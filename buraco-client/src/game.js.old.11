@@ -1,0 +1,300 @@
+const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
+const pointValues = { '3': 5, '4': 5, '5': 5, '6': 5, '7': 5, '8': 10, '9': 10, '10': 10, 'J': 10, 'Q': 10, 'K': 10, 'A': 15, '2': 20, 'JOKER': 50 };
+const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
+
+export function sortCards(cards) {
+  const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
+  return [...cards].sort((a, b) => {
+    if (suitValues[a.suit] !== suitValues[b.suit]) return suitValues[a.suit] - suitValues[b.suit];
+    return sortVals[a.rank] - sortVals[b.rank];
+  });
+}
+
+function parseMeld(cards, rules) {
+  if (cards.length < 3) return { valid: false };
+
+  const jokers = cards.filter(c => c.rank === 'JOKER');
+  const twos = cards.filter(c => c.rank === '2');
+  const naturals = cards.filter(c => c.rank !== 'JOKER' && c.rank !== '2');
+
+  if (jokers.length + twos.length > 2) return { valid: false }; 
+  const mainSuit = naturals.length > 0 ? naturals[0].suit : (twos.length > 0 ? twos[0].suit : null);
+  
+  // RUNNER (Trinca) Logic
+  if (naturals.length > 0 && naturals.every(c => c.rank === naturals[0].rank)) {
+    const r = naturals[0].rank;
+    let allowed = false;
+    if (rules.runners === 'any') allowed = true;
+    if (rules.runners === 'aces_threes' && (r === 'A' || r === '3')) allowed = true;
+    if (rules.runners === 'aces_kings' && (r === 'A' || r === 'K')) allowed = true;
+    
+    if (allowed && jokers.length + twos.length <= 1) {
+      const isClean = (jokers.length + twos.length) === 0;
+      return { valid: true, status: isClean ? 'clean' : 'dirty', sorted: [...naturals, ...twos, ...jokers] };
+    }
+  }
+
+  // SEQUENCE Logic
+  if (!naturals.every(c => c.suit === mainSuit)) return { valid: false };
+
+  for (let aceValue of [1, 14]) {
+    let testSequence = naturals.map(c => c.rank === 'A' ? aceValue : sequenceMath[c.rank]).sort((a, b) => a - b);
+    if (new Set(testSequence).size !== testSequence.length) continue;
+
+    let min = testSequence.length > 0 ? testSequence[0] : 3;
+    let availableWilds = [...jokers];
+    let naturalTwos = [];
+    
+    for (let two of twos) {
+      if (two.suit === mainSuit && !testSequence.includes(2) && !naturalTwos.includes(two) && aceValue === 1) {
+        naturalTwos.push(two);
+        testSequence.push(2);
+        testSequence.sort((a, b) => a - b);
+        min = Math.min(min, 2);
+      } else {
+        availableWilds.push(two); 
+      }
+    }
+
+    if (availableWilds.length > 1) continue; 
+
+    min = testSequence.length > 0 ? testSequence[0] : 3;
+    let max = testSequence.length > 0 ? testSequence[testSequence.length - 1] : 3;
+    if ((max - min + 1) <= testSequence.length + availableWilds.length) {
+      let sortedOutput = [];
+      let wildUsed = false;
+      let currentVal = min;
+      
+      while (sortedOutput.length < cards.length) {
+        let match = cards.find(c => 
+          (c.rank === 'A' && aceValue === 1 && currentVal === 1) ||
+          (c.rank === 'A' && aceValue === 14 && currentVal === 14) ||
+          (c.rank === '2' && naturalTwos.includes(c) && currentVal === 2) ||
+          (sequenceMath[c.rank] === currentVal && c.rank !== 'A' && c.rank !== '2')
+        );
+
+        if (match) sortedOutput.push(match);
+        else if (availableWilds.length > 0 && !wildUsed) { sortedOutput.push(availableWilds[0]); wildUsed = true; }
+        else break;
+        currentVal++;
+      }
+      if (availableWilds.length > 0 && !wildUsed) sortedOutput.push(availableWilds[0]);
+      
+      let isClean = availableWilds.length === 0;
+      return { valid: true, status: isClean ? 'clean' : 'dirty', sorted: sortedOutput };
+    }
+  }
+  return { valid: false };
+}
+
+export function getCanastaStatus(meld, rules) {
+  const result = parseMeld(meld, rules);
+  if (result.valid && meld.length >= 7) return result.status;
+  return null;
+}
+
+function checkMorto(G, ctx) {
+  const p = ctx.currentPlayer;
+  const team = G.teams[p];
+  if (G.hands[p].length === 0) {
+    if (G.pots.pot1.length > 0) { G.hands[p] = G.pots.pot1; G.pots.pot1 = []; G.teamMortos[team] = true; } 
+    else if (G.pots.pot2.length > 0) { G.hands[p] = G.pots.pot2; G.pots.pot2 = []; G.teamMortos[team] = true; }
+  }
+}
+
+function calculateScores(G) {
+  let scores = { team0: 0, team1: 0 };
+  const processTeam = (teamId, players) => {
+    let score = 0;
+    const allMelds = players.flatMap(p => G.melds[p] || []);
+    const allHandCards = players.flatMap(p => G.hands[p] || []);
+    
+    allMelds.forEach(meld => {
+      meld.forEach(card => score += pointValues[card.rank]);
+      const status = getCanastaStatus(meld, G.rules);
+      if (status === 'clean') score += 200;
+      if (status === 'dirty') score += 100;
+      if (G.rules.largeCanasta) {
+        if (meld.length === 13) score += 500;
+        if (meld.length >= 14) score += 1000;
+      }
+    });
+    allHandCards.forEach(card => score -= pointValues[card.rank]);
+    if (!G.teamMortos[teamId]) score -= 100;
+    scores[teamId] = score;
+  };
+  processTeam('team0', G.teamPlayers['team0']);
+  processTeam('team1', G.teamPlayers['team1']);
+  return scores;
+}
+
+function buildDeck() {
+  const suits = ['♠', '♥', '♦', '♣'];
+  const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+  let deck = [];
+  for (let i = 0; i < 2; i++) {
+    for (let suit of suits) {
+      for (let rank of ranks) deck.push({ rank, suit, id: `${rank}${suit}-${i}` });
+    }
+  }
+  for (let i = 0; i < 4; i++) deck.push({ rank: 'JOKER', suit: '★', id: `Joker-${i}` });
+  return deck;
+}
+
+export const BuracoGame = {
+  name: 'buraco',
+  setup: ({ random }, setupData) => {
+    let initialDeck = random.Shuffle(buildDeck());
+    const pots = { pot1: initialDeck.splice(0, 11), pot2: initialDeck.splice(0, 11) };
+    
+    // Dynamic Player Hands (2 vs 4)
+    let numPlayers = 4; // Default
+    let hands = { '0': [], '1': [], '2': [], '3': [] };
+    // Just deal to whoever is actually playing
+    for (let i = 0; i < 4; i++) {
+      if (i < 2 || numPlayers === 4) hands[i.toString()] = initialDeck.splice(0, 11);
+    }
+
+    return {
+      deck: initialDeck, hands: hands, discardPile: [initialDeck.pop()],
+      melds: { '0': [], '1': [], '2': [], '3': [] }, pots: pots,
+      hasDrawn: false, drawnCardId: null, // Tracks the specifically drawn card
+      teams: { '0': 'team0', '1': 'team1', '2': 'team0', '3': 'team1' },
+      teamPlayers: { team0: ['0', '2'], team1: ['1', '3'] },
+      teamMortos: { team0: false, team1: false },
+      rules: { discard: 'open', runners: 'none', largeCanasta: false } // Default rules
+    };
+  },
+
+  phases: {
+    // Phase 1: Player 0 configures the game rules
+    rulesSetup: {
+      start: true,
+      next: 'play',
+      moves: {
+        setRules: ({ G, events }, rules) => {
+          G.rules = rules;
+          events.endPhase();
+        }
+      }
+    },
+    // Phase 2: Actual Gameplay
+    play: {
+      moves: {
+        drawCard: ({ G, ctx }) => {
+          if (G.hasDrawn) return;
+          if (G.deck.length === 0) {
+            if (G.pots.pot1.length > 0) { G.deck = G.pots.pot1; G.pots.pot1 = []; } 
+            else if (G.pots.pot2.length > 0) { G.deck = G.pots.pot2; G.pots.pot2 = []; }
+          }
+          if (G.deck.length > 0) {
+            const card = G.deck.pop();
+            card.isNewlyDrawn = true; // Flag for UI separation
+            G.hands[ctx.currentPlayer].push(card);
+            G.drawnCardId = card.id;
+            G.hasDrawn = true;
+          }
+        },
+
+        pickUpDiscard: ({ G, ctx }, selectedHandIds) => {
+          if (G.hasDrawn || G.discardPile.length === 0) return;
+          
+          if (G.rules.discard === 'closed') {
+            const topCard = G.discardPile[G.discardPile.length - 1];
+            const hand = G.hands[ctx.currentPlayer];
+            const proposedCards = [...hand.filter(c => selectedHandIds.includes(c.id)), topCard];
+            const parsed = parseMeld(proposedCards, G.rules);
+            
+            if (parsed.valid) {
+              G.hands[ctx.currentPlayer] = hand.filter(c => !selectedHandIds.includes(c.id));
+              G.melds[ctx.currentPlayer].push(parsed.sorted);
+              G.discardPile.pop(); // Remove top
+              G.hands[ctx.currentPlayer].push(...G.discardPile); // Take the rest
+              G.discardPile = [];
+              G.hasDrawn = true;
+              checkMorto(G, ctx);
+            }
+          } else {
+            G.hands[ctx.currentPlayer].push(...G.discardPile);
+            G.discardPile = [];
+            G.hasDrawn = true;
+          }
+        },
+        
+        playMeld: ({ G, ctx }, cardIds) => {
+          if (!G.hasDrawn) return; 
+          const hand = G.hands[ctx.currentPlayer];
+          const cardsToMeld = hand.filter(card => cardIds.includes(card.id));
+          const parsed = parseMeld(cardsToMeld, G.rules);
+          if (parsed.valid) {
+            G.hands[ctx.currentPlayer] = hand.filter(card => !cardIds.includes(card.id));
+            G.melds[ctx.currentPlayer].push(parsed.sorted);
+            checkMorto(G, ctx); 
+          }
+        },
+
+        appendToMeld: ({ G, ctx }, meldOwner, meldIndex, cardIds) => {
+          if (!G.hasDrawn || G.teams[ctx.currentPlayer] !== G.teams[meldOwner]) return;
+          const hand = G.hands[ctx.currentPlayer];
+          const cardsToAdd = hand.filter(card => cardIds.includes(card.id));
+          const proposed = [...G.melds[meldOwner][meldIndex], ...cardsToAdd];
+          const parsed = parseMeld(proposed, G.rules);
+          if (parsed.valid) {
+            G.hands[ctx.currentPlayer] = hand.filter(card => !cardIds.includes(card.id));
+            G.melds[meldOwner][meldIndex] = parsed.sorted;
+            checkMorto(G, ctx); 
+          }
+        },
+
+        discardCard: ({ G, ctx, events }, cardId) => {
+          if (!G.hasDrawn) return; 
+          const hand = G.hands[ctx.currentPlayer];
+          const cardIndex = hand.findIndex(card => card.id === cardId);
+          if (cardIndex !== -1) {
+            G.discardPile.push(hand.splice(cardIndex, 1)[0]);
+            checkMorto(G, ctx); 
+            G.hasDrawn = false; 
+            G.drawnCardId = null;
+            hand.forEach(c => delete c.isNewlyDrawn); // Clear UI flags
+            events.endTurn();
+          }
+        },
+
+        // NEW: End Turn without discarding if deck is exhausted
+        passTurn: ({ G, ctx, events }) => {
+          if (G.deck.length === 0 && G.pots.pot1.length === 0 && G.pots.pot2.length === 0 && G.hasDrawn) {
+            G.hasDrawn = false;
+            G.drawnCardId = null;
+            G.hands[ctx.currentPlayer].forEach(c => delete c.isNewlyDrawn);
+            events.endTurn();
+          }
+        }
+      }
+    }
+  },
+
+  endIf: ({ G, ctx }) => {
+    if (ctx.phase === 'rulesSetup') return; // Don't end during setup
+
+    // Win condition check
+    for (let p of ['0', '1', '2', '3']) {
+      const team = G.teams[p];
+      if (G.hands[p] && G.hands[p].length === 0 && G.teamMortos[team]) {
+        const teamMelds = G.teamPlayers[team].flatMap(tp => G.melds[tp] || []);
+        if (teamMelds.some(m => m.length >= 7)) {
+          let finalScores = calculateScores(G);
+          finalScores[team] += 100; 
+          return { winner: team, reason: 'Went Out!', scores: finalScores };
+        }
+      }
+    }
+    
+    // Exhaustion condition: Deck empty, pots empty, and player cannot act
+    if (G.deck.length === 0 && G.pots.pot1.length === 0 && G.pots.pot2.length === 0) {
+      // Allow them to use the discard pile if possible
+      if (G.discardPile.length === 0 && !G.hasDrawn) {
+        return { reason: 'Deck Exhausted', scores: calculateScores(G) };
+      }
+    }
+  }
+};

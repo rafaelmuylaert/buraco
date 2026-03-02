@@ -1,0 +1,246 @@
+// --- HELPERS ---
+const sortValues = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14, '2': 15, 'JOKER': 16 };
+const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
+const pointValues = { '3': 5, '4': 5, '5': 5, '6': 5, '7': 5, '8': 10, '9': 10, '10': 10, 'J': 10, 'Q': 10, 'K': 10, 'A': 15, '2': 20, 'JOKER': 50 };
+
+export function sortCards(cards) {
+  return [...cards].sort((a, b) => {
+    if (suitValues[a.suit] !== suitValues[b.suit]) return suitValues[a.suit] - suitValues[b.suit];
+    return sortValues[a.rank] - sortValues[b.rank];
+  });
+}
+
+export function sortMeld(cards) {
+  const wilds = cards.filter(c => c.rank === 'JOKER' || c.rank === '2');
+  const naturals = cards.filter(c => c.rank !== 'JOKER' && c.rank !== '2');
+  if (wilds.length === 0 || naturals.length === 0) return sortCards(cards);
+
+  const sortedNaturals = sortCards(naturals);
+  const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
+
+  let gapIndex = -1;
+  for (let i = 0; i < sortedNaturals.length - 1; i++) {
+    let currentVal = sequenceMath[sortedNaturals[i].rank];
+    let nextVal = sequenceMath[sortedNaturals[i+1].rank];
+    if (nextVal - currentVal > 1) {
+      gapIndex = i + 1;
+      break;
+    }
+  }
+
+  if (gapIndex !== -1) {
+    sortedNaturals.splice(gapIndex, 0, wilds[0]);
+    return sortedNaturals;
+  } else {
+    return [...sortedNaturals, wilds[0]];
+  }
+}
+
+function isValidMeld(cards) {
+  if (cards.length < 3) return false;
+  const wilds = cards.filter(c => c.rank === 'JOKER' || c.rank === '2');
+  const naturals = cards.filter(c => c.rank !== 'JOKER' && c.rank !== '2');
+
+  if (wilds.length > 1) return false;
+  if (naturals.length === 0) return false;
+
+  const mainSuit = naturals[0].suit;
+  if (!naturals.every(c => c.suit === mainSuit)) return false;
+
+  const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
+  const values = naturals.map(c => sequenceMath[c.rank]).sort((a, b) => a - b);
+  if (new Set(values).size !== values.length) return false;
+
+  const spread = values[values.length - 1] - values[0] + 1;
+  if (spread > naturals.length + wilds.length) return false;
+
+  return true; 
+}
+
+function getCanastaStatus(meld) {
+  if (meld.length < 7) return null;
+  const hasWild = meld.some(c => c.rank === 'JOKER' || c.rank === '2');
+  return hasWild ? 'dirty' : 'clean';
+}
+
+function checkMorto(G, ctx) {
+  const playerStr = ctx.currentPlayer;
+  const team = G.teams[playerStr];
+  const hand = G.hands[playerStr];
+  
+  if (hand.length === 0) {
+    if (G.pots.pot1.length > 0) {
+      G.hands[playerStr] = G.pots.pot1;
+      G.pots.pot1 = [];
+      G.teamMortos[team] = true;
+    } else if (G.pots.pot2.length > 0) {
+      G.hands[playerStr] = G.pots.pot2;
+      G.pots.pot2 = [];
+      G.teamMortos[team] = true;
+    }
+  }
+}
+
+// SCORING ENGINE
+function calculateScores(G) {
+  let scores = { team0: 0, team1: 0 };
+  
+  const processTeam = (teamId, playerA, playerB) => {
+    let score = 0;
+    const allMelds = [...G.melds[playerA], ...G.melds[playerB]];
+    const allHandCards = [...G.hands[playerA], ...G.hands[playerB]];
+
+    // Add points for Melds & Canastas
+    allMelds.forEach(meld => {
+      meld.forEach(card => score += pointValues[card.rank]);
+      const status = getCanastaStatus(meld);
+      if (status === 'clean') score += 200;
+      if (status === 'dirty') score += 100;
+    });
+
+    // Subtract points for cards left in hand
+    allHandCards.forEach(card => score -= pointValues[card.rank]);
+
+    // Penalty for not picking up Morto
+    if (!G.teamMortos[teamId]) score -= 100;
+
+    scores[teamId] = score;
+  };
+
+  processTeam('team0', '0', '2');
+  processTeam('team1', '1', '3');
+  return scores;
+}
+
+function buildDeck() {
+  const suits = ['♠', '♥', '♦', '♣'];
+  const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+  let deck = [];
+  for (let i = 0; i < 2; i++) {
+    for (let suit of suits) {
+      for (let rank of ranks) { deck.push({ rank, suit, id: `${rank}${suit}-${i}` }); }
+    }
+  }
+  for (let i = 0; i < 4; i++) { deck.push({ rank: 'JOKER', suit: '★', id: `Joker-${i}` }); }
+  return deck;
+}
+
+// --- GAME DEFINITION ---
+export const BuracoGame = {
+  name: 'buraco',
+  
+  setup: ({ random }) => {
+    let initialDeck = buildDeck();
+    initialDeck = random.Shuffle(initialDeck);
+
+    const pots = { pot1: initialDeck.splice(0, 11), pot2: initialDeck.splice(0, 11) };
+    let hands = { '0': [], '1': [], '2': [], '3': [] };
+    for (let i = 0; i < 4; i++) hands[i.toString()] = initialDeck.splice(0, 11);
+
+    return {
+      deck: initialDeck,
+      hands: hands,
+      discardPile: [initialDeck.pop()],
+      melds: { '0': [], '1': [], '2': [], '3': [] }, 
+      pots: pots,
+      hasDrawn: false,
+      // NEW: Team mapping and Morto tracking
+      teams: { '0': 'team0', '1': 'team1', '2': 'team0', '3': 'team1' },
+      teamMortos: { team0: false, team1: false }
+    };
+  },
+
+  moves: {
+    drawCard: ({ G, ctx }) => {
+      if (G.hasDrawn) return;
+
+      // NEW: Deck Restock Logic
+      if (G.deck.length === 0) {
+        if (G.pots.pot1.length > 0) {
+          G.deck = G.pots.pot1;
+          G.pots.pot1 = [];
+        } else if (G.pots.pot2.length > 0) {
+          G.deck = G.pots.pot2;
+          G.pots.pot2 = [];
+        }
+      }
+
+      if (G.deck.length > 0) {
+        const card = G.deck.pop();
+        G.hands[ctx.currentPlayer].push(card);
+        G.hasDrawn = true;
+      }
+    },
+
+    pickUpDiscard: ({ G, ctx }) => {
+      if (G.discardPile.length > 0 && !G.hasDrawn) {
+        G.hands[ctx.currentPlayer].push(...G.discardPile);
+        G.discardPile = [];
+        G.hasDrawn = true;
+      }
+    },
+    
+    playMeld: ({ G, ctx }, cardIds) => {
+      const hand = G.hands[ctx.currentPlayer];
+      const cardsToMeld = hand.filter(card => cardIds.includes(card.id));
+      if (isValidMeld(cardsToMeld)) {
+        G.hands[ctx.currentPlayer] = hand.filter(card => !cardIds.includes(card.id));
+        G.melds[ctx.currentPlayer].push(sortMeld(cardsToMeld));
+        checkMorto(G, ctx); 
+      }
+    },
+
+    appendToMeld: ({ G, ctx }, meldIndex, cardIds) => {
+      const hand = G.hands[ctx.currentPlayer];
+      const cardsToAdd = hand.filter(card => cardIds.includes(card.id));
+      const proposedMeld = [...G.melds[ctx.currentPlayer][meldIndex], ...cardsToAdd];
+      if (isValidMeld(proposedMeld)) {
+        G.hands[ctx.currentPlayer] = hand.filter(card => !cardIds.includes(card.id));
+        G.melds[ctx.currentPlayer][meldIndex] = sortMeld(proposedMeld);
+        checkMorto(G, ctx); 
+      }
+    },
+
+    discardCard: ({ G, ctx, events }, cardId) => {
+      if (!G.hasDrawn) return; 
+      const hand = G.hands[ctx.currentPlayer];
+      const cardIndex = hand.findIndex(card => card.id === cardId);
+      if (cardIndex !== -1) {
+        const [discardedCard] = hand.splice(cardIndex, 1);
+        G.discardPile.push(discardedCard);
+        checkMorto(G, ctx); 
+        G.hasDrawn = false; 
+        events.endTurn();
+      }
+    }
+  },
+
+  // NEW: Endgame Condition Hook
+  endIf: ({ G, ctx }) => {
+    // 1. Did someone go out? (Hand is empty AND team has their Morto)
+    for (let i = 0; i < 4; i++) {
+      const p = i.toString();
+      const team = G.teams[p];
+      
+      // If hand is 0 here, checkMorto didn't refill it, meaning pots are empty or they already got one.
+      if (G.hands[p].length === 0 && G.teamMortos[team]) {
+        // Standard rule: A team must have at least 1 Canasta to go out
+        const p1 = team === 'team0' ? '0' : '1';
+        const p2 = team === 'team0' ? '2' : '3';
+        const teamMelds = [...G.melds[p1], ...G.melds[p2]];
+        const hasCanasta = teamMelds.some(meld => meld.length >= 7);
+        
+        if (hasCanasta) {
+          let finalScores = calculateScores(G);
+          finalScores[team] += 100; // 100 point bonus for going out (Bater)
+          return { winner: team, reason: 'Went Out!', scores: finalScores };
+        }
+      }
+    }
+
+    // 2. Did the deck run out with no Mortos to restock?
+    if (G.deck.length === 0 && G.pots.pot1.length === 0 && G.pots.pot2.length === 0) {
+      return { reason: 'Deck Exhausted', scores: calculateScores(G) };
+    }
+  }
+};

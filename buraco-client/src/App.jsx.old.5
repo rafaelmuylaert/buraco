@@ -1,0 +1,53 @@
+import React, { useState } from 'react';
+import { Client } from 'boardgame.io/react';
+import { SocketIO } from 'boardgame.io/multiplayer';
+import { BuracoGame } from './game.js';
+import { BuracoBoard } from './Board.jsx';
+
+const SERVER_ADDRESS = `http://${window.location.hostname}:8000`;
+
+const BuracoClient = Client({
+  game: BuracoGame,
+  board: BuracoBoard,
+  multiplayer: SocketIO({ server: SERVER_ADDRESS }),
+  debug: false 
+});
+
+const App = () => {
+  const [inGame, setInGame] = useState(false);
+  const [roomCode, setRoomCode] = useState('friday-night');
+  const [seat, setSeat] = useState('0');
+
+  if (inGame) {
+    return <BuracoClient matchID={roomCode} playerID={seat} />;
+  }
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#111', backgroundImage: 'radial-gradient(circle, #2d6a4f 0%, #081c15 100%)', fontFamily: 'sans-serif', color: 'white' }}>
+      <div style={{ background: 'rgba(0,0,0,0.6)', padding: '40px', borderRadius: '15px', border: '2px solid #40916c', width: '400px', textAlign: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.8)' }}>
+        <h1 style={{ color: '#ffd700', fontSize: '2.5em', margin: '0 0 10px 0' }}>♠♥ BURACO ♦♣</h1>
+        <p style={{ color: '#aaa', marginBottom: '30px' }}>Join the table to start playing</p>
+
+        <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#4da6ff' }}>Room Name</label>
+          <input type="text" value={roomCode} onChange={(e) => setRoomCode(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', fontSize: '1.1em', boxSizing: 'border-box' }} />
+        </div>
+
+        <div style={{ marginBottom: '30px', textAlign: 'left' }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#ff4d4d' }}>Select Your Seat</label>
+          <select value={seat} onChange={(e) => setSeat(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', fontSize: '1.1em', boxSizing: 'border-box', cursor: 'pointer' }}>
+            <option value="0">Seat 0 (Host)</option>
+            <option value="1">Seat 1</option>
+            <option value="2">Seat 2</option>
+            <option value="3">Seat 3</option>
+          </select>
+          <small style={{ color: '#888', display: 'block', marginTop: '5px' }}>If playing 2-player, choose Seats 0 and 1.</small>
+        </div>
+
+        <button onClick={() => setInGame(true)} style={{ width: '100%', padding: '15px', borderRadius: '8px', border: 'none', backgroundColor: '#ffd700', fontSize: '1.2em', fontWeight: 'bold', cursor: 'pointer' }}>Take a Seat</button>
+      </div>
+    </div>
+  );
+};
+
+export default App;

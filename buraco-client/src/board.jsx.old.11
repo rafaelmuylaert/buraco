@@ -1,0 +1,217 @@
+import React, { useState, useEffect } from 'react';
+import { sortCards, getCanastaStatus } from './game.js';
+
+const Card = ({ card, isSelected, onClick }) => {
+  const isRed = card.suit === '♥' || card.suit === '♦';
+  return (
+    <div onClick={onClick} style={{
+      border: isSelected ? '3px solid #ffd700' : '1px solid #333', transform: isSelected ? 'translateY(-10px)' : 'none', transition: 'all 0.2s', cursor: onClick ? 'pointer' : 'default',
+      borderRadius: '8px', width: '60px', height: '90px', display: 'inline-flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', margin: '2px',
+      backgroundColor: 'white', color: isRed ? 'red' : 'black', boxShadow: '2px 2px 5px rgba(0,0,0,0.2)'
+    }}>
+      <div style={{ fontSize: '1.2em', fontWeight: 'bold' }}>{card.rank}</div>
+      <div style={{ fontSize: '1.5em' }}>{card.suit}</div>
+    </div>
+  );
+};
+
+const CardBack = ({ label, count, onClick }) => (
+  <div onClick={onClick} style={{
+    border: '2px solid white', borderRadius: '8px', width: '60px', height: '90px', margin: '2px',
+    backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px)',
+    boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'white', cursor: onClick ? 'pointer' : 'default', textAlign: 'center'
+  }}>
+    <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>{label}</span>
+    <span style={{ fontSize: '1.2em' }}>{count}</span>
+  </div>
+);
+
+export function BuracoBoard({ ctx, G, moves, playerID }) {
+  const [selectedCards, setSelectedCards] = useState([]);
+  const [localRules, setLocalRules] = useState(G?.rules || { numPlayers: 4, discard: 'open', runners: 'none', largeCanasta: false, cleanCanastaToWin: false });
+
+  useEffect(() => {
+    if (ctx && G && ctx.phase === 'waitingRoom' && !G.players.includes(playerID)) {
+      moves.joinTable(playerID);
+    }
+  }, [ctx, G, playerID, moves]);
+
+  if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Loading Table...</div>;
+
+  if (ctx.gameover) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#1b4332', color: 'white', fontFamily: 'sans-serif' }}>
+        <h1 style={{ fontSize: '3em', color: '#ffd700' }}>Match Finished!</h1>
+        <h2>Reason: {ctx.gameover.reason}</h2>
+        <div style={{ display: 'flex', gap: '50px', marginTop: '40px' }}>
+          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '30px', borderRadius: '15px', textAlign: 'center', border: '2px solid #4da6ff' }}>
+            <h2>Team 0</h2><p style={{ fontSize: '3em', fontWeight: 'bold' }}>{ctx.gameover.scores.team0}</p>
+          </div>
+          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '30px', borderRadius: '15px', textAlign: 'center', border: '2px solid #ff4d4d' }}>
+            <h2>Team 1</h2><p style={{ fontSize: '3em', fontWeight: 'bold' }}>{ctx.gameover.scores.team1}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (ctx.phase === 'waitingRoom') {
+    const isHost = playerID === '0';
+    return (
+      <div style={{ padding: '50px', color: 'white', fontFamily: 'sans-serif', backgroundColor: '#1b4332', minHeight: '100vh', display: 'flex', gap: '50px' }}>
+        <div style={{ flex: 1, background: 'rgba(0,0,0,0.5)', padding: '30px', borderRadius: '15px' }}>
+          <h2 style={{ color: '#ffd700', marginTop: 0 }}>Game Settings</h2>
+          {isHost ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <label>Players: <select value={localRules.numPlayers} onChange={e => setLocalRules({...localRules, numPlayers: parseInt(e.target.value)})}><option value={2}>2 Players</option><option value={4}>4 Players</option></select></label>
+              <label>Discard Pickup: <select value={localRules.discard} onChange={e => setLocalRules({...localRules, discard: e.target.value})}><option value="open">Open (Always)</option><option value="closed">Closed (Must meld instantly)</option></select></label>
+              <label>Runners Allowed: <select value={localRules.runners} onChange={e => setLocalRules({...localRules, runners: e.target.value})}><option value="none">None</option><option value="aces_threes">Aces & Threes</option><option value="aces_kings">Aces & Kings</option><option value="any">Any Rank</option></select></label>
+              <label><input type="checkbox" checked={localRules.largeCanasta} onChange={e => setLocalRules({...localRules, largeCanasta: e.target.checked})} /> Large Canasta Bonus (A-K=500, A-A=1000)</label>
+              <label><input type="checkbox" checked={localRules.cleanCanastaToWin} onChange={e => setLocalRules({...localRules, cleanCanastaToWin: e.target.checked})} /> Clean Canasta (Real) Required to Win</label>
+              <button onClick={() => moves.updateRules(localRules)} style={{ padding: '10px', background: '#4da6ff', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer', marginTop: '20px' }}>Save Rules & Allow Start</button>
+            </div>
+          ) : (
+            <div>
+              <p style={{ color: '#ccc' }}>Waiting for Player 0 to configure rules...</p>
+              <ul>
+                <li>Players: {G.rules.numPlayers}</li>
+                <li>Discard: {G.rules.discard}</li>
+                <li>Runners: {G.rules.runners}</li>
+                <li>Clean Canasta Required: {G.rules.cleanCanastaToWin ? "Yes" : "No"}</li>
+              </ul>
+            </div>
+          )}
+        </div>
+        <div style={{ flex: 1, background: 'rgba(0,0,0,0.5)', padding: '30px', borderRadius: '15px' }}>
+          <h2 style={{ color: '#4da6ff', marginTop: 0 }}>Players in Room ({G.players.length} / {G.rules.numPlayers})</h2>
+          <ul style={{ fontSize: '1.2em' }}>{G.players.map(p => <li key={p}>Seat {p} Connected</li>)}</ul>
+          {G.players.length < G.rules.numPlayers && <p style={{ color: '#ffd700', fontStyle: 'italic' }}>Waiting for players... The game will auto-start and randomly assign teams when full.</p>}
+        </div>
+      </div>
+    );
+  }
+
+  const rawHand = G.hands[playerID] || []; 
+  const standardHand = rawHand.filter(c => !c.isNewlyDrawn);
+  const drawnCards = rawHand.filter(c => c.isNewlyDrawn);
+  const sortedHand = sortCards(standardHand); 
+  const topDiscard = G.discardPile[G.discardPile.length - 1];
+  
+  const myTeam = G.teams[playerID];
+  const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
+  const myTeamPlayers = G.teamPlayers[myTeam] || [];
+  const oppTeamPlayers = G.teamPlayers[oppTeam] || [];
+
+  const toggleCardSelection = (cardId) => setSelectedCards(prev => prev.includes(cardId) ? prev.filter(id => id !== cardId) : [...prev, cardId]);
+
+  const handleDiscardPileClick = () => {
+    if (selectedCards.length === 1 && G.hasDrawn) {
+      moves.discardCard(selectedCards[0]);
+      setSelectedCards([]);
+    } else if (!G.hasDrawn && G.discardPile.length > 0) {
+      if (G.rules.discard === 'closed') {
+        moves.pickUpDiscard(selectedCards, { type: 'new' });
+        setSelectedCards([]);
+      } else {
+        moves.pickUpDiscard();
+      }
+    }
+  };
+
+  const renderTeamTable = (teamPlayers, title, isMyTeam) => (
+    <div style={{ background: isMyTeam ? 'rgba(77, 166, 255, 0.1)' : 'rgba(255, 77, 77, 0.1)', padding: '15px', borderRadius: '10px', height: '100%', minHeight: '120px' }}>
+      <h3 style={{ margin: '0 0 10px 0', color: isMyTeam ? '#4da6ff' : '#ff4d4d' }}>{title}</h3>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
+        
+        {teamPlayers.map(p => (G.melds[p] || []).map((meldGroup, index) => {
+          const status = getCanastaStatus(meldGroup, G.rules);
+          const borderColor = status === 'clean' ? '#ffd700' : (status === 'dirty' ? '#c0c0c0' : 'transparent');
+          return (
+            <div key={`${p}-${index}`} onClick={() => { 
+                if (isMyTeam) {
+                  if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) {
+                    moves.pickUpDiscard(selectedCards, { type: 'append', player: p, index });
+                    setSelectedCards([]);
+                  } else if (selectedCards.length > 0) {
+                    moves.appendToMeld(p, index, selectedCards); 
+                    setSelectedCards([]);
+                  }
+                }
+              }}
+              style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', padding: '5px', borderRadius: '8px', border: `2px solid ${borderColor}`, cursor: (isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default' }}>
+              {meldGroup.map(card => <Card key={card.id} card={card} />)}
+            </div>
+          );
+        }))}
+
+        {isMyTeam && (
+          <div onClick={() => { 
+              if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) {
+                moves.pickUpDiscard(selectedCards, { type: 'new' });
+                setSelectedCards([]);
+              } else if (selectedCards.length >= 3) { 
+                moves.playMeld(selectedCards); 
+                setSelectedCards([]); 
+              } 
+            }} 
+            style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (selectedCards.length >= 3 || (!G.hasDrawn && G.rules.discard === 'closed')) ? 'pointer' : 'default', color: '#888' }}>
+            + Place New Meld
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: '20px', fontFamily: 'sans-serif', backgroundColor: '#2d6a4f', minHeight: '100vh', color: 'white', display: 'flex', flexDirection: 'column' }}>
+      <h1>Player {playerID} {ctx.currentPlayer === playerID ? <span style={{ color: '#ffd700' }}>(Your Turn)</span> : ""}</h1>
+      
+      <div style={{ display: 'flex', gap: '20px', minHeight: '150px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '80px', alignItems: 'center' }}>
+          
+          <div style={{ textAlign: 'center' }}>
+            <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Deck</h4>
+            <CardBack label="Draw" count={G.deck.length} onClick={() => { if(!G.hasDrawn) moves.drawCard(); }} />
+          </div>
+
+          <div style={{ textAlign: 'center' }}>
+            <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Pile ({G.discardPile.length})</h4>
+            <div onClick={handleDiscardPileClick} style={{ cursor: (!G.hasDrawn || (selectedCards.length === 1 && G.hasDrawn)) ? 'pointer' : 'not-allowed' }}>
+              {topDiscard ? <Card card={topDiscard} /> : <div style={{ border: '2px dashed #40916c', width: '60px', height: '90px', borderRadius: '8px', textAlign: 'center', lineHeight: '90px', color: '#888' }}>Empty</div>}
+            </div>
+          </div>
+
+        </div>
+
+        <div style={{ flexGrow: 1 }}>{renderTeamTable(oppTeamPlayers, "Opponents' Table", false)}</div>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '80px', alignItems: 'center' }}>
+          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Mortos</h4>
+          {G.pots.pot1.length > 0 ? <CardBack label="Pot 1" count={11} /> : <div style={{ width: '60px', height: '90px', border: '2px dashed #333' }}></div>}
+          {G.pots.pot2.length > 0 ? <CardBack label="Pot 2" count={11} /> : <div style={{ width: '60px', height: '90px', border: '2px dashed #333' }}></div>}
+        </div>
+      </div>
+
+      <div style={{ marginTop: '20px' }}>{renderTeamTable(myTeamPlayers, "My Team's Table", true)}</div>
+
+      <div style={{ display: 'flex', gap: '30px', marginTop: '20px', alignItems: 'flex-start' }}>
+        
+        <div style={{ padding: '15px', background: 'rgba(255, 215, 0, 0.1)', border: '2px dashed #ffd700', borderRadius: '10px', minWidth: '100px', maxWidth: '350px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: '#ffd700', textAlign: 'center' }}>Picked Up</h4>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', justifyContent: 'center' }}>
+            {drawnCards.map(card => <Card key={card.id} card={card} isSelected={selectedCards.includes(card.id)} onClick={() => toggleCardSelection(card.id)} />)}
+          </div>
+          {G.deck.length === 0 && !G.hasDrawn && <button onClick={() => moves.declareExhausted()} style={{ marginTop: '10px', background: '#ff4d4d', color: 'white', border: 'none', padding: '8px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>End Game</button>}
+        </div>
+
+        <div style={{ flexGrow: 1 }}>
+          <h2>My Hand {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.6em' }}>(Must Draw or Pick up)</span> : ""}</h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+            {sortedHand.map(card => <Card key={card.id} card={card} isSelected={selectedCards.includes(card.id)} onClick={() => toggleCardSelection(card.id)} />)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

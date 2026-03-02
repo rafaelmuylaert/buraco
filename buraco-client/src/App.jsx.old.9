@@ -1,0 +1,125 @@
+import React, { useState, useEffect } from 'react';
+import { Client } from 'boardgame.io/react';
+import { SocketIO } from 'boardgame.io/multiplayer';
+import { LobbyClient } from 'boardgame.io/client';
+import { BuracoGame } from './game.js';
+import { BuracoBoard } from './Board.jsx';
+
+const SERVER_ADDRESS = `http://${window.location.hostname}:8000`;
+const lobbyClient = new LobbyClient({ server: SERVER_ADDRESS });
+
+const BuracoClient = Client({
+  game: BuracoGame,
+  board: BuracoBoard,
+  multiplayer: SocketIO({ server: SERVER_ADDRESS }),
+  debug: false 
+});
+
+const App = () => {
+  const [view, setView] = useState('lounge'); 
+  const [matches, setMatches] = useState([]);
+  const [matchID, setMatchID] = useState(null);
+  const [playerID, setPlayerID] = useState(null);
+  const [credentials, setCredentials] = useState(null); 
+  
+  const [rules, setRules] = useState({ numPlayers: 4, discard: 'open', runners: 'none', largeCanasta: false, cleanCanastaToWin: false });
+
+  useEffect(() => {
+    if (view === 'lounge') {
+      const fetchMatches = async () => {
+        try {
+          const { matches } = await lobbyClient.listMatches('buraco');
+          setMatches(matches);
+        } catch (e) { console.error("Sem conexão com o servidor."); }
+      };
+      fetchMatches();
+      const interval = setInterval(fetchMatches, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [view]);
+
+  const handleCreateMatch = async () => {
+    try {
+      const createdMatch = await lobbyClient.createMatch('buraco', {
+        numPlayers: rules.numPlayers,
+        setupData: rules 
+      });
+      await handleJoinMatch(createdMatch.matchID, '0');
+    } catch (e) { alert("Erro ao criar mesa: " + e.message); }
+  };
+
+  const handleJoinMatch = async (id, seat) => {
+    try {
+      const { playerCredentials } = await lobbyClient.joinMatch('buraco', id, { playerID: seat, playerName: `Jogador ${seat}` });
+      setMatchID(id);
+      setPlayerID(seat);
+      setCredentials(playerCredentials); 
+      setView('game');
+    } catch (e) { alert("Erro ao entrar no assento: " + e.message); }
+  };
+
+  if (view === 'game') return <BuracoClient matchID={matchID} playerID={playerID} credentials={credentials} />;
+
+  if (view === 'create') {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#111', color: 'white', fontFamily: 'sans-serif' }}>
+        <div style={{ background: '#1b4332', padding: '40px', borderRadius: '15px', border: '2px solid #4da6ff', width: '500px' }}>
+          <h2 style={{ color: '#ffd700', marginTop: 0 }}>Configurar Nova Mesa</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '30px' }}>
+            <label>Jogadores: <select value={rules.numPlayers} onChange={e => setRules({...rules, numPlayers: parseInt(e.target.value)})} style={{float:'right'}}><option value={2}>2 Jogadores</option><option value={4}>4 Jogadores</option></select></label>
+            <label>Compra do Lixo: <select value={rules.discard} onChange={e => setRules({...rules, discard: e.target.value})} style={{float:'right'}}><option value="open">Aberto (Sempre)</option><option value="closed">Fechado (Obrigatório justificar)</option></select></label>
+            <label>Trincas (Runners): <select value={rules.runners} onChange={e => setRules({...rules, runners: e.target.value})} style={{float:'right'}}><option value="none">Nenhuma</option><option value="aces_threes">Ases e Três</option><option value="aces_kings">Ases e Reis</option><option value="any">Qualquer Carta</option></select></label>
+            <label><input type="checkbox" checked={rules.largeCanasta} onChange={e => setRules({...rules, largeCanasta: e.target.checked})} /> Bônus Canastrão (A-K=500, A-A=1000)</label>
+            <label><input type="checkbox" checked={rules.cleanCanastaToWin} onChange={e => setRules({...rules, cleanCanastaToWin: e.target.checked})} /> Bater exige Canastra Limpa (Real)</label>
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={handleCreateMatch} style={{ flex: 1, padding: '10px', background: '#ffd700', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '5px' }}>Abrir Mesa</button>
+            <button onClick={() => setView('lounge')} style={{ flex: 1, padding: '10px', background: '#555', color: 'white', cursor: 'pointer', border: 'none', borderRadius: '5px' }}>Cancelar</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
+        <h1 style={{ color: '#ffd700', margin: 0 }}>♠♥ Salão de Buraco ♦♣</h1>
+        <button onClick={() => setView('create')} style={{ padding: '15px 30px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.2em', fontWeight: 'bold', cursor: 'pointer' }}>+ Criar Nova Mesa</button>
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
+        {matches.length === 0 ? <p style={{ color: '#aaa', fontSize: '1.2em' }}>Nenhuma mesa ativa no momento.</p> : null}
+        
+        {matches.map(m => {
+          const isFull = m.players.every(p => p.name);
+          const r = m.setupData || { numPlayers: 4, discard: 'open', runners: 'none', cleanCanastaToWin: false };
+          
+          return (
+            <div key={m.matchID} style={{ background: '#1b4332', border: '2px solid #40916c', borderRadius: '10px', padding: '20px', width: '350px' }}>
+              <h3 style={{ margin: '0 0 10px 0', color: '#ffd700' }}>Mesa: {m.matchID}</h3>
+              <div style={{ fontSize: '0.9em', color: '#ccc', marginBottom: '15px' }}>
+                {r.numPlayers}P | Lixo: {r.discard === 'open' ? 'Aberto' : 'Fechado'} | Trincas: {r.runners.replace('_', ' ')}
+                {r.cleanCanastaToWin ? " | 👑 Limpa Obrigatória" : ""}
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {m.players.map(p => (
+                  <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '5px' }}>
+                    <span>Assento {p.id} (Equipe {p.id % 2 === 0 ? '0' : '1'})</span>
+                    {p.name ? <span style={{ color: '#aaa' }}>Ocupado</span> : 
+                      <button onClick={() => handleJoinMatch(m.matchID, p.id.toString())} style={{ background: '#4da6ff', border: 'none', borderRadius: '3px', color: 'white', cursor: 'pointer', padding: '2px 10px' }}>Entrar</button>
+                    }
+                  </div>
+                ))}
+              </div>
+              {isFull && <div style={{ marginTop: '15px', color: '#ff4d4d', fontWeight: 'bold', textAlign: 'center' }}>Mesa Lotada</div>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+export default App;

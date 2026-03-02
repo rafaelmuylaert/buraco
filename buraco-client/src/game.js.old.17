@@ -1,0 +1,329 @@
+const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
+export const pointValues = { '3': 5, '4': 5, '5': 5, '6': 5, '7': 5, '8': 10, '9': 10, '10': 10, 'J': 10, 'Q': 10, 'K': 10, 'A': 15, '2': 20, 'JOKER': 50 };
+const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
+
+export function sortCards(cards) {
+  const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
+  return [...cards].sort((a, b) => {
+    if (suitValues[a.suit] !== suitValues[b.suit]) return suitValues[a.suit] - suitValues[b.suit];
+    return sortVals[a.rank] - sortVals[b.rank];
+  });
+}
+
+function parseMeld(cards, rules) {
+  if (cards.length < 3) return { valid: false };
+  const jokers = cards.filter(c => c.rank === 'JOKER');
+  const twos = cards.filter(c => c.rank === '2');
+  const naturals = cards.filter(c => c.rank !== 'JOKER' && c.rank !== '2');
+
+  if (jokers.length + twos.length > 2) return { valid: false }; 
+  const mainSuit = naturals.length > 0 ? naturals[0].suit : (twos.length > 0 ? twos[0].suit : null);
+  
+  // RUNNERS (Trincas)
+  if (naturals.length > 0 && naturals.every(c => c.rank === naturals[0].rank)) {
+    const r = naturals[0].rank;
+    let allowed = false;
+    if (rules.runners === 'any') allowed = true;
+    if (rules.runners === 'aces_threes' && (r === 'A' || r === '3')) allowed = true;
+    if (rules.runners === 'aces_kings' && (r === 'A' || r === 'K')) allowed = true;
+    if (allowed && jokers.length + twos.length <= 1) {
+      return { valid: true, status: (jokers.length + twos.length) === 0 ? 'clean' : 'dirty', sorted: [...naturals, ...twos, ...jokers] };
+    }
+  }
+
+  // SEQUENCES
+  if (!naturals.every(c => c.suit === mainSuit)) return { valid: false };
+  const aces = naturals.filter(c => c.rank === 'A');
+  if (aces.length > 2) return { valid: false };
+
+  let aceConfigs = aces.length === 0 ? [[]] : aces.length === 1 ? [[1], [14]] : [[1, 14]]; 
+  
+  let suitedTwos = twos.filter(t => t.suit === mainSuit);
+  let twoConfigs = [ { naturals: [], wilds: [...twos] } ];
+  if (suitedTwos.length === 1) {
+    twoConfigs.push({ naturals: [suitedTwos[0]], wilds: twos.filter(t => t !== suitedTwos[0]) });
+  } else if (suitedTwos.length === 2) {
+    twoConfigs.push({ naturals: [suitedTwos[0]], wilds: [suitedTwos[1]] });
+    twoConfigs.push({ naturals: [suitedTwos[1]], wilds: [suitedTwos[0]] });
+    twoConfigs.push({ naturals: [suitedTwos[0], suitedTwos[1]], wilds: [] });
+  }
+
+  let validOutputs = [];
+
+  for (let currentAces of aceConfigs) {
+    for (let twoOpt of twoConfigs) {
+      let testSequence = naturals.filter(c => c.rank !== 'A').map(c => sequenceMath[c.rank]);
+      testSequence.push(...currentAces);
+      testSequence.push(...twoOpt.naturals.map(c => 2));
+      testSequence.sort((a, b) => a - b);
+      
+      if (new Set(testSequence).size !== testSequence.length) continue;
+
+      let availableWilds = [...jokers, ...twoOpt.wilds];
+      if (availableWilds.length > 1) continue; 
+
+      let min = testSequence.length > 0 ? testSequence[0] : 3;
+      let max = testSequence.length > 0 ? testSequence[testSequence.length - 1] : 3;
+      
+      if ((max - min + 1) <= testSequence.length + availableWilds.length) {
+        let sortedOutput = [];
+        let wildUsed = false;
+        let currentVal = min;
+        let pool = [...cards]; 
+        
+        while (sortedOutput.length < cards.length) {
+          let match = pool.find(c => 
+            (c.rank === 'A' && currentVal === 1) || (c.rank === 'A' && currentVal === 14) ||
+            (c.rank === '2' && twoOpt.naturals.includes(c) && currentVal === 2) ||
+            (sequenceMath[c.rank] === currentVal && c.rank !== 'A' && c.rank !== '2')
+          );
+
+          if (match) { sortedOutput.push(match); pool.splice(pool.indexOf(match), 1); }
+          else if (availableWilds.length > 0 && !wildUsed) { sortedOutput.push(availableWilds[0]); wildUsed = true; }
+          else break;
+          currentVal++;
+        }
+        if (availableWilds.length > 0 && !wildUsed) sortedOutput.push(availableWilds[0]);
+        
+        if (sortedOutput.length === cards.length) {
+          validOutputs.push({ status: availableWilds.length === 0 ? 'clean' : 'dirty', sorted: sortedOutput });
+        }
+      }
+    }
+  }
+
+  if (validOutputs.length > 0) {
+    // SMART PREFERENCE: If ANY valid timeline is clean, prefer it!
+    const cleanConfig = validOutputs.find(c => c.status === 'clean');
+    return cleanConfig ? { valid: true, ...cleanConfig } : { valid: true, ...validOutputs[0] };
+  }
+
+  return { valid: false };
+}
+
+export function getCanastaStatus(meld, rules) {
+  const result = parseMeld(meld, rules);
+  if (result.valid && meld.length >= 7) return result.status;
+  return null;
+}
+
+export function calculateMeldPoints(meldGroup, rules) {
+  let pts = 0;
+  meldGroup.forEach(c => pts += pointValues[c.rank]);
+  const status = getCanastaStatus(meldGroup, rules);
+  if (status === 'clean') pts += 200;
+  if (status === 'dirty') pts += 100;
+  if (rules.largeCanasta) {
+    if (meldGroup.length === 13) pts += 500;
+    if (meldGroup.length >= 14) pts += 1000;
+  }
+  return pts;
+}
+
+function checkMorto(G, ctx) {
+  const p = ctx.currentPlayer;
+  if (G.hands[p].length === 0) {
+    if (G.pots.pot1.length > 0) { G.hands[p] = G.pots.pot1; G.pots.pot1 = []; G.teamMortos[G.teams[p]] = true; } 
+    else if (G.pots.pot2.length > 0) { G.hands[p] = G.pots.pot2; G.pots.pot2 = []; G.teamMortos[G.teams[p]] = true; }
+  }
+}
+
+function canEmptyHand(G, team) {
+  const teamMelds = G.teamPlayers[team].flatMap(tp => G.melds[tp] || []);
+  const hasMorto = G.teamMortos[team];
+  const mortosAvailable = G.pots.pot1.length > 0 || G.pots.pot2.length > 0;
+  
+  if (!hasMorto && mortosAvailable) return true; // Allowed to empty to grab the Morto
+  
+  // Must have the required Canasta to Bater
+  return teamMelds.some(m => {
+    const status = getCanastaStatus(m, G.rules);
+    if (!status) return false;
+    if (G.rules.cleanCanastaToWin && status !== 'clean') return false;
+    return true;
+  });
+}
+
+function calculateFinalScores(G) {
+  let scores = { team0: 0, team1: 0 };
+  for (const teamId of ['team0', 'team1']) {
+    const players = G.teamPlayers[teamId] || [];
+    const allMelds = players.flatMap(p => G.melds[p] || []);
+    const allHandCards = players.flatMap(p => G.hands[p] || []);
+    
+    allMelds.forEach(meld => scores[teamId] += calculateMeldPoints(meld, G.rules));
+    allHandCards.forEach(card => scores[teamId] -= pointValues[card.rank]);
+    
+    // Penalty: If they didn't get the Morto, OR they got it but never used it.
+    if (!G.teamMortos[teamId] || (G.teamMortos[teamId] && !G.mortoUsed[teamId])) {
+      if (players.length > 0) scores[teamId] -= 100;
+    }
+  }
+  return scores;
+}
+
+function buildDeck() {
+  const suits = ['♠', '♥', '♦', '♣'];
+  const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+  let deck = [];
+  for (let i = 0; i < 2; i++) {
+    for (let suit of suits) { for (let rank of ranks) deck.push({ rank, suit, id: `${rank}${suit}-${i}` }); }
+  }
+  for (let i = 0; i < 4; i++) deck.push({ rank: 'JOKER', suit: '★', id: `Joker-${i}` });
+  return deck;
+}
+
+export const BuracoGame = {
+  name: 'buraco',
+  setup: ({ random }, setupData) => {
+    const rules = setupData || { numPlayers: 4, discard: 'open', runners: 'none', largeCanasta: false, cleanCanastaToWin: false };
+    let initialDeck = random.Shuffle(buildDeck());
+    const pots = { pot1: initialDeck.splice(0, 11), pot2: initialDeck.splice(0, 11) };
+    
+    let hands = { '0': [], '1': [], '2': [], '3': [] };
+    for (let i = 0; i < rules.numPlayers; i++) { hands[i.toString()] = initialDeck.splice(0, 11); }
+
+    let teams = {}; let teamPlayers = {};
+    if (rules.numPlayers === 2) {
+      teams = { '0': 'team0', '1': 'team1' }; teamPlayers = { team0: ['0'], team1: ['1'] };
+    } else {
+      teams = { '0': 'team0', '1': 'team1', '2': 'team0', '3': 'team1' }; teamPlayers = { team0: ['0', '2'], team1: ['1', '3'] };
+    }
+
+    return {
+      rules, deck: initialDeck, discardPile: [initialDeck.pop()], pots, hands,
+      melds: { '0': [], '1': [], '2': [], '3': [] },
+      hasDrawn: false, teams, teamPlayers, teamMortos: { team0: false, team1: false },
+      mortoUsed: { team0: false, team1: false }, isExhausted: false
+    };
+  },
+
+  moves: {
+    drawCard: ({ G, ctx }) => {
+      if (G.hasDrawn) return;
+      if (G.deck.length === 0) {
+        if (G.pots.pot1.length > 0) { G.deck = G.pots.pot1; G.pots.pot1 = []; } 
+        else if (G.pots.pot2.length > 0) { G.deck = G.pots.pot2; G.pots.pot2 = []; }
+      }
+      if (G.deck.length > 0) {
+        const card = G.deck.pop();
+        card.isNewlyDrawn = true; 
+        G.hands[ctx.currentPlayer].push(card);
+        G.hasDrawn = true;
+      }
+    },
+
+    pickUpDiscard: ({ G, ctx }, selectedHandIds = [], target = { type: 'new' }) => {
+      if (G.hasDrawn || G.discardPile.length === 0) return;
+      const hand = G.hands[ctx.currentPlayer];
+      const topCard = G.discardPile[G.discardPile.length - 1];
+      const selectedCards = hand.filter(c => selectedHandIds.includes(c.id));
+
+      if (G.rules.discard === 'closed') {
+        let isValid = false;
+        let sortedMeld = null;
+
+        if (target.type === 'new') {
+          const parsed = parseMeld([...selectedCards, topCard], G.rules);
+          if (parsed.valid) { isValid = true; sortedMeld = parsed.sorted; }
+        } else if (target.type === 'append') {
+          const existingMeld = G.melds[target.player][target.index];
+          const parsed = parseMeld([...existingMeld, ...selectedCards, topCard], G.rules);
+          if (parsed.valid) { isValid = true; sortedMeld = parsed.sorted; }
+        }
+
+        if (!isValid) return; 
+
+        G.hands[ctx.currentPlayer] = hand.filter(c => !selectedHandIds.includes(c.id));
+        if (target.type === 'new') G.melds[ctx.currentPlayer].push(sortedMeld);
+        else G.melds[target.player][target.index] = sortedMeld;
+
+        G.discardPile.pop();
+        G.discardPile.forEach(c => c.isNewlyDrawn = true);
+        G.hands[ctx.currentPlayer].push(...G.discardPile);
+        G.discardPile = [];
+        G.hasDrawn = true;
+        if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
+        checkMorto(G, ctx);
+
+      } else {
+        G.discardPile.forEach(c => c.isNewlyDrawn = true);
+        G.hands[ctx.currentPlayer].push(...G.discardPile);
+        G.discardPile = [];
+        G.hasDrawn = true;
+      }
+    },
+    
+    playMeld: ({ G, ctx }, cardIds) => {
+      if (!G.hasDrawn) return; 
+      const hand = G.hands[ctx.currentPlayer];
+      
+      // BATER LOCK: Prevent moving to 0 cards if Bater is invalid!
+      if (hand.length - cardIds.length === 0 && !canEmptyHand(G, G.teams[ctx.currentPlayer])) return;
+
+      const cardsToMeld = hand.filter(card => cardIds.includes(card.id));
+      const parsed = parseMeld(cardsToMeld, G.rules);
+      if (parsed.valid) {
+        G.hands[ctx.currentPlayer] = hand.filter(card => !cardIds.includes(card.id));
+        G.melds[ctx.currentPlayer].push(parsed.sorted);
+        if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
+        checkMorto(G, ctx); 
+      }
+    },
+
+    appendToMeld: ({ G, ctx }, meldOwner, meldIndex, cardIds) => {
+      if (!G.hasDrawn || G.teams[ctx.currentPlayer] !== G.teams[meldOwner]) return;
+      const hand = G.hands[ctx.currentPlayer];
+      
+      // BATER LOCK
+      if (hand.length - cardIds.length === 0 && !canEmptyHand(G, G.teams[ctx.currentPlayer])) return;
+
+      const cardsToAdd = hand.filter(card => cardIds.includes(card.id));
+      const proposed = [...G.melds[meldOwner][meldIndex], ...cardsToAdd];
+      const parsed = parseMeld(proposed, G.rules);
+      if (parsed.valid) {
+        G.hands[ctx.currentPlayer] = hand.filter(card => !cardIds.includes(card.id));
+        G.melds[meldOwner][meldIndex] = parsed.sorted;
+        if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
+        checkMorto(G, ctx); 
+      }
+    },
+
+    discardCard: ({ G, ctx, events }, cardId) => {
+      if (!G.hasDrawn) return; 
+      const hand = G.hands[ctx.currentPlayer];
+      
+      // BATER LOCK: Cannot discard your last card if Bater is invalid!
+      if (hand.length === 1 && !canEmptyHand(G, G.teams[ctx.currentPlayer])) return;
+
+      const cardIndex = hand.findIndex(card => card.id === cardId);
+      if (cardIndex !== -1) {
+        const discardedCard = hand.splice(cardIndex, 1)[0];
+        delete discardedCard.isNewlyDrawn; 
+        
+        G.discardPile.push(discardedCard);
+        if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
+        checkMorto(G, ctx); 
+        G.hasDrawn = false; 
+        hand.forEach(c => delete c.isNewlyDrawn); 
+        events.endTurn();
+      }
+    },
+
+    declareExhausted: ({ G }) => { G.isExhausted = true; }
+  },
+
+  endIf: ({ G }) => {
+    if (G.isExhausted) return { reason: 'Monte Esgotado', scores: calculateFinalScores(G) };
+    for (let p of ['0', '1', '2', '3']) {
+      const team = G.teams[p];
+      if (G.hands[p] && G.hands[p].length === 0 && G.teamMortos[team]) {
+        if (canEmptyHand(G, team)) {
+          let finalScores = calculateFinalScores(G);
+          finalScores[team] += 100; // Bonus for going out
+          return { winner: team, reason: 'Bateu!', scores: finalScores };
+        }
+      }
+    }
+  }
+};

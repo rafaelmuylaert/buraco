@@ -1,0 +1,93 @@
+import { Server } from 'boardgame.io/dist/cjs/server.js'; 
+import { BuracoGame } from './game.js';
+import fs from 'fs';
+import path from 'path';
+
+const server = Server({
+  games: [BuracoGame],
+  origins: ['*'], // Wildcard CORS for Game WebSockets
+});
+
+// --- CUSTOM TOURNAMENT & HISTORY API ---
+const dbPath = path.join(process.cwd(), 'db');
+if (!fs.existsSync(dbPath)) fs.mkdirSync(dbPath);
+
+const tourneyFile = path.join(dbPath, 'tournaments.json');
+const historyFile = path.join(dbPath, 'history.json');
+
+if (!fs.existsSync(tourneyFile)) fs.writeFileSync(tourneyFile, '[]');
+if (!fs.existsSync(historyFile)) fs.writeFileSync(historyFile, '[]');
+
+// Bulletproof manual body parser (Guarantees no server crashes)
+const parseBody = (req) => new Promise((resolve) => {
+  let body = '';
+  req.on('data', chunk => body += chunk.toString());
+  req.on('end', () => {
+    try { resolve(body ? JSON.parse(body) : null); } 
+    catch (e) { resolve(null); }
+  });
+});
+
+// SECURITY: Answer the Browser's "Preflight" Checks to prevent "Failed to fetch"
+server.router.options('/api/(.*)', (ctx) => {
+  ctx.set('Access-Control-Allow-Origin', '*');
+  ctx.set('Access-Control-Allow-Headers', 'Content-Type');
+  ctx.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  ctx.status = 200;
+});
+
+// Read Routes
+server.router.get('/api/tournaments', (ctx) => {
+  ctx.set('Access-Control-Allow-Origin', '*');
+  ctx.body = fs.readFileSync(tourneyFile, 'utf8');
+});
+
+server.router.get('/api/history', (ctx) => {
+  ctx.set('Access-Control-Allow-Origin', '*');
+  ctx.body = fs.readFileSync(historyFile, 'utf8');
+});
+
+// Write Routes
+server.router.post('/api/tournaments', async (ctx) => {
+  ctx.set('Access-Control-Allow-Origin', '*');
+  try {
+    const body = (ctx.request.body && Object.keys(ctx.request.body).length > 0) 
+      ? ctx.request.body 
+      : await parseBody(ctx.req);
+      
+    if (body) fs.writeFileSync(tourneyFile, JSON.stringify(body));
+    ctx.body = { success: true };
+  } catch (e) {
+    console.error("Tournament Save Error:", e);
+    ctx.status = 500;
+    ctx.body = { error: 'Failed to save tournament' };
+  }
+});
+
+server.router.post('/api/history/add', async (ctx) => {
+  ctx.set('Access-Control-Allow-Origin', '*');
+  try {
+    const body = (ctx.request.body && Object.keys(ctx.request.body).length > 0) 
+      ? ctx.request.body 
+      : await parseBody(ctx.req);
+      
+    if (body && body.matchID) {
+      const history = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
+      // Only append if this match hasn't been saved yet
+      if (!history.some(h => h.matchID === body.matchID)) {
+        history.unshift(body);
+        fs.writeFileSync(historyFile, JSON.stringify(history));
+      }
+    }
+    ctx.body = { success: true };
+  } catch (e) {
+    console.error("History Save Error:", e);
+    ctx.status = 500;
+    ctx.body = { error: 'Failed to save history' };
+  }
+});
+
+// Start Server
+server.run({ port: 8000, host: '0.0.0.0' }, () => {
+  console.log(`Server running on port 8000...`);
+});

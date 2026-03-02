@@ -1,0 +1,242 @@
+import React, { useState, useEffect } from 'react';
+import { sortCards, getCanastaStatus, calculateMeldPoints } from './game.js';
+
+const Card = ({ card, isSelected, onClick }) => {
+  const isRed = card.suit === '♥' || card.suit === '♦';
+  return (
+    <div onClick={onClick} style={{
+      border: isSelected ? '3px solid #ffd700' : '1px solid #333', transform: isSelected ? 'translateY(-10px)' : 'none', transition: 'all 0.2s', cursor: onClick ? 'pointer' : 'default',
+      borderRadius: '8px', width: '60px', height: '90px', display: 'inline-flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', margin: '2px',
+      backgroundColor: 'white', color: isRed ? 'red' : 'black', boxShadow: '2px 2px 5px rgba(0,0,0,0.2)'
+    }}>
+      <div style={{ fontSize: '1.2em', fontWeight: 'bold' }}>{card.rank}</div>
+      <div style={{ fontSize: '1.5em' }}>{card.suit}</div>
+    </div>
+  );
+};
+
+const CardBack = ({ label, count, onClick }) => (
+  <div onClick={onClick} style={{
+    border: '2px solid white', borderRadius: '8px', width: '60px', height: '90px', margin: '2px',
+    backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px)',
+    boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'white', cursor: onClick ? 'pointer' : 'default', textAlign: 'center'
+  }}>
+    <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>{label}</span>
+    <span style={{ fontSize: '1.2em' }}>{count}</span>
+  </div>
+);
+
+export function BuracoBoard({ ctx, G, moves, playerID }) {
+  const [selectedCards, setSelectedCards] = useState([]);
+
+  useEffect(() => {
+    if (ctx && G && ctx.phase === 'waitingRoom' && !G.players.includes(playerID)) {
+      moves.joinTable(playerID);
+    }
+  }, [ctx, G, playerID, moves]);
+
+  if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregando Mesa...</div>;
+
+  // --- DETAILED GAME OVER SCOREBOARD ---
+  if (ctx.gameover) {
+    const s0 = ctx.gameover.scores.team0;
+    const s1 = ctx.gameover.scores.team1;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#1b4332', color: 'white', fontFamily: 'sans-serif' }}>
+        <h1 style={{ fontSize: '3em', color: '#ffd700', marginBottom: '5px' }}>Fim de Jogo!</h1>
+        <h2 style={{ marginBottom: '40px', color: '#ccc' }}>Motivo: {ctx.gameover.reason}</h2>
+        
+        <div style={{ display: 'flex', gap: '50px' }}>
+          
+          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '30px', borderRadius: '15px', border: '2px solid #4da6ff', width: '300px' }}>
+            <h2 style={{ textAlign: 'center', color: '#4da6ff', margin: '0 0 20px 0' }}>Nós (Eq. 0)</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '5px 0' }}><span>Pontos na Mesa:</span> <span>{s0.table}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '5px 0', color: '#ff4d4d' }}><span>Cartas na Mão:</span> <span>{s0.hand}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '5px 0', color: '#ff4d4d' }}><span>Multa do Morto:</span> <span>{s0.mortoPenalty}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '5px 0', color: '#ffd700' }}><span>Bônus de Batida:</span> <span>{s0.baterBonus}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '15px', fontSize: '1.5em', fontWeight: 'bold' }}><span>Total:</span> <span>{s0.total}</span></div>
+          </div>
+
+          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '30px', borderRadius: '15px', border: '2px solid #ff4d4d', width: '300px' }}>
+            <h2 style={{ textAlign: 'center', color: '#ff4d4d', margin: '0 0 20px 0' }}>Eles (Eq. 1)</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '5px 0' }}><span>Pontos na Mesa:</span> <span>{s1.table}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '5px 0', color: '#ff4d4d' }}><span>Cartas na Mão:</span> <span>{s1.hand}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '5px 0', color: '#ff4d4d' }}><span>Multa do Morto:</span> <span>{s1.mortoPenalty}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '5px 0', color: '#ffd700' }}><span>Bônus de Batida:</span> <span>{s1.baterBonus}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '15px', fontSize: '1.5em', fontWeight: 'bold' }}><span>Total:</span> <span>{s1.total}</span></div>
+          </div>
+
+        </div>
+
+        {/* Saves the score and leaves the seat cleanly */}
+        <button 
+          onClick={() => {
+            const hist = [{ date: new Date().toLocaleString(), scores: ctx.gameover.scores }, ...JSON.parse(localStorage.getItem('buraco_history') || '[]')];
+            localStorage.setItem('buraco_history', JSON.stringify(hist));
+            localStorage.removeItem('buraco_session');
+            window.location.reload(); 
+          }} 
+          style={{ marginTop: '40px', padding: '15px 30px', background: '#ffd700', border: 'none', borderRadius: '8px', fontSize: '1.2em', fontWeight: 'bold', cursor: 'pointer' }}
+        >
+          Salvar Placar e Voltar ao Salão
+        </button>
+      </div>
+    );
+  }
+
+  if (ctx.phase === 'waitingRoom') {
+    return (
+      <div style={{ padding: '50px', color: 'white', fontFamily: 'sans-serif', backgroundColor: '#1b4332', minHeight: '100vh', display: 'flex', gap: '50px' }}>
+        <div style={{ flex: 1, background: 'rgba(0,0,0,0.5)', padding: '30px', borderRadius: '15px' }}>
+          <h2 style={{ color: '#ffd700', marginTop: 0 }}>Aguardando o Anfitrião iniciar...</h2>
+        </div>
+      </div>
+    );
+  }
+
+  const rawHand = G.hands[playerID] || []; 
+  const standardHand = rawHand.filter(c => !c.isNewlyDrawn);
+  const drawnCards = rawHand.filter(c => c.isNewlyDrawn);
+  const sortedHand = sortCards(standardHand); 
+  const topDiscard = G.discardPile[G.discardPile.length - 1];
+  
+  const myTeam = G.teams[playerID];
+  const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
+  const myTeamPlayers = G.teamPlayers[myTeam] || [];
+  const oppTeamPlayers = G.teamPlayers[oppTeam] || [];
+
+  const calcTeamTablePoints = (teamPlayers) => {
+    let total = 0;
+    teamPlayers.forEach(p => (G.melds[p] || []).forEach(m => total += calculateMeldPoints(m, G.rules)));
+    return total;
+  };
+
+  const toggleCardSelection = (cardId) => setSelectedCards(prev => prev.includes(cardId) ? prev.filter(id => id !== cardId) : [...prev, cardId]);
+
+  const handleDiscardPileClick = () => {
+    if (selectedCards.length === 1 && G.hasDrawn) {
+      moves.discardCard(selectedCards[0]);
+      setSelectedCards([]);
+    } else if (!G.hasDrawn && G.discardPile.length > 0) {
+      if (G.rules.discard === 'closed') {
+        moves.pickUpDiscard(selectedCards, { type: 'new' });
+        setSelectedCards([]);
+      } else {
+        moves.pickUpDiscard();
+      }
+    }
+  };
+
+  const renderTeamTable = (teamPlayers, title, isMyTeam) => (
+    <div style={{ background: isMyTeam ? 'rgba(77, 166, 255, 0.1)' : 'rgba(255, 77, 77, 0.1)', padding: '15px', borderRadius: '10px', height: '100%', minHeight: '120px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <h3 style={{ margin: 0, color: isMyTeam ? '#4da6ff' : '#ff4d4d' }}>{title}</h3>
+        <span style={{ background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: '20px', fontWeight: 'bold', color: '#ffd700' }}>
+          Pontos da Mesa: {calcTeamTablePoints(teamPlayers)}
+        </span>
+      </div>
+      
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
+        {teamPlayers.map(p => (G.melds[p] || []).map((meldGroup, index) => {
+          const status = getCanastaStatus(meldGroup, G.rules);
+          const points = calculateMeldPoints(meldGroup, G.rules);
+          const borderColor = status === 'clean' ? '#ffd700' : (status === 'dirty' ? '#c0c0c0' : 'transparent');
+          
+          return (
+            <div key={`${p}-${index}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ color: borderColor !== 'transparent' ? borderColor : '#aaa', fontSize: '0.8em', fontWeight: 'bold', marginBottom: '3px' }}>
+                {points} pts
+              </div>
+              <div onClick={() => { 
+                  if (isMyTeam) {
+                    if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) {
+                      moves.pickUpDiscard(selectedCards, { type: 'append', player: p, index });
+                      setSelectedCards([]);
+                    } else if (selectedCards.length > 0) {
+                      moves.appendToMeld(p, index, selectedCards); 
+                      setSelectedCards([]);
+                    }
+                  }
+                }}
+                style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', padding: '5px', borderRadius: '8px', border: `2px solid ${borderColor}`, cursor: (isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default' }}>
+                {meldGroup.map(card => <Card key={card.id} card={card} />)}
+              </div>
+            </div>
+          );
+        }))}
+
+        {isMyTeam && (
+          <div onClick={() => { 
+              if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) {
+                moves.pickUpDiscard(selectedCards, { type: 'new' });
+                setSelectedCards([]);
+              } else if (selectedCards.length >= 3) { 
+                moves.playMeld(selectedCards); 
+                setSelectedCards([]); 
+              } 
+            }} 
+            style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (selectedCards.length >= 3 || (!G.hasDrawn && G.rules.discard === 'closed')) ? 'pointer' : 'default', color: '#888' }}>
+            + Baixar Jogo
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: '20px', fontFamily: 'sans-serif', backgroundColor: '#2d6a4f', minHeight: '100vh', color: 'white', display: 'flex', flexDirection: 'column' }}>
+      <h1>Jogador {playerID} {ctx.currentPlayer === playerID ? <span style={{ color: '#ffd700' }}>(Sua Vez)</span> : ""}</h1>
+      
+      <div style={{ display: 'flex', gap: '20px', minHeight: '150px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '80px', alignItems: 'center' }}>
+          
+          <div style={{ textAlign: 'center' }}>
+            <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Monte</h4>
+            {/* Translated Cavar -> Comprar */}
+            <CardBack label="Comprar" count={G.deck.length} onClick={() => { if(!G.hasDrawn) moves.drawCard(); }} />
+          </div>
+
+          <div style={{ textAlign: 'center' }}>
+            <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Lixo ({G.discardPile.length})</h4>
+            <div onClick={handleDiscardPileClick} style={{ cursor: (!G.hasDrawn || (selectedCards.length === 1 && G.hasDrawn)) ? 'pointer' : 'not-allowed' }}>
+              {topDiscard ? <Card card={topDiscard} /> : <div style={{ border: '2px dashed #40916c', width: '60px', height: '90px', borderRadius: '8px', textAlign: 'center', lineHeight: '90px', color: '#888' }}>Vazio</div>}
+            </div>
+          </div>
+
+        </div>
+
+        <div style={{ flexGrow: 1 }}>{renderTeamTable(oppTeamPlayers, "Mesa Deles", false)}</div>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '120px', alignItems: 'center' }}>
+          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Mortos</h4>
+          <div style={{ fontSize: '0.7em', color: G.teamMortos[myTeam] ? '#ffd700' : '#888' }}>Nós: {G.teamMortos[myTeam] ? '✔️' : '❌'}</div>
+          <div style={{ fontSize: '0.7em', color: G.teamMortos[oppTeam] ? '#ffd700' : '#888', marginBottom: '5px' }}>Eles: {G.teamMortos[oppTeam] ? '✔️' : '❌'}</div>
+
+          {G.pots.pot1.length > 0 ? <CardBack label="Morto" count={11} /> : null}
+          {G.pots.pot2.length > 0 ? <CardBack label="Morto" count={11} /> : null}
+        </div>
+      </div>
+
+      <div style={{ marginTop: '20px' }}>{renderTeamTable(myTeamPlayers, "Nossa Mesa", true)}</div>
+
+      <div style={{ display: 'flex', gap: '30px', marginTop: '20px', alignItems: 'flex-start' }}>
+        
+        <div style={{ padding: '15px', background: 'rgba(255, 215, 0, 0.1)', border: '2px dashed #ffd700', borderRadius: '10px', minWidth: '100px', maxWidth: '350px', minHeight: '120px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: '#ffd700', textAlign: 'center' }}>Compradas</h4>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', justifyContent: 'center' }}>
+            {drawnCards.map(card => <Card key={card.id} card={card} isSelected={selectedCards.includes(card.id)} onClick={() => toggleCardSelection(card.id)} />)}
+          </div>
+          {G.deck.length === 0 && !G.hasDrawn && <button onClick={() => moves.declareExhausted()} style={{ marginTop: '10px', background: '#ff4d4d', color: 'white', border: 'none', padding: '8px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Passar a Vez</button>}
+        </div>
+
+        <div style={{ flexGrow: 1 }}>
+          <h2>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.6em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+            {sortedHand.map(card => <Card key={card.id} card={card} isSelected={selectedCards.includes(card.id)} onClick={() => toggleCardSelection(card.id)} />)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

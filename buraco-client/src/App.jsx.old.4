@@ -1,0 +1,91 @@
+import React, { useState } from 'react';
+import { Client } from 'boardgame.io/react';
+import { SocketIO } from 'boardgame.io/multiplayer';
+import { BuracoGame } from './game.js';
+import { BuracoBoard } from './Board.jsx';
+
+// Dynamically uses your server's IP address
+const SERVER_ADDRESS = `http://${window.location.hostname}:8000`;
+
+const BuracoClient = Client({
+  game: BuracoGame,
+  board: BuracoBoard,
+  multiplayer: SocketIO({ server: SERVER_ADDRESS }),
+  debug: false // Turns off the boardgame.io debug panel at the bottom
+});
+
+const App = () => {
+  const [inGame, setInGame] = useState(false);
+  const [roomCode, setRoomCode] = useState('game-night');
+  const [seat, setSeat] = useState('0');
+
+  // If the player has joined, render the actual game board
+  if (inGame) {
+    return <BuracoClient matchID={roomCode} playerID={seat} />;
+  }
+
+  // Otherwise, render our custom, beautiful Lobby UI
+  return (
+    <div style={{ 
+      display: 'flex', justifyContent: 'center', alignItems: 'center', 
+      minHeight: '100vh', backgroundColor: '#111', 
+      backgroundImage: 'radial-gradient(circle, #2d6a4f 0%, #081c15 100%)',
+      fontFamily: 'sans-serif', color: 'white' 
+    }}>
+      <div style={{ 
+        background: 'rgba(0,0,0,0.6)', padding: '40px', borderRadius: '15px', 
+        border: '2px solid #40916c', width: '400px', textAlign: 'center',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.8)'
+      }}>
+        <h1 style={{ color: '#ffd700', fontSize: '2.5em', margin: '0 0 10px 0' }}>♠♥ BURACO ♦♣</h1>
+        <p style={{ color: '#aaa', marginBottom: '30px' }}>Join the table to start playing</p>
+
+        <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#4da6ff' }}>Room Name</label>
+          <input 
+            type="text" 
+            value={roomCode} 
+            onChange={(e) => setRoomCode(e.target.value)}
+            style={{ 
+              width: '100%', padding: '12px', borderRadius: '8px', border: 'none', 
+              fontSize: '1.1em', boxSizing: 'border-box', backgroundColor: '#eee' 
+            }} 
+          />
+          <small style={{ color: '#888', display: 'block', marginTop: '5px' }}>
+            (Make sure your friends type the exact same room name!)
+          </small>
+        </div>
+
+        <div style={{ marginBottom: '30px', textAlign: 'left' }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#ff4d4d' }}>Select Your Seat</label>
+          <select 
+            value={seat} 
+            onChange={(e) => setSeat(e.target.value)}
+            style={{ 
+              width: '100%', padding: '12px', borderRadius: '8px', border: 'none', 
+              fontSize: '1.1em', boxSizing: 'border-box', backgroundColor: '#eee', cursor: 'pointer' 
+            }}
+          >
+            <option value="0">Seat 0 (Team 0)</option>
+            <option value="1">Seat 1 (Team 1)</option>
+            <option value="2">Seat 2 (Team 0)</option>
+            <option value="3">Seat 3 (Team 1)</option>
+          </select>
+        </div>
+
+        <button 
+          onClick={() => setInGame(true)}
+          style={{ 
+            width: '100%', padding: '15px', borderRadius: '8px', border: 'none', 
+            backgroundColor: '#ffd700', color: '#000', fontSize: '1.2em', 
+            fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 10px rgba(255, 215, 0, 0.3)' 
+          }}
+        >
+          Take a Seat
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default App;

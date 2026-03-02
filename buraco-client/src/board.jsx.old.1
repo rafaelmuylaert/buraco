@@ -1,0 +1,61 @@
+import React from 'react';
+
+// A simple reusable card component
+const Card = ({ card }) => {
+  const isRed = card.suit === '♥' || card.suit === '♦';
+  return (
+    <div style={{
+      border: '1px solid #333',
+      borderRadius: '8px',
+      width: '60px',
+      height: '90px',
+      display: 'inline-flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      margin: '5px',
+      backgroundColor: 'white',
+      color: isRed ? 'red' : 'black',
+      boxShadow: '2px 2px 5px rgba(0,0,0,0.2)'
+    }}>
+      <div style={{ fontSize: '1.2em', fontWeight: 'bold' }}>{card.rank}</div>
+      <div style={{ fontSize: '1.5em' }}>{card.suit}</div>
+    </div>
+  );
+};
+
+export function BuracoBoard({ ctx, G, moves }) {
+  // Boardgame.io passes the player ID in playerID (if undefined, you are a spectator)
+  const myHand = G.hands[ctx.currentPlayer] || []; 
+  const topDiscard = G.discardPile[G.discardPile.length - 1];
+
+  return (
+    <div style={{ padding: '20px', fontFamily: 'sans-serif', backgroundColor: '#2d6a4f', minHeight: '100vh', color: 'white' }}>
+      <h1>Table {ctx.currentPlayer}'s Turn</h1>
+      
+      <div style={{ display: 'flex', gap: '50px', marginBottom: '40px' }}>
+        {/* Draw Pile */}
+        <div onClick={() => moves.drawCard()} style={{ cursor: 'pointer', textAlign: 'center' }}>
+          <h3>Deck ({G.deck.length})</h3>
+          <div style={{ border: '2px dashed white', width: '60px', height: '90px', borderRadius: '8px', background: '#1b4332' }}></div>
+        </div>
+
+        {/* Discard Pile */}
+        <div style={{ textAlign: 'center' }}>
+          <h3>Discard</h3>
+          {topDiscard ? <Card card={topDiscard} /> : <div style={{ width: '60px', height: '90px' }}></div>}
+        </div>
+      </div>
+
+      <hr style={{ borderColor: '#40916c' }} />
+
+      {/* Player's Hand */}
+      <h2>My Hand</h2>
+      <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+        {myHand.map(card => (
+          <Card key={card.id} card={card} />
+        ))}
+      </div>
+    </div>
+  );
+}
