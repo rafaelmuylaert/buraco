@@ -23,7 +23,7 @@ The easiest way to run the game is using Docker. It will automatically build the
 
 ### 1. Clone the repository
 ```bash
-git clone [https://github.com/YourUsername/buraco-web.git](https://github.com/YourUsername/buraco-web.git)
+git clone [https://github.com/rafaelmuylaert/buraco](https://github.com/rafaelmuylaert/buraco)
 cd buraco-web
 ```
 ### 2. Start the Containers
@@ -39,34 +39,28 @@ This app is pre-configured to be hosted behind an Nginx proxy under a sub-path (
 If you are using Nginx Proxy Manager, route your domain to your server's local IP, and create the following Custom Locations:
 
 ### 1. The Frontend:
-
-Location: /buraco
-Forward Port: 4173
+* **Location: /buraco
+* **Forward Port: 4173
 
 ### 2. The Game Engine API:
-
-Location: /buraco/games/
-Forward Port: 8000
-Advanced/Gear Icon: rewrite ^/buraco/games/(.*) /games/$1 break;
+* **Location: /buraco/games/
+* **Forward Port: 8000
+* **Advanced/Gear Icon: rewrite ^/buraco/games/(.*) /games/$1 break;
 
 ### 3. The Tournament Database API:
-
-Location: /buraco/api/
-Forward Port: 8000
-Advanced/Gear Icon: rewrite ^/buraco/api/(.*) /api/$1 break;
+* **Location: /buraco/api/
+* **Forward Port: 8000
+* **Advanced/Gear Icon: rewrite ^/buraco/api/(.*) /api/$1 break;
 
 ### 4. Real-Time WebSockets:
-
-Location: /buraco/socket.io/
-Forward Port: 8000
-Websockets Support: ON
-Advanced/Gear Icon: rewrite ^/buraco/socket.io/(.*) /socket.io/$1 break;
+* **Location: /buraco/socket.io/
+* **Forward Port: 8000
+* **Websockets Support: ON
+* **Advanced/Gear Icon: rewrite ^/buraco/socket.io/(.*) /socket.io/$1 break;
 
 ## ⚙️ Accessing the Admin Panel
 To access the "God Mode" dashboard to manage active tables and wipe test data:
-
 Open the main Lounge screen.
-
 Click the faint, hidden Gear Icon (⚙️) located directly to the left of the "Salão Principal" title.
 
 ## 💾 Backing up your Database
