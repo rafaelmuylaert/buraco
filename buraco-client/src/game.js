@@ -17,7 +17,6 @@ function parseMeld(cards, rules) {
   const twos = cards.filter(c => c.rank === '2');
   const naturals = cards.filter(c => c.rank !== 'JOKER' && c.rank !== '2');
 
-  // 1. Check if it's a valid Runner (Trinca)
   if (naturals.length > 0 && naturals.every(c => c.rank === naturals[0].rank)) {
     const r = naturals[0].rank;
     let allowed = false;
@@ -30,7 +29,6 @@ function parseMeld(cards, rules) {
     }
   }
 
-  // 2. Check if it's a valid Sequence (Sequência)
   if (naturals.length > 0) {
     const suit = naturals[0].suit;
     
@@ -73,7 +71,6 @@ function parseMeld(cards, rules) {
               values.push(...cfg.nat.map(c => 2));
               values.sort((a, b) => a - b);
 
-              // Reject if there are duplicate natural cards
               if (new Set(values).size !== values.length) continue;
 
               let min = values[0];
@@ -83,7 +80,6 @@ function parseMeld(cards, rules) {
                 gaps += (values[i] - values[i-1] - 1);
               }
 
-              // Perfect fit logic for the Wild card
               if ((gaps === 0 && cfg.wild.length === 0) || 
                   (gaps === 1 && cfg.wild.length === 1) || 
                   (gaps === 0 && cfg.wild.length === 1)) {
@@ -129,7 +125,6 @@ function parseMeld(cards, rules) {
                   }
                 }
                 
-                // Final failsafe verification
                 if (sorted.length === cards.length && sorted.every(c => c !== undefined)) {
                   return { valid: true, status: cfg.wild.length === 0 ? 'clean' : 'dirty', sorted };
                 }
@@ -236,7 +231,6 @@ function buildDeck(rules) {
   for (let i = 0; i < 2; i++) {
     for (let suit of suits) { for (let rank of ranks) deck.push({ rank, suit, id: `${rank}${suit}-${i}` }); }
   }
-  // Feature: Conditionally add Jokers based on Tournament Rules!
   if (!rules.noJokers) {
     for (let i = 0; i < 4; i++) deck.push({ rank: 'JOKER', suit: '★', id: `Joker-${i}` });
   }
@@ -246,10 +240,8 @@ function buildDeck(rules) {
 export const BuracoGame = {
   name: 'buraco',
   setup: ({ random }, setupData) => {
-    // Inject our new default rules if they are missing
     const rules = setupData || { numPlayers: 4, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false };
     
-    // Pass the rules into the deck builder!
     let initialDeck = random.Shuffle(buildDeck(rules));
     const pots = [initialDeck.splice(0, 11), initialDeck.splice(0, 11)];
     
@@ -432,26 +424,22 @@ export const BuracoGame = {
         }
       }
     }
-  }
-  // NEW: THE BOT BRAIN
+  },
+
   ai: {
     enumerate: (G, ctx) => {
       let moves = [];
       const p = ctx.currentPlayer;
 
       if (!G.hasDrawn) {
-        // Phase 1: Always draw a card from the deck
         moves.push({ move: 'drawCard', args: [] });
       } else {
         const hand = G.hands[p] || [];
         
-        // Failsafe: Prevent the bot from soft-locking the server if it tries 
-        // to discard its last card without a clean canasta!
         if (hand.length === 1 && !canEmptyHand(G, G.teams[p])) {
           return moves; 
         }
 
-        // Phase 2: Pick a random card from the hand and discard it
         hand.forEach(card => {
           moves.push({ move: 'discardCard', args: [card.id] });
         });
