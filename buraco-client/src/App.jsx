@@ -273,10 +273,46 @@ const App = () => {
     return { standings: sorted, isFinished };
   };
 
-  const handleAdminDeleteTournament = (tID) => {
-    if (!confirm("Tem certeza que deseja apagar este torneio? Isso removerá ele da tela.")) return;
+  // --- NEW: ADVANCED ADMIN CONTROLS ---
+  const handleAdminDeleteTournament = async (tID) => {
+    if (!confirm("Tem certeza? Isso apagará o torneio E DESTRUIRÁ todas as mesas associadas permanentemente.")) return;
+    
+    // 1. Find the tournament
+    const tToDelete = tournaments.find(t => t.id === tID);
+    if (tToDelete) {
+      // 2. Extract every matchID that belonged to it
+      const matchIDs = tToDelete.rounds.flatMap(r => r.assignments.map(a => a.matchID));
+      // 3. Command the engine to annihilate the files
+      for (let mID of matchIDs) {
+        try {
+          await fetch(`${API_ADDRESS}/api/admin/delete-match`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ matchID: mID })
+          });
+        } catch (e) { console.error("Falha ao apagar mesa", mID); }
+      }
+    }
+    
+    // 4. Remove it from the UI
     const updated = tournaments.filter(t => t.id !== tID);
     saveTournamentsToAPI(updated);
+  };
+
+  const handleCleanOrphans = async () => {
+    if (!confirm("Isso apagará todas as mesas fantasma do servidor. Continuar?")) return;
+    
+    const validMatchIDs = tournaments.flatMap(t => t.rounds.flatMap(r => r.assignments.map(a => a.matchID)));
+    const orphanMatches = matches.filter(m => !validMatchIDs.includes(m.matchID));
+    
+    for (let m of orphanMatches) {
+       await fetch(`${API_ADDRESS}/api/admin/delete-match`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ matchID: m.matchID })
+       });
+    }
+    alert(`${orphanMatches.length} mesas fantasma apagadas!`);
   };
 
   const handleAdminForceKick = async (matchID, seatID) => {
@@ -304,6 +340,9 @@ const App = () => {
     );
   }
 
+  // Generate a list of all valid matches to detect ghosts in the Admin Panel
+  const allValidMatchIDs = tournaments.flatMap(t => t.rounds.flatMap(r => r.assignments.map(a => a.matchID)));
+
   if (view === 'admin') {
     return (
       <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
@@ -321,28 +360,34 @@ const App = () => {
                 <div>
                   <strong>{t.name}</strong> <span style={{ fontSize: '0.8em', color: t.status === 'completed' ? '#aaa' : '#4da6ff' }}>({t.status})</span>
                 </div>
-                <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar</button>
+                <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar Torneio e Mesas</button>
               </div>
             ))}
           </div>
 
           <div style={{ flex: '2 1 300px', background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
-            <h2 style={{ color: '#4da6ff', marginTop: 0 }}>Mesas Ativas (Liberar Assentos)</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <h2 style={{ color: '#4da6ff', margin: 0 }}>Mesas Ativas (Liberar Assentos)</h2>
+              <button onClick={handleCleanOrphans} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold' }}>🧹 Limpar Mesas Órfãs</button>
+            </div>
             {matches.length === 0 ? <p style={{ color: '#888' }}>Nenhuma mesa ativa.</p> : null}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
-              {matches.map(m => (
-                <div key={m.matchID} style={{ background: '#111', border: '1px solid #333', borderRadius: '8px', padding: '15px', width: '300px' }}>
-                  <h4 style={{ margin: '0 0 10px 0', color: '#ccc' }}>Mesa: {m.matchID.substring(0,6)}...</h4>
-                  {m.players.map(p => (
-                    <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px dashed #333', paddingBottom: '4px' }}>
-                      <span style={{ fontSize: '0.9em' }}>Assento {p.id}: <strong style={{ color: p.name ? 'white' : '#555' }}>{p.name || 'Vazio'}</strong></span>
-                      {p.name && (
-                        <button onClick={() => handleAdminForceKick(m.matchID, p.id)} style={{ background: '#ff9900', color: 'black', border: 'none', borderRadius: '3px', padding: '2px 8px', fontSize: '0.8em', fontWeight: 'bold', cursor: 'pointer' }}>Forçar Saída</button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ))}
+              {matches.map(m => {
+                const isOrphan = !allValidMatchIDs.includes(m.matchID);
+                return (
+                  <div key={m.matchID} style={{ background: '#111', border: `1px solid ${isOrphan ? '#ff4d4d' : '#333'}`, borderRadius: '8px', padding: '15px', width: '300px' }}>
+                    <h4 style={{ margin: '0 0 10px 0', color: isOrphan ? '#ff4d4d' : '#ccc' }}>Mesa: {m.matchID.substring(0,6)}... {isOrphan && '(Órfã)'}</h4>
+                    {m.players.map(p => (
+                      <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px dashed #333', paddingBottom: '4px' }}>
+                        <span style={{ fontSize: '0.9em' }}>Assento {p.id}: <strong style={{ color: p.name ? 'white' : '#555' }}>{p.name || 'Vazio'}</strong></span>
+                        {p.name && (
+                          <button onClick={() => handleAdminForceKick(m.matchID, p.id)} style={{ background: '#ff9900', color: 'black', border: 'none', borderRadius: '3px', padding: '2px 8px', fontSize: '0.8em', fontWeight: 'bold', cursor: 'pointer' }}>Forçar Saída</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
