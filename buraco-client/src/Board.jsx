@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { sortCards, getCanastaStatus, calculateMeldPoints } from './game.js';
 
-const Card = ({ card, isSelected, onClick, customStyle }) => {
+const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle }) => {
   const isRed = card.suit === '♥' || card.suit === '♦';
   return (
     <div onClick={onClick} style={{
       position: 'relative',
-      border: isSelected ? '3px solid #ffd700' : '1px solid #333', 
+      border: isSelected ? '3px solid #ffd700' : (isNewlyDrawn ? '3px solid #ffcc00' : '1px solid #333'), 
       transform: isSelected ? 'translateY(-10px)' : 'none', 
       transition: 'all 0.2s', 
       cursor: onClick ? 'pointer' : 'default',
-      borderRadius: '8px', width: '60px', height: '90px', 
+      borderRadius: '8px', width: '60px', height: '90px', minWidth: '60px',
       display: 'inline-flex', flexDirection: 'column', 
       justifyContent: 'center', alignItems: 'center', margin: '2px',
       backgroundColor: 'white', color: isRed ? 'red' : 'black', 
-      boxShadow: '2px 2px 5px rgba(0,0,0,0.4)',
+      boxShadow: isNewlyDrawn && !isSelected ? '0 0 15px rgba(255, 204, 0, 0.8)' : '2px 2px 5px rgba(0,0,0,0.4)',
       ...customStyle
     }}>
       <div style={{ position: 'absolute', top: '4px', left: '4px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1' }}>
@@ -39,9 +39,7 @@ const CardBack = ({ label, count, onClick }) => (
 
 const isRunner = (meld) => {
   const naturals = meld.filter(c => c.rank !== 'JOKER' && c.rank !== '2');
-  if (naturals.length >= 2) {
-    return naturals[0].rank === naturals[1].rank;
-  }
+  if (naturals.length >= 2) return naturals[0].rank === naturals[1].rank;
   return false;
 };
 
@@ -49,7 +47,6 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
   const [selectedCards, setSelectedCards] = useState([]);
 
   useEffect(() => {
-    // SAFE CHECK: Added G.players to prevent undefined crashes
     if (ctx && G && ctx.phase === 'waitingRoom' && G.players && !G.players.includes(playerID)) {
       moves.joinTable(playerID);
     }
@@ -72,6 +69,11 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
   if (ctx.gameover) {
     const s0 = ctx.gameover.scores.team0;
     const s1 = ctx.gameover.scores.team1;
+    
+    // Feature: Display real player names in Game Over screen
+    const team0Names = (G.teamPlayers.team0 || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`).join(' & ');
+    const team1Names = (G.teamPlayers.team1 || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`).join(' & ');
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#1b4332', color: 'white', fontFamily: 'sans-serif' }}>
         <h1 style={{ fontSize: '3em', color: '#ffd700', marginBottom: '5px' }}>Fim de Jogo!</h1>
@@ -79,7 +81,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
         
         <div style={{ display: 'flex', gap: '50px', flexWrap: 'wrap', justifyContent: 'center' }}>
           <div style={{ background: 'rgba(0,0,0,0.5)', padding: '30px', borderRadius: '15px', border: '2px solid #4da6ff', width: '300px' }}>
-            <h2 style={{ textAlign: 'center', color: '#4da6ff', margin: '0 0 20px 0' }}>Equipe 0</h2>
+            <h2 style={{ textAlign: 'center', color: '#4da6ff', margin: '0 0 20px 0' }}>{team0Names || 'Equipe 0'}</h2>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '5px 0' }}><span>Pontos na Mesa:</span> <span>{s0.table}</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '5px 0', color: '#ff4d4d' }}><span>Dedução (Mão):</span> <span>{s0.hand}</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '5px 0', color: '#ff4d4d' }}><span>Multa do Morto:</span> <span>{s0.mortoPenalty}</span></div>
@@ -88,7 +90,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
           </div>
 
           <div style={{ background: 'rgba(0,0,0,0.5)', padding: '30px', borderRadius: '15px', border: '2px solid #ff4d4d', width: '300px' }}>
-            <h2 style={{ textAlign: 'center', color: '#ff4d4d', margin: '0 0 20px 0' }}>Equipe 1</h2>
+            <h2 style={{ textAlign: 'center', color: '#ff4d4d', margin: '0 0 20px 0' }}>{team1Names || 'Equipe 1'}</h2>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '5px 0' }}><span>Pontos na Mesa:</span> <span>{s1.table}</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '5px 0', color: '#ff4d4d' }}><span>Dedução (Mão):</span> <span>{s1.hand}</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '5px 0', color: '#ff4d4d' }}><span>Multa do Morto:</span> <span>{s1.mortoPenalty}</span></div>
@@ -112,10 +114,9 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
     );
   }
 
+  // Feature: Organized hand with highlighted new cards!
   const rawHand = G.hands[playerID] || []; 
-  const standardHand = rawHand.filter(c => !c.isNewlyDrawn);
-  const drawnCards = rawHand.filter(c => c.isNewlyDrawn);
-  const sortedHand = sortCards(standardHand); 
+  const sortedHand = sortCards(rawHand); 
   const topDiscard = G.discardPile[G.discardPile.length - 1];
   
   const myTeam = G.teams[playerID];
@@ -226,56 +227,84 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
       <h1>{myName} {ctx.currentPlayer === playerID ? <span style={{ color: '#ffd700' }}>(Sua Vez)</span> : ""}</h1>
       
       <div style={{ display: 'flex', gap: '20px', minHeight: '150px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '80px', alignItems: 'center' }}>
+        
+        {/* Left Column: Deck and Discard */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: G.rules?.openDiscardView ? 'auto' : '80px', minWidth: '80px', maxWidth: '300px', alignItems: 'center' }}>
           <div style={{ textAlign: 'center' }}>
             <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Monte</h4>
             <CardBack label="Comprar" count={G.deck.length} onClick={() => { if(!G.hasDrawn) moves.drawCard(); }} />
           </div>
-          <div style={{ textAlign: 'center' }}>
+          
+          <div style={{ textAlign: 'center', width: '100%' }}>
             <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Lixo ({G.discardPile.length})</h4>
-            <div onClick={handleDiscardPileClick} style={{ cursor: (!G.hasDrawn || (selectedCards.length === 1 && G.hasDrawn)) ? 'pointer' : 'not-allowed' }}>
-              {topDiscard ? <Card card={topDiscard} /> : <div style={{ border: '2px dashed #40916c', width: '60px', height: '90px', borderRadius: '8px', textAlign: 'center', lineHeight: '90px', color: '#888' }}>Vazio</div>}
+            <div onClick={handleDiscardPileClick} style={{ 
+              cursor: (!G.hasDrawn || (selectedCards.length === 1 && G.hasDrawn)) ? 'pointer' : 'not-allowed',
+              display: 'flex', justifyContent: G.rules?.openDiscardView ? 'flex-start' : 'center', overflowX: 'auto', paddingBottom: '10px'
+            }}>
+              {G.discardPile.length > 0 ? (
+                G.rules?.openDiscardView ? (
+                  G.discardPile.map((c, i) => <Card key={c.id} card={c} customStyle={{ marginLeft: i > 0 ? '-40px' : '0' }} />)
+                ) : (
+                  <Card card={topDiscard} />
+                )
+              ) : (
+                <div style={{ border: '2px dashed #40916c', width: '60px', height: '90px', borderRadius: '8px', textAlign: 'center', lineHeight: '90px', color: '#888' }}>Vazio</div>
+              )}
             </div>
           </div>
+          {G.deck.length === 0 && !G.hasDrawn && <button onClick={() => moves.declareExhausted()} style={{ background: '#ff4d4d', color: 'white', border: 'none', padding: '8px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Passar a Vez</button>}
         </div>
 
+        {/* Center: Opponent Table */}
         <div style={{ flexGrow: 1 }}>{renderTeamTable(oppTeamPlayers, "Mesa Deles", false)}</div>
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '120px', alignItems: 'center' }}>
-          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Mortos</h4>
-          <div style={{ fontSize: '0.7em', color: G.teamMortos[myTeam] ? '#ffd700' : '#888' }}>Nós: {G.teamMortos[myTeam] ? '✔️' : '❌'}</div>
-          <div style={{ fontSize: '0.7em', color: G.teamMortos[oppTeam] ? '#ffd700' : '#888', marginBottom: '5px' }}>Eles: {G.teamMortos[oppTeam] ? '✔️' : '❌'}</div>
+        {/* Right Column: Mortos and Player Tracker */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '180px', alignItems: 'center' }}>
+          
+          {/* Mortos Tracker */}
+          <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+            <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Mortos</h4>
+            <div style={{ fontSize: '0.7em', color: G.teamMortos[myTeam] ? '#ffd700' : '#888', display: 'flex', justifyContent: 'space-between' }}><span>Nós:</span> <span>{G.teamMortos[myTeam] ? '✔️' : '❌'}</span></div>
+            <div style={{ fontSize: '0.7em', color: G.teamMortos[oppTeam] ? '#ffd700' : '#888', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}><span>Eles:</span> <span>{G.teamMortos[oppTeam] ? '✔️' : '❌'}</span></div>
 
-          {/* SAFE VISUAL MORTO STACK */}
-          <div style={{ display: 'flex', gap: '5px' }}>
-            {(Array.isArray(G.pots) ? G.pots : Object.values(G.pots || {}).filter(p => p && p.length > 0)).map((_, i) => (
-              <div key={`morto-${i}`} style={{
-                border: '1px solid white', borderRadius: '4px', width: '40px', height: '60px',
-                backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.1) 3px, rgba(255,255,255,0.1) 6px)',
-                boxShadow: '1px 1px 3px rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white'
-              }}>
-                <span style={{ fontSize: '0.6em', fontWeight: 'bold', transform: 'rotate(-45deg)' }}>Morto</span>
-              </div>
-            ))}
+            <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+              {(Array.isArray(G.pots) ? G.pots : Object.values(G.pots || {}).filter(p => p && p.length > 0)).map((_, i) => (
+                <div key={`morto-${i}`} style={{
+                  border: '1px solid white', borderRadius: '4px', width: '30px', height: '45px',
+                  backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 4px)',
+                  boxShadow: '1px 1px 3px rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white'
+                }}>
+                  <span style={{ fontSize: '0.5em', fontWeight: 'bold', transform: 'rotate(-45deg)' }}>Morto</span>
+                </div>
+              ))}
+            </div>
           </div>
+
+          {/* Feature: Hand Size & Turn Tracker */}
+          <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px' }}>
+            <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Jogadores</h4>
+            {Object.keys(G.hands).filter(p => G.hands[p]).map(p => {
+              const isTurn = ctx.currentPlayer === p;
+              const name = G.rules?.assignments?.[p] || `P${p}`;
+              return (
+                <div key={p} style={{ fontSize: '0.75em', display: 'flex', justifyContent: 'space-between', color: isTurn ? '#ffd700' : '#888', fontWeight: isTurn ? 'bold' : 'normal', marginBottom: '4px' }}>
+                  <span>{isTurn ? '👉 ' : ''}{name}</span>
+                  <span>{G.hands[p].length} 🃏</span>
+                </div>
+              )
+            })}
+          </div>
+          
         </div>
       </div>
 
       <div style={{ marginTop: '20px' }}>{renderTeamTable(myTeamPlayers, "Nossa Mesa", true)}</div>
 
       <div style={{ display: 'flex', gap: '30px', marginTop: '20px', alignItems: 'flex-start' }}>
-        <div style={{ padding: '15px', background: 'rgba(255, 215, 0, 0.1)', border: '2px dashed #ffd700', borderRadius: '10px', minWidth: '100px', maxWidth: '350px', minHeight: '120px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: '#ffd700', textAlign: 'center' }}>Compradas</h4>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', justifyContent: 'center' }}>
-            {drawnCards.map(card => <Card key={card.id} card={card} isSelected={selectedCards.includes(card.id)} onClick={() => toggleCardSelection(card.id)} />)}
-          </div>
-          {G.deck.length === 0 && !G.hasDrawn && <button onClick={() => moves.declareExhausted()} style={{ marginTop: '10px', background: '#ff4d4d', color: 'white', border: 'none', padding: '8px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Passar a Vez</button>}
-        </div>
-
         <div style={{ flexGrow: 1 }}>
           <h2>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.6em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-            {sortedHand.map(card => <Card key={card.id} card={card} isSelected={selectedCards.includes(card.id)} onClick={() => toggleCardSelection(card.id)} />)}
+            {sortedHand.map(card => <Card key={card.id} card={card} isSelected={selectedCards.includes(card.id)} isNewlyDrawn={card.isNewlyDrawn} onClick={() => toggleCardSelection(card.id)} />)}
           </div>
         </div>
       </div>
