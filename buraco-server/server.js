@@ -16,7 +16,6 @@ const server = Server({
   db: gameDB, 
 });
 
-// --- CUSTOM TOURNAMENT & ADMIN API ---
 const tourneyFile = path.join(dbPath, 'tournaments.json');
 const historyFile = path.join(dbPath, 'history.json');
 
@@ -32,7 +31,6 @@ const parseBody = (req) => new Promise((resolve) => {
   });
 });
 
-// Smart CORS Helper - Automatically trusts the Nginx Proxy Domain
 const setCors = (ctx) => {
   ctx.set('Access-Control-Allow-Origin', ctx.request.headers.origin || '*');
   ctx.set('Access-Control-Allow-Headers', 'Content-Type');
@@ -78,7 +76,6 @@ server.router.post('/api/history/add', async (ctx) => {
   } catch (e) { ctx.status = 500; ctx.body = { error: 'Failed' }; }
 });
 
-// NEW: ADMIN BACKDOOR TO FREE SEATS
 server.router.post('/api/admin/kick', async (ctx) => {
   setCors(ctx);
   try {
@@ -87,19 +84,33 @@ server.router.post('/api/admin/kick', async (ctx) => {
       const matchID = body.matchID;
       const playerID = body.playerID.toString();
 
-      // Reach directly into the active Boardgame.io database
       const { metadata } = await server.db.fetch(matchID, { metadata: true });
       if (metadata && metadata.players && metadata.players[playerID]) {
-        delete metadata.players[playerID].name; // Erase the name
-        delete metadata.players[playerID].credentials; // Destroy the password
-        await server.db.setMetadata(matchID, metadata); // Save it back
+        delete metadata.players[playerID].name; 
+        delete metadata.players[playerID].credentials; 
+        await server.db.setMetadata(matchID, metadata); 
       }
     }
     ctx.body = { success: true };
   } catch (e) {
-    console.error("Admin Kick Error:", e);
     ctx.status = 500;
     ctx.body = { error: 'Failed to kick player' };
+  }
+});
+
+// NEW: ADMIN BACKDOOR TO WIPE A MATCH ENTIRELY
+server.router.post('/api/admin/delete-match', async (ctx) => {
+  setCors(ctx);
+  try {
+    const body = (ctx.request.body && Object.keys(ctx.request.body).length > 0) ? ctx.request.body : await parseBody(ctx.req);
+    if (body && body.matchID) {
+      // Reaches into Boardgame.io and completely deletes the save file
+      await server.db.wipe(body.matchID);
+    }
+    ctx.body = { success: true };
+  } catch (e) {
+    ctx.status = 500;
+    ctx.body = { error: 'Failed to delete match' };
   }
 });
 
