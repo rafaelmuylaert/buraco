@@ -31,7 +31,7 @@ const App = () => {
   const [newTourney, setNewTourney] = useState({ 
     name: '', type: 'team', format: 'points', targetPoints: 3000, maxRounds: 3, 
     players: 'João, Maria, Pedro, Ana',
-    rules: { numPlayers: 4, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true }
+    rules: { numPlayers: 4, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false }
   });
 
   const loadServerData = async () => {
@@ -133,7 +133,6 @@ const App = () => {
     window.location.reload(); 
   };
 
-  // --- TOURNAMENT ENGINE ---
   const handleCreateTournament = async () => {
     const playerList = newTourney.players.split(',').map(p => p.trim()).filter(p => p);
     if (playerList.length % newTourney.rules.numPlayers !== 0) {
@@ -274,7 +273,6 @@ const App = () => {
     return { standings: sorted, isFinished };
   };
 
-  // --- ADMIN FUNCTIONS ---
   const handleAdminDeleteTournament = (tID) => {
     if (!confirm("Tem certeza que deseja apagar este torneio? Isso removerá ele da tela.")) return;
     const updated = tournaments.filter(t => t.id !== tID);
@@ -293,7 +291,6 @@ const App = () => {
     } catch (e) { alert("Erro ao liberar assento."); }
   };
 
-  // --- VIEWS ---
   if (view === 'game') {
     return (
       <div>
@@ -307,7 +304,6 @@ const App = () => {
     );
   }
 
-  // --- ADMIN DASHBOARD ---
   if (view === 'admin') {
     return (
       <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
@@ -316,9 +312,8 @@ const App = () => {
           <button onClick={() => setView('lounge')} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Sair do Modo Admin</button>
         </div>
 
-        <div style={{ display: 'flex', gap: '40px', alignItems: 'flex-start' }}>
-          {/* Tournament Deletion Column */}
-          <div style={{ flex: 1, background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'flex-start' }}>
+          <div style={{ flex: '1 1 300px', background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
             <h2 style={{ color: '#ffd700', marginTop: 0 }}>Gerenciar Torneios</h2>
             {tournaments.length === 0 ? <p style={{ color: '#888' }}>Nenhum torneio.</p> : null}
             {tournaments.map(t => (
@@ -331,8 +326,7 @@ const App = () => {
             ))}
           </div>
 
-          {/* Seat Kick Column */}
-          <div style={{ flex: 2, background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
+          <div style={{ flex: '2 1 300px', background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
             <h2 style={{ color: '#4da6ff', marginTop: 0 }}>Mesas Ativas (Liberar Assentos)</h2>
             {matches.length === 0 ? <p style={{ color: '#888' }}>Nenhuma mesa ativa.</p> : null}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
@@ -356,7 +350,6 @@ const App = () => {
     );
   }
 
-  // --- CREATE TOURNAMENT VIEW ---
   if (view === 'tournaments') {
     return (
       <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
@@ -366,8 +359,8 @@ const App = () => {
         </div>
 
         <div style={{ background: '#1b4332', padding: '30px', borderRadius: '15px', border: '2px solid #4da6ff', maxWidth: '800px', margin: '0 auto' }}>
-          <div style={{ display: 'flex', gap: '40px' }}>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px' }}>
+            <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <h3 style={{ margin: 0, color: '#4da6ff' }}>Geral</h3>
               <input type="text" placeholder="Nome do Torneio" value={newTourney.name} onChange={e => setNewTourney({...newTourney, name: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
               <label>Formato:</label>
@@ -387,13 +380,15 @@ const App = () => {
               <textarea rows="3" value={newTourney.players} onChange={e => setNewTourney({...newTourney, players: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none', resize: 'vertical' }} />
             </div>
 
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '15px', borderLeft: '1px solid #444', paddingLeft: '40px' }}>
+            <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '15px', borderLeft: '1px solid #444', paddingLeft: '20px' }}>
               <h3 style={{ margin: 0, color: '#ff4d4d' }}>Regras das Mesas</h3>
               <label>Jogadores por Mesa: <select value={newTourney.rules.numPlayers} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, numPlayers: parseInt(e.target.value)}})}><option value={2}>2 (Mano a Mano)</option><option value={4}>4 (Duplas)</option></select></label>
               <label>Compra do Lixo: <select value={newTourney.rules.discard} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, discard: e.target.value}})}><option value="open">Aberto</option><option value="closed">Fechado</option></select></label>
               <label>Trincas: <select value={newTourney.rules.runners} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, runners: e.target.value}})}><option value="none">Nenhuma</option><option value="aces_threes">Ás e Três</option><option value="aces_kings">Ás e Reis</option><option value="any">Qualquer</option></select></label>
               <label><input type="checkbox" checked={newTourney.rules.largeCanasta} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, largeCanasta: e.target.checked}})} /> Bônus Canastrão (500/1000)</label>
               <label><input type="checkbox" checked={newTourney.rules.cleanCanastaToWin} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, cleanCanastaToWin: e.target.checked}})} /> Bater exige Canastra Limpa</label>
+              <label><input type="checkbox" checked={newTourney.rules.noJokers} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, noJokers: e.target.checked}})} /> Sem Curingas (Jokers)</label>
+              <label><input type="checkbox" checked={newTourney.rules.openDiscardView} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
             </div>
           </div>
           <button onClick={handleCreateTournament} style={{ width: '100%', marginTop: '30px', padding: '15px', background: '#ffd700', fontSize: '1.2em', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Iniciar Torneio</button>
@@ -402,7 +397,6 @@ const App = () => {
     );
   }
 
-  // --- MAIN LOUNGE VIEW ---
   const activeTournaments = tournaments.filter(t => t.status !== 'completed');
   const completedTournaments = tournaments.filter(t => t.status === 'completed');
   const savedSessions = getSavedSessions();
@@ -411,7 +405,6 @@ const App = () => {
     <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
         <h1 style={{ color: '#ffd700', margin: 0 }}>
-          {/* THE SECRET ADMIN BUTTON */}
           <span onClick={() => setView('admin')} style={{ cursor: 'pointer', opacity: 0.2, marginRight: '15px' }} title="Modo Admin">⚙️</span>
           ♠♥ Salão Principal ♦♣
         </h1>
@@ -429,13 +422,12 @@ const App = () => {
             <div key={t.id} style={{ background: '#1b4332', borderRadius: '15px', border: `2px solid #40916c`, padding: '30px' }}>
               <div style={{ marginBottom: '20px' }}>
                 <h2 style={{ margin: 0, color: '#ffd700', fontSize: '2em' }}>{t.name}</h2>
-                <div style={{ color: '#aaa', marginTop: '5px' }}>Formato: {t.format.toUpperCase()} | {t.rules.numPlayers}P | Rodada Atual: {t.rounds.length}</div>
+                <div style={{ color: '#aaa', marginTop: '5px' }}>
+                  Formato: {t.format.toUpperCase()} {t.format === 'points' ? `(Meta: ${t.targetPoints} pts)` : ''} | {t.rules.numPlayers}P | Rodada Atual: {t.rounds.length}
+                </div>
               </div>
 
-              {/* RESPONSIVE FLEX CONTAINER: Wrap and Gap */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px' }}>
-                
-                {/* Scoreboard Column */}
                 <div style={{ flex: '1 1 300px', background: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '10px' }}>
                   <h3 style={{ color: '#4da6ff', margin: '0 0 15px 0' }}>Classificação</h3>
                   <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
@@ -451,7 +443,6 @@ const App = () => {
                   </table>
                 </div>
 
-                {/* Tables Column */}
                 <div style={{ flex: '2 1 300px', display: 'flex', flexWrap: 'wrap', gap: '15px', alignContent: 'flex-start' }}>
                   {matches.filter(m => currentRoundMatches.includes(m.matchID)).map(m => {
                     const isDone = history.some(h => h.matchID === m.matchID);
