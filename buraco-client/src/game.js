@@ -229,22 +229,28 @@ function calculateFinalScores(G) {
   return scores;
 }
 
-function buildDeck() {
+function buildDeck(rules) {
   const suits = ['♠', '♥', '♦', '♣'];
   const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
   let deck = [];
   for (let i = 0; i < 2; i++) {
     for (let suit of suits) { for (let rank of ranks) deck.push({ rank, suit, id: `${rank}${suit}-${i}` }); }
   }
-  for (let i = 0; i < 4; i++) deck.push({ rank: 'JOKER', suit: '★', id: `Joker-${i}` });
+  // Feature: Conditionally add Jokers based on Tournament Rules!
+  if (!rules.noJokers) {
+    for (let i = 0; i < 4; i++) deck.push({ rank: 'JOKER', suit: '★', id: `Joker-${i}` });
+  }
   return deck;
 }
 
 export const BuracoGame = {
   name: 'buraco',
   setup: ({ random }, setupData) => {
-    const rules = setupData || { numPlayers: 4, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true };
-    let initialDeck = random.Shuffle(buildDeck());
+    // Inject our new default rules if they are missing
+    const rules = setupData || { numPlayers: 4, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false };
+    
+    // Pass the rules into the deck builder!
+    let initialDeck = random.Shuffle(buildDeck(rules));
     const pots = [initialDeck.splice(0, 11), initialDeck.splice(0, 11)];
     
     let hands = {}; let melds = {};
