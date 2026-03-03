@@ -430,21 +430,82 @@ export const BuracoGame = {
     enumerate: (G, ctx) => {
       let moves = [];
       const p = ctx.currentPlayer;
+      const hand = G.hands[p] || [];
+      const topDiscard = G.discardPile.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
 
       if (!G.hasDrawn) {
+        // Option 1: Draw from deck
         moves.push({ move: 'drawCard', args: [] });
+
+        // Option 2: Hijack the draw and pick up the discard!
+        if (topDiscard) {
+          if (G.rules.discard === 'closed') {
+            for (let i = 0; i < hand.length; i++) {
+              for (let j = i + 1; j < hand.length; j++) {
+                const parsed = parseMeld([hand[i], hand[j], topDiscard], G.rules);
+                if (parsed.valid) {
+                  // GREEDY LOGIC: If we can pick up the discard to make a meld, DO IT!
+                  return [{ move: 'pickUpDiscard', args: [[hand[i].id, hand[j].id], { type: 'new' }] }];
+                }
+              }
+            }
+          } else {
+            // Open discard -> the bot should just pick it up if there are multiple cards
+            if (G.discardPile.length > 2) {
+              return [{ move: 'pickUpDiscard', args: [] }];
+            }
+            moves.push({ move: 'pickUpDiscard', args: [] });
+          }
+        }
+        return moves;
+
       } else {
-        const hand = G.hands[p] || [];
-        
-        if (hand.length === 1 && !canEmptyHand(G, G.teams[p])) {
-          return moves; 
+        // Phase 2: Post-Draw
+        let meldAndAppendMoves = [];
+
+        // 1. Scan for Appends (Adding 1 card to existing melds)
+        const myTeam = G.teams[p];
+        const teamPlayers = G.teamPlayers[myTeam] || [];
+        teamPlayers.forEach(tp => {
+          const teamMelds = G.melds[tp] || [];
+          teamMelds.forEach((meld, mIndex) => {
+            hand.forEach(card => {
+              const parsed = parseMeld([...meld, card], G.rules);
+              if (parsed.valid) {
+                meldAndAppendMoves.push({ move: 'appendToMeld', args: [tp, mIndex, [card.id]] });
+              }
+            });
+          });
+        });
+
+        // 2. Scan for New Melds (3 card combos)
+        for (let i = 0; i < hand.length; i++) {
+          for (let j = i + 1; j < hand.length; j++) {
+            for (let k = j + 1; k < hand.length; k++) {
+              const parsed = parseMeld([hand[i], hand[j], hand[k]], G.rules);
+              if (parsed.valid) {
+                meldAndAppendMoves.push({ move: 'playMeld', args: [[hand[i].id, hand[j].id, hand[k].id]] });
+              }
+            }
+          }
         }
 
-        hand.forEach(card => {
-          moves.push({ move: 'discardCard', args: [card.id] });
-        });
+        // GREEDY LOOP: If we found ANY valid melds or appends, hide the discards!
+        // This forces the bot to play its melds immediately. Because it hasn't discarded, 
+        // it remains its turn, and the bot script will loop to play the next meld!
+        if (meldAndAppendMoves.length > 0) {
+          return meldAndAppendMoves;
+        }
+
+        // 3. Out of melds. Time to Discard.
+        let discardMoves = [];
+        if (hand.length > 1 || canEmptyHand(G, myTeam)) {
+          hand.forEach(card => {
+            discardMoves.push({ move: 'discardCard', args: [card.id] });
+          });
+        }
+        return discardMoves;
       }
-      return moves;
     }
   }
 };
