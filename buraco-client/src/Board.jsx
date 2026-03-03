@@ -121,10 +121,11 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
   const myTeamPlayers = G.teamPlayers[myTeam] || [];
   const oppTeamPlayers = G.teamPlayers[oppTeam] || [];
 
+  // CHUNKING: Restrict horizontal cascade to 5 cards max
   const chunkedDiscard = [];
   if (G.discardPile && G.discardPile.length > 0) {
-    for (let i = 0; i < G.discardPile.length; i += 6) {
-      chunkedDiscard.push(G.discardPile.slice(i, i + 6));
+    for (let i = 0; i < G.discardPile.length; i += 5) {
+      chunkedDiscard.push(G.discardPile.slice(i, i + 5));
     }
   }
 
@@ -152,7 +153,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
   };
 
   const renderTeamTable = (teamPlayers, title, isMyTeam) => (
-    <div style={{ background: isMyTeam ? 'rgba(77, 166, 255, 0.1)' : 'rgba(255, 77, 77, 0.1)', padding: '15px', borderRadius: '10px', height: '100%', minHeight: '120px' }}>
+    <div style={{ background: isMyTeam ? 'rgba(77, 166, 255, 0.1)' : 'rgba(255, 77, 77, 0.1)', padding: '15px', borderRadius: '10px', minHeight: '120px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <h3 style={{ margin: 0, color: isMyTeam ? '#4da6ff' : '#ff4d4d' }}>{title}</h3>
         <span style={{ background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: '20px', fontWeight: 'bold', color: '#ffd700' }}>
@@ -225,11 +226,11 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
   );
 
   return (
-    // FEATURE: Fixed 100vh Layout with Overflow Control
-    <div style={{ height: '100vh', boxSizing: 'border-box', overflow: 'hidden', padding: '15px', fontFamily: 'sans-serif', backgroundColor: '#2d6a4f', color: 'white', display: 'flex', gap: '15px' }}>
+    // ABSOLUTE POSITIONING: Forces the browser to never scroll the page globally.
+    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100vh', boxSizing: 'border-box', overflow: 'hidden', padding: '15px', fontFamily: 'sans-serif', backgroundColor: '#2d6a4f', color: 'white', display: 'flex', gap: '15px' }}>
       
-      {/* Left Column: Deck and Discard */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: G.rules?.openDiscardView ? '160px' : '80px', minWidth: '80px', alignItems: 'center', overflowY: 'auto' }}>
+      {/* LEFT COLUMN: Deck & Discard - Prevent Shrinking & Hide Horizontal Overflow */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: G.rules?.openDiscardView ? '150px' : '90px', minWidth: G.rules?.openDiscardView ? '150px' : '90px', flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
         <div style={{ textAlign: 'center' }}>
           <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Monte</h4>
           <CardBack label="Comprar" count={G.deck.length} onClick={() => { if(!G.hasDrawn) moves.drawCard(); }} />
@@ -240,7 +241,6 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
           <div onClick={handleDiscardPileClick} style={{ cursor: (!G.hasDrawn || (selectedCards.length === 1 && G.hasDrawn)) ? 'pointer' : 'not-allowed' }}>
             {G.discardPile.length > 0 ? (
               G.rules?.openDiscardView ? (
-                /* FEATURE: Cascading Multi-Row Discard Pile */
                 chunkedDiscard.map((row, rIdx) => (
                   <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-65px' : '0' }}>
                     {row.map((c, i) => <Card key={c.id} card={c} customStyle={{ marginLeft: i > 0 ? '-40px' : '0' }} />)}
@@ -257,8 +257,8 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
         {G.deck.length === 0 && !G.hasDrawn && <button onClick={() => moves.declareExhausted()} style={{ background: '#ff4d4d', color: 'white', border: 'none', padding: '8px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Passar a Vez</button>}
       </div>
 
-      {/* Center Column: Opponent Table, My Table, and My Hand */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '15px', overflowY: 'auto', paddingRight: '5px' }}>
+      {/* CENTER COLUMN: Tables & Hand - Flex 1 allows it to take remaining space, Gap increased to prevent overlaps! */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '25px', overflowY: 'auto', overflowX: 'hidden', paddingRight: '10px', paddingBottom: '20px' }}>
         <div style={{ flexShrink: 0 }}>{renderTeamTable(oppTeamPlayers, "Mesa Deles", false)}</div>
         <div style={{ flexShrink: 0 }}>{renderTeamTable(myTeamPlayers, "Nossa Mesa", true)}</div>
         <div style={{ flexShrink: 0 }}>
@@ -269,33 +269,32 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
         </div>
       </div>
       
-      {/* Right Column: Return Button, Mortos, Player Tracker, Known Cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '220px', minWidth: '220px', alignItems: 'center', overflowY: 'auto' }}>
+      {/* RIGHT COLUMN: Sidebar - Narrowed slightly, hidden horizontal scroll */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '180px', minWidth: '180px', flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
         
-        {/* FEATURE: Return Button moved from Top Bar to Top of Sidebar */}
-        <button onClick={() => window.location.reload()} style={{ width: '100%', background: '#4da6ff', color: 'white', border: 'none', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)' }}>
+        <button onClick={() => window.location.reload()} style={{ width: '100%', background: '#4da6ff', color: 'white', border: 'none', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.9em' }}>
           ⬅ Voltar ao Salão
         </button>
 
-        <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+        <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', textAlign: 'center', boxSizing: 'border-box' }}>
           <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Mortos</h4>
-          <div style={{ fontSize: '0.7em', color: G.teamMortos[myTeam] ? '#ffd700' : '#888', display: 'flex', justifyContent: 'space-between' }}><span>Nós:</span> <span>{G.teamMortos[myTeam] ? '✔️' : '❌'}</span></div>
+          <div style={{ fontSize: '0.7em', color: G.teamMortos[myTeam] ? '#ffd700' : '#888', display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}><span>Nós:</span> <span>{G.teamMortos[myTeam] ? '✔️' : '❌'}</span></div>
           <div style={{ fontSize: '0.7em', color: G.teamMortos[oppTeam] ? '#ffd700' : '#888', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}><span>Eles:</span> <span>{G.teamMortos[oppTeam] ? '✔️' : '❌'}</span></div>
 
-          <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', gap: '5px', justifyContent: 'center', flexWrap: 'wrap' }}>
             {(Array.isArray(G.pots) ? G.pots : Object.values(G.pots || {}).filter(p => p && p.length > 0)).map((_, i) => (
               <div key={`morto-${i}`} style={{
-                border: '1px solid white', borderRadius: '4px', width: '30px', height: '45px',
+                border: '1px solid white', borderRadius: '4px', width: '25px', height: '40px',
                 backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 4px)',
                 boxShadow: '1px 1px 3px rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white'
               }}>
-                <span style={{ fontSize: '0.5em', fontWeight: 'bold', transform: 'rotate(-45deg)' }}>Morto</span>
+                <span style={{ fontSize: '0.45em', fontWeight: 'bold', transform: 'rotate(-45deg)' }}>Morto</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px' }}>
+        <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', boxSizing: 'border-box' }}>
           <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Jogadores</h4>
           {Object.keys(G.hands).filter(p => G.hands[p]).map(p => {
             const isTurn = ctx.currentPlayer === p;
@@ -303,34 +302,33 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
             const name = G.rules?.assignments?.[p] || `P${p}`;
             return (
               <div key={p} style={{ 
-                fontSize: '0.75em', display: 'flex', justifyContent: 'space-between', 
+                fontSize: '0.70em', display: 'flex', justifyContent: 'space-between', 
                 color: isTurn ? '#ffd700' : (isMe ? '#4da6ff' : '#888'), 
                 fontWeight: (isTurn || isMe) ? 'bold' : 'normal', 
                 marginBottom: '4px',
                 background: isMe ? 'rgba(77, 166, 255, 0.2)' : 'transparent',
                 border: isMe ? '1px solid #4da6ff' : '1px solid transparent',
-                padding: '4px 6px', borderRadius: '4px'
+                padding: '4px 4px', borderRadius: '4px'
               }}>
-                <span>{isTurn ? '👉 ' : ''}{name} {isMe ? '(Você)' : ''}</span>
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100px' }}>{isTurn ? '👉 ' : ''}{name}</span>
                 <span>{G.hands[p].length} 🃏</span>
               </div>
             )
           })}
         </div>
 
-        {/* FEATURE: Known Cards Displayed cleanly by player in Sidebar */}
         {G.rules?.showKnownCards && Object.keys(G.knownCards).some(p => G.knownCards[p].length > 0) && (
-          <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px' }}>
+          <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', boxSizing: 'border-box' }}>
             <h4 style={{ margin: '0 0 10px 0', fontSize: '0.8em', color: '#ccc' }}>Memorizadas</h4>
             {Object.keys(G.knownCards).map(p => {
               if (G.knownCards[p].length === 0) return null;
               const name = G.rules?.assignments?.[p] || `P${p}`;
               return (
                 <div key={p} style={{ marginBottom: '8px' }}>
-                  <div style={{ fontSize: '0.75em', color: '#888', marginBottom: '3px' }}>{name}:</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                  <div style={{ fontSize: '0.7em', color: '#888', marginBottom: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}:</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
                     {G.knownCards[p].map((c, i) => (
-                      <div key={i} style={{ background: 'white', color: (c.suit==='♥'||c.suit==='♦')?'red':'black', padding: '1px 4px', borderRadius: '3px', fontSize: '0.7em', fontWeight: 'bold' }}>
+                      <div key={i} style={{ background: 'white', color: (c.suit==='♥'||c.suit==='♦')?'red':'black', padding: '1px 3px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold' }}>
                         {c.rank}{c.suit}
                       </div>
                     ))}
