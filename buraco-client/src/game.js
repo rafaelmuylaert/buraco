@@ -414,10 +414,9 @@ export const BuracoGame = {
   },
 
   endIf: ({ G }) => {
-    // Explicit call to end game
     if (G.isExhausted) return { reason: 'Monte Esgotado', scores: calculateFinalScores(G) };
 
-    // FEATURE: Automatic Game End if player is forced into a corner
+    // Automatic Exhaustion Logic
     if (G.deck.length === 0 && G.pots.length === 0 && G.discardPile.length <= 1 && !G.hasDrawn) {
         return { reason: 'Monte Esgotado', scores: calculateFinalScores(G) };
     }
@@ -475,7 +474,7 @@ export const BuracoGame = {
           }
         }
         
-        // FEATURE: Bot knows how to Exhaust the deck properly!
+        // Bot knows how to end game if it is forced to
         if (G.deck.length === 0 && G.pots.length === 0) {
             return [{ move: 'declareExhausted', args: [] }];
         }
