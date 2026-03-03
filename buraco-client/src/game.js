@@ -12,88 +12,135 @@ export function sortCards(cards) {
 
 function parseMeld(cards, rules) {
   if (cards.length < 3) return { valid: false };
+
   const jokers = cards.filter(c => c.rank === 'JOKER');
   const twos = cards.filter(c => c.rank === '2');
   const naturals = cards.filter(c => c.rank !== 'JOKER' && c.rank !== '2');
 
-  if (jokers.length + twos.length > 2) return { valid: false }; 
-  const mainSuit = naturals.length > 0 ? naturals[0].suit : (twos.length > 0 ? twos[0].suit : null);
-  
+  // 1. Check if it's a valid Runner (Trinca)
   if (naturals.length > 0 && naturals.every(c => c.rank === naturals[0].rank)) {
     const r = naturals[0].rank;
     let allowed = false;
     if (rules.runners === 'any') allowed = true;
     if (rules.runners === 'aces_threes' && (r === 'A' || r === '3')) allowed = true;
     if (rules.runners === 'aces_kings' && (r === 'A' || r === 'K')) allowed = true;
+    
     if (allowed && jokers.length + twos.length <= 1) {
       return { valid: true, status: (jokers.length + twos.length) === 0 ? 'clean' : 'dirty', sorted: [...naturals, ...twos, ...jokers] };
     }
   }
 
-  if (!naturals.every(c => c.suit === mainSuit)) return { valid: false };
-  const aces = naturals.filter(c => c.rank === 'A');
-  if (aces.length > 2) return { valid: false };
+  // 2. Check if it's a valid Sequence (Sequência)
+  if (naturals.length > 0) {
+    const suit = naturals[0].suit;
+    
+    if (naturals.every(c => c.suit === suit)) {
+      const suitedTwos = twos.filter(c => c.suit === suit);
+      const unsuitedTwos = twos.filter(c => c.suit !== suit);
 
-  let aceConfigs = aces.length === 0 ? [[]] : aces.length === 1 ? [[1], [14]] : [[1, 14]]; 
-  
-  let suitedTwos = twos.filter(t => t.suit === mainSuit);
-  let twoConfigs = [ { naturals: [], wilds: [...twos] } ];
-  if (suitedTwos.length === 1) {
-    twoConfigs.push({ naturals: [suitedTwos[0]], wilds: twos.filter(t => t !== suitedTwos[0]) });
-  } else if (suitedTwos.length === 2) {
-    twoConfigs.push({ naturals: [suitedTwos[0]], wilds: [suitedTwos[1]] });
-    twoConfigs.push({ naturals: [suitedTwos[1]], wilds: [suitedTwos[0]] });
-    twoConfigs.push({ naturals: [suitedTwos[0], suitedTwos[1]], wilds: [] });
-  }
-
-  let validOutputs = [];
-
-  for (let currentAces of aceConfigs) {
-    for (let twoOpt of twoConfigs) {
-      let testSequence = naturals.filter(c => c.rank !== 'A').map(c => sequenceMath[c.rank]);
-      testSequence.push(...currentAces);
-      testSequence.push(...twoOpt.naturals.map(c => 2));
-      testSequence.sort((a, b) => a - b);
-      
-      if (new Set(testSequence).size !== testSequence.length) continue;
-
-      let availableWilds = [...jokers, ...twoOpt.wilds];
-      if (availableWilds.length > 1) continue; 
-
-      let min = testSequence.length > 0 ? testSequence[0] : 3;
-      let max = testSequence.length > 0 ? testSequence[testSequence.length - 1] : 3;
-      
-      if ((max - min + 1) <= testSequence.length + availableWilds.length) {
-        let sortedOutput = [];
-        let wildUsed = false;
-        let currentVal = min;
-        let pool = [...cards]; 
+      if (jokers.length + unsuitedTwos.length <= 1 && suitedTwos.length <= 2) {
+        let possibleConfigs = [];
         
-        while (sortedOutput.length < cards.length) {
-          let match = pool.find(c => 
-            (c.rank === 'A' && currentVal === 1) || (c.rank === 'A' && currentVal === 14) ||
-            (c.rank === '2' && twoOpt.naturals.includes(c) && currentVal === 2) ||
-            (sequenceMath[c.rank] === currentVal && c.rank !== 'A' && c.rank !== '2')
-          );
-
-          if (match) { sortedOutput.push(match); pool.splice(pool.indexOf(match), 1); }
-          else if (availableWilds.length > 0 && !wildUsed) { sortedOutput.push(availableWilds[0]); wildUsed = true; }
-          else break;
-          currentVal++;
+        if (suitedTwos.length === 0) {
+          possibleConfigs.push({ nat: [], wild: [...jokers, ...unsuitedTwos] });
+        } else if (suitedTwos.length === 1) {
+          possibleConfigs.push({ nat: [suitedTwos[0]], wild: [...jokers, ...unsuitedTwos] });
+          if (jokers.length + unsuitedTwos.length === 0) {
+            possibleConfigs.push({ nat: [], wild: [suitedTwos[0]] });
+          }
+        } else if (suitedTwos.length === 2) {
+          if (jokers.length + unsuitedTwos.length === 0) {
+            possibleConfigs.push({ nat: [suitedTwos[0]], wild: [suitedTwos[1]] });
+            possibleConfigs.push({ nat: [suitedTwos[1]], wild: [suitedTwos[0]] });
+          }
         }
-        if (availableWilds.length > 0 && !wildUsed) sortedOutput.push(availableWilds[0]);
+
+        const aces = naturals.filter(c => c.rank === 'A');
+        const otherNaturals = naturals.filter(c => c.rank !== 'A');
         
-        if (sortedOutput.length === cards.length) {
-          validOutputs.push({ status: availableWilds.length === 0 ? 'clean' : 'dirty', sorted: sortedOutput });
+        if (aces.length <= 2) {
+          let aceValues = [];
+          if (aces.length === 0) aceValues.push([]);
+          if (aces.length === 1) { aceValues.push([1]); aceValues.push([14]); }
+          if (aces.length === 2) { aceValues.push([1, 14]); }
+
+          for (let cfg of possibleConfigs) {
+            if (cfg.wild.length > 1) continue;
+
+            for (let aVals of aceValues) {
+              let values = otherNaturals.map(c => sequenceMath[c.rank]);
+              values.push(...aVals);
+              values.push(...cfg.nat.map(c => 2));
+              values.sort((a, b) => a - b);
+
+              // Reject if there are duplicate natural cards
+              if (new Set(values).size !== values.length) continue;
+
+              let min = values[0];
+              let max = values[values.length - 1];
+              let gaps = 0;
+              for (let i = 1; i < values.length; i++) {
+                gaps += (values[i] - values[i-1] - 1);
+              }
+
+              // Perfect fit logic for the Wild card
+              if ((gaps === 0 && cfg.wild.length === 0) || 
+                  (gaps === 1 && cfg.wild.length === 1) || 
+                  (gaps === 0 && cfg.wild.length === 1)) {
+                  
+                let sorted = [];
+                let pool = [...cards];
+                let actualMin = min;
+                let actualMax = max;
+                let wildVal = -1;
+
+                if (cfg.wild.length === 1) {
+                  if (gaps === 1) {
+                    for (let i = 1; i < values.length; i++) {
+                      if (values[i] - values[i-1] > 1) {
+                        wildVal = values[i-1] + 1;
+                        break;
+                      }
+                    }
+                  } else {
+                    if (max < 14) {
+                      wildVal = max + 1;
+                      actualMax++;
+                    } else {
+                      wildVal = min - 1;
+                      actualMin--;
+                    }
+                  }
+                }
+
+                for (let v = actualMin; v <= actualMax; v++) {
+                  if (v === wildVal) {
+                    sorted.push(cfg.wild[0]);
+                  } else {
+                    let matchIndex = pool.findIndex(c => {
+                      if (v === 1 || v === 14) return c.rank === 'A';
+                      if (v === 2) return c.rank === '2' && cfg.nat.includes(c);
+                      return sequenceMath[c.rank] === v;
+                    });
+                    if (matchIndex !== -1) {
+                      sorted.push(pool[matchIndex]);
+                      pool.splice(matchIndex, 1);
+                    }
+                  }
+                }
+                
+                // Final failsafe verification
+                if (sorted.length === cards.length && sorted.every(c => c !== undefined)) {
+                  return { valid: true, status: cfg.wild.length === 0 ? 'clean' : 'dirty', sorted };
+                }
+              }
+            }
+          }
         }
       }
     }
   }
 
-  if (validOutputs.length > 0) {
-    const cleanConfig = validOutputs.find(c => c.status === 'clean');
-    return cleanConfig ? { valid: true, ...cleanConfig } : { valid: true, ...validOutputs[0] };
-  }
   return { valid: false };
 }
 
@@ -119,18 +166,16 @@ export function calculateMeldPoints(meldGroup, rules) {
 function checkMorto(G, ctx) {
   const p = ctx.currentPlayer;
   const team = G.teams[p];
-  
-  // BUG FIX: Prevent a team from stealing the second Morto!
-  if (G.hands[p].length === 0 && !G.teamMortos[team]) {
-    if (G.pots.pot1?.length > 0) { G.hands[p] = G.pots.pot1; G.pots.pot1 = []; G.teamMortos[team] = true; } 
-    else if (G.pots.pot2?.length > 0) { G.hands[p] = G.pots.pot2; G.pots.pot2 = []; G.teamMortos[team] = true; }
+  if (G.hands[p].length === 0 && !G.teamMortos[team] && G.pots.length > 0) {
+    G.hands[p] = G.pots.shift(); 
+    G.teamMortos[team] = true;
   }
 }
 
 function canEmptyHand(G, team) {
   const teamMelds = G.teamPlayers[team].flatMap(tp => G.melds[tp] || []);
   const hasMorto = G.teamMortos[team];
-  const mortosAvailable = G.pots.pot1?.length > 0 || G.pots.pot2?.length > 0;
+  const mortosAvailable = G.pots.length > 0;
   
   if (!hasMorto && mortosAvailable) return true; 
   
@@ -149,7 +194,7 @@ function canEmptyHandWithSimulatedMelds(G, team, simulatedMeldsForTarget, target
   );
   
   const hasMorto = G.teamMortos[team];
-  const mortosAvailable = G.pots.pot1?.length > 0 || G.pots.pot2?.length > 0;
+  const mortosAvailable = G.pots.length > 0;
   
   if (!hasMorto && mortosAvailable) return true; 
   
@@ -200,10 +245,13 @@ export const BuracoGame = {
   setup: ({ random }, setupData) => {
     const rules = setupData || { numPlayers: 4, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true };
     let initialDeck = random.Shuffle(buildDeck());
-    const pots = { pot1: initialDeck.splice(0, 11), pot2: initialDeck.splice(0, 11) };
+    const pots = [initialDeck.splice(0, 11), initialDeck.splice(0, 11)];
     
-    let hands = { '0': [], '1': [], '2': [], '3': [] };
-    for (let i = 0; i < rules.numPlayers; i++) { hands[i.toString()] = initialDeck.splice(0, 11); }
+    let hands = {}; let melds = {};
+    for (let i = 0; i < rules.numPlayers; i++) { 
+      hands[i.toString()] = initialDeck.splice(0, 11); 
+      melds[i.toString()] = [];
+    }
 
     let teams = {}; let teamPlayers = {};
     if (rules.numPlayers === 2) {
@@ -213,8 +261,7 @@ export const BuracoGame = {
     }
 
     return {
-      rules, deck: initialDeck, discardPile: [initialDeck.pop()], pots, hands,
-      melds: { '0': [], '1': [], '2': [], '3': [] },
+      rules, deck: initialDeck, discardPile: [initialDeck.pop()], pots, hands, melds,
       hasDrawn: false, teams, teamPlayers, teamMortos: { team0: false, team1: false },
       mortoUsed: { team0: false, team1: false }, isExhausted: false
     };
@@ -223,9 +270,8 @@ export const BuracoGame = {
   moves: {
     drawCard: ({ G, ctx }) => {
       if (G.hasDrawn) return;
-      if (G.deck.length === 0) {
-        if (G.pots.pot1?.length > 0) { G.deck = G.pots.pot1; G.pots.pot1 = []; } 
-        else if (G.pots.pot2?.length > 0) { G.deck = G.pots.pot2; G.pots.pot2 = []; }
+      if (G.deck.length === 0 && G.pots.length > 0) {
+        G.deck = G.pots.shift(); 
       }
       if (G.deck.length > 0) {
         const card = G.deck.pop();
@@ -366,9 +412,10 @@ export const BuracoGame = {
   endIf: ({ G }) => {
     if (G.isExhausted) return { reason: 'Monte Esgotado', scores: calculateFinalScores(G) };
     
-    for (let p of ['0', '1', '2', '3']) {
+    for (let i = 0; i < G.rules.numPlayers; i++) {
+      const p = i.toString();
       const team = G.teams[p];
-      const mortosAvailable = G.pots.pot1?.length > 0 || G.pots.pot2?.length > 0;
+      const mortosAvailable = G.pots.length > 0;
       
       if (G.hands[p] && G.hands[p].length === 0 && (G.teamMortos[team] || !mortosAvailable)) {
         if (canEmptyHand(G, team)) {

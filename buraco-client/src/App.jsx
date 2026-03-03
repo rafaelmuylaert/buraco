@@ -432,8 +432,11 @@ const App = () => {
                 <div style={{ color: '#aaa', marginTop: '5px' }}>Formato: {t.format.toUpperCase()} | {t.rules.numPlayers}P | Rodada Atual: {t.rounds.length}</div>
               </div>
 
-              <div style={{ display: 'flex', gap: '40px' }}>
-                <div style={{ flex: 1, background: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '10px' }}>
+              {/* RESPONSIVE FLEX CONTAINER: Wrap and Gap */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px' }}>
+                
+                {/* Scoreboard Column */}
+                <div style={{ flex: '1 1 300px', background: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '10px' }}>
                   <h3 style={{ color: '#4da6ff', margin: '0 0 15px 0' }}>Classificação</h3>
                   <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
                     <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Jogador</th><th>Pts</th><th>V</th><th>E</th><th>D</th></tr></thead>
@@ -448,7 +451,8 @@ const App = () => {
                   </table>
                 </div>
 
-                <div style={{ flex: 2, display: 'flex', flexWrap: 'wrap', gap: '15px', alignContent: 'flex-start' }}>
+                {/* Tables Column */}
+                <div style={{ flex: '2 1 300px', display: 'flex', flexWrap: 'wrap', gap: '15px', alignContent: 'flex-start' }}>
                   {matches.filter(m => currentRoundMatches.includes(m.matchID)).map(m => {
                     const isDone = history.some(h => h.matchID === m.matchID);
                     return (

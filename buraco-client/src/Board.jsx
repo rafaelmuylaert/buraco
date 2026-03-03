@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { sortCards, getCanastaStatus, calculateMeldPoints } from './game.js';
 
-// NEW: Redesigned physical card style
 const Card = ({ card, isSelected, onClick, customStyle }) => {
   const isRed = card.suit === '♥' || card.suit === '♦';
   return (
@@ -18,13 +17,10 @@ const Card = ({ card, isSelected, onClick, customStyle }) => {
       boxShadow: '2px 2px 5px rgba(0,0,0,0.4)',
       ...customStyle
     }}>
-      {/* Top Left Indicator (Allows stacking without hiding value) */}
       <div style={{ position: 'absolute', top: '4px', left: '4px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1' }}>
         <span style={{ fontSize: '0.9em', fontWeight: 'bold' }}>{card.rank}</span>
         <span style={{ fontSize: '0.9em' }}>{card.suit}</span>
       </div>
-      
-      {/* Center Watermark */}
       <div style={{ fontSize: '2em', opacity: 0.3 }}>{card.suit}</div>
     </div>
   );
@@ -41,7 +37,6 @@ const CardBack = ({ label, count, onClick }) => (
   </div>
 );
 
-// Helper to determine Stack Direction
 const isRunner = (meld) => {
   const naturals = meld.filter(c => c.rank !== 'JOKER' && c.rank !== '2');
   if (naturals.length >= 2) {
@@ -54,14 +49,14 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
   const [selectedCards, setSelectedCards] = useState([]);
 
   useEffect(() => {
-    if (ctx && G && ctx.phase === 'waitingRoom' && !G.players.includes(playerID)) {
+    // SAFE CHECK: Added G.players to prevent undefined crashes
+    if (ctx && G && ctx.phase === 'waitingRoom' && G.players && !G.players.includes(playerID)) {
       moves.joinTable(playerID);
     }
   }, [ctx, G, playerID, moves]);
 
-useEffect(() => {
+  useEffect(() => {
     if (ctx.gameover && matchID) {
-      // UPDATED: Now points to the relative window origin + /buraco
       fetch(`${window.location.origin}/buraco/api/history/add`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -82,8 +77,7 @@ useEffect(() => {
         <h1 style={{ fontSize: '3em', color: '#ffd700', marginBottom: '5px' }}>Fim de Jogo!</h1>
         <h2 style={{ marginBottom: '40px', color: '#ccc' }}>Motivo: {ctx.gameover.reason}</h2>
         
-        <div style={{ display: 'flex', gap: '50px' }}>
-          
+        <div style={{ display: 'flex', gap: '50px', flexWrap: 'wrap', justifyContent: 'center' }}>
           <div style={{ background: 'rgba(0,0,0,0.5)', padding: '30px', borderRadius: '15px', border: '2px solid #4da6ff', width: '300px' }}>
             <h2 style={{ textAlign: 'center', color: '#4da6ff', margin: '0 0 20px 0' }}>Equipe 0</h2>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '5px 0' }}><span>Pontos na Mesa:</span> <span>{s0.table}</span></div>
@@ -101,7 +95,6 @@ useEffect(() => {
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '5px 0', color: '#ffd700' }}><span>Bônus de Batida:</span> <span>{s1.baterBonus}</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '15px', fontSize: '1.5em', fontWeight: 'bold' }}><span>Total:</span> <span>{s1.total}</span></div>
           </div>
-
         </div>
 
         <button 
@@ -169,8 +162,6 @@ useEffect(() => {
           const status = getCanastaStatus(meldGroup, G.rules);
           const points = calculateMeldPoints(meldGroup, G.rules);
           const borderColor = status === 'clean' ? '#ffd700' : (status === 'dirty' ? '#c0c0c0' : 'transparent');
-          
-          // Determine if we should stack vertically or horizontally
           const runner = isRunner(meldGroup);
 
           return (
@@ -191,7 +182,7 @@ useEffect(() => {
                 }}
                 style={{ 
                   display: 'flex', 
-                  flexDirection: runner ? 'column' : 'row', // STACKING DIRECTION
+                  flexDirection: runner ? 'column' : 'row', 
                   background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', 
                   border: `2px solid ${borderColor}`, 
                   cursor: (isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default' 
@@ -201,9 +192,9 @@ useEffect(() => {
                     key={card.id} 
                     card={card} 
                     customStyle={{ 
-                      marginLeft: (!runner && i > 0) ? '-40px' : '0', // Overlap 40px left for Sequences
-                      marginTop: (runner && i > 0) ? '-60px' : '0',   // Overlap 60px up for Runners
-                      zIndex: i // Ensures cards layer properly left-to-right / top-to-bottom
+                      marginLeft: (!runner && i > 0) ? '-40px' : '0', 
+                      marginTop: (runner && i > 0) ? '-60px' : '0',   
+                      zIndex: i 
                     }} 
                   />
                 ))}
@@ -226,7 +217,6 @@ useEffect(() => {
             + Baixar Jogo
           </div>
         )}
-
       </div>
     </div>
   );
@@ -237,19 +227,16 @@ useEffect(() => {
       
       <div style={{ display: 'flex', gap: '20px', minHeight: '150px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '80px', alignItems: 'center' }}>
-          
           <div style={{ textAlign: 'center' }}>
             <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Monte</h4>
             <CardBack label="Comprar" count={G.deck.length} onClick={() => { if(!G.hasDrawn) moves.drawCard(); }} />
           </div>
-
           <div style={{ textAlign: 'center' }}>
             <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Lixo ({G.discardPile.length})</h4>
             <div onClick={handleDiscardPileClick} style={{ cursor: (!G.hasDrawn || (selectedCards.length === 1 && G.hasDrawn)) ? 'pointer' : 'not-allowed' }}>
               {topDiscard ? <Card card={topDiscard} /> : <div style={{ border: '2px dashed #40916c', width: '60px', height: '90px', borderRadius: '8px', textAlign: 'center', lineHeight: '90px', color: '#888' }}>Vazio</div>}
             </div>
           </div>
-
         </div>
 
         <div style={{ flexGrow: 1 }}>{renderTeamTable(oppTeamPlayers, "Mesa Deles", false)}</div>
@@ -259,15 +246,24 @@ useEffect(() => {
           <div style={{ fontSize: '0.7em', color: G.teamMortos[myTeam] ? '#ffd700' : '#888' }}>Nós: {G.teamMortos[myTeam] ? '✔️' : '❌'}</div>
           <div style={{ fontSize: '0.7em', color: G.teamMortos[oppTeam] ? '#ffd700' : '#888', marginBottom: '5px' }}>Eles: {G.teamMortos[oppTeam] ? '✔️' : '❌'}</div>
 
-          {G.pots.pot1.length > 0 ? <CardBack label="Morto" count={11} /> : null}
-          {G.pots.pot2.length > 0 ? <CardBack label="Morto" count={11} /> : null}
+          {/* SAFE VISUAL MORTO STACK */}
+          <div style={{ display: 'flex', gap: '5px' }}>
+            {(Array.isArray(G.pots) ? G.pots : Object.values(G.pots || {}).filter(p => p && p.length > 0)).map((_, i) => (
+              <div key={`morto-${i}`} style={{
+                border: '1px solid white', borderRadius: '4px', width: '40px', height: '60px',
+                backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.1) 3px, rgba(255,255,255,0.1) 6px)',
+                boxShadow: '1px 1px 3px rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white'
+              }}>
+                <span style={{ fontSize: '0.6em', fontWeight: 'bold', transform: 'rotate(-45deg)' }}>Morto</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       <div style={{ marginTop: '20px' }}>{renderTeamTable(myTeamPlayers, "Nossa Mesa", true)}</div>
 
       <div style={{ display: 'flex', gap: '30px', marginTop: '20px', alignItems: 'flex-start' }}>
-        
         <div style={{ padding: '15px', background: 'rgba(255, 215, 0, 0.1)', border: '2px dashed #ffd700', borderRadius: '10px', minWidth: '100px', maxWidth: '350px', minHeight: '120px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <h4 style={{ margin: '0 0 10px 0', color: '#ffd700', textAlign: 'center' }}>Compradas</h4>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', justifyContent: 'center' }}>
