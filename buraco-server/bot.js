@@ -1,5 +1,5 @@
-import { Client } from 'boardgame.io/client';
-import { SocketIO } from 'boardgame.io/multiplayer';
+import { Client } from 'boardgame.io/dist/cjs/client.js';
+import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import { BuracoGame } from './game.js';
 
 const SERVER_URL = 'http://127.0.0.1:8000';
