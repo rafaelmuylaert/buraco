@@ -6,8 +6,34 @@ import path from 'path';
 const dbPath = path.join(process.cwd(), 'db');
 if (!fs.existsSync(dbPath)) fs.mkdirSync(dbPath);
 
+const gamesPath = path.join(dbPath, 'games');
+if (!fs.existsSync(gamesPath)) fs.mkdirSync(gamesPath);
+
+// --- THE AUTO-SWEEPER: VAPORIZE CORRUPTED GHOST FILES ---
+// This guarantees the Lobby API will never crash due to a broken file!
+try {
+  const files = fs.readdirSync(gamesPath);
+  let deletedGhosts = 0;
+  for (const file of files) {
+    const fp = path.join(gamesPath, file);
+    if (fs.statSync(fp).isFile()) {
+      try {
+        const content = fs.readFileSync(fp, 'utf8');
+        if (!content.trim()) throw new Error("Empty file");
+        JSON.parse(content); // Test if it's valid JSON
+      } catch (e) {
+        fs.unlinkSync(fp); // Destroy corrupted file immediately
+        deletedGhosts++;
+      }
+    }
+  }
+  if (deletedGhosts > 0) console.log(`[SWEEPER] Vaporized ${deletedGhosts} corrupted ghost tables!`);
+} catch (e) {
+  console.error("[SWEEPER] Error during sweep:", e);
+}
+
 const gameDB = new FlatFile({
-  dir: path.join(dbPath, 'games'),
+  dir: gamesPath,
   logging: false,
 });
 
@@ -22,19 +48,18 @@ const historyFile = path.join(dbPath, 'history.json');
 if (!fs.existsSync(tourneyFile)) fs.writeFileSync(tourneyFile, '[]');
 if (!fs.existsSync(historyFile)) fs.writeFileSync(historyFile, '[]');
 
-const parseBody = (req) => new Promise((resolve) => {
-  let body = '';
-  req.on('data', chunk => body += chunk.toString());
-  req.on('end', () => {
-    try { resolve(body ? JSON.parse(body) : null); } 
-    catch (e) { resolve(null); }
-  });
-});
-
 const setCors = (ctx) => {
   ctx.set('Access-Control-Allow-Origin', ctx.request.headers.origin || '*');
   ctx.set('Access-Control-Allow-Headers', 'Content-Type');
   ctx.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+};
+
+// Safe Body Parser (prevents requests from hanging)
+const getBody = (ctx) => {
+  if (typeof ctx.request.body === 'string') {
+    try { return JSON.parse(ctx.request.body); } catch(e) { return {}; }
+  }
+  return ctx.request.body || {};
 };
 
 server.router.options('/api/(.*)', (ctx) => {
@@ -44,27 +69,27 @@ server.router.options('/api/(.*)', (ctx) => {
 
 server.router.get('/api/tournaments', (ctx) => {
   setCors(ctx);
-  ctx.body = fs.readFileSync(tourneyFile, 'utf8');
+  try { ctx.body = fs.readFileSync(tourneyFile, 'utf8'); } catch(e) { ctx.body = '[]'; }
 });
 
 server.router.get('/api/history', (ctx) => {
   setCors(ctx);
-  ctx.body = fs.readFileSync(historyFile, 'utf8');
+  try { ctx.body = fs.readFileSync(historyFile, 'utf8'); } catch(e) { ctx.body = '[]'; }
 });
 
-server.router.post('/api/tournaments', async (ctx) => {
+server.router.post('/api/tournaments', (ctx) => {
   setCors(ctx);
   try {
-    const body = (ctx.request.body && Object.keys(ctx.request.body).length > 0) ? ctx.request.body : await parseBody(ctx.req);
-    if (body) fs.writeFileSync(tourneyFile, JSON.stringify(body));
+    const body = getBody(ctx);
+    if (body && Object.keys(body).length > 0) fs.writeFileSync(tourneyFile, JSON.stringify(body));
     ctx.body = { success: true };
   } catch (e) { ctx.status = 500; ctx.body = { error: 'Failed' }; }
 });
 
-server.router.post('/api/history/add', async (ctx) => {
+server.router.post('/api/history/add', (ctx) => {
   setCors(ctx);
   try {
-    const body = (ctx.request.body && Object.keys(ctx.request.body).length > 0) ? ctx.request.body : await parseBody(ctx.req);
+    const body = getBody(ctx);
     if (body && body.matchID) {
       const history = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
       if (!history.some(h => h.matchID === body.matchID)) {
@@ -79,7 +104,7 @@ server.router.post('/api/history/add', async (ctx) => {
 server.router.post('/api/admin/kick', async (ctx) => {
   setCors(ctx);
   try {
-    const body = (ctx.request.body && Object.keys(ctx.request.body).length > 0) ? ctx.request.body : await parseBody(ctx.req);
+    const body = getBody(ctx);
     if (body && body.matchID && body.playerID) {
       const matchID = body.matchID;
       const playerID = body.playerID.toString();
@@ -98,13 +123,11 @@ server.router.post('/api/admin/kick', async (ctx) => {
   }
 });
 
-// NEW: ADMIN BACKDOOR TO WIPE A MATCH ENTIRELY
 server.router.post('/api/admin/delete-match', async (ctx) => {
   setCors(ctx);
   try {
-    const body = (ctx.request.body && Object.keys(ctx.request.body).length > 0) ? ctx.request.body : await parseBody(ctx.req);
+    const body = getBody(ctx);
     if (body && body.matchID) {
-      // Reaches into Boardgame.io and completely deletes the save file
       await server.db.wipe(body.matchID);
     }
     ctx.body = { success: true };
