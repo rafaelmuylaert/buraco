@@ -428,83 +428,141 @@ export const BuracoGame = {
 
   ai: {
     enumerate: (G, ctx) => {
-      let moves = [];
       const p = ctx.currentPlayer;
       const hand = G.hands[p] || [];
       const topDiscard = G.discardPile.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
+      const myTeam = G.teams[p];
+      const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
+      const isWild = (c) => c.rank === 'JOKER' || c.rank === '2';
+
+      // --- DYNAMIC STRATEGY EVALUATORS ---
+      // Check if we or the opponents are dangerously close to ending the game
+      const oppPlayers = G.teamPlayers[oppTeam] || [];
+      const myPlayers = G.teamPlayers[myTeam] || [];
+      
+      const oppLowestHand = Math.min(...oppPlayers.map(op => G.hands[op].length));
+      const oppHasMorto = G.teamMortos[oppTeam];
+      const oppHasCanasta = oppPlayers.some(op => (G.melds[op] || []).some(m => getCanastaStatus(m, G.rules)));
+      
+      const myHasMorto = G.teamMortos[myTeam];
+      
+      // PANIC MODE: If opponent has a canasta, has the morto, and has <= 3 cards... we must drop points immediately!
+      // Or, if we are trying to grab the morto, we drop everything.
+      const isPanicMode = (oppHasMorto && oppHasCanasta && oppLowestHand <= 3) || (!myHasMorto && hand.length <= 4);
 
       if (!G.hasDrawn) {
-        // Option 1: Draw from deck
-        moves.push({ move: 'drawCard', args: [] });
-
-        // Option 2: Hijack the draw and pick up the discard!
         if (topDiscard) {
           if (G.rules.discard === 'closed') {
             for (let i = 0; i < hand.length; i++) {
               for (let j = i + 1; j < hand.length; j++) {
                 const parsed = parseMeld([hand[i], hand[j], topDiscard], G.rules);
                 if (parsed.valid) {
-                  // GREEDY LOGIC: If we can pick up the discard to make a meld, DO IT!
-                  return [{ move: 'pickUpDiscard', args: [[hand[i].id, hand[j].id], { type: 'new' }] }];
+                  // In Panic Mode, pick up anything valid. Normally, only pick up Clean melds.
+                  if (isPanicMode || parsed.status === 'clean') {
+                    return [{ move: 'pickUpDiscard', args: [[hand[i].id, hand[j].id], { type: 'new' }] }];
+                  }
                 }
               }
             }
-          } else {
-            // Open discard -> the bot should just pick it up if there are multiple cards
-            if (G.discardPile.length > 2) {
-              return [{ move: 'pickUpDiscard', args: [] }];
-            }
-            moves.push({ move: 'pickUpDiscard', args: [] });
+          } else if (G.discardPile.length >= 4) {
+            return [{ move: 'pickUpDiscard', args: [] }];
           }
         }
-        return moves;
+        return [{ move: 'drawCard', args: [] }];
 
       } else {
-        // Phase 2: Post-Draw
-        let meldAndAppendMoves = [];
+        let bestMove = null;
+        let highestScore = -9999;
 
-        // 1. Scan for Appends (Adding 1 card to existing melds)
-        const myTeam = G.teams[p];
-        const teamPlayers = G.teamPlayers[myTeam] || [];
-        teamPlayers.forEach(tp => {
-          const teamMelds = G.melds[tp] || [];
-          teamMelds.forEach((meld, mIndex) => {
+        const evaluateMove = (move, score) => {
+          if (score > highestScore) { highestScore = score; bestMove = move; }
+        };
+
+        // STRATEGY: Smart Appends
+        myPlayers.forEach(tp => {
+          (G.melds[tp] || []).forEach((meld, mIndex) => {
             hand.forEach(card => {
               const parsed = parseMeld([...meld, card], G.rules);
               if (parsed.valid) {
-                meldAndAppendMoves.push({ move: 'appendToMeld', args: [tp, mIndex, [card.id]] });
+                let score = 50; 
+                
+                if (isWild(card)) {
+                  // PRIORITIZE SUITED 2s: If it's a 2 matching the meld's suit, it's safe to use!
+                  if (card.rank === '2' && meld.some(c => c.suit === card.suit && c.rank !== '2' && c.rank !== 'JOKER')) {
+                    score += 100; // Reward suited 2s!
+                  } else {
+                    score -= isPanicMode ? 0 : 80; // Penalize unsuited wilds unless panicking
+                  }
+                }
+                
+                if (meld.length >= 6) score += 1000; // MUST FINISH CANASTAS
+                evaluateMove({ move: 'appendToMeld', args: [tp, mIndex, [card.id]] }, score);
               }
             });
           });
         });
 
-        // 2. Scan for New Melds (3 card combos)
+        // STRATEGY: Smart New Melds
         for (let i = 0; i < hand.length; i++) {
           for (let j = i + 1; j < hand.length; j++) {
             for (let k = j + 1; k < hand.length; k++) {
               const parsed = parseMeld([hand[i], hand[j], hand[k]], G.rules);
               if (parsed.valid) {
-                meldAndAppendMoves.push({ move: 'playMeld', args: [[hand[i].id, hand[j].id, hand[k].id]] });
+                let score = 30;
+                
+                // If panicking, play everything. If not, severely penalize starting dirty 3-card melds.
+                if (parsed.status === 'dirty') {
+                  // Check if the wild used is a suited 2
+                  const hasSuitedTwo = [hand[i], hand[j], hand[k]].some(c => c.rank === '2' && [hand[i], hand[j], hand[k]].some(other => other.suit === c.suit && other.rank !== '2' && other.rank !== 'JOKER'));
+                  score -= (isPanicMode || hasSuitedTwo) ? 20 : 150; 
+                }
+                
+                evaluateMove({ move: 'playMeld', args: [[hand[i].id, hand[j].id, hand[k].id]] }, score);
               }
             }
           }
         }
 
-        // GREEDY LOOP: If we found ANY valid melds or appends, hide the discards!
-        // This forces the bot to play its melds immediately. Because it hasn't discarded, 
-        // it remains its turn, and the bot script will loop to play the next meld!
-        if (meldAndAppendMoves.length > 0) {
-          return meldAndAppendMoves;
-        }
+        if (bestMove && highestScore > 0) return [bestMove];
 
-        // 3. Out of melds. Time to Discard.
+        // STRATEGY: Defensive Discarding & Hoarding
         let discardMoves = [];
         if (hand.length > 1 || canEmptyHand(G, myTeam)) {
           hand.forEach(card => {
-            discardMoves.push({ move: 'discardCard', args: [card.id] });
+            let discardScore = 0;
+            
+            if (isWild(card)) discardScore -= 5000; 
+
+            // EXTREME DEFENSE: Starve the opponent's Canastas
+            oppPlayers.forEach(op => {
+              (G.melds[op] || []).forEach(meld => {
+                const parsed = parseMeld([...meld, card], G.rules);
+                if (parsed.valid) {
+                  // If they have 5 or 6 cards and no clean canasta, HOLD THIS CARD FOR DEAR LIFE
+                  if (meld.length >= 5 && !oppHasCanasta) {
+                    discardScore -= 10000; 
+                  } else {
+                    discardScore -= 500; 
+                  }
+                }
+              });
+            });
+
+            const hasPair = hand.some(c => c.id !== card.id && c.rank === card.rank);
+            const hasNeighbor = hand.some(c => c.id !== card.id && c.suit === card.suit && Math.abs(sequenceMath[c.rank] - sequenceMath[card.rank]) === 1);
+            
+            if (!hasPair && !hasNeighbor) discardScore += 100; // Good orphan to dump
+
+            discardMoves.push({ move: 'discardCard', args: [card.id], score: discardScore });
           });
+
+          discardMoves.sort((a, b) => b.score - a.score);
+          if (discardMoves.length > 0) {
+            return [{ move: 'discardCard', args: discardMoves[0].args }];
+          }
         }
-        return discardMoves;
+        
+        return [{ move: 'discardCard', args: [hand[0].id] }];
       }
     }
   }
