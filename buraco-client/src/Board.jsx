@@ -121,7 +121,6 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
   const myTeamPlayers = G.teamPlayers[myTeam] || [];
   const oppTeamPlayers = G.teamPlayers[oppTeam] || [];
 
-  // Cascading Discard Pile Algorithm
   const chunkedDiscard = [];
   if (G.discardPile && G.discardPile.length > 0) {
     for (let i = 0; i < G.discardPile.length; i += 6) {
@@ -222,115 +221,126 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
           </div>
         )}
       </div>
-
-      {/* FEATURE: Known Cards Display */}
-      {G.rules?.showKnownCards && teamPlayers.some(p => G.knownCards[p] && G.knownCards[p].length > 0) && (
-        <div style={{ width: '100%', marginTop: '15px', padding: '10px', background: 'rgba(0,0,0,0.4)', borderRadius: '8px', border: '1px solid #444' }}>
-          <h4 style={{ margin: '0 0 5px 0', color: '#ccc', fontSize: '0.8em' }}>Cartas Memorizadas (Na mão deles)</h4>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-            {teamPlayers.flatMap(p => G.knownCards[p] || []).map((c, i) => (
-              <div key={i} style={{ background: 'white', color: (c.suit==='♥'||c.suit==='♦')?'red':'black', padding: '2px 5px', borderRadius: '4px', fontSize: '0.7em', fontWeight: 'bold' }}>
-                {c.rank}{c.suit}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif', backgroundColor: '#2d6a4f', minHeight: '100vh', color: 'white', display: 'flex', flexDirection: 'column' }}>
+    // FEATURE: Fixed 100vh Layout with Overflow Control
+    <div style={{ height: '100vh', boxSizing: 'border-box', overflow: 'hidden', padding: '15px', fontFamily: 'sans-serif', backgroundColor: '#2d6a4f', color: 'white', display: 'flex', gap: '15px' }}>
       
-      <div style={{ display: 'flex', gap: '20px', minHeight: '150px' }}>
+      {/* Left Column: Deck and Discard */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: G.rules?.openDiscardView ? '160px' : '80px', minWidth: '80px', alignItems: 'center', overflowY: 'auto' }}>
+        <div style={{ textAlign: 'center' }}>
+          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Monte</h4>
+          <CardBack label="Comprar" count={G.deck.length} onClick={() => { if(!G.hasDrawn) moves.drawCard(); }} />
+        </div>
         
-        {/* Left Column: Deck and Discard */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: G.rules?.openDiscardView ? '160px' : '80px', minWidth: '80px', alignItems: 'center' }}>
-          <div style={{ textAlign: 'center' }}>
-            <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Monte</h4>
-            <CardBack label="Comprar" count={G.deck.length} onClick={() => { if(!G.hasDrawn) moves.drawCard(); }} />
-          </div>
-          
-          <div style={{ textAlign: 'center', width: '100%' }}>
-            <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Lixo ({G.discardPile.length})</h4>
-            <div onClick={handleDiscardPileClick} style={{ cursor: (!G.hasDrawn || (selectedCards.length === 1 && G.hasDrawn)) ? 'pointer' : 'not-allowed' }}>
-              {G.discardPile.length > 0 ? (
-                G.rules?.openDiscardView ? (
-                  /* Cascading Multi-Row Discard Pile */
-                  chunkedDiscard.map((row, rIdx) => (
-                    <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-65px' : '0' }}>
-                      {row.map((c, i) => <Card key={c.id} card={c} customStyle={{ marginLeft: i > 0 ? '-40px' : '0' }} />)}
-                    </div>
-                  ))
-                ) : (
-                  <Card card={topDiscard} />
-                )
+        <div style={{ textAlign: 'center', width: '100%' }}>
+          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Lixo ({G.discardPile.length})</h4>
+          <div onClick={handleDiscardPileClick} style={{ cursor: (!G.hasDrawn || (selectedCards.length === 1 && G.hasDrawn)) ? 'pointer' : 'not-allowed' }}>
+            {G.discardPile.length > 0 ? (
+              G.rules?.openDiscardView ? (
+                /* FEATURE: Cascading Multi-Row Discard Pile */
+                chunkedDiscard.map((row, rIdx) => (
+                  <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-65px' : '0' }}>
+                    {row.map((c, i) => <Card key={c.id} card={c} customStyle={{ marginLeft: i > 0 ? '-40px' : '0' }} />)}
+                  </div>
+                ))
               ) : (
-                <div style={{ border: '2px dashed #40916c', width: '60px', height: '90px', borderRadius: '8px', textAlign: 'center', lineHeight: '90px', color: '#888', margin: '0 auto' }}>Vazio</div>
-              )}
-            </div>
-          </div>
-          {G.deck.length === 0 && !G.hasDrawn && <button onClick={() => moves.declareExhausted()} style={{ background: '#ff4d4d', color: 'white', border: 'none', padding: '8px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Passar a Vez</button>}
-        </div>
-
-        {/* Center: Opponent Table */}
-        <div style={{ flexGrow: 1 }}>{renderTeamTable(oppTeamPlayers, "Mesa Deles", false)}</div>
-        
-        {/* Right Column: Mortos and Player Tracker */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '200px', alignItems: 'center' }}>
-          
-          <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
-            <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Mortos</h4>
-            <div style={{ fontSize: '0.7em', color: G.teamMortos[myTeam] ? '#ffd700' : '#888', display: 'flex', justifyContent: 'space-between' }}><span>Nós:</span> <span>{G.teamMortos[myTeam] ? '✔️' : '❌'}</span></div>
-            <div style={{ fontSize: '0.7em', color: G.teamMortos[oppTeam] ? '#ffd700' : '#888', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}><span>Eles:</span> <span>{G.teamMortos[oppTeam] ? '✔️' : '❌'}</span></div>
-
-            <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
-              {(Array.isArray(G.pots) ? G.pots : Object.values(G.pots || {}).filter(p => p && p.length > 0)).map((_, i) => (
-                <div key={`morto-${i}`} style={{
-                  border: '1px solid white', borderRadius: '4px', width: '30px', height: '45px',
-                  backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 4px)',
-                  boxShadow: '1px 1px 3px rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white'
-                }}>
-                  <span style={{ fontSize: '0.5em', fontWeight: 'bold', transform: 'rotate(-45deg)' }}>Morto</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px' }}>
-            <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Jogadores</h4>
-            {Object.keys(G.hands).filter(p => G.hands[p]).map(p => {
-              const isTurn = ctx.currentPlayer === p;
-              const isMe = p === playerID;
-              const name = G.rules?.assignments?.[p] || `P${p}`;
-              return (
-                <div key={p} style={{ 
-                  fontSize: '0.75em', display: 'flex', justifyContent: 'space-between', 
-                  color: isTurn ? '#ffd700' : (isMe ? '#4da6ff' : '#888'), 
-                  fontWeight: (isTurn || isMe) ? 'bold' : 'normal', 
-                  marginBottom: '4px',
-                  background: isMe ? 'rgba(77, 166, 255, 0.2)' : 'transparent',
-                  padding: '4px 6px', borderRadius: '4px'
-                }}>
-                  <span>{isTurn ? '👉 ' : ''}{name} {isMe ? '(Você)' : ''}</span>
-                  <span>{G.hands[p].length} 🃏</span>
-                </div>
+                <Card card={topDiscard} />
               )
-            })}
+            ) : (
+              <div style={{ border: '2px dashed #40916c', width: '60px', height: '90px', borderRadius: '8px', textAlign: 'center', lineHeight: '90px', color: '#888', margin: '0 auto' }}>Vazio</div>
+            )}
           </div>
-          
         </div>
+        {G.deck.length === 0 && !G.hasDrawn && <button onClick={() => moves.declareExhausted()} style={{ background: '#ff4d4d', color: 'white', border: 'none', padding: '8px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Passar a Vez</button>}
       </div>
 
-      <div style={{ marginTop: '20px' }}>{renderTeamTable(myTeamPlayers, "Nossa Mesa", true)}</div>
-
-      <div style={{ display: 'flex', gap: '30px', marginTop: '20px', alignItems: 'flex-start' }}>
-        <div style={{ flexGrow: 1 }}>
-          <h2>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.6em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
+      {/* Center Column: Opponent Table, My Table, and My Hand */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '15px', overflowY: 'auto', paddingRight: '5px' }}>
+        <div style={{ flexShrink: 0 }}>{renderTeamTable(oppTeamPlayers, "Mesa Deles", false)}</div>
+        <div style={{ flexShrink: 0 }}>{renderTeamTable(myTeamPlayers, "Nossa Mesa", true)}</div>
+        <div style={{ flexShrink: 0 }}>
+          <h2 style={{ fontSize: '1.2em', margin: '0 0 10px 0' }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
             {sortedHand.map(card => <Card key={card.id} card={card} isSelected={selectedCards.includes(card.id)} isNewlyDrawn={card.isNewlyDrawn} onClick={() => toggleCardSelection(card.id)} />)}
           </div>
         </div>
+      </div>
+      
+      {/* Right Column: Return Button, Mortos, Player Tracker, Known Cards */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '220px', minWidth: '220px', alignItems: 'center', overflowY: 'auto' }}>
+        
+        {/* FEATURE: Return Button moved from Top Bar to Top of Sidebar */}
+        <button onClick={() => window.location.reload()} style={{ width: '100%', background: '#4da6ff', color: 'white', border: 'none', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)' }}>
+          ⬅ Voltar ao Salão
+        </button>
+
+        <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Mortos</h4>
+          <div style={{ fontSize: '0.7em', color: G.teamMortos[myTeam] ? '#ffd700' : '#888', display: 'flex', justifyContent: 'space-between' }}><span>Nós:</span> <span>{G.teamMortos[myTeam] ? '✔️' : '❌'}</span></div>
+          <div style={{ fontSize: '0.7em', color: G.teamMortos[oppTeam] ? '#ffd700' : '#888', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}><span>Eles:</span> <span>{G.teamMortos[oppTeam] ? '✔️' : '❌'}</span></div>
+
+          <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+            {(Array.isArray(G.pots) ? G.pots : Object.values(G.pots || {}).filter(p => p && p.length > 0)).map((_, i) => (
+              <div key={`morto-${i}`} style={{
+                border: '1px solid white', borderRadius: '4px', width: '30px', height: '45px',
+                backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 4px)',
+                boxShadow: '1px 1px 3px rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white'
+              }}>
+                <span style={{ fontSize: '0.5em', fontWeight: 'bold', transform: 'rotate(-45deg)' }}>Morto</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px' }}>
+          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Jogadores</h4>
+          {Object.keys(G.hands).filter(p => G.hands[p]).map(p => {
+            const isTurn = ctx.currentPlayer === p;
+            const isMe = p === playerID;
+            const name = G.rules?.assignments?.[p] || `P${p}`;
+            return (
+              <div key={p} style={{ 
+                fontSize: '0.75em', display: 'flex', justifyContent: 'space-between', 
+                color: isTurn ? '#ffd700' : (isMe ? '#4da6ff' : '#888'), 
+                fontWeight: (isTurn || isMe) ? 'bold' : 'normal', 
+                marginBottom: '4px',
+                background: isMe ? 'rgba(77, 166, 255, 0.2)' : 'transparent',
+                border: isMe ? '1px solid #4da6ff' : '1px solid transparent',
+                padding: '4px 6px', borderRadius: '4px'
+              }}>
+                <span>{isTurn ? '👉 ' : ''}{name} {isMe ? '(Você)' : ''}</span>
+                <span>{G.hands[p].length} 🃏</span>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* FEATURE: Known Cards Displayed cleanly by player in Sidebar */}
+        {G.rules?.showKnownCards && Object.keys(G.knownCards).some(p => G.knownCards[p].length > 0) && (
+          <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px' }}>
+            <h4 style={{ margin: '0 0 10px 0', fontSize: '0.8em', color: '#ccc' }}>Memorizadas</h4>
+            {Object.keys(G.knownCards).map(p => {
+              if (G.knownCards[p].length === 0) return null;
+              const name = G.rules?.assignments?.[p] || `P${p}`;
+              return (
+                <div key={p} style={{ marginBottom: '8px' }}>
+                  <div style={{ fontSize: '0.75em', color: '#888', marginBottom: '3px' }}>{name}:</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                    {G.knownCards[p].map((c, i) => (
+                      <div key={i} style={{ background: 'white', color: (c.suit==='♥'||c.suit==='♦')?'red':'black', padding: '1px 4px', borderRadius: '3px', fontSize: '0.7em', fontWeight: 'bold' }}>
+                        {c.rank}{c.suit}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        
       </div>
     </div>
   );
