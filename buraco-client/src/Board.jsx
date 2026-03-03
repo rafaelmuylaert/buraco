@@ -69,8 +69,6 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
   if (ctx.gameover) {
     const s0 = ctx.gameover.scores.team0;
     const s1 = ctx.gameover.scores.team1;
-    
-    // Feature: Display real player names in Game Over screen
     const team0Names = (G.teamPlayers.team0 || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`).join(' & ');
     const team1Names = (G.teamPlayers.team1 || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`).join(' & ');
 
@@ -114,7 +112,6 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
     );
   }
 
-  // Feature: Organized hand with highlighted new cards!
   const rawHand = G.hands[playerID] || []; 
   const sortedHand = sortCards(rawHand); 
   const topDiscard = G.discardPile[G.discardPile.length - 1];
@@ -124,7 +121,13 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
   const myTeamPlayers = G.teamPlayers[myTeam] || [];
   const oppTeamPlayers = G.teamPlayers[oppTeam] || [];
 
-  const myName = G.rules?.assignments?.[playerID] || `Jogador ${playerID}`;
+  // Cascading Discard Pile Algorithm
+  const chunkedDiscard = [];
+  if (G.discardPile && G.discardPile.length > 0) {
+    for (let i = 0; i < G.discardPile.length; i += 6) {
+      chunkedDiscard.push(G.discardPile.slice(i, i + 6));
+    }
+  }
 
   const calcTeamTablePoints = (teamPlayers) => {
     let total = 0;
@@ -219,17 +222,30 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
           </div>
         )}
       </div>
+
+      {/* FEATURE: Known Cards Display */}
+      {G.rules?.showKnownCards && teamPlayers.some(p => G.knownCards[p] && G.knownCards[p].length > 0) && (
+        <div style={{ width: '100%', marginTop: '15px', padding: '10px', background: 'rgba(0,0,0,0.4)', borderRadius: '8px', border: '1px solid #444' }}>
+          <h4 style={{ margin: '0 0 5px 0', color: '#ccc', fontSize: '0.8em' }}>Cartas Memorizadas (Na mão deles)</h4>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+            {teamPlayers.flatMap(p => G.knownCards[p] || []).map((c, i) => (
+              <div key={i} style={{ background: 'white', color: (c.suit==='♥'||c.suit==='♦')?'red':'black', padding: '2px 5px', borderRadius: '4px', fontSize: '0.7em', fontWeight: 'bold' }}>
+                {c.rank}{c.suit}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif', backgroundColor: '#2d6a4f', minHeight: '100vh', color: 'white', display: 'flex', flexDirection: 'column' }}>
-      <h1>{myName} {ctx.currentPlayer === playerID ? <span style={{ color: '#ffd700' }}>(Sua Vez)</span> : ""}</h1>
       
       <div style={{ display: 'flex', gap: '20px', minHeight: '150px' }}>
         
         {/* Left Column: Deck and Discard */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: G.rules?.openDiscardView ? 'auto' : '80px', minWidth: '80px', maxWidth: '300px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: G.rules?.openDiscardView ? '160px' : '80px', minWidth: '80px', alignItems: 'center' }}>
           <div style={{ textAlign: 'center' }}>
             <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Monte</h4>
             <CardBack label="Comprar" count={G.deck.length} onClick={() => { if(!G.hasDrawn) moves.drawCard(); }} />
@@ -237,18 +253,20 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
           
           <div style={{ textAlign: 'center', width: '100%' }}>
             <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Lixo ({G.discardPile.length})</h4>
-            <div onClick={handleDiscardPileClick} style={{ 
-              cursor: (!G.hasDrawn || (selectedCards.length === 1 && G.hasDrawn)) ? 'pointer' : 'not-allowed',
-              display: 'flex', justifyContent: G.rules?.openDiscardView ? 'flex-start' : 'center', overflowX: 'auto', paddingBottom: '10px'
-            }}>
+            <div onClick={handleDiscardPileClick} style={{ cursor: (!G.hasDrawn || (selectedCards.length === 1 && G.hasDrawn)) ? 'pointer' : 'not-allowed' }}>
               {G.discardPile.length > 0 ? (
                 G.rules?.openDiscardView ? (
-                  G.discardPile.map((c, i) => <Card key={c.id} card={c} customStyle={{ marginLeft: i > 0 ? '-40px' : '0' }} />)
+                  /* Cascading Multi-Row Discard Pile */
+                  chunkedDiscard.map((row, rIdx) => (
+                    <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-65px' : '0' }}>
+                      {row.map((c, i) => <Card key={c.id} card={c} customStyle={{ marginLeft: i > 0 ? '-40px' : '0' }} />)}
+                    </div>
+                  ))
                 ) : (
                   <Card card={topDiscard} />
                 )
               ) : (
-                <div style={{ border: '2px dashed #40916c', width: '60px', height: '90px', borderRadius: '8px', textAlign: 'center', lineHeight: '90px', color: '#888' }}>Vazio</div>
+                <div style={{ border: '2px dashed #40916c', width: '60px', height: '90px', borderRadius: '8px', textAlign: 'center', lineHeight: '90px', color: '#888', margin: '0 auto' }}>Vazio</div>
               )}
             </div>
           </div>
@@ -259,9 +277,8 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
         <div style={{ flexGrow: 1 }}>{renderTeamTable(oppTeamPlayers, "Mesa Deles", false)}</div>
         
         {/* Right Column: Mortos and Player Tracker */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '180px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '200px', alignItems: 'center' }}>
           
-          {/* Mortos Tracker */}
           <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
             <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Mortos</h4>
             <div style={{ fontSize: '0.7em', color: G.teamMortos[myTeam] ? '#ffd700' : '#888', display: 'flex', justifyContent: 'space-between' }}><span>Nós:</span> <span>{G.teamMortos[myTeam] ? '✔️' : '❌'}</span></div>
@@ -280,15 +297,22 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
             </div>
           </div>
 
-          {/* Feature: Hand Size & Turn Tracker */}
           <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px' }}>
             <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Jogadores</h4>
             {Object.keys(G.hands).filter(p => G.hands[p]).map(p => {
               const isTurn = ctx.currentPlayer === p;
+              const isMe = p === playerID;
               const name = G.rules?.assignments?.[p] || `P${p}`;
               return (
-                <div key={p} style={{ fontSize: '0.75em', display: 'flex', justifyContent: 'space-between', color: isTurn ? '#ffd700' : '#888', fontWeight: isTurn ? 'bold' : 'normal', marginBottom: '4px' }}>
-                  <span>{isTurn ? '👉 ' : ''}{name}</span>
+                <div key={p} style={{ 
+                  fontSize: '0.75em', display: 'flex', justifyContent: 'space-between', 
+                  color: isTurn ? '#ffd700' : (isMe ? '#4da6ff' : '#888'), 
+                  fontWeight: (isTurn || isMe) ? 'bold' : 'normal', 
+                  marginBottom: '4px',
+                  background: isMe ? 'rgba(77, 166, 255, 0.2)' : 'transparent',
+                  padding: '4px 6px', borderRadius: '4px'
+                }}>
+                  <span>{isTurn ? '👉 ' : ''}{name} {isMe ? '(Você)' : ''}</span>
                   <span>{G.hands[p].length} 🃏</span>
                 </div>
               )
