@@ -122,17 +122,6 @@ const App = () => {
     }
   };
 
-  const handleReturnToLounge = () => setView('lounge');
-
-  const handleLeaveMatch = async () => {
-    try { if (matchID && playerID && credentials) await lobbyClient.leaveMatch('buraco', matchID, { playerID, credentials }); } 
-    catch (e) { console.error("Erro ao sair da mesa."); }
-    const sessions = getSavedSessions();
-    delete sessions[`${matchID}_${playerID}`];
-    localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
-    window.location.reload(); 
-  };
-
   const handleCreateTournament = async () => {
     const playerList = newTourney.players.split(',').map(p => p.trim()).filter(p => p);
     if (playerList.length % newTourney.rules.numPlayers !== 0) {
@@ -273,16 +262,11 @@ const App = () => {
     return { standings: sorted, isFinished };
   };
 
-  // --- NEW: ADVANCED ADMIN CONTROLS ---
   const handleAdminDeleteTournament = async (tID) => {
     if (!confirm("Tem certeza? Isso apagará o torneio E DESTRUIRÁ todas as mesas associadas permanentemente.")) return;
-    
-    // 1. Find the tournament
     const tToDelete = tournaments.find(t => t.id === tID);
     if (tToDelete) {
-      // 2. Extract every matchID that belonged to it
       const matchIDs = tToDelete.rounds.flatMap(r => r.assignments.map(a => a.matchID));
-      // 3. Command the engine to annihilate the files
       for (let mID of matchIDs) {
         try {
           await fetch(`${API_ADDRESS}/api/admin/delete-match`, {
@@ -290,29 +274,30 @@ const App = () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ matchID: mID })
           });
-        } catch (e) { console.error("Falha ao apagar mesa", mID); }
+        } catch (e) {}
       }
     }
-    
-    // 4. Remove it from the UI
     const updated = tournaments.filter(t => t.id !== tID);
     saveTournamentsToAPI(updated);
   };
 
   const handleCleanOrphans = async () => {
-    if (!confirm("Isso apagará todas as mesas fantasma do servidor. Continuar?")) return;
+    if (!confirm("Isso apagará todas as mesas fantasma do disco. Continuar?")) return;
     
     const validMatchIDs = tournaments.flatMap(t => t.rounds.flatMap(r => r.assignments.map(a => a.matchID)));
     const orphanMatches = matches.filter(m => !validMatchIDs.includes(m.matchID));
     
     for (let m of orphanMatches) {
-       await fetch(`${API_ADDRESS}/api/admin/delete-match`, {
+      try {
+        await fetch(`${API_ADDRESS}/api/admin/delete-match`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ matchID: m.matchID })
-       });
+        });
+      } catch(e) {}
     }
-    alert(`${orphanMatches.length} mesas fantasma apagadas!`);
+    alert(`${orphanMatches.length} mesas fantasma apagadas! IMPORTANTE: Se elas continuarem na tela, reinicie o container do servidor no terminal (sudo docker compose restart buraco-server) para limpar o cache da memória RAM!`);
+    window.location.reload();
   };
 
   const handleAdminForceKick = async (matchID, seatID) => {
@@ -327,20 +312,11 @@ const App = () => {
     } catch (e) { alert("Erro ao liberar assento."); }
   };
 
+  // FEATURE: Pure 100vh Full Screen Mode (Black bar completely removed)
   if (view === 'game') {
-    return (
-      <div>
-        <div style={{ background: '#081c15', padding: '10px', textAlign: 'right' }}>
-          <button onClick={handleReturnToLounge} style={{ background: '#4da6ff', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>
-            Voltar ao Salão (Manter Assento)
-          </button>
-        </div>
-        <BuracoClient matchID={matchID} playerID={playerID} credentials={credentials} />
-      </div>
-    );
+    return <BuracoClient matchID={matchID} playerID={playerID} credentials={credentials} />;
   }
 
-  // Generate a list of all valid matches to detect ghosts in the Admin Panel
   const allValidMatchIDs = tournaments.flatMap(t => t.rounds.flatMap(r => r.assignments.map(a => a.matchID)));
 
   if (view === 'admin') {
@@ -508,10 +484,11 @@ const App = () => {
                               <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', background: '#111', padding: '6px', borderRadius: '5px', alignItems: 'center' }}>
                                 <span>{seatName}</span>
                                 
-                                {isDone ? (
-                                  <span style={{ color: '#aaa', fontSize: '0.8em' }}>Concluído</span>
-                                ) : hasLocalCredentials ? (
+                                {/* FEATURE: Reconnect button is ALWAYS available if you have credentials, even if game is done! */}
+                                {hasLocalCredentials ? (
                                   <button onClick={() => handleReconnect(m.matchID, p.id.toString())} style={{ background: '#4da6ff', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>Reconectar</button>
+                                ) : isDone ? (
+                                  <span style={{ color: '#aaa', fontSize: '0.8em' }}>Concluído</span>
                                 ) : p.name ? (
                                   <span style={{ color: '#ff4d4d', fontSize: '0.8em', fontWeight: 'bold' }}>Ocupado</span>
                                 ) : (
