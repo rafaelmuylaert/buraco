@@ -249,7 +249,7 @@ export const BuracoGame = {
     for (let i = 0; i < rules.numPlayers; i++) { 
       hands[i.toString()] = initialDeck.splice(0, 11); 
       melds[i.toString()] = [];
-      knownCards[i.toString()] = []; // FEATURE: AI Memory Bank
+      knownCards[i.toString()] = []; 
     }
 
     let teams = {}; let teamPlayers = {};
@@ -325,7 +325,7 @@ export const BuracoGame = {
 
         G.discardPile.pop();
         G.discardPile.forEach(c => c.isNewlyDrawn = true);
-        G.knownCards[ctx.currentPlayer].push(...G.discardPile); // Log memory!
+        G.knownCards[ctx.currentPlayer].push(...G.discardPile); 
         G.hands[ctx.currentPlayer].push(...G.discardPile);
         G.discardPile = [];
         G.hasDrawn = true;
@@ -334,7 +334,7 @@ export const BuracoGame = {
 
       } else {
         G.discardPile.forEach(c => c.isNewlyDrawn = true);
-        G.knownCards[ctx.currentPlayer].push(...G.discardPile); // Log memory!
+        G.knownCards[ctx.currentPlayer].push(...G.discardPile); 
         G.hands[ctx.currentPlayer].push(...G.discardPile);
         G.discardPile = [];
         G.hasDrawn = true;
@@ -358,7 +358,7 @@ export const BuracoGame = {
 
         G.hands[ctx.currentPlayer] = newHand;
         G.melds[ctx.currentPlayer] = newMelds;
-        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => !cardIds.includes(c.id)); // Remove from memory
+        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => !cardIds.includes(c.id)); 
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
         checkMorto(G, ctx); 
       }
@@ -383,7 +383,7 @@ export const BuracoGame = {
 
         G.hands[ctx.currentPlayer] = newHand;
         G.melds[meldOwner] = newMeldState;
-        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => !cardIds.includes(c.id)); // Remove from memory
+        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => !cardIds.includes(c.id)); 
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
         checkMorto(G, ctx); 
       }
@@ -401,7 +401,7 @@ export const BuracoGame = {
         delete discardedCard.isNewlyDrawn; 
         
         G.discardPile.push(discardedCard);
-        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => c.id !== cardId); // Remove from memory
+        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => c.id !== cardId); 
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
         checkMorto(G, ctx); 
         G.hasDrawn = false; 
@@ -414,7 +414,13 @@ export const BuracoGame = {
   },
 
   endIf: ({ G }) => {
+    // Explicit call to end game
     if (G.isExhausted) return { reason: 'Monte Esgotado', scores: calculateFinalScores(G) };
+
+    // FEATURE: Automatic Game End if player is forced into a corner
+    if (G.deck.length === 0 && G.pots.length === 0 && G.discardPile.length <= 1 && !G.hasDrawn) {
+        return { reason: 'Monte Esgotado', scores: calculateFinalScores(G) };
+    }
     
     for (let i = 0; i < G.rules.numPlayers; i++) {
       const p = i.toString();
@@ -468,6 +474,11 @@ export const BuracoGame = {
             return [{ move: 'pickUpDiscard', args: [] }];
           }
         }
+        
+        // FEATURE: Bot knows how to Exhaust the deck properly!
+        if (G.deck.length === 0 && G.pots.length === 0) {
+            return [{ move: 'declareExhausted', args: [] }];
+        }
         return [{ move: 'drawCard', args: [] }];
 
       } else {
@@ -483,13 +494,12 @@ export const BuracoGame = {
             hand.forEach(card => {
               const parsed = parseMeld([...meld, card], G.rules);
               if (parsed.valid) {
-                // BUG FIX: Simulate new hand to prevent the Freeze!
                 const newHandLength = hand.length - 1;
                 let simulatedMelds = [...G.melds[tp]];
                 simulatedMelds[mIndex] = parsed.sorted;
                 
                 if (newHandLength < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, simulatedMelds, tp)) {
-                  return; // Illegal move! Skip!
+                  return; 
                 }
 
                 let score = 50; 
@@ -512,12 +522,11 @@ export const BuracoGame = {
             for (let k = j + 1; k < hand.length; k++) {
               const parsed = parseMeld([hand[i], hand[j], hand[k]], G.rules);
               if (parsed.valid) {
-                // BUG FIX: Simulate new hand to prevent the Freeze!
                 const newHandLength = hand.length - 3;
                 let simulatedMelds = [...(G.melds[p] || []), parsed.sorted];
 
                 if (newHandLength < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, simulatedMelds, p)) {
-                  continue; // Illegal move! Skip!
+                  continue; 
                 }
 
                 let score = 30;
@@ -548,11 +557,10 @@ export const BuracoGame = {
                 }
               });
 
-              // FEATURE: Use the Memory Bank! Never discard a card they explicitly picked up!
               (G.knownCards[op] || []).forEach(kCard => {
                 if (!isWild(card)) {
-                  if (kCard.rank === card.rank) discardScore -= 3000; // They hold the pair!
-                  if (kCard.suit === card.suit && Math.abs(sequenceMath[kCard.rank] - sequenceMath[card.rank]) <= 2) discardScore -= 3000; // They hold a sequence neighbor!
+                  if (kCard.rank === card.rank) discardScore -= 3000; 
+                  if (kCard.suit === card.suit && Math.abs(sequenceMath[kCard.rank] - sequenceMath[card.rank]) <= 2) discardScore -= 3000; 
                 }
               });
             });
@@ -570,8 +578,9 @@ export const BuracoGame = {
           }
         }
         
-        return []; // If we truly have no moves, we wait (fixes infinite loop crashes)
+        return []; 
       }
     }
   }
+};
 };
