@@ -583,4 +583,3 @@ export const BuracoGame = {
     }
   }
 };
-};
