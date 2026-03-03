@@ -1,5 +1,166 @@
 import React, { useState, useEffect } from 'react';
-import { sortCards, getCanastaStatus, calculateMeldPoints } from './game.js';
+
+// --- INLINED GAME LOGIC FOR PREVIEW COMPATIBILITY ---
+const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
+const pointValues = { '3': 5, '4': 5, '5': 5, '6': 5, '7': 5, '8': 10, '9': 10, '10': 10, 'J': 10, 'Q': 10, 'K': 10, 'A': 15, '2': 20, 'JOKER': 50 };
+const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
+
+function sortCards(cards) {
+  const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
+  return [...cards].sort((a, b) => {
+    if (suitValues[a.suit] !== suitValues[b.suit]) return suitValues[a.suit] - suitValues[b.suit];
+    return sortVals[a.rank] - sortVals[b.rank];
+  });
+}
+
+function parseMeld(cards, rules) {
+  if (cards.length < 3) return { valid: false };
+
+  const jokers = cards.filter(c => c.rank === 'JOKER');
+  const twos = cards.filter(c => c.rank === '2');
+  const naturals = cards.filter(c => c.rank !== 'JOKER' && c.rank !== '2');
+
+  if (naturals.length > 0 && naturals.every(c => c.rank === naturals[0].rank)) {
+    const r = naturals[0].rank;
+    let allowed = false;
+    if (rules?.runners === 'any') allowed = true;
+    if (rules?.runners === 'aces_threes' && (r === 'A' || r === '3')) allowed = true;
+    if (rules?.runners === 'aces_kings' && (r === 'A' || r === 'K')) allowed = true;
+    
+    if (allowed && jokers.length + twos.length <= 1) {
+      return { valid: true, status: (jokers.length + twos.length) === 0 ? 'clean' : 'dirty', sorted: [...naturals, ...twos, ...jokers] };
+    }
+  }
+
+  if (naturals.length > 0) {
+    const suit = naturals[0].suit;
+    
+    if (naturals.every(c => c.suit === suit)) {
+      const suitedTwos = twos.filter(c => c.suit === suit);
+      const unsuitedTwos = twos.filter(c => c.suit !== suit);
+
+      if (jokers.length + unsuitedTwos.length <= 1 && suitedTwos.length <= 2) {
+        let possibleConfigs = [];
+        
+        if (suitedTwos.length === 0) {
+          possibleConfigs.push({ nat: [], wild: [...jokers, ...unsuitedTwos] });
+        } else if (suitedTwos.length === 1) {
+          possibleConfigs.push({ nat: [suitedTwos[0]], wild: [...jokers, ...unsuitedTwos] });
+          if (jokers.length + unsuitedTwos.length === 0) {
+            possibleConfigs.push({ nat: [], wild: [suitedTwos[0]] });
+          }
+        } else if (suitedTwos.length === 2) {
+          if (jokers.length + unsuitedTwos.length === 0) {
+            possibleConfigs.push({ nat: [suitedTwos[0]], wild: [suitedTwos[1]] });
+            possibleConfigs.push({ nat: [suitedTwos[1]], wild: [suitedTwos[0]] });
+          }
+        }
+
+        const aces = naturals.filter(c => c.rank === 'A');
+        const otherNaturals = naturals.filter(c => c.rank !== 'A');
+        
+        if (aces.length <= 2) {
+          let aceValues = [];
+          if (aces.length === 0) aceValues.push([]);
+          if (aces.length === 1) { aceValues.push([1]); aceValues.push([14]); }
+          if (aces.length === 2) { aceValues.push([1, 14]); }
+
+          for (let cfg of possibleConfigs) {
+            if (cfg.wild.length > 1) continue;
+
+            for (let aVals of aceValues) {
+              let values = otherNaturals.map(c => sequenceMath[c.rank]);
+              values.push(...aVals);
+              values.push(...cfg.nat.map(c => 2));
+              values.sort((a, b) => a - b);
+
+              if (new Set(values).size !== values.length) continue;
+
+              let min = values[0];
+              let max = values[values.length - 1];
+              let gaps = 0;
+              for (let i = 1; i < values.length; i++) {
+                gaps += (values[i] - values[i-1] - 1);
+              }
+
+              if ((gaps === 0 && cfg.wild.length === 0) || 
+                  (gaps === 1 && cfg.wild.length === 1) || 
+                  (gaps === 0 && cfg.wild.length === 1)) {
+                  
+                let sorted = [];
+                let pool = [...cards];
+                let actualMin = min;
+                let actualMax = max;
+                let wildVal = -1;
+
+                if (cfg.wild.length === 1) {
+                  if (gaps === 1) {
+                    for (let i = 1; i < values.length; i++) {
+                      if (values[i] - values[i-1] > 1) {
+                        wildVal = values[i-1] + 1;
+                        break;
+                      }
+                    }
+                  } else {
+                    if (max < 14) {
+                      wildVal = max + 1;
+                      actualMax++;
+                    } else {
+                      wildVal = min - 1;
+                      actualMin--;
+                    }
+                  }
+                }
+
+                for (let v = actualMin; v <= actualMax; v++) {
+                  if (v === wildVal) {
+                    sorted.push(cfg.wild[0]);
+                  } else {
+                    let matchIndex = pool.findIndex(c => {
+                      if (v === 1 || v === 14) return c.rank === 'A';
+                      if (v === 2) return c.rank === '2' && cfg.nat.includes(c);
+                      return sequenceMath[c.rank] === v;
+                    });
+                    if (matchIndex !== -1) {
+                      sorted.push(pool[matchIndex]);
+                      pool.splice(matchIndex, 1);
+                    }
+                  }
+                }
+                
+                if (sorted.length === cards.length && sorted.every(c => c !== undefined)) {
+                  return { valid: true, status: cfg.wild.length === 0 ? 'clean' : 'dirty', sorted };
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return { valid: false };
+}
+
+function getCanastaStatus(meld, rules) {
+  const result = parseMeld(meld, rules);
+  if (result.valid && meld.length >= 7) return result.status;
+  return null;
+}
+
+function calculateMeldPoints(meldGroup, rules) {
+  let pts = 0;
+  meldGroup.forEach(c => pts += pointValues[c.rank]);
+  const status = getCanastaStatus(meldGroup, rules);
+  if (status === 'clean') pts += 200;
+  if (status === 'dirty') pts += 100;
+  if (rules?.largeCanasta) {
+    if (meldGroup.length === 13) pts += 500;
+    if (meldGroup.length >= 14) pts += 1000;
+  }
+  return pts;
+}
+// --- END INLINED LOGIC ---
 
 const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle }) => {
   const isRed = card.suit === '♥' || card.suit === '♦';
@@ -121,7 +282,6 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
   const myTeamPlayers = G.teamPlayers[myTeam] || [];
   const oppTeamPlayers = G.teamPlayers[oppTeam] || [];
 
-  // CHUNKING: Restrict horizontal cascade to 5 cards max
   const chunkedDiscard = [];
   if (G.discardPile && G.discardPile.length > 0) {
     for (let i = 0; i < G.discardPile.length; i += 5) {
@@ -225,15 +385,30 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
     </div>
   );
 
+  const deckEmpty = G.deck.length === 0 && G.pots.length === 0;
+  const deckCount = G.deck.length === 0 && G.pots.length > 0 ? 11 : G.deck.length;
+
   return (
-    // ABSOLUTE POSITIONING: Forces the browser to never scroll the page globally.
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100vh', boxSizing: 'border-box', overflow: 'hidden', padding: '15px', fontFamily: 'sans-serif', backgroundColor: '#2d6a4f', color: 'white', display: 'flex', gap: '15px' }}>
       
-      {/* LEFT COLUMN: Deck & Discard - Prevent Shrinking & Hide Horizontal Overflow */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: G.rules?.openDiscardView ? '150px' : '90px', minWidth: G.rules?.openDiscardView ? '150px' : '90px', flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
         <div style={{ textAlign: 'center' }}>
           <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Monte</h4>
-          <CardBack label="Comprar" count={G.deck.length} onClick={() => { if(!G.hasDrawn) moves.drawCard(); }} />
+          {deckEmpty ? (
+            <div 
+              onClick={() => { if(!G.hasDrawn) moves.declareExhausted(); }} 
+              style={{
+                border: '2px dashed #ff4d4d', borderRadius: '8px', width: '60px', height: '90px', margin: '2px auto',
+                backgroundColor: 'rgba(255, 77, 77, 0.1)', display: 'flex', flexDirection: 'column', 
+                justifyContent: 'center', alignItems: 'center', color: '#ff4d4d', cursor: !G.hasDrawn ? 'pointer' : 'default', textAlign: 'center',
+                boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', transition: 'all 0.2s'
+              }}>
+              <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>Fim de</span>
+              <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>Jogo</span>
+            </div>
+          ) : (
+            <CardBack label="Comprar" count={deckCount} onClick={() => { if(!G.hasDrawn) moves.drawCard(); }} />
+          )}
         </div>
         
         <div style={{ textAlign: 'center', width: '100%' }}>
@@ -254,10 +429,8 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
             )}
           </div>
         </div>
-        {G.deck.length === 0 && !G.hasDrawn && <button onClick={() => moves.declareExhausted()} style={{ background: '#ff4d4d', color: 'white', border: 'none', padding: '8px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Passar a Vez</button>}
       </div>
 
-      {/* CENTER COLUMN: Tables & Hand - Flex 1 allows it to take remaining space, Gap increased to prevent overlaps! */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '25px', overflowY: 'auto', overflowX: 'hidden', paddingRight: '10px', paddingBottom: '20px' }}>
         <div style={{ flexShrink: 0 }}>{renderTeamTable(oppTeamPlayers, "Mesa Deles", false)}</div>
         <div style={{ flexShrink: 0 }}>{renderTeamTable(myTeamPlayers, "Nossa Mesa", true)}</div>
@@ -269,7 +442,6 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
         </div>
       </div>
       
-      {/* RIGHT COLUMN: Sidebar - Narrowed slightly, hidden horizontal scroll */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '180px', minWidth: '180px', flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
         
         <button onClick={() => window.location.reload()} style={{ width: '100%', background: '#4da6ff', color: 'white', border: 'none', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.9em' }}>
@@ -343,3 +515,5 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
     </div>
   );
 }
+
+export default BuracoBoard;
