@@ -245,10 +245,11 @@ export const BuracoGame = {
     let initialDeck = random.Shuffle(buildDeck(rules));
     const pots = [initialDeck.splice(0, 11), initialDeck.splice(0, 11)];
     
-    let hands = {}; let melds = {};
+    let hands = {}; let melds = {}; let knownCards = {};
     for (let i = 0; i < rules.numPlayers; i++) { 
       hands[i.toString()] = initialDeck.splice(0, 11); 
       melds[i.toString()] = [];
+      knownCards[i.toString()] = []; // FEATURE: AI Memory Bank
     }
 
     let teams = {}; let teamPlayers = {};
@@ -259,7 +260,7 @@ export const BuracoGame = {
     }
 
     return {
-      rules, deck: initialDeck, discardPile: [initialDeck.pop()], pots, hands, melds,
+      rules, deck: initialDeck, discardPile: [initialDeck.pop()], pots, hands, melds, knownCards,
       hasDrawn: false, teams, teamPlayers, teamMortos: { team0: false, team1: false },
       mortoUsed: { team0: false, team1: false }, isExhausted: false
     };
@@ -324,6 +325,7 @@ export const BuracoGame = {
 
         G.discardPile.pop();
         G.discardPile.forEach(c => c.isNewlyDrawn = true);
+        G.knownCards[ctx.currentPlayer].push(...G.discardPile); // Log memory!
         G.hands[ctx.currentPlayer].push(...G.discardPile);
         G.discardPile = [];
         G.hasDrawn = true;
@@ -332,6 +334,7 @@ export const BuracoGame = {
 
       } else {
         G.discardPile.forEach(c => c.isNewlyDrawn = true);
+        G.knownCards[ctx.currentPlayer].push(...G.discardPile); // Log memory!
         G.hands[ctx.currentPlayer].push(...G.discardPile);
         G.discardPile = [];
         G.hasDrawn = true;
@@ -355,6 +358,7 @@ export const BuracoGame = {
 
         G.hands[ctx.currentPlayer] = newHand;
         G.melds[ctx.currentPlayer] = newMelds;
+        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => !cardIds.includes(c.id)); // Remove from memory
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
         checkMorto(G, ctx); 
       }
@@ -379,6 +383,7 @@ export const BuracoGame = {
 
         G.hands[ctx.currentPlayer] = newHand;
         G.melds[meldOwner] = newMeldState;
+        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => !cardIds.includes(c.id)); // Remove from memory
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
         checkMorto(G, ctx); 
       }
@@ -396,6 +401,7 @@ export const BuracoGame = {
         delete discardedCard.isNewlyDrawn; 
         
         G.discardPile.push(discardedCard);
+        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => c.id !== cardId); // Remove from memory
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
         checkMorto(G, ctx); 
         G.hasDrawn = false; 
@@ -435,8 +441,6 @@ export const BuracoGame = {
       const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
       const isWild = (c) => c.rank === 'JOKER' || c.rank === '2';
 
-      // --- DYNAMIC STRATEGY EVALUATORS ---
-      // Check if we or the opponents are dangerously close to ending the game
       const oppPlayers = G.teamPlayers[oppTeam] || [];
       const myPlayers = G.teamPlayers[myTeam] || [];
       
@@ -445,9 +449,6 @@ export const BuracoGame = {
       const oppHasCanasta = oppPlayers.some(op => (G.melds[op] || []).some(m => getCanastaStatus(m, G.rules)));
       
       const myHasMorto = G.teamMortos[myTeam];
-      
-      // PANIC MODE: If opponent has a canasta, has the morto, and has <= 3 cards... we must drop points immediately!
-      // Or, if we are trying to grab the morto, we drop everything.
       const isPanicMode = (oppHasMorto && oppHasCanasta && oppLowestHand <= 3) || (!myHasMorto && hand.length <= 4);
 
       if (!G.hasDrawn) {
@@ -457,7 +458,6 @@ export const BuracoGame = {
               for (let j = i + 1; j < hand.length; j++) {
                 const parsed = parseMeld([hand[i], hand[j], topDiscard], G.rules);
                 if (parsed.valid) {
-                  // In Panic Mode, pick up anything valid. Normally, only pick up Clean melds.
                   if (isPanicMode || parsed.status === 'clean') {
                     return [{ move: 'pickUpDiscard', args: [[hand[i].id, hand[j].id], { type: 'new' }] }];
                   }
@@ -478,45 +478,53 @@ export const BuracoGame = {
           if (score > highestScore) { highestScore = score; bestMove = move; }
         };
 
-        // STRATEGY: Smart Appends
         myPlayers.forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIndex) => {
             hand.forEach(card => {
               const parsed = parseMeld([...meld, card], G.rules);
               if (parsed.valid) {
-                let score = 50; 
+                // BUG FIX: Simulate new hand to prevent the Freeze!
+                const newHandLength = hand.length - 1;
+                let simulatedMelds = [...G.melds[tp]];
+                simulatedMelds[mIndex] = parsed.sorted;
                 
+                if (newHandLength < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, simulatedMelds, tp)) {
+                  return; // Illegal move! Skip!
+                }
+
+                let score = 50; 
                 if (isWild(card)) {
-                  // PRIORITIZE SUITED 2s: If it's a 2 matching the meld's suit, it's safe to use!
                   if (card.rank === '2' && meld.some(c => c.suit === card.suit && c.rank !== '2' && c.rank !== 'JOKER')) {
-                    score += 100; // Reward suited 2s!
+                    score += 100; 
                   } else {
-                    score -= isPanicMode ? 0 : 80; // Penalize unsuited wilds unless panicking
+                    score -= isPanicMode ? 0 : 80; 
                   }
                 }
-                
-                if (meld.length >= 6) score += 1000; // MUST FINISH CANASTAS
+                if (meld.length >= 6) score += 1000; 
                 evaluateMove({ move: 'appendToMeld', args: [tp, mIndex, [card.id]] }, score);
               }
             });
           });
         });
 
-        // STRATEGY: Smart New Melds
         for (let i = 0; i < hand.length; i++) {
           for (let j = i + 1; j < hand.length; j++) {
             for (let k = j + 1; k < hand.length; k++) {
               const parsed = parseMeld([hand[i], hand[j], hand[k]], G.rules);
               if (parsed.valid) {
+                // BUG FIX: Simulate new hand to prevent the Freeze!
+                const newHandLength = hand.length - 3;
+                let simulatedMelds = [...(G.melds[p] || []), parsed.sorted];
+
+                if (newHandLength < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, simulatedMelds, p)) {
+                  continue; // Illegal move! Skip!
+                }
+
                 let score = 30;
-                
-                // If panicking, play everything. If not, severely penalize starting dirty 3-card melds.
                 if (parsed.status === 'dirty') {
-                  // Check if the wild used is a suited 2
                   const hasSuitedTwo = [hand[i], hand[j], hand[k]].some(c => c.rank === '2' && [hand[i], hand[j], hand[k]].some(other => other.suit === c.suit && other.rank !== '2' && other.rank !== 'JOKER'));
                   score -= (isPanicMode || hasSuitedTwo) ? 20 : 150; 
                 }
-                
                 evaluateMove({ move: 'playMeld', args: [[hand[i].id, hand[j].id, hand[k].id]] }, score);
               }
             }
@@ -525,33 +533,33 @@ export const BuracoGame = {
 
         if (bestMove && highestScore > 0) return [bestMove];
 
-        // STRATEGY: Defensive Discarding & Hoarding
         let discardMoves = [];
         if (hand.length > 1 || canEmptyHand(G, myTeam)) {
           hand.forEach(card => {
             let discardScore = 0;
-            
             if (isWild(card)) discardScore -= 5000; 
 
-            // EXTREME DEFENSE: Starve the opponent's Canastas
             oppPlayers.forEach(op => {
               (G.melds[op] || []).forEach(meld => {
                 const parsed = parseMeld([...meld, card], G.rules);
                 if (parsed.valid) {
-                  // If they have 5 or 6 cards and no clean canasta, HOLD THIS CARD FOR DEAR LIFE
-                  if (meld.length >= 5 && !oppHasCanasta) {
-                    discardScore -= 10000; 
-                  } else {
-                    discardScore -= 500; 
-                  }
+                  if (meld.length >= 5 && !oppHasCanasta) discardScore -= 10000; 
+                  else discardScore -= 500; 
+                }
+              });
+
+              // FEATURE: Use the Memory Bank! Never discard a card they explicitly picked up!
+              (G.knownCards[op] || []).forEach(kCard => {
+                if (!isWild(card)) {
+                  if (kCard.rank === card.rank) discardScore -= 3000; // They hold the pair!
+                  if (kCard.suit === card.suit && Math.abs(sequenceMath[kCard.rank] - sequenceMath[card.rank]) <= 2) discardScore -= 3000; // They hold a sequence neighbor!
                 }
               });
             });
 
             const hasPair = hand.some(c => c.id !== card.id && c.rank === card.rank);
             const hasNeighbor = hand.some(c => c.id !== card.id && c.suit === card.suit && Math.abs(sequenceMath[c.rank] - sequenceMath[card.rank]) === 1);
-            
-            if (!hasPair && !hasNeighbor) discardScore += 100; // Good orphan to dump
+            if (!hasPair && !hasNeighbor) discardScore += 100; 
 
             discardMoves.push({ move: 'discardCard', args: [card.id], score: discardScore });
           });
@@ -562,7 +570,7 @@ export const BuracoGame = {
           }
         }
         
-        return [{ move: 'discardCard', args: [hand[0].id] }];
+        return []; // If we truly have no moves, we wait (fixes infinite loop crashes)
       }
     }
   }
