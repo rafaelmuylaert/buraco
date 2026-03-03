@@ -9,6 +9,7 @@ if (!fs.existsSync(dbPath)) fs.mkdirSync(dbPath);
 const gamesPath = path.join(dbPath, 'games');
 if (!fs.existsSync(gamesPath)) fs.mkdirSync(gamesPath);
 
+// --- THE AUTO-SWEEPER ---
 try {
   const files = fs.readdirSync(gamesPath);
   let deletedGhosts = 0;
@@ -52,12 +53,19 @@ const setCors = (ctx) => {
   ctx.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 };
 
-const getBody = (ctx) => {
-  if (typeof ctx.request.body === 'string') {
-    try { return JSON.parse(ctx.request.body); } catch(e) { return {}; }
+// BUG FIX: The bulletproof Asynchronous Stream Reader!
+// This guarantees the server actually reads the Match ID you are trying to delete.
+const parseBody = (ctx) => new Promise((resolve) => {
+  if (ctx.request && ctx.request.body && Object.keys(ctx.request.body).length > 0) {
+    return resolve(ctx.request.body);
   }
-  return ctx.request.body || {};
-};
+  let body = '';
+  ctx.req.on('data', chunk => body += chunk.toString());
+  ctx.req.on('end', () => {
+    try { resolve(body ? JSON.parse(body) : null); } 
+    catch (e) { resolve(null); }
+  });
+});
 
 server.router.options('/api/(.*)', (ctx) => {
   setCors(ctx);
@@ -74,19 +82,19 @@ server.router.get('/api/history', (ctx) => {
   try { ctx.body = fs.readFileSync(historyFile, 'utf8'); } catch(e) { ctx.body = '[]'; }
 });
 
-server.router.post('/api/tournaments', (ctx) => {
+server.router.post('/api/tournaments', async (ctx) => {
   setCors(ctx);
   try {
-    const body = getBody(ctx);
+    const body = await parseBody(ctx);
     if (body && Object.keys(body).length > 0) fs.writeFileSync(tourneyFile, JSON.stringify(body));
     ctx.body = { success: true };
   } catch (e) { ctx.status = 500; ctx.body = { error: 'Failed' }; }
 });
 
-server.router.post('/api/history/add', (ctx) => {
+server.router.post('/api/history/add', async (ctx) => {
   setCors(ctx);
   try {
-    const body = getBody(ctx);
+    const body = await parseBody(ctx);
     if (body && body.matchID) {
       const history = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
       if (!history.some(h => h.matchID === body.matchID)) {
@@ -98,18 +106,17 @@ server.router.post('/api/history/add', (ctx) => {
   } catch (e) { ctx.status = 500; ctx.body = { error: 'Failed' }; }
 });
 
-// FIXED: Admin Kick Route
 server.router.post('/api/admin/kick', async (ctx) => {
   setCors(ctx);
   try {
-    const body = getBody(ctx);
+    const body = await parseBody(ctx);
     if (body && body.matchID && body.playerID) {
       const matchID = body.matchID;
       const playerID = body.playerID.toString();
 
       const data = await server.db.fetch(matchID, { metadata: true });
       if (data && data.metadata && data.metadata.players && data.metadata.players[playerID]) {
-        // Absolutely destroy the session data and reset to a blank ID
+        // Nullify the seat
         data.metadata.players[playerID] = { id: Number(playerID) }; 
         await server.db.setMetadata(matchID, data.metadata); 
       }
@@ -124,9 +131,16 @@ server.router.post('/api/admin/kick', async (ctx) => {
 server.router.post('/api/admin/delete-match', async (ctx) => {
   setCors(ctx);
   try {
-    const body = getBody(ctx);
+    const body = await parseBody(ctx);
     if (body && body.matchID) {
+      // 1. Tell boardgame.io to wipe it from memory
       await server.db.wipe(body.matchID);
+      
+      // 2. HARD DELETE FAILSAFE: Physically delete the file from the hard drive
+      const matchFilePath = path.join(gamesPath, body.matchID);
+      if (fs.existsSync(matchFilePath)) {
+        fs.unlinkSync(matchFilePath);
+      }
     }
     ctx.body = { success: true };
   } catch (e) {
