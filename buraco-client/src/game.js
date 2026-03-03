@@ -427,4 +427,30 @@ export const BuracoGame = {
       }
     }
   }
+  // NEW: THE BOT BRAIN
+  ai: {
+    enumerate: (G, ctx) => {
+      let moves = [];
+      const p = ctx.currentPlayer;
+
+      if (!G.hasDrawn) {
+        // Phase 1: Always draw a card from the deck
+        moves.push({ move: 'drawCard', args: [] });
+      } else {
+        const hand = G.hands[p] || [];
+        
+        // Failsafe: Prevent the bot from soft-locking the server if it tries 
+        // to discard its last card without a clean canasta!
+        if (hand.length === 1 && !canEmptyHand(G, G.teams[p])) {
+          return moves; 
+        }
+
+        // Phase 2: Pick a random card from the hand and discard it
+        hand.forEach(card => {
+          moves.push({ move: 'discardCard', args: [card.id] });
+        });
+      }
+      return moves;
+    }
+  }
 };
