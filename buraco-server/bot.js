@@ -2,7 +2,7 @@ import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import { BuracoGame } from './game.js';
 
-const SERVER_URL = 'http://127.0.0.1:8000';
+const SERVER_URL = 'http://buraco-server:8000';
 const activeBots = {}; // Tracks running bots to prevent duplicates
 
 async function pollLobby() {
