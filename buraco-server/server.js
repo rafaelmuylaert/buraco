@@ -9,8 +9,6 @@ if (!fs.existsSync(dbPath)) fs.mkdirSync(dbPath);
 const gamesPath = path.join(dbPath, 'games');
 if (!fs.existsSync(gamesPath)) fs.mkdirSync(gamesPath);
 
-// --- THE AUTO-SWEEPER: VAPORIZE CORRUPTED GHOST FILES ---
-// This guarantees the Lobby API will never crash due to a broken file!
 try {
   const files = fs.readdirSync(gamesPath);
   let deletedGhosts = 0;
@@ -20,9 +18,9 @@ try {
       try {
         const content = fs.readFileSync(fp, 'utf8');
         if (!content.trim()) throw new Error("Empty file");
-        JSON.parse(content); // Test if it's valid JSON
+        JSON.parse(content); 
       } catch (e) {
-        fs.unlinkSync(fp); // Destroy corrupted file immediately
+        fs.unlinkSync(fp); 
         deletedGhosts++;
       }
     }
@@ -54,7 +52,6 @@ const setCors = (ctx) => {
   ctx.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 };
 
-// Safe Body Parser (prevents requests from hanging)
 const getBody = (ctx) => {
   if (typeof ctx.request.body === 'string') {
     try { return JSON.parse(ctx.request.body); } catch(e) { return {}; }
@@ -101,6 +98,7 @@ server.router.post('/api/history/add', (ctx) => {
   } catch (e) { ctx.status = 500; ctx.body = { error: 'Failed' }; }
 });
 
+// FIXED: Admin Kick Route
 server.router.post('/api/admin/kick', async (ctx) => {
   setCors(ctx);
   try {
@@ -109,11 +107,11 @@ server.router.post('/api/admin/kick', async (ctx) => {
       const matchID = body.matchID;
       const playerID = body.playerID.toString();
 
-      const { metadata } = await server.db.fetch(matchID, { metadata: true });
-      if (metadata && metadata.players && metadata.players[playerID]) {
-        delete metadata.players[playerID].name; 
-        delete metadata.players[playerID].credentials; 
-        await server.db.setMetadata(matchID, metadata); 
+      const data = await server.db.fetch(matchID, { metadata: true });
+      if (data && data.metadata && data.metadata.players && data.metadata.players[playerID]) {
+        // Absolutely destroy the session data and reset to a blank ID
+        data.metadata.players[playerID] = { id: Number(playerID) }; 
+        await server.db.setMetadata(matchID, data.metadata); 
       }
     }
     ctx.body = { success: true };
