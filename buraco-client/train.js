@@ -1,52 +1,43 @@
 import { Client } from 'boardgame.io/client';
 import { BuracoGame } from './src/game.js';
 
-// 1. THE BASE DNA (Our starting point)
+// 1. THE ML BASE GENOME (Neural Network Weights)
+// All weights start at 0. The algorithm will quickly learn which ones should be positive (rewards) or negative (penalties).
 const BASE_GENOME = {
-    wildcardHoldValue: -200,
-    suitedTwoBonus: 80,
-    finishCanastaBonus: 1000,
-    grabMortoBonus: 2000,
-    dirtyMeldPenalty: -300,
-    dirtyMeldPanicBonus: 100,
-    safeRepeatBonus: 200,
-    oppCanastaDenialPenalty: -10000,
-    standardDenialPenalty: -800,
-    knownCardDenial: -3000,
-    panicModeDiscardBonus: 50,
-    intrinsic: { '3': 60, '4': 40, '5': 20, '6': -30, '7': -40, '8': -40, '9': -20, '10': 0, 'J': 10, 'Q': 20, 'K': -30, 'A': -30 }
+    // Pickup Features
+    pickup_base: 0, pickup_clean: 0, pickup_dirty: 0, pickup_onlyCopy: 0, pickup_pileSize: 0, pickup_panic: 0,
+    
+    // Meld Features
+    meld_base: 0, meld_finishesCanasta: 0, meld_grabsMorto: 0, meld_isWild: 0, meld_isSuitedTwo: 0, meld_isDirty: 0, meld_panic: 0,
+    
+    // Discard Action Features
+    discard_base: 0, discard_isWild: 0, discard_isSafeRepeat: 0, discard_givesOppCanasta: 0, discard_standardDenial: 0, 
+    discard_knownCardDenial: 0, discard_hasPair: 0, discard_hasNeighbor: 0, discard_panic: 0,
+    
+    // Discard Rank Features (Intrinsic values)
+    discard_rank_3: 0, discard_rank_4: 0, discard_rank_5: 0, discard_rank_6: 0, 
+    discard_rank_7: 0, discard_rank_8: 0, discard_rank_9: 0, discard_rank_10: 0, 
+    discard_rank_J: 0, discard_rank_Q: 0, discard_rank_K: 0, discard_rank_A: 0
 };
 
-// 2. GENETICS ENGINE (Mutation & Breeding)
-function mutate(genome, mutationRate = 0.1) {
+// 2. GENETICS ENGINE (Mutation & Breeding for ML Weights)
+function mutate(genome, mutationRate = 0.2, maxStep = 5.0) {
     const mutated = JSON.parse(JSON.stringify(genome)); // Deep copy
     for (let key in mutated) {
-        if (key === 'intrinsic') {
-            for (let rank in mutated.intrinsic) {
-                if (Math.random() < mutationRate) {
-                    // Shift the value up or down by up to 30%
-                    mutated.intrinsic[rank] += mutated.intrinsic[rank] * (Math.random() * 0.6 - 0.3);
-                }
-            }
-        } else {
-            if (Math.random() < mutationRate) {
-                mutated[key] += mutated[key] * (Math.random() * 0.6 - 0.3);
-            }
+        if (Math.random() < mutationRate) {
+            // Because weights can be 0, we ADD a random step between -maxStep and +maxStep
+            const shift = (Math.random() * 2 - 1) * maxStep;
+            mutated[key] += shift;
         }
     }
     return mutated;
 }
 
 function breed(parentA, parentB) {
-    const child = JSON.parse(JSON.stringify(BASE_GENOME));
-    for (let key in child) {
-        if (key === 'intrinsic') {
-            for (let rank in child.intrinsic) {
-                child.intrinsic[rank] = Math.random() > 0.5 ? parentA.intrinsic[rank] : parentB.intrinsic[rank];
-            }
-        } else {
-            child[key] = Math.random() > 0.5 ? parentA[key] : parentB[key];
-        }
+    const child = {};
+    // Flat crossover: randomly take each weight from Parent A or Parent B
+    for (let key in BASE_GENOME) {
+        child[key] = Math.random() > 0.5 ? parentA[key] : parentB[key];
     }
     return mutate(child);
 }
@@ -69,11 +60,10 @@ function runMatch(genomes) {
     const MAX_MOVES = 800; // Prevent infinite loops if bots evolve into cowards
 
     while (!state.ctx.gameover && moveCount < MAX_MOVES) {
-        const p = state.ctx.currentPlayer;
         const moves = BuracoGame.ai.enumerate(state.G, state.ctx);
         
         if (moves && moves.length > 0) {
-            const bestMove = moves[0]; // The enumerate function already sorts them
+            const bestMove = moves[0]; // The ML model already sorted them
             client.moves[bestMove.move](...bestMove.args);
         } else {
             // If the bot gets stuck/hallucinates, force pass to avoid infinite loop
@@ -85,7 +75,7 @@ function runMatch(genomes) {
     }
 
     if (!state.ctx.gameover) {
-        // Match timed out (Bots were too cowardly). Return heavy penalty scores.
+        // Match timed out (Bots evolved to never draw/discard to avoid mistakes). Return heavy penalty scores.
         return { team0: { total: -5000 }, team1: { total: -5000 } };
     }
 
@@ -95,11 +85,12 @@ function runMatch(genomes) {
 // 4. THE EVOLUTIONARY LOOP
 async function train() {
     const POPULATION_SIZE = 20;
-    const GENERATIONS = 50;
-    const MATCHES_PER_GENERATION = 10; // To average out luck of the draw
+    const GENERATIONS = 500;
+    const MATCHES_PER_GENERATION = 15; // Increased slightly to average out the luck of ML bots
 
-    console.log("🧬 Initializing Bot Population...");
-    let population = Array(POPULATION_SIZE).fill(null).map(() => mutate(BASE_GENOME, 0.5)); // Start with heavy mutation
+    console.log("🧬 Initializing ML Bot Population...");
+    // Start with heavy mutation (step size 10.0) so the initial weights spread out quickly
+    let population = Array(POPULATION_SIZE).fill(null).map(() => mutate(BASE_GENOME, 0.5, 10.0)); 
 
     for (let gen = 1; gen <= GENERATIONS; gen++) {
         console.log(`\n⚔️ --- GENERATION ${gen} ---`);
@@ -156,10 +147,16 @@ async function train() {
 
         population = newPopulation;
 
-        // Print the DNA of the current champion so you can copy-paste it into the game if it's good!
+        // Print the DNA of the current champion every 10 generations!
         if (gen % 10 === 0 || gen === GENERATIONS) {
             console.log(`\n👑 Champion DNA (Gen ${gen}):`);
-            console.log(JSON.stringify(rankedBots[0].genome, null, 2));
+            
+            // Format the weights nicely to 2 decimal places for readability
+            const prettyDNA = {};
+            for (const key in rankedBots[0].genome) {
+                prettyDNA[key] = parseFloat(rankedBots[0].genome[key].toFixed(2));
+            }
+            console.log(JSON.stringify(prettyDNA, null, 2));
         }
     }
 }
