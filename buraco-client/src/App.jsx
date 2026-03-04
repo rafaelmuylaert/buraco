@@ -217,16 +217,16 @@ const App = () => {
     const myName = "Eu";
     let assignmentsMap = { '0': myName };
     
-    // Ensure bots are added up to the selected numPlayers
+    // 1. Reserve names for the bots in the assignments map
     for (let i = 1; i < quickGameConfig.numPlayers; i++) {
         assignmentsMap[i.toString()] = `Bot ${i}`;
     }
 
     try {
-      // 1. Create the match on the server
+      // 2. Create the match on the server
       const { matchID } = await lobbyClient.createMatch('buraco', {
          numPlayers: quickGameConfig.numPlayers,
-         unlisted: true, // Hide from main lobby
+         unlisted: true, 
          setupData: { 
              ...quickGameConfig.rules, 
              isTournament: false, 
@@ -236,24 +236,31 @@ const App = () => {
          }
       });
 
-      // 2. Request credentials for our seat
+      // 3. Force the Bots to explicitly join the match so the server knows they exist!
+      let joinPromises = [];
+      for (let i = 1; i < quickGameConfig.numPlayers; i++) {
+          joinPromises.push(lobbyClient.joinMatch('buraco', matchID, { playerID: i.toString(), playerName: `Bot ${i}` }));
+      }
+      // Wait for all bots to join
+      await Promise.all(joinPromises);
+
+      // 4. Finally, request credentials for OUR seat
       const { playerCredentials } = await lobbyClient.joinMatch('buraco', matchID, { playerID: '0', playerName: myName });
       
       const sessions = getSavedSessions();
       sessions[`${matchID}_0`] = { matchID, playerID: '0', credentials: playerCredentials };
       localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
       
-      // 3. Set the state to trigger the Board view
+      // 5. Enter the game
       setMatchID(matchID); 
       setPlayerID('0'); 
       setCredentials(playerCredentials); 
       setShowQuickGamePopup(false);
 
-      // 4. Force a tiny timeout so the server finishes instantiating the bot states 
-      // before the React client tries to aggressively fetch the board state.
+      // Small delay just to be safe
       setTimeout(() => {
           setView('game');
-      }, 500);
+      }, 300);
 
     } catch (e) { 
         alert("Erro ao criar partida rápida. " + e.message); 
