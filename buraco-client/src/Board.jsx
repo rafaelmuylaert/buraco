@@ -77,25 +77,23 @@ export function BuracoBoard(props) {
     const team0Names = team0NamesArr.join(' & ');
     const team1Names = team1NamesArr.join(' & ');
 
-    // Safely check tournament because we guaranteed it exists in the destructuring above
-    let nextMatchID = null;
-    if (tournament && tournament.status !== 'completed' && tournament.rounds && tournament.rounds.length > 0) {
-        const lastRound = tournament.rounds[tournament.rounds.length - 1];
-        const myName = G.rules?.assignments?.[playerID];
-        const myNextAssignment = lastRound.assignments.find(a => a.team0.includes(myName) || a.team1.includes(myName));
-        if (myNextAssignment && myNextAssignment.matchID !== matchID) {
-            nextMatchID = myNextAssignment.matchID;
-        }
-    }
+    const myName = G.rules?.assignments?.[playerID] || "Eu";
+    const isTournament = !!tournament;
+    const isTournamentComplete = tournament && tournament.status === 'completed';
+    const showNextButton = !isTournament || (isTournament && !isTournamentComplete);
 
     const handleReturnLobby = () => {
         window.location.reload(); 
     };
 
-    const handleNextMatch = async () => {
-        if (!nextMatchID) return;
-        const myName = G.rules?.assignments?.[playerID];
-        sessionStorage.setItem('auto_join_next', JSON.stringify({ matchID: nextMatchID, playerName: myName }));
+    const handleNextMatch = () => {
+        if (isTournament) {
+            // Signal App.jsx to find the next match in this tournament
+            sessionStorage.setItem('auto_join_tournament', JSON.stringify({ tournamentId: tournament.id, playerName: myName }));
+        } else {
+            // Signal App.jsx to create a new Quick Match with the exact same rules
+            sessionStorage.setItem('quick_game_rematch', JSON.stringify({ rules: G.rules, numPlayers: G.rules.numPlayers, myName }));
+        }
         window.location.reload();
     };
 
@@ -127,7 +125,7 @@ export function BuracoBoard(props) {
 
           {tournamentStandings && (
             <div style={{ background: '#222', padding: '20px', borderRadius: '15px', border: '2px solid #ffd700', width: '300px' }}>
-                <h3 style={{ textAlign: 'center', color: '#ffd700', margin: '0 0 15px 0' }}>🏆 Classificação do Torneio</h3>
+                <h3 style={{ textAlign: 'center', color: '#ffd700', margin: '0 0 15px 0' }}>🏆 Classificação</h3>
                 <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '0.9em' }}>
                     <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Jogador</th><th>Pts</th><th>V-E-D</th></tr></thead>
                     <tbody>
@@ -152,9 +150,9 @@ export function BuracoBoard(props) {
                 Voltar ao Salão
             </button>
             
-            {nextMatchID && (
+            {showNextButton && (
                 <button onClick={handleNextMatch} style={{ padding: '15px 30px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.2em', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 15px rgba(77, 166, 255, 0.6)' }}>
-                    Próxima Mesa ➡️
+                    {isTournament ? "Próxima Mesa ➡️" : "Jogar Novamente 🔄"}
                 </button>
             )}
         </div>
