@@ -239,25 +239,28 @@ function buildDeck(rules) {
 
 export const BuracoGame = {
   name: 'buraco',
-  setup: ({ random }, setupData) => {
-    const rules = setupData || { numPlayers: 4, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false };
+  setup: ({ random, ctx }, setupData) => {
+
+    const numPlayers = ctx.numPlayers || 4; 
+    const rules = setupData || { numPlayers, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false };
     
     let initialDeck = random.Shuffle(buildDeck(rules));
     const pots = [initialDeck.splice(0, 11), initialDeck.splice(0, 11)];
     
     let hands = {}; let melds = {}; let knownCards = {};
-    for (let i = 0; i < rules.numPlayers; i++) { 
+    for (let i = 0; i < numPlayers; i++) { 
       hands[i.toString()] = initialDeck.splice(0, 11); 
       melds[i.toString()] = [];
       knownCards[i.toString()] = []; 
     }
 
     let teams = {}; let teamPlayers = {};
-    if (rules.numPlayers === 2) {
+    if (numPlayers === 2) {
       teams = { '0': 'team0', '1': 'team1' }; teamPlayers = { team0: ['0'], team1: ['1'] };
     } else {
       teams = { '0': 'team0', '1': 'team1', '2': 'team0', '3': 'team1' }; teamPlayers = { team0: ['0', '2'], team1: ['1', '3'] };
     }
+
 
     return {
       rules, deck: initialDeck, discardPile: [initialDeck.pop()], pots, hands, melds, knownCards,
