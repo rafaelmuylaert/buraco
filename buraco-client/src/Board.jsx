@@ -53,15 +53,105 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
   }, [ctx, G, playerID, moves]);
 
   useEffect(() => {
-    if (ctx.gameover && matchID) {
-      fetch(`${window.location.origin}/buraco/api/history/add`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matchID, date: new Date().toLocaleString(), scores: ctx.gameover.scores })
-      }).then(() => {
-        window.dispatchEvent(new Event('history_updated')); 
-      });
+    if (ctx.gameover) {
+    const s0 = ctx.gameover.scores.team0;
+    const s1 = ctx.gameover.scores.team1;
+    const team0NamesArr = (G.teamPlayers.team0 || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`);
+    const team1NamesArr = (G.teamPlayers.team1 || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`);
+    const team0Names = team0NamesArr.join(' & ');
+    const team1Names = team1NamesArr.join(' & ');
+
+    // FEATURE: Find next match for this player in the tournament
+    let nextMatchID = null;
+    if (tournament && tournament.status !== 'completed' && tournament.rounds.length > 0) {
+        const lastRound = tournament.rounds[tournament.rounds.length - 1];
+        const myName = G.rules?.assignments?.[playerID];
+        const myNextAssignment = lastRound.assignments.find(a => a.team0.includes(myName) || a.team1.includes(myName));
+        if (myNextAssignment && myNextAssignment.matchID !== matchID) {
+            nextMatchID = myNextAssignment.matchID;
+        }
     }
+
+    const handleReturnLobby = () => {
+        window.location.reload(); 
+    };
+
+    const handleNextMatch = async () => {
+        if (!nextMatchID) return;
+        const myName = G.rules?.assignments?.[playerID];
+        // The App.jsx Lobby logic manages sessions, so we have to signal it to join via local storage routing
+        // However, a simpler way without refactoring App.jsx deeply is to just reload and let the user click "Sentar" or "Reconectar".
+        // To auto-join, we would need to pass down the `handleJoinMatch` function from App.jsx. 
+        // For now, we will save the intent to localStorage and reload.
+        sessionStorage.setItem('auto_join_next', JSON.stringify({ matchID: nextMatchID, playerName: myName }));
+        window.location.reload();
+    };
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', padding: '40px', height: '100vh', backgroundColor: '#1b4332', color: 'white', fontFamily: 'sans-serif', overflowY: 'auto' }}>
+        <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+          <h1 style={{ fontSize: '3em', color: '#ffd700', margin: '0 0 10px 0' }}>Fim de Jogo!</h1>
+          <h2 style={{ margin: 0, color: '#ccc' }}>Motivo: {ctx.gameover.reason}</h2>
+        </div>
+        
+        <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', justifyContent: 'center', marginBottom: '40px' }}>
+          {/* Match Score Breakdown */}
+          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '15px', border: '2px solid #4da6ff', width: '280px' }}>
+            <h3 style={{ textAlign: 'center', color: '#4da6ff', margin: '0 0 15px 0' }}>{team0Names || 'Equipe 0'}</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', fontSize: '0.9em' }}><span>Pontos na Mesa:</span> <span>{s0.table}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>Dedução (Mão):</span> <span>{s0.hand}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>Multa do Morto:</span> <span>{s0.mortoPenalty}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ffd700', fontSize: '0.9em' }}><span>Bônus:</span> <span>{s0.baterBonus}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '10px', fontSize: '1.3em', fontWeight: 'bold' }}><span>Total Mesa:</span> <span>{s0.total}</span></div>
+          </div>
+
+          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '15px', border: '2px solid #ff4d4d', width: '280px' }}>
+            <h3 style={{ textAlign: 'center', color: '#ff4d4d', margin: '0 0 15px 0' }}>{team1Names || 'Equipe 1'}</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', fontSize: '0.9em' }}><span>Pontos na Mesa:</span> <span>{s1.table}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>Dedução (Mão):</span> <span>{s1.hand}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>Multa do Morto:</span> <span>{s1.mortoPenalty}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ffd700', fontSize: '0.9em' }}><span>Bônus:</span> <span>{s1.baterBonus}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '10px', fontSize: '1.3em', fontWeight: 'bold' }}><span>Total Mesa:</span> <span>{s1.total}</span></div>
+          </div>
+
+          {/* FEATURE: Tournament Leaderboard Overlay */}
+          {tournamentStandings && (
+            <div style={{ background: '#222', padding: '20px', borderRadius: '15px', border: '2px solid #ffd700', width: '300px' }}>
+                <h3 style={{ textAlign: 'center', color: '#ffd700', margin: '0 0 15px 0' }}>🏆 Classificação do Torneio</h3>
+                <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '0.9em' }}>
+                    <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Jogador</th><th>Pts</th><th>V-E-D</th></tr></thead>
+                    <tbody>
+                        {tournamentStandings.map(([pName, st]) => {
+                            // Highlight the current player or their teammates
+                            const isMe = G.rules?.assignments?.[playerID] === pName;
+                            return (
+                                <tr key={pName} style={{ borderBottom: '1px solid #333', background: isMe ? 'rgba(255, 215, 0, 0.2)' : 'transparent' }}>
+                                    <td style={{ padding: '6px 0', fontWeight: isMe ? 'bold' : 'normal' }}>{pName}</td>
+                                    <td style={{ fontWeight: 'bold', color: '#ffd700' }}>{st.points}</td>
+                                    <td>{st.v}-{st.e}-{st.d}</td>
+                                </tr>
+                            )
+                        })}
+                    </tbody>
+                </table>
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', marginTop: '20px' }}>
+            <button onClick={handleReturnLobby} style={{ padding: '15px 30px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.2em', fontWeight: 'bold', cursor: 'pointer' }}>
+                Voltar ao Salão
+            </button>
+            
+            {nextMatchID && (
+                <button onClick={handleNextMatch} style={{ padding: '15px 30px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.2em', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 15px rgba(77, 166, 255, 0.6)' }}>
+                    Próxima Mesa ➡️
+                </button>
+            )}
+        </div>
+      </div>
+    );
+  }
   }, [ctx.gameover, matchID]);
 
   if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregando Mesa...</div>;
