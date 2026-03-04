@@ -223,26 +223,41 @@ const App = () => {
     }
 
     try {
+      // 1. Create the match on the server
       const { matchID } = await lobbyClient.createMatch('buraco', {
          numPlayers: quickGameConfig.numPlayers,
+         unlisted: true, // Hide from main lobby
          setupData: { 
-             ...quickGameConfig.rules, // Spread ALL rules from state
+             ...quickGameConfig.rules, 
              isTournament: false, 
              quickGameTargetPoints: quickGameConfig.format === 'points' ? quickGameConfig.targetPoints : null,
              quickGameMaxRounds: quickGameConfig.format === 'rounds' ? quickGameConfig.maxRounds : null,
              assignments: assignmentsMap 
          }
       });
+
+      // 2. Request credentials for our seat
       const { playerCredentials } = await lobbyClient.joinMatch('buraco', matchID, { playerID: '0', playerName: myName });
       
       const sessions = getSavedSessions();
       sessions[`${matchID}_0`] = { matchID, playerID: '0', credentials: playerCredentials };
       localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
       
-      setMatchID(matchID); setPlayerID('0'); setCredentials(playerCredentials); 
+      // 3. Set the state to trigger the Board view
+      setMatchID(matchID); 
+      setPlayerID('0'); 
+      setCredentials(playerCredentials); 
       setShowQuickGamePopup(false);
-      setView('game');
-    } catch (e) { alert("Erro ao criar partida rápida."); }
+
+      // 4. Force a tiny timeout so the server finishes instantiating the bot states 
+      // before the React client tries to aggressively fetch the board state.
+      setTimeout(() => {
+          setView('game');
+      }, 500);
+
+    } catch (e) { 
+        alert("Erro ao criar partida rápida. " + e.message); 
+    }
   };
 
   const executePhaseGeneration = async (tID, currentTournaments) => {
@@ -505,13 +520,12 @@ const App = () => {
               <label>Compra do Lixo: <select value={newTourney.rules.discard} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, discard: e.target.value}})}><option value="open">Aberto</option><option value="closed">Fechado</option></select></label>
               <label>Trincas: <select value={newTourney.rules.runners} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, runners: e.target.value}})}><option value="none">Nenhuma</option><option value="aces_threes">Ás e Três</option><option value="aces_kings">Ás e Reis</option><option value="any">Qualquer</option></select></label>
               
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px' }}>
-                <label><input type="checkbox" checked={quickGameConfig.rules.largeCanasta} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, largeCanasta: e.target.checked}})} /> Bônus Canastrão (500/1000)</label>
-                <label><input type="checkbox" checked={quickGameConfig.rules.cleanCanastaToWin} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, cleanCanastaToWin: e.target.checked}})} /> Bater exige Canastra Limpa</label>
-                <label><input type="checkbox" checked={quickGameConfig.rules.noJokers} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, noJokers: e.target.checked}})} /> Sem Curingas (Jokers)</label>
-                <label><input type="checkbox" checked={quickGameConfig.rules.openDiscardView} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
-                <label><input type="checkbox" checked={quickGameConfig.rules.showKnownCards} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas Memorizadas (Para Bot/Async)</label>
-              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px', background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px' }}>
+                <label><input type="checkbox" checked={newTourney.rules.largeCanasta} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, largeCanasta: e.target.checked}})} /> Bônus Canastrão (500/1000)</label>
+                <label><input type="checkbox" checked={newTourney.rules.cleanCanastaToWin} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, cleanCanastaToWin: e.target.checked}})} /> Bater exige Canastra Limpa</label>
+                <label><input type="checkbox" checked={newTourney.rules.noJokers} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, noJokers: e.target.checked}})} /> Sem Curingas (Jokers)</label>
+                <label><input type="checkbox" checked={newTourney.rules.openDiscardView} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
+                <label><input type="checkbox" checked={newTourney.rules.showKnownCards} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas Memorizadas (Para Async)</label>
             </div>
           </div>
           <button onClick={handleCreateTournament} style={{ width: '100%', marginTop: '30px', padding: '15px', background: '#ffd700', fontSize: '1.2em', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Iniciar Torneio</button>
