@@ -28,6 +28,16 @@ const App = () => {
   const [history, setHistory] = useState([]);
   const [tournaments, setTournaments] = useState([]);
 
+  // Add this new state for the Quick Match popup
+  const [showQuickGamePopup, setShowQuickGamePopup] = useState(false);
+  const [quickGameConfig, setQuickGameConfig] = useState({
+    numPlayers: 4,
+    format: 'points',
+    targetPoints: 3000,
+    maxRounds: 3,
+    rules: { discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false, showKnownCards: false }
+  });
+
   const [newTourney, setNewTourney] = useState({ 
     name: '', type: 'team', format: 'points', targetPoints: 3000, maxRounds: 3, 
     players: 'João, Maria, Pedro, Ana',
@@ -203,17 +213,22 @@ const App = () => {
     setView('lounge'); 
   };
 
-  const handleQuickGame = async (numPlayers) => {
-    const rules = { numPlayers, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false, showKnownCards: false };
-    const myName = prompt("Digite seu nome para a partida rápida:") || "Jogador 1";
-    
+  const handleQuickGameSubmit = async () => {
+    const myName = "Eu";
     let assignmentsMap = { '0': myName };
-    for (let i = 1; i < numPlayers; i++) assignmentsMap[i.toString()] = `Bot ${i}`;
+    for (let i = 1; i < quickGameConfig.numPlayers; i++) assignmentsMap[i.toString()] = `Bot ${i}`;
 
     try {
       const { matchID } = await lobbyClient.createMatch('buraco', {
-         numPlayers,
-         setupData: { ...rules, isTournament: false, assignments: assignmentsMap }
+         numPlayers: quickGameConfig.numPlayers,
+         // We pass the meta-rules down so the end-screen can see the target points/rounds
+         setupData: { 
+             ...quickGameConfig.rules, 
+             isTournament: false, 
+             quickGameTargetPoints: quickGameConfig.format === 'points' ? quickGameConfig.targetPoints : null,
+             quickGameMaxRounds: quickGameConfig.format === 'rounds' ? quickGameConfig.maxRounds : null,
+             assignments: assignmentsMap 
+         }
       });
       const { playerCredentials } = await lobbyClient.joinMatch('buraco', matchID, { playerID: '0', playerName: myName });
       
@@ -222,6 +237,7 @@ const App = () => {
       localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
       
       setMatchID(matchID); setPlayerID('0'); setCredentials(playerCredentials); 
+      setShowQuickGamePopup(false);
       setView('game');
     } catch (e) { alert("Erro ao criar partida rápida."); }
   };
@@ -505,6 +521,7 @@ const App = () => {
   const completedTournaments = tournaments.filter(t => t.status === 'completed');
   const savedSessions = getSavedSessions();
 
+
   return (
     <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
@@ -513,11 +530,47 @@ const App = () => {
           ♠♥ Salão Principal ♦♣
         </h1>
         <div style={{ display: 'flex', gap: '15px' }}>
-          <button onClick={() => handleQuickGame(2)} style={{ padding: '15px 20px', background: '#e63946', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>⚡ X1 vs Bot</button>
-          <button onClick={() => handleQuickGame(4)} style={{ padding: '15px 20px', background: '#e63946', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>⚡ 4P vs Bots</button>
+          <button onClick={() => setShowQuickGamePopup(true)} style={{ padding: '15px 20px', background: '#e63946', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>⚡ Jogo Rápido</button>
           <button onClick={() => setView('tournaments')} style={{ padding: '15px 30px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.2em', fontWeight: 'bold', cursor: 'pointer' }}>+ Novo Torneio</button>
         </div>
       </div>
+
+      {showQuickGamePopup && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#1b4332', padding: '30px', borderRadius: '15px', border: '2px solid #e63946', width: '500px', maxWidth: '90%' }}>
+            <h2 style={{ color: '#e63946', marginTop: 0 }}>Configurar Jogo Rápido</h2>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
+              <label>Jogadores: <select value={quickGameConfig.numPlayers} onChange={e => setQuickGameConfig({...quickGameConfig, numPlayers: parseInt(e.target.value)})} style={{ padding: '5px', marginLeft: '10px' }}><option value={2}>2 (Mano a Mano)</option><option value={4}>4 (Duplas)</option></select></label>
+              
+              <label>Formato: 
+                <select value={quickGameConfig.format} onChange={e => setQuickGameConfig({...quickGameConfig, format: e.target.value})} style={{ padding: '5px', marginLeft: '10px' }}>
+                  <option value="points">Meta de Pontos</option>
+                  <option value="rounds">Limite de Rodadas</option>
+                </select>
+              </label>
+              
+              {quickGameConfig.format === 'points' && <label>Pontos para Vencer: <input type="number" value={quickGameConfig.targetPoints} onChange={e => setQuickGameConfig({...quickGameConfig, targetPoints: parseInt(e.target.value)})} style={{ width: '80px', padding: '5px' }} /></label>}
+              {quickGameConfig.format === 'rounds' && <label>Máximo de Rodadas: <input type="number" value={quickGameConfig.maxRounds} onChange={e => setQuickGameConfig({...quickGameConfig, maxRounds: parseInt(e.target.value)})} style={{ width: '80px', padding: '5px' }} /></label>}
+
+              <h4 style={{ margin: '10px 0 0 0', color: '#4da6ff' }}>Regras</h4>
+              <label>Compra do Lixo: <select value={quickGameConfig.rules.discard} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, discard: e.target.value}})}><option value="open">Aberto</option><option value="closed">Fechado</option></select></label>
+              <label>Trincas: <select value={quickGameConfig.rules.runners} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, runners: e.target.value}})}><option value="none">Nenhuma</option><option value="aces_threes">Ás e Três</option><option value="aces_kings">Ás e Reis</option><option value="any">Qualquer</option></select></label>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px' }}>
+                <label><input type="checkbox" checked={quickGameConfig.rules.largeCanasta} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, largeCanasta: e.target.checked}})} /> Bônus Canastrão</label>
+                <label><input type="checkbox" checked={quickGameConfig.rules.cleanCanastaToWin} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, cleanCanastaToWin: e.target.checked}})} /> Bater exige Canastra Limpa</label>
+                <label><input type="checkbox" checked={quickGameConfig.rules.noJokers} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, noJokers: e.target.checked}})} /> Sem Curingas</label>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowQuickGamePopup(false)} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={handleQuickGameSubmit} style={{ padding: '10px 20px', background: '#e63946', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Iniciar Partida</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '50px' }}>
         {activeTournaments.length === 0 ? <div style={{ textAlign: 'center', color: '#aaa', fontSize: '1.5em', marginTop: '20px' }}>Nenhum torneio em andamento. Crie um acima!</div> : null}
