@@ -123,10 +123,15 @@ const App = () => {
   };
 
   const handleCreateTournament = async () => {
-    const playerList = newTourney.players.split(',').map(p => p.trim()).filter(p => p);
-    if (playerList.length % newTourney.rules.numPlayers !== 0) {
-      alert(`O número de jogadores deve ser múltiplo de ${newTourney.rules.numPlayers}.`);
-      return;
+    let playerList = newTourney.players.split(',').map(p => p.trim()).filter(p => p);
+    
+    // FEATURE: Auto-fill with Bots if not a multiple of numPlayers
+    const remainder = playerList.length % newTourney.rules.numPlayers;
+    if (remainder !== 0) {
+      const botsNeeded = newTourney.rules.numPlayers - remainder;
+      for (let i = 0; i < botsNeeded; i++) {
+        playerList.push(`Bot ${i + 1}`);
+      }
     }
     
     let tourneyType = newTourney.rules.numPlayers === 2 ? 'individual' : newTourney.type;
@@ -155,6 +160,29 @@ const App = () => {
     setNewTourney({ ...newTourney, name: '', players: '' });
     await executePhaseGeneration(t.id, updated);
     setView('lounge'); 
+  };
+
+  const handleQuickGame = async (numPlayers) => {
+    const rules = { numPlayers, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false, showKnownCards: false };
+    const myName = prompt("Digite seu nome para a partida rápida:") || "Jogador 1";
+    
+    let assignmentsMap = { '0': myName };
+    for (let i = 1; i < numPlayers; i++) assignmentsMap[i.toString()] = `Bot ${i}`;
+
+    try {
+      const { matchID } = await lobbyClient.createMatch('buraco', {
+         numPlayers,
+         setupData: { ...rules, isTournament: false, assignments: assignmentsMap }
+      });
+      const { playerCredentials } = await lobbyClient.joinMatch('buraco', matchID, { playerID: '0', playerName: myName });
+      
+      const sessions = getSavedSessions();
+      sessions[`${matchID}_0`] = { matchID, playerID: '0', credentials: playerCredentials };
+      localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
+      
+      setMatchID(matchID); setPlayerID('0'); setCredentials(playerCredentials); 
+      setView('game');
+    } catch (e) { alert("Erro ao criar partida rápida."); }
   };
 
   const executePhaseGeneration = async (tID, currentTournaments) => {
@@ -312,9 +340,19 @@ const App = () => {
     } catch (e) { alert("Erro ao liberar assento."); }
   };
 
-  // FEATURE: Pure 100vh Full Screen Mode (Black bar completely removed)
   if (view === 'game') {
-    return <BuracoClient matchID={matchID} playerID={playerID} credentials={credentials} />;
+    // Find if this match belongs to a tournament
+    const activeTournament = tournaments.find(t => t.rounds.some(r => r.assignments.some(a => a.matchID === matchID)));
+    const tStats = activeTournament ? getLeaderboard(activeTournament).standings : null;
+
+    return <BuracoClient 
+      matchID={matchID} 
+      playerID={playerID} 
+      credentials={credentials} 
+      // Expose extra props to the Board component
+      tournament={activeTournament}
+      tournamentStandings={tStats}
+    />;
   }
 
   const allValidMatchIDs = tournaments.flatMap(t => t.rounds.flatMap(r => r.assignments.map(a => a.matchID)));
@@ -433,7 +471,11 @@ const App = () => {
           <span onClick={() => setView('admin')} style={{ cursor: 'pointer', opacity: 0.2, marginRight: '15px' }} title="Modo Admin">⚙️</span>
           ♠♥ Salão Principal ♦♣
         </h1>
-        <button onClick={() => setView('tournaments')} style={{ padding: '15px 30px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.2em', fontWeight: 'bold', cursor: 'pointer' }}>+ Novo Torneio</button>
+        <div style={{ display: 'flex', gap: '15px' }}>
+          <button onClick={() => handleQuickGame(2)} style={{ padding: '15px 20px', background: '#e63946', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>⚡ X1 vs Bot</button>
+          <button onClick={() => handleQuickGame(4)} style={{ padding: '15px 20px', background: '#e63946', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>⚡ 4P vs Bots</button>
+          <button onClick={() => setView('tournaments')} style={{ padding: '15px 30px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.2em', fontWeight: 'bold', cursor: 'pointer' }}>+ Novo Torneio</button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '50px' }}>
