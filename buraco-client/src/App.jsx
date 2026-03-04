@@ -217,20 +217,19 @@ const App = () => {
     const myName = "Eu";
     let assignmentsMap = { '0': myName };
     
-    // 1. Just reserve the names for the bots. 
-    // DO NOT declare botsMap or call joinMatch for them!
+    // 1. Reserve the names for the bots. 
     for (let i = 1; i < quickGameConfig.numPlayers; i++) {
         assignmentsMap[i.toString()] = `Bot ${i}`;
     }
 
     try {
       // 2. Create the match
+      // REMOVED: unlisted: true. The external docker bot runner NEEDS to see this in the lobby API!
       const { matchID } = await lobbyClient.createMatch('buraco', {
          numPlayers: quickGameConfig.numPlayers,
-         unlisted: true, 
          setupData: { 
              ...quickGameConfig.rules, 
-             numPlayers: quickGameConfig.numPlayers, // Passing this explicitly to ensure setup() runs perfectly
+             numPlayers: quickGameConfig.numPlayers, 
              isTournament: false, 
              quickGameTargetPoints: quickGameConfig.format === 'points' ? quickGameConfig.targetPoints : null,
              quickGameMaxRounds: quickGameConfig.format === 'rounds' ? quickGameConfig.maxRounds : null,
@@ -239,8 +238,6 @@ const App = () => {
       });
 
       // 3. Request credentials for OUR seat ONLY.
-      // Because we leave the bot seats "un-joined", the boardgame.io server will automatically
-      // activate the AI engine for them just like it does in Tournaments!
       const { playerCredentials } = await lobbyClient.joinMatch('buraco', matchID, { playerID: '0', playerName: myName });
       
       const sessions = getSavedSessions();
@@ -253,9 +250,10 @@ const App = () => {
       setCredentials(playerCredentials); 
       setShowQuickGamePopup(false);
 
+      // Give the external bot runner a few seconds to poll the lobby, see the game, and connect
       setTimeout(() => {
           setView('game');
-      }, 300);
+      }, 500);
 
     } catch (e) { 
         alert("Erro ao criar partida rápida. " + e.message); 
