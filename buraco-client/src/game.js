@@ -271,7 +271,7 @@ export const BuracoGame = {
 
   moves: {
     drawCard: ({ G, ctx }) => {
-      if (G.hasDrawn) return;
+      if (G.hasDrawn) return 'INVALID_MOVE';
       if (G.deck.length === 0 && G.pots.length > 0) {
         G.deck = G.pots.shift(); 
       }
@@ -284,7 +284,7 @@ export const BuracoGame = {
     },
 
     pickUpDiscard: ({ G, ctx }, selectedHandIds = [], target = { type: 'new' }) => {
-      if (G.hasDrawn || G.discardPile.length === 0) return;
+      if (G.hasDrawn || G.discardPile.length === 0) return 'INVALID_MOVE';
       const hand = G.hands[ctx.currentPlayer];
       const topCard = G.discardPile[G.discardPile.length - 1];
       const selectedCards = hand.filter(c => selectedHandIds.includes(c.id));
@@ -302,7 +302,7 @@ export const BuracoGame = {
           if (parsed.valid) { isValid = true; sortedMeld = parsed.sorted; }
         }
 
-        if (!isValid) return; 
+        if (!isValid) return 'INVALID_MOVE'; 
 
         const newHand = hand.filter(c => !selectedHandIds.includes(c.id));
         const restOfPile = G.discardPile.slice(0, G.discardPile.length - 1);
@@ -319,7 +319,7 @@ export const BuracoGame = {
         }
 
         if (finalHandLength < 2 && !canEmptyHandWithSimulatedMelds(G, G.teams[ctx.currentPlayer], newMeldsForTarget, targetPlayer)) {
-          return; 
+          return 'INVALID_MOVE'; 
         }
 
         G.hands[ctx.currentPlayer] = newHand;
@@ -345,7 +345,7 @@ export const BuracoGame = {
     },
     
     playMeld: ({ G, ctx }, cardIds) => {
-      if (!G.hasDrawn) return; 
+      if (!G.hasDrawn) return 'INVALID_MOVE'; 
       const hand = G.hands[ctx.currentPlayer];
       
       const cardsToMeld = hand.filter(card => cardIds.includes(card.id));
@@ -356,7 +356,7 @@ export const BuracoGame = {
         const newMelds = [...G.melds[ctx.currentPlayer], parsed.sorted];
         
         if (newHand.length < 2 && !canEmptyHandWithSimulatedMelds(G, G.teams[ctx.currentPlayer], newMelds, ctx.currentPlayer)) {
-          return; 
+          return 'INVALID_MOVE'; 
         }
 
         G.hands[ctx.currentPlayer] = newHand;
@@ -364,11 +364,13 @@ export const BuracoGame = {
         G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => !cardIds.includes(c.id)); 
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
         checkMorto(G, ctx); 
+      } else {
+        return 'INVALID_MOVE';
       }
     },
 
     appendToMeld: ({ G, ctx }, meldOwner, meldIndex, cardIds) => {
-      if (!G.hasDrawn || G.teams[ctx.currentPlayer] !== G.teams[meldOwner]) return;
+      if (!G.hasDrawn || G.teams[ctx.currentPlayer] !== G.teams[meldOwner]) return 'INVALID_MOVE';
       const hand = G.hands[ctx.currentPlayer];
       
       const cardsToAdd = hand.filter(card => cardIds.includes(card.id));
@@ -381,7 +383,7 @@ export const BuracoGame = {
         newMeldState[meldIndex] = parsed.sorted;
 
         if (newHand.length < 2 && !canEmptyHandWithSimulatedMelds(G, G.teams[ctx.currentPlayer], newMeldState, meldOwner)) {
-          return; 
+          return 'INVALID_MOVE'; 
         }
 
         G.hands[ctx.currentPlayer] = newHand;
@@ -389,14 +391,16 @@ export const BuracoGame = {
         G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => !cardIds.includes(c.id)); 
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
         checkMorto(G, ctx); 
+      } else {
+        return 'INVALID_MOVE';
       }
     },
 
     discardCard: ({ G, ctx, events }, cardId) => {
-      if (!G.hasDrawn) return; 
+      if (!G.hasDrawn) return 'INVALID_MOVE'; 
       const hand = G.hands[ctx.currentPlayer];
       
-      if (hand.length === 1 && !canEmptyHand(G, G.teams[ctx.currentPlayer])) return;
+      if (hand.length === 1 && !canEmptyHand(G, G.teams[ctx.currentPlayer])) return 'INVALID_MOVE';
 
       const cardIndex = hand.findIndex(card => card.id === cardId);
       if (cardIndex !== -1) {
@@ -406,10 +410,17 @@ export const BuracoGame = {
         G.discardPile.push(discardedCard);
         G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => c.id !== cardId); 
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
+        
         checkMorto(G, ctx); 
         G.hasDrawn = false; 
-        hand.forEach(c => delete c.isNewlyDrawn); 
+        
+        // CRITICAL FIX: Access the fresh proxy state (G.hands) instead of the old 'hand' variable
+        // to prevent Immer memory revocation crashes when picking up the Morto!
+        G.hands[ctx.currentPlayer].forEach(c => delete c.isNewlyDrawn); 
+        
         events.endTurn();
+      } else {
+        return 'INVALID_MOVE';
       }
     },
 
