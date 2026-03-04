@@ -224,16 +224,31 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
       </div>
     </div>
   );
-
+  const deckEmpty = G.deck.length === 0 && G.pots.length === 0;
+  const deckCount = G.deck.length === 0 && G.pots.length > 0 ? 11 : G.deck.length;
   return (
     // ABSOLUTE POSITIONING: Forces the browser to never scroll the page globally.
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100vh', boxSizing: 'border-box', overflow: 'hidden', padding: '15px', fontFamily: 'sans-serif', backgroundColor: '#2d6a4f', color: 'white', display: 'flex', gap: '15px' }}>
       
       {/* LEFT COLUMN: Deck & Discard - Prevent Shrinking & Hide Horizontal Overflow */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: G.rules?.openDiscardView ? '150px' : '90px', minWidth: G.rules?.openDiscardView ? '150px' : '90px', flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
-        <div style={{ textAlign: 'center' }}>
+         <div style={{ textAlign: 'center' }}>
           <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Monte</h4>
-          <CardBack label="Comprar" count={G.deck.length} onClick={() => { if(!G.hasDrawn) moves.drawCard(); }} />
+          {deckEmpty ? (
+            <div 
+              onClick={() => { if(!G.hasDrawn) moves.declareExhausted(); }} 
+              style={{
+                border: '2px dashed #ff4d4d', borderRadius: '8px', width: '60px', height: '90px', margin: '2px auto',
+                backgroundColor: 'rgba(255, 77, 77, 0.1)', display: 'flex', flexDirection: 'column', 
+                justifyContent: 'center', alignItems: 'center', color: '#ff4d4d', cursor: !G.hasDrawn ? 'pointer' : 'default', textAlign: 'center',
+                boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', transition: 'all 0.2s'
+              }}>
+              <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>Fim de</span>
+              <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>Jogo</span>
+            </div>
+          ) : (
+            <CardBack label="Comprar" count={deckCount} onClick={() => { if(!G.hasDrawn) moves.drawCard(); }} />
+          )}
         </div>
         
         <div style={{ textAlign: 'center', width: '100%' }}>
@@ -254,7 +269,6 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
             )}
           </div>
         </div>
-        {G.deck.length === 0 && !G.hasDrawn && <button onClick={() => moves.declareExhausted()} style={{ background: '#ff4d4d', color: 'white', border: 'none', padding: '8px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Passar a Vez</button>}
       </div>
 
       {/* CENTER COLUMN: Tables & Hand - Flex 1 allows it to take remaining space, Gap increased to prevent overlaps! */}
