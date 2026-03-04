@@ -241,7 +241,7 @@ const App = () => {
       for (let i = 1; i < quickGameConfig.numPlayers; i++) {
           joinPromises.push(lobbyClient.joinMatch('buraco', matchID, { playerID: i.toString(), playerName: `Bot ${i}` }));
       }
-      // Wait for all bots to join
+      // CRITICAL FIX: Wait for all bots to successfully join the server lobby
       await Promise.all(joinPromises);
 
       // 4. Finally, request credentials for OUR seat
@@ -257,7 +257,7 @@ const App = () => {
       setCredentials(playerCredentials); 
       setShowQuickGamePopup(false);
 
-      // Small delay just to be safe
+      // Add a slight delay to ensure the server has broadcast the full state
       setTimeout(() => {
           setView('game');
       }, 300);
