@@ -462,27 +462,29 @@ export const BuracoGame = {
       const topDiscard = G.discardPile.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
       const myTeam = G.teams[p];
       const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
-      const isWild = (c) => c.rank === 'JOKER' || c.rank === '2';
+      const isWild = (c) => c.rank === 'JOKER' || c.rank === '2' ? 1 : 0;
 
-      // --- EXTRACT DNA ---
-      // If no DNA is found for this seat (e.g. human game), use our standard defaults
+      // --- EXTRACT ML DNA (WEIGHTS) ---
+      // If playing a human game with no trained bots yet, fallback to neutral weights 
+      // (These will be terrible until you train them and paste the Champion DNA here!)
       const DNA = G.botGenomes[p] || {
-          wildcardHoldValue: -200, suitedTwoBonus: 80, finishCanastaBonus: 1000, grabMortoBonus: 2000,
-          dirtyMeldPenalty: -300, dirtyMeldPanicBonus: 100, safeRepeatBonus: 200, oppCanastaDenialPenalty: -10000,
-          standardDenialPenalty: -800, knownCardDenial: -3000, panicModeDiscardBonus: 50,
-          intrinsic: { '3': 60, '4': 40, '5': 20, '6': -30, '7': -40, '8': -40, '9': -20, '10': 0, 'J': 10, 'Q': 20, 'K': -30, 'A': -30 }
+          pickup_base: 0, pickup_clean: 0, pickup_dirty: 0, pickup_onlyCopy: 0, pickup_pileSize: 0, pickup_panic: 0,
+          meld_base: 0, meld_finishesCanasta: 0, meld_grabsMorto: 0, meld_isWild: 0, meld_isSuitedTwo: 0, meld_isDirty: 0, meld_panic: 0,
+          discard_base: 0, discard_isWild: 0, discard_isSafeRepeat: 0, discard_givesOppCanasta: 0, discard_standardDenial: 0, discard_knownCardDenial: 0, discard_hasPair: 0, discard_hasNeighbor: 0, discard_panic: 0,
+          discard_rank_3: 0, discard_rank_4: 0, discard_rank_5: 0, discard_rank_6: 0, discard_rank_7: 0, discard_rank_8: 0, discard_rank_9: 0, discard_rank_10: 0, discard_rank_J: 0, discard_rank_Q: 0, discard_rank_K: 0, discard_rank_A: 0
       };
 
       const oppPlayers = G.teamPlayers[oppTeam] || [];
       const myPlayers = G.teamPlayers[myTeam] || [];
       const oppLowestHand = Math.min(...oppPlayers.map(op => G.hands[op].length));
-      const oppHasMorto = G.teamMortos[oppTeam];
-      const oppHasCanasta = oppPlayers.some(op => (G.melds[op] || []).some(m => getCanastaStatus(m, G.rules)));
-      const myHasMorto = G.teamMortos[myTeam];
+      const oppHasMorto = G.teamMortos[oppTeam] ? 1 : 0;
+      const oppHasCanasta = oppPlayers.some(op => (G.melds[op] || []).some(m => getCanastaStatus(m, G.rules))) ? 1 : 0;
+      const myHasMorto = G.teamMortos[myTeam] ? 1 : 0;
       
-      const isEarlyGame = G.deck.length > 60 && !oppHasMorto && !myHasMorto;
-      const isLateGame = G.deck.length < 20;
-      const isPanicMode = (oppHasMorto && oppHasCanasta && oppLowestHand <= 3) || (!myHasMorto && hand.length <= 4) || isLateGame;
+      // State Features
+      const isEarlyGame = (G.deck.length > 60 && !oppHasMorto && !myHasMorto) ? 1 : 0;
+      const isLateGame = (G.deck.length < 20) ? 1 : 0;
+      const isPanicMode = ((oppHasMorto && oppHasCanasta && oppLowestHand <= 3) || (!myHasMorto && hand.length <= 4) || isLateGame) ? 1 : 0;
 
       const countVisible = (rank, suit) => {
           let count = 0;
@@ -492,6 +494,9 @@ export const BuracoGame = {
           return count;
       };
 
+      // ==========================================
+      // PHASE 1: DRAW OR PICKUP DISCARD
+      // ==========================================
       if (!G.hasDrawn) {
         if (topDiscard) {
           if (G.rules.discard === 'closed') {
@@ -499,26 +504,40 @@ export const BuracoGame = {
               for (let j = i + 1; j < hand.length; j++) {
                 const parsed = parseMeld([hand[i], hand[j], topDiscard], G.rules);
                 if (parsed.valid) {
-                  const isOnlyCopyLeft = countVisible(topDiscard.rank, topDiscard.suit) >= 1;
-                  if (isPanicMode || parsed.status === 'clean' || isOnlyCopyLeft || isEarlyGame) {
-                    return [{ move: 'pickUpDiscard', args: [[hand[i].id, hand[j].id], { type: 'new' }] }];
-                  }
+                  // ML Score Calculation for Pickup
+                  let score = DNA.pickup_base;
+                  score += DNA.pickup_clean * (parsed.status === 'clean' ? 1 : 0);
+                  score += DNA.pickup_dirty * (parsed.status === 'dirty' ? 1 : 0);
+                  score += DNA.pickup_onlyCopy * (countVisible(topDiscard.rank, topDiscard.suit) >= 1 ? 1 : 0);
+                  score += DNA.pickup_panic * isPanicMode;
+
+                  // Let's assume a Draw score is 0. If ML decides pickup > 0, do it.
+                  if (score > 0) return [{ move: 'pickUpDiscard', args: [[hand[i].id, hand[j].id], { type: 'new' }] }];
                 }
               }
             }
           } else {
-             if (G.discardPile.length >= 3 && isEarlyGame) return [{ move: 'pickUpDiscard', args: [] }];
-             if (G.discardPile.length >= 5) return [{ move: 'pickUpDiscard', args: [] }];
+             let score = DNA.pickup_base;
+             score += DNA.pickup_pileSize * G.discardPile.length;
+             score += DNA.pickup_panic * isPanicMode;
+             if (score > 0) return [{ move: 'pickUpDiscard', args: [] }];
           }
         }
+        
         if (G.deck.length === 0 && G.pots.length === 0) return [{ move: 'declareExhausted', args: [] }];
         return [{ move: 'drawCard', args: [] }];
 
-      } else {
-        let bestMove = null; let highestScore = -9999;
+      } 
+      
+      // ==========================================
+      // PHASE 2 & 3: MELD OR DISCARD
+      // ==========================================
+      else {
+        let bestMove = null; let highestScore = -Infinity;
         const evaluateMove = (move, score) => { if (score > highestScore) { highestScore = score; bestMove = move; } };
-        const getsMorto = (cCount) => !myHasMorto && G.pots.length > 0 && (hand.length - cCount === 0);
+        const getsMorto = (cCount) => (!myHasMorto && G.pots.length > 0 && hand.length - cCount === 0) ? 1 : 0;
 
+        // EVALUATE APPENDS
         myPlayers.forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIndex) => {
             hand.forEach(card => {
@@ -527,23 +546,13 @@ export const BuracoGame = {
                 let sim = [...G.melds[tp]]; sim[mIndex] = parsed.sorted;
                 if (hand.length - 1 < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, tp)) return; 
 
-                let score = 50; 
-                const finishesCanasta = meld.length === 6;
-                const grabsMorto = getsMorto(1);
-
-                if (isWild(card)) {
-                  if (finishesCanasta || grabsMorto || isPanicMode) {
-                      score += 500; 
-                  } else {
-                      score += DNA.wildcardHoldValue; // Use DNA!
-                      if (card.rank === '2' && meld.some(c => c.suit === card.suit && c.rank !== '2' && c.rank !== 'JOKER')) {
-                          score += DNA.suitedTwoBonus; // Use DNA!
-                      }
-                  }
-                }
-
-                if (finishesCanasta && !isWild(card)) score += DNA.finishCanastaBonus; // Use DNA!
-                if (grabsMorto) score += DNA.grabMortoBonus; // Use DNA!
+                // Neural Net Dot Product
+                let score = DNA.meld_base;
+                score += DNA.meld_finishesCanasta * (meld.length === 6 ? 1 : 0);
+                score += DNA.meld_grabsMorto * getsMorto(1);
+                score += DNA.meld_isWild * isWild(card);
+                score += DNA.meld_isSuitedTwo * ((card.rank === '2' && meld.some(c => c.suit === card.suit && c.rank !== '2' && c.rank !== 'JOKER')) ? 1 : 0);
+                score += DNA.meld_panic * isPanicMode;
 
                 evaluateMove({ move: 'appendToMeld', args: [tp, mIndex, [card.id]] }, score);
               }
@@ -551,6 +560,7 @@ export const BuracoGame = {
           });
         });
 
+        // EVALUATE NEW MELDS
         for (let i = 0; i < hand.length; i++) {
           for (let j = i + 1; j < hand.length; j++) {
             for (let k = j + 1; k < hand.length; k++) {
@@ -559,66 +569,60 @@ export const BuracoGame = {
                 let sim = [...(G.melds[p] || []), parsed.sorted];
                 if (hand.length - 3 < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue; 
 
-                let score = 30;
-                const grabsMorto = getsMorto(3);
-                if (grabsMorto) score += DNA.grabMortoBonus; // Use DNA!
+                let score = DNA.meld_base;
+                score += DNA.meld_grabsMorto * getsMorto(3);
+                score += DNA.meld_isDirty * (parsed.status === 'dirty' ? 1 : 0);
+                score += DNA.meld_panic * isPanicMode;
 
-                if (parsed.status === 'dirty') {
-                  if (grabsMorto || isPanicMode) score += DNA.dirtyMeldPanicBonus; // Use DNA!
-                  else score += DNA.dirtyMeldPenalty; // Use DNA!
-                }
                 evaluateMove({ move: 'playMeld', args: [[hand[i].id, hand[j].id, hand[k].id]] }, score);
               }
             }
           }
         }
 
-        if (bestMove && highestScore > 0) return [bestMove];
-
-        let discardMoves = [];
+        // EVALUATE DISCARDS
         if (hand.length > 1 || canEmptyHand(G, myTeam)) {
           hand.forEach(card => {
-            let discardScore = 0;
-            if (isWild(card)) discardScore -= 5000; 
+            let discardScore = DNA.discard_base;
+            
+            discardScore += DNA.discard_isWild * isWild(card);
+            discardScore += (DNA[`discard_rank_${card.rank}`] || 0);
+            discardScore += DNA.discard_isSafeRepeat * (G.discardPile.some(c => c.rank === card.rank && c.suit === card.suit) ? 1 : 0);
+            discardScore += DNA.discard_panic * isPanicMode;
 
-            if (!isWild(card) && DNA.intrinsic[card.rank]) {
-                discardScore += DNA.intrinsic[card.rank]; // Use DNA!
-            }
-
-            if (G.discardPile.some(c => c.rank === card.rank && c.suit === card.suit)) {
-                discardScore += DNA.safeRepeatBonus; // Use DNA!
-            }
+            let givesOppCanasta = 0;
+            let standardDenial = 0;
+            let knownDenial = 0;
 
             oppPlayers.forEach(op => {
               (G.melds[op] || []).forEach(meld => {
-                const parsed = parseMeld([...meld, card], G.rules);
-                if (parsed.valid) {
-                  if (meld.length >= 5 && !oppHasCanasta) discardScore += DNA.oppCanastaDenialPenalty; // Use DNA!
-                  else discardScore += DNA.standardDenialPenalty; // Use DNA!
+                if (parseMeld([...meld, card], G.rules).valid) {
+                  if (meld.length >= 5 && !oppHasCanasta) givesOppCanasta = 1;
+                  else standardDenial = 1;
                 }
               });
-
               (G.knownCards[op] || []).forEach(kCard => {
                 if (!isWild(card)) {
-                  if (kCard.rank === card.rank) discardScore += DNA.knownCardDenial; // Use DNA!
-                  if (kCard.suit === card.suit && Math.abs(sequenceMath[kCard.rank] - sequenceMath[card.rank]) <= 2) discardScore += DNA.knownCardDenial; // Use DNA!
+                  if (kCard.rank === card.rank) knownDenial = 1;
+                  if (kCard.suit === card.suit && Math.abs(sequenceMath[kCard.rank] - sequenceMath[card.rank]) <= 2) knownDenial = 1;
                 }
               });
             });
 
-            const hasPair = hand.some(c => c.id !== card.id && c.rank === card.rank);
-            const hasNeighbor = hand.some(c => c.id !== card.id && c.suit === card.suit && Math.abs(sequenceMath[c.rank] - sequenceMath[card.rank]) === 1);
-            if (!hasPair && !hasNeighbor) discardScore += 100; 
+            discardScore += DNA.discard_givesOppCanasta * givesOppCanasta;
+            discardScore += DNA.discard_standardDenial * standardDenial;
+            discardScore += DNA.discard_knownCardDenial * knownDenial;
 
-            if (isPanicMode) discardScore += DNA.panicModeDiscardBonus; // Use DNA!
+            const hasPair = hand.some(c => c.id !== card.id && c.rank === card.rank) ? 1 : 0;
+            const hasNeighbor = hand.some(c => c.id !== card.id && c.suit === card.suit && Math.abs(sequenceMath[c.rank] - sequenceMath[card.rank]) === 1) ? 1 : 0;
+            discardScore += DNA.discard_hasPair * hasPair;
+            discardScore += DNA.discard_hasNeighbor * hasNeighbor;
 
-            discardMoves.push({ move: 'discardCard', args: [card.id], score: discardScore });
+            evaluateMove({ move: 'discardCard', args: [card.id] }, discardScore);
           });
-
-          discardMoves.sort((a, b) => b.score - a.score);
-          if (discardMoves.length > 0) return [{ move: 'discardCard', args: discardMoves[0].args }];
         }
         
+        if (bestMove) return [bestMove];
         return []; 
       }
     }
