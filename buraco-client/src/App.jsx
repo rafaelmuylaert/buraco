@@ -216,14 +216,19 @@ const App = () => {
   const handleQuickGameSubmit = async () => {
     const myName = "Eu";
     let assignmentsMap = { '0': myName };
+    let botsMap = {};
     
-    // 1. Reserve names for the bots in the assignments map
+    // 1. Reserve names for the bots and build the AI declaration map
     for (let i = 1; i < quickGameConfig.numPlayers; i++) {
-        assignmentsMap[i.toString()] = `Bot ${i}`;
+        const botSeatId = i.toString();
+        assignmentsMap[botSeatId] = `Bot ${i}`;
+        
+        // This is the critical missing piece: Tell the engine to attach the 'ai' to these seats
+        botsMap[botSeatId] = {}; 
     }
 
     try {
-      // 2. Create the match on the server
+      // 2. Create the match on the server, explicitly passing the botsMap
       const { matchID } = await lobbyClient.createMatch('buraco', {
          numPlayers: quickGameConfig.numPlayers,
          unlisted: true, 
@@ -232,19 +237,19 @@ const App = () => {
              isTournament: false, 
              quickGameTargetPoints: quickGameConfig.format === 'points' ? quickGameConfig.targetPoints : null,
              quickGameMaxRounds: quickGameConfig.format === 'rounds' ? quickGameConfig.maxRounds : null,
-             assignments: assignmentsMap 
+             assignments: assignmentsMap,
+             bots: botsMap // Forces the server to instantiate AI actors
          }
       });
 
-      // 3. Force the Bots to explicitly join the match so the server knows they exist!
+      // 3. Force the Bots to explicitly join the match via Lobby API
       let joinPromises = [];
       for (let i = 1; i < quickGameConfig.numPlayers; i++) {
           joinPromises.push(lobbyClient.joinMatch('buraco', matchID, { playerID: i.toString(), playerName: `Bot ${i}` }));
       }
-      // CRITICAL FIX: Wait for all bots to successfully join the server lobby
       await Promise.all(joinPromises);
 
-      // 4. Finally, request credentials for OUR seat
+      // 4. Request credentials for our seat
       const { playerCredentials } = await lobbyClient.joinMatch('buraco', matchID, { playerID: '0', playerName: myName });
       
       const sessions = getSavedSessions();
@@ -257,7 +262,6 @@ const App = () => {
       setCredentials(playerCredentials); 
       setShowQuickGamePopup(false);
 
-      // Add a slight delay to ensure the server has broadcast the full state
       setTimeout(() => {
           setView('game');
       }, 300);
