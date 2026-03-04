@@ -216,47 +216,38 @@ const App = () => {
   const handleQuickGameSubmit = async () => {
     const myName = "Eu";
     let assignmentsMap = { '0': myName };
-    let botsMap = {};
     
-    // 1. Reserve names for the bots and build the AI declaration map
+    // 1. Just reserve the names for the bots. 
+    // DO NOT declare botsMap or call joinMatch for them!
     for (let i = 1; i < quickGameConfig.numPlayers; i++) {
-        const botSeatId = i.toString();
-        assignmentsMap[botSeatId] = `Bot ${i}`;
-        
-        // This is the critical missing piece: Tell the engine to attach the 'ai' to these seats
-        botsMap[botSeatId] = {}; 
+        assignmentsMap[i.toString()] = `Bot ${i}`;
     }
 
     try {
-      // 2. Create the match on the server, explicitly passing the botsMap
+      // 2. Create the match
       const { matchID } = await lobbyClient.createMatch('buraco', {
          numPlayers: quickGameConfig.numPlayers,
          unlisted: true, 
          setupData: { 
              ...quickGameConfig.rules, 
+             numPlayers: quickGameConfig.numPlayers, // Passing this explicitly to ensure setup() runs perfectly
              isTournament: false, 
              quickGameTargetPoints: quickGameConfig.format === 'points' ? quickGameConfig.targetPoints : null,
              quickGameMaxRounds: quickGameConfig.format === 'rounds' ? quickGameConfig.maxRounds : null,
-             assignments: assignmentsMap,
-             bots: botsMap // Forces the server to instantiate AI actors
+             assignments: assignmentsMap 
          }
       });
 
-      // 3. Force the Bots to explicitly join the match via Lobby API
-      let joinPromises = [];
-      for (let i = 1; i < quickGameConfig.numPlayers; i++) {
-          joinPromises.push(lobbyClient.joinMatch('buraco', matchID, { playerID: i.toString(), playerName: `Bot ${i}` }));
-      }
-      await Promise.all(joinPromises);
-
-      // 4. Request credentials for our seat
+      // 3. Request credentials for OUR seat ONLY.
+      // Because we leave the bot seats "un-joined", the boardgame.io server will automatically
+      // activate the AI engine for them just like it does in Tournaments!
       const { playerCredentials } = await lobbyClient.joinMatch('buraco', matchID, { playerID: '0', playerName: myName });
       
       const sessions = getSavedSessions();
       sessions[`${matchID}_0`] = { matchID, playerID: '0', credentials: playerCredentials };
       localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
       
-      // 5. Enter the game
+      // 4. Enter the game
       setMatchID(matchID); 
       setPlayerID('0'); 
       setCredentials(playerCredentials); 
