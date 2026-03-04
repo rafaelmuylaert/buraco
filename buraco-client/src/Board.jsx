@@ -43,7 +43,7 @@ const isRunner = (meld) => {
   return false;
 };
 
-export function BuracoBoard({ ctx, G, moves, playerID, matchID }) {
+export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament, tournamentStandings }) {
   const [selectedCards, setSelectedCards] = useState([]);
 
   useEffect(() => {
