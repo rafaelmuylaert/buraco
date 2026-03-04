@@ -108,46 +108,77 @@ const App = () => {
     if (shouldUpdate) saveTournamentsToAPI(updatedTournaments);
   }, [history]);
 
-  // FEATURE: Intercept Auto-Join requests from the Game Over screen
+  // FEATURE: Intercept Auto-Join for Tournaments and Quick Game Rematches
   useEffect(() => {
-    const autoJoinData = sessionStorage.getItem('auto_join_next');
-    if (autoJoinData && matches.length > 0) {
-      sessionStorage.removeItem('auto_join_next');
-      const { matchID, playerName } = JSON.parse(autoJoinData);
+    // 1. Handle Quick Game Rematch
+    const rematchData = sessionStorage.getItem('quick_game_rematch');
+    if (rematchData) {
+      sessionStorage.removeItem('quick_game_rematch');
+      const { rules, numPlayers, myName } = JSON.parse(rematchData);
       
-      const targetMatch = matches.find(m => m.matchID === matchID);
-      if (targetMatch) {
-         // Find an empty seat, preferably one assigned to this player
-         let targetSeatID = null;
-         const assignments = targetMatch.setupData?.assignments || {};
-         
-         // Try to find exact name assignment
-         for (let seatId in assignments) {
-             if (assignments[seatId] === playerName && !targetMatch.players.find(p => p.id.toString() === seatId)?.name) {
-                 targetSeatID = seatId;
-                 break;
-             }
-         }
-         
-         // If no strict assignment, just find first empty seat
-         if (!targetSeatID) {
-             const emptyPlayer = targetMatch.players.find(p => !p.name);
-             if (emptyPlayer) targetSeatID = emptyPlayer.id.toString();
-         }
+      let assignmentsMap = { '0': myName };
+      for (let i = 1; i < numPlayers; i++) assignmentsMap[i.toString()] = `Bot ${i}`;
 
-         if (targetSeatID) {
-             // Directly join the match
-             lobbyClient.joinMatch('buraco', matchID, { playerID: targetSeatID, playerName }).then(({ playerCredentials }) => {
-                const sessions = getSavedSessions();
-                sessions[`${matchID}_${targetSeatID}`] = { matchID, playerID: targetSeatID, credentials: playerCredentials };
-                localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
-                setMatchID(matchID); setPlayerID(targetSeatID); setCredentials(playerCredentials); 
-                setView('game');
-             }).catch(e => console.error("Auto-join failed", e));
-         }
+      lobbyClient.createMatch('buraco', {
+         numPlayers: numPlayers,
+         // unlisted must be false or omitted so the external Bot Runner finds it!
+         setupData: { ...rules, numPlayers: numPlayers, isTournament: false, assignments: assignmentsMap }
+      }).then(async ({ matchID }) => {
+         const { playerCredentials } = await lobbyClient.joinMatch('buraco', matchID, { playerID: '0', playerName: myName });
+         const sessions = getSavedSessions();
+         sessions[`${matchID}_0`] = { matchID, playerID: '0', credentials: playerCredentials };
+         localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
+         
+         setMatchID(matchID); setPlayerID('0'); setCredentials(playerCredentials); 
+         setTimeout(() => setView('game'), 500);
+      }).catch(e => console.error("Rematch failed", e));
+      return; 
+    }
+
+    // 2. Handle Tournament Auto-Join
+    const tourneyAutoJoin = sessionStorage.getItem('auto_join_tournament');
+    // We must wait for tournaments and matches to load from the server before processing this
+    if (tourneyAutoJoin && tournaments.length > 0 && matches.length > 0) {
+      const { tournamentId, playerName } = JSON.parse(tourneyAutoJoin);
+      
+      const t = tournaments.find(t => t.id === tournamentId);
+      if (t && t.rounds && t.rounds.length > 0) {
+          // Look at the most recently generated round
+          const lastRound = t.rounds[t.rounds.length - 1];
+          const myAssignment = lastRound.assignments.find(a => a.team0.includes(playerName) || a.team1.includes(playerName));
+          
+          if (myAssignment) {
+              const targetMatch = matches.find(m => m.matchID === myAssignment.matchID);
+              if (targetMatch) {
+                  // We found the match! Clear the storage so we don't loop
+                  sessionStorage.removeItem('auto_join_tournament');
+                  
+                  let targetSeatID = null;
+                  const assignments = targetMatch.setupData?.assignments || {};
+                  for (let seatId in assignments) {
+                      if (assignments[seatId] === playerName) {
+                          targetSeatID = seatId; break;
+                      }
+                  }
+                  if (!targetSeatID) {
+                      const empty = targetMatch.players.find(p => !p.name);
+                      if (empty) targetSeatID = empty.id.toString();
+                  }
+
+                  if (targetSeatID) {
+                      lobbyClient.joinMatch('buraco', targetMatch.matchID, { playerID: targetSeatID, playerName }).then(({ playerCredentials }) => {
+                          const sessions = getSavedSessions();
+                          sessions[`${targetMatch.matchID}_${targetSeatID}`] = { matchID: targetMatch.matchID, playerID: targetSeatID, credentials: playerCredentials };
+                          localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
+                          setMatchID(targetMatch.matchID); setPlayerID(targetSeatID); setCredentials(playerCredentials); 
+                          setView('game');
+                      }).catch(e => console.error(e));
+                  }
+              }
+          }
       }
     }
-  }, [matches]);
+  }, [tournaments, matches]);
 
   const handleJoinMatch = async (match, seatID) => {
     const assignedName = match.setupData?.assignments?.[seatID];
