@@ -526,7 +526,9 @@ const App = () => {
                 <label><input type="checkbox" checked={newTourney.rules.noJokers} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, noJokers: e.target.checked}})} /> Sem Curingas (Jokers)</label>
                 <label><input type="checkbox" checked={newTourney.rules.openDiscardView} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
                 <label><input type="checkbox" checked={newTourney.rules.showKnownCards} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas Memorizadas (Para Async)</label>
-            </div>
+            
+              </div>
+              </div>
           </div>
           <button onClick={handleCreateTournament} style={{ width: '100%', marginTop: '30px', padding: '15px', background: '#ffd700', fontSize: '1.2em', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Iniciar Torneio</button>
         </div>
