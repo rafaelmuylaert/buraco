@@ -216,14 +216,17 @@ const App = () => {
   const handleQuickGameSubmit = async () => {
     const myName = "Eu";
     let assignmentsMap = { '0': myName };
-    for (let i = 1; i < quickGameConfig.numPlayers; i++) assignmentsMap[i.toString()] = `Bot ${i}`;
+    
+    // Ensure bots are added up to the selected numPlayers
+    for (let i = 1; i < quickGameConfig.numPlayers; i++) {
+        assignmentsMap[i.toString()] = `Bot ${i}`;
+    }
 
     try {
       const { matchID } = await lobbyClient.createMatch('buraco', {
          numPlayers: quickGameConfig.numPlayers,
-         // We pass the meta-rules down so the end-screen can see the target points/rounds
          setupData: { 
-             ...quickGameConfig.rules, 
+             ...quickGameConfig.rules, // Spread ALL rules from state
              isTournament: false, 
              quickGameTargetPoints: quickGameConfig.format === 'points' ? quickGameConfig.targetPoints : null,
              quickGameMaxRounds: quickGameConfig.format === 'rounds' ? quickGameConfig.maxRounds : null,
@@ -502,12 +505,12 @@ const App = () => {
               <label>Compra do Lixo: <select value={newTourney.rules.discard} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, discard: e.target.value}})}><option value="open">Aberto</option><option value="closed">Fechado</option></select></label>
               <label>Trincas: <select value={newTourney.rules.runners} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, runners: e.target.value}})}><option value="none">Nenhuma</option><option value="aces_threes">Ás e Três</option><option value="aces_kings">Ás e Reis</option><option value="any">Qualquer</option></select></label>
               
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px', background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px' }}>
-                <label><input type="checkbox" checked={newTourney.rules.largeCanasta} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, largeCanasta: e.target.checked}})} /> Bônus Canastrão (500/1000)</label>
-                <label><input type="checkbox" checked={newTourney.rules.cleanCanastaToWin} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, cleanCanastaToWin: e.target.checked}})} /> Bater exige Canastra Limpa</label>
-                <label><input type="checkbox" checked={newTourney.rules.noJokers} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, noJokers: e.target.checked}})} /> Sem Curingas (Jokers)</label>
-                <label><input type="checkbox" checked={newTourney.rules.openDiscardView} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
-                <label><input type="checkbox" checked={newTourney.rules.showKnownCards} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas Memorizadas (Para Async)</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px' }}>
+                <label><input type="checkbox" checked={quickGameConfig.rules.largeCanasta} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, largeCanasta: e.target.checked}})} /> Bônus Canastrão (500/1000)</label>
+                <label><input type="checkbox" checked={quickGameConfig.rules.cleanCanastaToWin} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, cleanCanastaToWin: e.target.checked}})} /> Bater exige Canastra Limpa</label>
+                <label><input type="checkbox" checked={quickGameConfig.rules.noJokers} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, noJokers: e.target.checked}})} /> Sem Curingas (Jokers)</label>
+                <label><input type="checkbox" checked={quickGameConfig.rules.openDiscardView} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
+                <label><input type="checkbox" checked={quickGameConfig.rules.showKnownCards} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas Memorizadas (Para Bot/Async)</label>
               </div>
             </div>
           </div>
