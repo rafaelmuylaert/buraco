@@ -98,6 +98,47 @@ const App = () => {
     if (shouldUpdate) saveTournamentsToAPI(updatedTournaments);
   }, [history]);
 
+  // FEATURE: Intercept Auto-Join requests from the Game Over screen
+  useEffect(() => {
+    const autoJoinData = sessionStorage.getItem('auto_join_next');
+    if (autoJoinData && matches.length > 0) {
+      sessionStorage.removeItem('auto_join_next');
+      const { matchID, playerName } = JSON.parse(autoJoinData);
+      
+      const targetMatch = matches.find(m => m.matchID === matchID);
+      if (targetMatch) {
+         // Find an empty seat, preferably one assigned to this player
+         let targetSeatID = null;
+         const assignments = targetMatch.setupData?.assignments || {};
+         
+         // Try to find exact name assignment
+         for (let seatId in assignments) {
+             if (assignments[seatId] === playerName && !targetMatch.players.find(p => p.id.toString() === seatId)?.name) {
+                 targetSeatID = seatId;
+                 break;
+             }
+         }
+         
+         // If no strict assignment, just find first empty seat
+         if (!targetSeatID) {
+             const emptyPlayer = targetMatch.players.find(p => !p.name);
+             if (emptyPlayer) targetSeatID = emptyPlayer.id.toString();
+         }
+
+         if (targetSeatID) {
+             // Directly join the match
+             lobbyClient.joinMatch('buraco', matchID, { playerID: targetSeatID, playerName }).then(({ playerCredentials }) => {
+                const sessions = getSavedSessions();
+                sessions[`${matchID}_${targetSeatID}`] = { matchID, playerID: targetSeatID, credentials: playerCredentials };
+                localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
+                setMatchID(matchID); setPlayerID(targetSeatID); setCredentials(playerCredentials); 
+                setView('game');
+             }).catch(e => console.error("Auto-join failed", e));
+         }
+      }
+    }
+  }, [matches]);
+
   const handleJoinMatch = async (match, seatID) => {
     const assignedName = match.setupData?.assignments?.[seatID];
     const pName = assignedName || prompt("Digite seu nome para entrar na mesa:");
