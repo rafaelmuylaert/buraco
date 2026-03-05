@@ -7,15 +7,12 @@ import path from 'path';
 const DNA_SIZE = 9761; 
 const BOTS_DIR = path.join(process.cwd(), 'bots');
 
-// Ensure the bots directory exists for saving DNA
 if (!fs.existsSync(BOTS_DIR)) {
     fs.mkdirSync(BOTS_DIR, { recursive: true });
 }
 
-// Track running training sessions to prevent overlaps
 const activeTrainings = new Map();
 
-// Initialize with random small weights between -0.5 and 0.5
 const generateRandomGenome = () => Array.from({ length: DNA_SIZE }, () => (Math.random() - 0.5));
 
 function mutate(genome, mutationRate = 0.1, maxStep = 0.5) {
@@ -62,7 +59,6 @@ function runMatch(genomes, rules) {
         moveCount++;
     }
 
-    // CRITICAL FIX: Destroy the Redux store to prevent RAM from exploding!
     client.stop();
 
     if (!state.ctx.gameover) {
@@ -74,7 +70,6 @@ function runMatch(genomes, rules) {
 
 export const TrainerService = {
     
-    // Fetch a bot's current weights
     getBotWeights: (botName) => {
         const filePath = path.join(BOTS_DIR, `${botName}.json`);
         if (fs.existsSync(filePath)) {
@@ -84,7 +79,6 @@ export const TrainerService = {
         return null;
     },
 
-    // Check if a bot is currently training
     getTrainingStatus: (botName) => {
         if (activeTrainings.has(botName)) {
             return { isTraining: true, progress: activeTrainings.get(botName) };
@@ -92,7 +86,6 @@ export const TrainerService = {
         return { isTraining: false, progress: null };
     },
 
-    // Async Training Loop triggered via API
     startTraining: async (botName, rules = {}, params = {}) => {
         if (activeTrainings.has(botName)) {
             throw new Error(`Training is already in progress for bot: ${botName}`);
@@ -104,13 +97,11 @@ export const TrainerService = {
 
         activeTrainings.set(botName, { currentGeneration: 0, totalGenerations: GENERATIONS, bestScore: 0 });
 
-        // Try to load existing DNA as a seed to continue training where we left off
         const seedDNA = TrainerService.getBotWeights(botName);
         let population;
         
         if (seedDNA) {
             console.log(`🧠 Resuming training for '${botName}' from existing DNA...`);
-            // Clone the champion, then fill the rest of the population with mutations of it
             population = Array(POPULATION_SIZE).fill(null).map((_, idx) => {
                 if (idx === 0) return seedDNA;
                 return mutate(seedDNA, 0.2, 0.5); 
@@ -125,6 +116,12 @@ export const TrainerService = {
                 let fitnessScores = Array(POPULATION_SIZE).fill(0);
 
                 for (let botId = 0; botId < POPULATION_SIZE; botId++) {
+                    
+                    // CRITICAL FIX: The Node.js Event Loop Yield!
+                    // This forces the heavy CPU loop to pause for a microsecond.
+                    // This allows the Garbage Collector to clean RAM and the Server to answer the frontend!
+                    await new Promise(resolve => setTimeout(resolve, 0));
+
                     for (let m = 0; m < MATCHES_PER_GENERATION; m++) {
                         const opps = [ 
                             Math.floor(Math.random() * POPULATION_SIZE), 
@@ -139,7 +136,6 @@ export const TrainerService = {
                             '3': population[opps[2]] 
                         };
                         
-                        // Pass dynamic rules here
                         const scores = runMatch(matchGenomes, rules);
                         fitnessScores[botId] += scores.team0.total; 
                     }
@@ -154,7 +150,6 @@ export const TrainerService = {
                 const bestScore = rankedBots[0].score;
                 console.log(`[${botName}] Gen ${gen}/${GENERATIONS} | Best: ${bestScore.toFixed(0)} pts`);
 
-                // Update status for the frontend
                 activeTrainings.set(botName, { 
                     currentGeneration: gen, 
                     totalGenerations: GENERATIONS, 
@@ -172,14 +167,10 @@ export const TrainerService = {
                 }
                 population = newPopulation;
 
-                // Save Champion DNA periodically and at the very end
                 if (gen % 5 === 0 || gen === GENERATIONS) {
                     const filePath = path.join(BOTS_DIR, `${botName}.json`);
                     fs.writeFileSync(filePath, JSON.stringify(rankedBots[0].genome));
                 }
-                
-                // Yield to the event loop so the server doesn't freeze during heavy training
-                await new Promise(resolve => setTimeout(resolve, 10)); 
             }
         } catch (error) {
             console.error(`Error during training for ${botName}:`, error);
