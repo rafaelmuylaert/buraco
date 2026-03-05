@@ -64,6 +64,57 @@ const App = () => {
 
   const getSavedSessions = () => JSON.parse(localStorage.getItem('buraco_sessions') || '{}');
 
+  // --- ADD THESE NEW STATES ---
+  const [availableBots, setAvailableBots] = useState([]);
+  const [showTrainBotPopup, setShowTrainBotPopup] = useState(false);
+  const [trainBotConfig, setTrainBotConfig] = useState({
+    name: 'BotPrometheus',
+    populationSize: 24,
+    generations: 5000,
+    matchesPerGeneration: 12,
+    rules: { discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false }
+  });
+
+  // --- ADD THIS USEEFFECT TO FETCH BOTS ON LOAD ---
+  useEffect(() => {
+    fetch(`${window.location.origin}/buraco/api/bots/list`)
+      .then(res => res.json())
+      .then(data => {
+          setAvailableBots(data);
+          // Set defaults for the dropdowns if bots exist
+          if (data.length > 0) {
+              setQuickGameConfig(prev => ({ ...prev, botName: data[0] }));
+              setNewTourney(prev => ({ ...prev, botName: data[0] }));
+          }
+      })
+      .catch(err => console.error("Error fetching bots:", err));
+  }, []);
+
+  // --- ADD THE START TRAINING HANDLER ---
+  const handleStartTraining = async () => {
+    if (!trainBotConfig.name.trim()) return alert("Digite um nome para o bot!");
+    try {
+      const res = await fetch(`${window.location.origin}/buraco/api/bots/train`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+           botName: trainBotConfig.name,
+           rules: trainBotConfig.rules,
+           trainParams: {
+              populationSize: trainBotConfig.populationSize,
+              generations: trainBotConfig.generations,
+              matchesPerGeneration: trainBotConfig.matchesPerGeneration
+           }
+        })
+      });
+      const data = await res.json();
+      alert(`Laboratório Iniciado: ${data.message || "Treinamento em andamento no servidor!"}`);
+      setShowTrainBotPopup(false);
+    } catch (e) {
+      alert("Erro ao iniciar o laboratório de IA.");
+    }
+  };
+
   useEffect(() => {
     loadServerData();
     window.addEventListener('history_updated', loadServerData);
@@ -248,7 +299,8 @@ const App = () => {
     const myName = "Eu";
     let assignmentsMap = { '0': myName };
     let botGenomes = {};
-    const targetBotName = "BotSauron"; // The name of the bot you trained!
+    // Grab the user's selection, fallback to a safe string if empty
+    const targetBotName = quickGameConfig.botName || "UntrainedBot";
     
     // 1. Reserve the names for the bots
     for (let i = 1; i < quickGameConfig.numPlayers; i++) {
@@ -484,8 +536,13 @@ const App = () => {
       <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #ff4d4d', paddingBottom: '20px' }}>
           <h1 style={{ color: '#ff4d4d', margin: 0 }}>🛠️ Painel de Administração</h1>
+          <button onClick={() => setShowTrainBotPopup(true)} style={{ padding: '15px 30px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer', marginTop: '20px', boxShadow: '0 0 15px rgba(138, 43, 226, 0.5)' }}>
+          🧠 Laboratório de IA (Treinar Bot)
+        </button>
           <button onClick={() => setView('lounge')} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Sair do Modo Admin</button>
         </div>
+
+        
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'flex-start' }}>
           <div style={{ flex: '1 1 300px', background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
@@ -601,6 +658,32 @@ const App = () => {
         </div>
       </div>
 
+      {showTrainBotPopup && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#2b1055', padding: '30px', borderRadius: '15px', border: '2px solid #8a2be2', width: '500px', maxWidth: '90%', color: 'white' }}>
+            <h2 style={{ color: '#b088f9', marginTop: 0 }}>🧠 Treinar Nova IA</h2>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
+              <label>Nome do Bot (DNA): <input type="text" value={trainBotConfig.name} onChange={e => setTrainBotConfig({...trainBotConfig, name: e.target.value})} style={{ padding: '5px', width: '150px', marginLeft: '10px' }} /></label>
+              
+              <h4 style={{ margin: '10px 0 0 0', color: '#ffb86c' }}>Parâmetros Genéticos</h4>
+              <label>População (Bots por Geração): <input type="number" value={trainBotConfig.populationSize} onChange={e => setTrainBotConfig({...trainBotConfig, populationSize: parseInt(e.target.value)})} style={{ width: '60px', padding: '5px' }} /></label>
+              <label>Gerações (Ciclos de Evolução): <input type="number" value={trainBotConfig.generations} onChange={e => setTrainBotConfig({...trainBotConfig, generations: parseInt(e.target.value)})} style={{ width: '60px', padding: '5px' }} /></label>
+              <label>Partidas por Geração: <input type="number" value={trainBotConfig.matchesPerGeneration} onChange={e => setTrainBotConfig({...trainBotConfig, matchesPerGeneration: parseInt(e.target.value)})} style={{ width: '60px', padding: '5px' }} /></label>
+
+              <h4 style={{ margin: '10px 0 0 0', color: '#8be9fd' }}>Regras do Ambiente</h4>
+              <label>Compra do Lixo: <select value={trainBotConfig.rules.discard} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, discard: e.target.value}})}><option value="open">Aberto</option><option value="closed">Fechado</option></select></label>
+              <label>Trincas: <select value={trainBotConfig.rules.runners} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, runners: e.target.value}})}><option value="none">Nenhuma</option><option value="aces_threes">Ás e Três</option><option value="aces_kings">Ás e Reis</option><option value="any">Qualquer</option></select></label>
+            </div>
+
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowTrainBotPopup(false)} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={handleStartTraining} style={{ padding: '10px 20px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Iniciar Mutação</button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {showQuickGamePopup && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div style={{ background: '#1b4332', padding: '30px', borderRadius: '15px', border: '2px solid #e63946', width: '500px', maxWidth: '90%' }}>
@@ -624,6 +707,13 @@ const App = () => {
               <label>Trincas: <select value={quickGameConfig.rules.runners} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, runners: e.target.value}})}><option value="none">Nenhuma</option><option value="aces_threes">Ás e Três</option><option value="aces_kings">Ás e Reis</option><option value="any">Qualquer</option></select></label>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px' }}>
+                <h4 style={{ margin: '10px 0 0 0', color: '#ffd700' }}>Inteligência Artificial</h4>
+              <label>Selecione a IA: 
+                <select value={quickGameConfig.botName || ''} onChange={e => setQuickGameConfig({...quickGameConfig, botName: e.target.value})} style={{ padding: '5px', marginLeft: '10px' }}>
+                  {availableBots.length === 0 && <option value="">(Nenhum Bot Treinado)</option>}
+                  {availableBots.map(bot => <option key={bot} value={bot}>{bot}</option>)}
+                </select>
+              </label>
                 <label><input type="checkbox" checked={quickGameConfig.rules.largeCanasta} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, largeCanasta: e.target.checked}})} /> Bônus Canastrão (500/1000)</label>
                 <label><input type="checkbox" checked={quickGameConfig.rules.cleanCanastaToWin} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, cleanCanastaToWin: e.target.checked}})} /> Bater exige Canastra Limpa</label>
                 <label><input type="checkbox" checked={quickGameConfig.rules.noJokers} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, noJokers: e.target.checked}})} /> Sem Curingas (Jokers)</label>
