@@ -1,4 +1,4 @@
-import { Client } from 'boardgame.io/client';
+import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { BuracoGame } from './game.js';
 import fs from 'fs';
 import path from 'path';
@@ -186,5 +186,3 @@ export const TrainerService = {
         }
     }
 };
-
-train();
