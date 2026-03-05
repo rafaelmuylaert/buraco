@@ -44,7 +44,6 @@ const isRunner = (meld) => {
 };
 
 export function BuracoBoard(props) {
-  // Safely extract all props, defaulting tournament to null if it gets stripped!
   const { ctx, G, moves, playerID, matchID, tournament = null, tournamentStandings = null } = props;
   
   const [selectedCards, setSelectedCards] = useState([]);
@@ -88,10 +87,8 @@ export function BuracoBoard(props) {
 
     const handleNextMatch = () => {
         if (isTournament) {
-            // Signal App.jsx to find the next match in this tournament
             sessionStorage.setItem('auto_join_tournament', JSON.stringify({ tournamentId: tournament.id, playerName: myName }));
         } else {
-            // Signal App.jsx to create a new Quick Match with the exact same rules
             sessionStorage.setItem('quick_game_rematch', JSON.stringify({ rules: G.rules, numPlayers: G.rules.numPlayers, myName }));
         }
         window.location.reload();
@@ -170,7 +167,6 @@ export function BuracoBoard(props) {
   const myTeamPlayers = G.teamPlayers[myTeam] || [];
   const oppTeamPlayers = G.teamPlayers[oppTeam] || [];
 
-  // CHUNKING: Restrict horizontal cascade to 5 cards max
   const chunkedDiscard = [];
   if (G.discardPile && G.discardPile.length > 0) {
     for (let i = 0; i < G.discardPile.length; i += 5) {
@@ -276,10 +272,8 @@ export function BuracoBoard(props) {
   const deckEmpty = G.deck.length === 0 && G.pots.length === 0;
   const deckCount = G.deck.length === 0 && G.pots.length > 0 ? 11 : G.deck.length;
   return (
-    // ABSOLUTE POSITIONING: Forces the browser to never scroll the page globally.
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100vh', boxSizing: 'border-box', overflow: 'hidden', padding: '15px', fontFamily: 'sans-serif', backgroundColor: '#2d6a4f', color: 'white', display: 'flex', gap: '15px' }}>
       
-      {/* LEFT COLUMN: Deck & Discard - Prevent Shrinking & Hide Horizontal Overflow */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: G.rules?.openDiscardView ? '150px' : '90px', minWidth: G.rules?.openDiscardView ? '150px' : '90px', flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
          <div style={{ textAlign: 'center' }}>
           <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Monte</h4>
@@ -320,7 +314,6 @@ export function BuracoBoard(props) {
         </div>
       </div>
 
-      {/* CENTER COLUMN: Tables & Hand - Flex 1 allows it to take remaining space, Gap increased to prevent overlaps! */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '25px', overflowY: 'auto', overflowX: 'hidden', paddingRight: '10px', paddingBottom: '20px' }}>
         <div style={{ flexShrink: 0 }}>{renderTeamTable(oppTeamPlayers, "Mesa Deles", false)}</div>
         <div style={{ flexShrink: 0 }}>{renderTeamTable(myTeamPlayers, "Nossa Mesa", true)}</div>
@@ -332,7 +325,6 @@ export function BuracoBoard(props) {
         </div>
       </div>
       
-      {/* RIGHT COLUMN: Sidebar - Narrowed slightly, hidden horizontal scroll */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '180px', minWidth: '180px', flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
         
         <button onClick={() => window.location.reload()} style={{ width: '100%', background: '#4da6ff', color: 'white', border: 'none', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.9em' }}>
