@@ -5,6 +5,9 @@ import { BuracoGame } from './game.js';
 const SERVER_URL = 'http://buraco-server:8000';
 const activeBots = {}; // Tracks running bots to prevent duplicates
 
+// NEW: Cache downloaded bot brains in memory so we don't spam the API
+const dnaCache = {};
+
 async function pollLobby() {
   try {
     const res = await fetch(`${SERVER_URL}/games/buraco`);
@@ -13,10 +16,21 @@ async function pollLobby() {
     for (const match of data.matches) {
       for (const p of match.players) {
         const assignedName = match.setupData?.assignments?.[p.id];
+        const targetBotName = match.setupData?.targetBotName || "UntrainedBot";
         
         // If the seat is pre-assigned to a "Bot" and is currently empty
         if (!p.name && assignedName && assignedName.toLowerCase().includes('bot')) {
-          console.log(`[BOT] Claiming Seat ${p.id} as ${assignedName} in match ${match.matchID.substring(0,6)}...`);
+          console.log(`[BOT] Claiming Seat ${p.id} as ${assignedName} using brain '${targetBotName}'...`);
+          
+          // Pre-fetch the bot's DNA into memory before joining
+          if (!dnaCache[targetBotName]) {
+            try {
+              const dnaRes = await fetch(`${SERVER_URL}/api/bots/weights/${targetBotName}`);
+              if (dnaRes.ok) dnaCache[targetBotName] = await dnaRes.json();
+            } catch(e) {
+              console.error(`[BOT] Could not fetch DNA for ${targetBotName}`);
+            }
+          }
           
           // Claim the seat and get the password (credentials)
           const joinRes = await fetch(`${SERVER_URL}/games/buraco/${match.matchID}/join`, {
@@ -27,7 +41,7 @@ async function pollLobby() {
           
           const joinData = await joinRes.json();
           if (joinData.playerCredentials) {
-            startBotClient(match.matchID, p.id.toString(), joinData.playerCredentials, assignedName);
+            startBotClient(match.matchID, p.id.toString(), joinData.playerCredentials, assignedName, targetBotName);
           }
         }
       }
@@ -37,7 +51,7 @@ async function pollLobby() {
   }
 }
 
-function startBotClient(matchID, playerID, credentials, botName) {
+function startBotClient(matchID, playerID, credentials, botName, targetBotName) {
   const clientKey = `${matchID}_${playerID}`;
   if (activeBots[clientKey]) return; 
 
@@ -70,8 +84,9 @@ function startBotClient(matchID, playerID, credentials, botName) {
         const currentState = client.getState();
         if (currentState.ctx.currentPlayer !== playerID) return; // Abort if turn changed
 
-        // Ask the Engine what moves are legal
-        const moves = BuracoGame.ai.enumerate(currentState.G, currentState.ctx);
+        // NEW: Pass the pre-downloaded DNA into the engine!
+        const myDNA = dnaCache[targetBotName];
+        const moves = BuracoGame.ai.enumerate(currentState.G, currentState.ctx, myDNA);
         if (moves.length > 0) {
           // Pick a random legal move
           const randomMove = moves[Math.floor(Math.random() * moves.length)];
