@@ -282,19 +282,7 @@ const App = () => {
       for(let i=0; i<playerList.length; i+=2) fTeams.push([playerList[i], playerList[i+1]]);
     }
 
-    let botGenomes = {};
     const targetBotName = newTourney.botName || "UntrainedBot";
-    try {
-        const response = await fetch(`${window.location.origin}/buraco/api/bots/weights/${targetBotName}`);
-        if (response.ok) {
-            const championDNA = await response.json();
-            for (let i = 0; i < newTourney.rules.numPlayers; i++) {
-                botGenomes[i.toString()] = championDNA;
-            }
-        }
-    } catch (err) {
-        console.warn("Could not load bot weights for tournament.");
-    }
 
     const t = {
       id: Date.now().toString(),
@@ -305,7 +293,9 @@ const App = () => {
       maxRounds: newTourney.maxRounds,
       players: playerList,
       fixedTeams: fTeams.length > 0 ? fTeams : null,
-      rules: { ...newTourney.rules, botGenomes }, 
+      
+      // Pass the name string (targetBotName) instead of the massive array!
+      rules: { ...newTourney.rules, targetBotName: newTourney.botName || "UntrainedBot" }, 
       status: 'active',
       isGeneratingNext: true,
       rounds: []
@@ -321,7 +311,6 @@ const App = () => {
   const handleQuickGameSubmit = async () => {
     const myName = "Eu";
     let assignmentsMap = { '0': myName };
-    let botGenomes = {};
     const targetBotName = quickGameConfig.botName || "UntrainedBot";
     
     for (let i = 1; i < quickGameConfig.numPlayers; i++) {
@@ -329,22 +318,8 @@ const App = () => {
     }
 
     try {
-      let championDNA = null;
-      try {
-          const response = await fetch(`${window.location.origin}/buraco/api/bots/weights/${targetBotName}`);
-          if (response.ok) {
-              championDNA = await response.json();
-          }
-      } catch (err) {
-          console.warn("Could not load bot weights, falling back to untrained AI.");
-      }
-
-      if (championDNA) {
-          for (let i = 1; i < quickGameConfig.numPlayers; i++) {
-              botGenomes[i.toString()] = championDNA;
-          }
-      }
-
+      // DELETE the entire 'try/catch' block that fetches championDNA
+      
       const { matchID } = await lobbyClient.createMatch('buraco', {
          numPlayers: quickGameConfig.numPlayers,
          setupData: { 
@@ -354,7 +329,9 @@ const App = () => {
              quickGameTargetPoints: quickGameConfig.format === 'points' ? quickGameConfig.targetPoints : null,
              quickGameMaxRounds: quickGameConfig.format === 'rounds' ? quickGameConfig.maxRounds : null,
              assignments: assignmentsMap,
-             botGenomes: botGenomes
+             
+             // Pass the name string instead of the array!
+             targetBotName: targetBotName
          }
       });
 
