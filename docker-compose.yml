@@ -8,7 +8,7 @@ services:
       - "8000:8000"
     volumes:
       - ./buraco-server/db:/app/db
-      - ./buraco-server/bots:/usr/src/app/bots
+      - ./buraco-server/bots:/app/bots
     restart: unless-stopped
 
   buraco-client:
@@ -20,11 +20,10 @@ services:
       - buraco-server
     restart: unless-stopped
 
-  # NEW: The Bot Worker Container
   buraco-bot:
     build: ./buraco-server
     container_name: buraco-bot
-    command: ["node", "bot.js"] # Overrides the default server command to run the bots instead!
+    command: ["node", "bot.js"] 
     depends_on:
       - buraco-server
     restart: unless-stopped
