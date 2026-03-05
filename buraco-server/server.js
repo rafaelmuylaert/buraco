@@ -89,7 +89,21 @@ server.router.post('/api/bots/train', async (req, res) => {
 server.router.get('/api/bots/status/:botName', (req, res) => {
     res.json(TrainerService.getTrainingStatus(req.params.botName));
 });
-
+// Fetch available bots
+server.router.get('/api/bots/list', (ctx) => {
+    const fs = require('fs');
+    const path = require('path');
+    const botsDir = path.join(process.cwd(), 'bots');
+    
+    if (!fs.existsSync(botsDir)) {
+        ctx.body = [];
+        return;
+    }
+    
+    // Read all JSON files in the bots folder and remove the .json extension
+    const files = fs.readdirSync(botsDir).filter(f => f.endsWith('.json'));
+    ctx.body = files.map(f => f.replace('.json', ''));
+});
 // Fetch Weights for a Game
 server.router.get('/api/bots/weights/:botName', (req, res) => {
     const weights = TrainerService.getBotWeights(req.params.botName);
