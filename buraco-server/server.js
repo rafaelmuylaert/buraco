@@ -74,23 +74,30 @@ server.router.options('/api/(.*)', (ctx) => {
 });
 
 // Trigger Training
-server.router.post('/api/bots/train', async (req, res) => {
-    const { botName, rules, trainParams } = req.body;
+server.router.post('/api/bots/train', async (ctx) => {
+    setCors(ctx);
     try {
+        const body = await parseBody(ctx);
+        const { botName, rules, trainParams } = body;
+        
         // We don't await this so it runs in the background!
         TrainerService.startTraining(botName, rules, trainParams); 
-        res.json({ success: true, message: `Training started for ${botName}` });
+        ctx.body = { success: true, message: `Training started for ${botName}` };
     } catch (e) {
-        res.status(400).json({ error: e.message });
+        ctx.status = 400;
+        ctx.body = { error: e.message };
     }
 });
 
 // Check Status
-server.router.get('/api/bots/status/:botName', (req, res) => {
-    res.json(TrainerService.getTrainingStatus(req.params.botName));
+server.router.get('/api/bots/status/:botName', (ctx) => {
+    setCors(ctx);
+    ctx.body = TrainerService.getTrainingStatus(ctx.params.botName);
 });
+
 // Fetch available bots
 server.router.get('/api/bots/list', (ctx) => {
+    setCors(ctx);
     const fs = require('fs');
     const path = require('path');
     const botsDir = path.join(process.cwd(), 'bots');
@@ -100,15 +107,20 @@ server.router.get('/api/bots/list', (ctx) => {
         return;
     }
     
-    // Read all JSON files in the bots folder and remove the .json extension
     const files = fs.readdirSync(botsDir).filter(f => f.endsWith('.json'));
     ctx.body = files.map(f => f.replace('.json', ''));
 });
+
 // Fetch Weights for a Game
-server.router.get('/api/bots/weights/:botName', (req, res) => {
-    const weights = TrainerService.getBotWeights(req.params.botName);
-    if (!weights) return res.status(404).json({ error: "Bot not found" });
-    res.json(weights);
+server.router.get('/api/bots/weights/:botName', (ctx) => {
+    setCors(ctx);
+    const weights = TrainerService.getBotWeights(ctx.params.botName);
+    if (!weights) {
+        ctx.status = 404;
+        ctx.body = { error: "Bot not found" };
+        return;
+    }
+    ctx.body = weights;
 });
 
 server.router.get('/api/tournaments', (ctx) => {
