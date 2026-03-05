@@ -33,12 +33,13 @@ function breed(parentA, parentB) {
     return mutate(child);
 }
 
-function runMatch(genomes, rules) {
+async function runMatch(genomes, rules) {
     const client = Client({
         game: BuracoGame,
         numPlayers: rules.numPlayers || 4,
         setupData: { 
             ...rules
+            // Make sure botGenomes is NOT passed here anymore!
         }
     });
 
@@ -48,7 +49,13 @@ function runMatch(genomes, rules) {
     const MAX_MOVES = 800; 
 
     while (!state.ctx.gameover && moveCount < MAX_MOVES) {
-        // INJECT the specific bot's genome dynamically
+        // CRITICAL FIX: Yield to the Event Loop every 25 moves
+        // This allows the Garbage Collector to wipe temporary calculation arrays!
+        if (moveCount % 25 === 0) {
+            await new Promise(resolve => setImmediate(resolve)); 
+        }
+
+        // Pass the specific bot's DNA into the enumerator
         const currentBotDNA = genomes[state.ctx.currentPlayer];
         const moves = BuracoGame.ai.enumerate(state.G, state.ctx, currentBotDNA);
         
@@ -63,11 +70,12 @@ function runMatch(genomes, rules) {
 
     client.stop();
 
-    if (!state.ctx.gameover) {
-        return { team0: { total: -5000 }, team1: { total: -5000 } };
-    }
-
-    return state.ctx.gameover.scores;
+    const finalScores = state.ctx.gameover ? state.ctx.gameover.scores : { team0: { total: -5000 }, team1: { total: -5000 } };
+    
+    // Nuke the state reference to help GC delete boardgame.io's history logs
+    state = null; 
+    
+    return finalScores;
 }
 
 export const TrainerService = {
@@ -138,7 +146,7 @@ export const TrainerService = {
                             '3': population[opps[2]] 
                         };
                         
-                        const scores = runMatch(matchGenomes, rules);
+                        const scores = await runMatch(matchGenomes, rules);
                         fitnessScores[botId] += scores.team0.total; 
                     }
                 }
