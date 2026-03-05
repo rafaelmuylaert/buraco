@@ -62,6 +62,9 @@ function runMatch(genomes, rules) {
         moveCount++;
     }
 
+    // CRITICAL FIX: Destroy the Redux store to prevent RAM from exploding!
+    client.stop();
+
     if (!state.ctx.gameover) {
         return { team0: { total: -5000 }, team1: { total: -5000 } };
     }
