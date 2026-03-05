@@ -38,8 +38,7 @@ function runMatch(genomes, rules) {
         game: BuracoGame,
         numPlayers: rules.numPlayers || 4,
         setupData: { 
-            ...rules,
-            botGenomes: genomes 
+            ...rules
         }
     });
 
@@ -49,7 +48,10 @@ function runMatch(genomes, rules) {
     const MAX_MOVES = 800; 
 
     while (!state.ctx.gameover && moveCount < MAX_MOVES) {
-        const moves = BuracoGame.ai.enumerate(state.G, state.ctx);
+        // INJECT the specific bot's genome dynamically
+        const currentBotDNA = genomes[state.ctx.currentPlayer];
+        const moves = BuracoGame.ai.enumerate(state.G, state.ctx, currentBotDNA);
+        
         if (moves && moves.length > 0) {
             client.moves[moves[0].move](...moves[0].args);
         } else {
