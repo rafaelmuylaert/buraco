@@ -54,8 +54,6 @@ const setCors = (ctx) => {
   ctx.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 };
 
-// BUG FIX: The bulletproof Asynchronous Stream Reader!
-// This guarantees the server actually reads the Match ID you are trying to delete.
 const parseBody = (ctx) => new Promise((resolve) => {
   if (ctx.request && ctx.request.body && Object.keys(ctx.request.body).length > 0) {
     return resolve(ctx.request.body);
@@ -73,14 +71,15 @@ server.router.options('/api/(.*)', (ctx) => {
   ctx.status = 200;
 });
 
-// Trigger Training
+// --- AI TRAINING API ROUTES ---
+
 server.router.post('/api/bots/train', async (ctx) => {
     setCors(ctx);
     try {
         const body = await parseBody(ctx);
         const { botName, rules, trainParams } = body;
         
-        // BUG FIX: Add .catch() so background errors don't crash the main server thread!
+        // BUG FIX: Attached .catch() to prevent background crashes from taking down the server!
         TrainerService.startTraining(botName, rules, trainParams).catch(err => {
             console.error(`[TRAINER ERROR] Background crash for ${botName}:`, err);
         }); 
@@ -92,17 +91,13 @@ server.router.post('/api/bots/train', async (ctx) => {
     }
 });
 
-// Check Status
 server.router.get('/api/bots/status/:botName', (ctx) => {
     setCors(ctx);
     ctx.body = TrainerService.getTrainingStatus(ctx.params.botName);
 });
 
-// Fetch available bots
 server.router.get('/api/bots/list', (ctx) => {
     setCors(ctx);
-    const fs = require('fs');
-    const path = require('path');
     const botsDir = path.join(process.cwd(), 'bots');
     
     if (!fs.existsSync(botsDir)) {
@@ -114,7 +109,6 @@ server.router.get('/api/bots/list', (ctx) => {
     ctx.body = files.map(f => f.replace('.json', ''));
 });
 
-// Fetch Weights for a Game
 server.router.get('/api/bots/weights/:botName', (ctx) => {
     setCors(ctx);
     const weights = TrainerService.getBotWeights(ctx.params.botName);
@@ -125,6 +119,8 @@ server.router.get('/api/bots/weights/:botName', (ctx) => {
     }
     ctx.body = weights;
 });
+
+// --- STANDARD GAME API ROUTES ---
 
 server.router.get('/api/tournaments', (ctx) => {
   setCors(ctx);
@@ -170,7 +166,6 @@ server.router.post('/api/admin/kick', async (ctx) => {
 
       const data = await server.db.fetch(matchID, { metadata: true });
       if (data && data.metadata && data.metadata.players && data.metadata.players[playerID]) {
-        // Nullify the seat
         data.metadata.players[playerID] = { id: Number(playerID) }; 
         await server.db.setMetadata(matchID, data.metadata); 
       }
@@ -187,10 +182,7 @@ server.router.post('/api/admin/delete-match', async (ctx) => {
   try {
     const body = await parseBody(ctx);
     if (body && body.matchID) {
-      // 1. Tell boardgame.io to wipe it from memory
       await server.db.wipe(body.matchID);
-      
-      // 2. HARD DELETE FAILSAFE: Physically delete the file from the hard drive
       const matchFilePath = path.join(gamesPath, body.matchID);
       if (fs.existsSync(matchFilePath)) {
         fs.unlinkSync(matchFilePath);
