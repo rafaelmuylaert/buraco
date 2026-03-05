@@ -378,7 +378,6 @@ export const BuracoGame = {
   setup: ({ random, ctx }, setupData) => {
     const numPlayers = ctx.numPlayers || 4; 
     const rules = setupData || { numPlayers, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false };
-    const botGenomes = setupData?.botGenomes || {};
     
     let initialDeck = random.Shuffle(buildDeck(rules));
     const pots = [initialDeck.splice(0, 11), initialDeck.splice(0, 11)];
@@ -400,7 +399,7 @@ export const BuracoGame = {
     return {
       rules, deck: initialDeck, discardPile: [initialDeck.pop()], pots, hands, melds, knownCards,
       hasDrawn: false, teams, teamPlayers, teamMortos: { team0: false, team1: false },
-      mortoUsed: { team0: false, team1: false }, isExhausted: false, botGenomes
+      mortoUsed: { team0: false, team1: false }, isExhausted: false
     };
   },
 
@@ -582,14 +581,16 @@ export const BuracoGame = {
   },
 
   ai: {
-    enumerate: (G, ctx) => {
+    // Add injectedDNA parameter here
+    enumerate: (G, ctx, injectedDNA) => {
       const p = ctx.currentPlayer;
       const hand = G.hands[p] || [];
       const topDiscard = G.discardPile.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
       const myTeam = G.teams[p];
       const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
 
-      const DNA = G.botGenomes[p] || new Array(9761).fill(0.01);
+      // Use injected DNA instead of G.botGenomes
+      const DNA = injectedDNA || new Array(9761).fill(0.01);
 
       let baseInputs = [];
       baseInputs.push(G.deck.length / 108.0);
