@@ -1,9 +1,19 @@
 import { Client } from 'boardgame.io/client';
 import { BuracoGame } from './src/game.js';
 import fs from 'fs';
+import path from 'path';
 
 // DNA SIZE: 608 inputs * 16 hidden nodes + 16 biases + 16 output weights + 1 output bias = 9761
 const DNA_SIZE = 9761; 
+const BOTS_DIR = path.join(process.cwd(), 'bots');
+
+// Ensure the bots directory exists for saving DNA
+if (!fs.existsSync(BOTS_DIR)) {
+    fs.mkdirSync(BOTS_DIR, { recursive: true });
+}
+
+// Track running training sessions to prevent overlaps
+const activeTrainings = new Map();
 
 // Initialize with random small weights between -0.5 and 0.5
 const generateRandomGenome = () => Array.from({ length: DNA_SIZE }, () => (Math.random() - 0.5));
@@ -20,117 +30,161 @@ function mutate(genome, mutationRate = 0.1, maxStep = 0.5) {
 
 function breed(parentA, parentB) {
     const child = new Array(DNA_SIZE);
-    // Uniform crossover: randomly pick each weight from either parent
     for (let i = 0; i < DNA_SIZE; i++) {
         child[i] = Math.random() > 0.5 ? parentA[i] : parentB[i];
     }
     return mutate(child);
 }
 
-function runMatch(genomes) {
+function runMatch(genomes, rules) {
     const client = Client({
         game: BuracoGame,
-        numPlayers: 4,
+        numPlayers: rules.numPlayers || 4,
         setupData: { 
-            numPlayers: 4, discard: 'closed', runners: 'aces_kings', 
-            largeCanasta: true, cleanCanastaToWin: true, noJokers: false, 
-            botGenomes: genomes // Inject the massive ML arrays here!
+            ...rules,
+            botGenomes: genomes 
         }
     });
 
     client.start();
     let state = client.getState();
     let moveCount = 0;
-    const MAX_MOVES = 800; // Hard cutoff to prevent infinite loops if bots evolve to be completely passive
+    const MAX_MOVES = 800; 
 
     while (!state.ctx.gameover && moveCount < MAX_MOVES) {
-        // AI Enumerate will now run the 9761-weight neural network calculation under the hood
         const moves = BuracoGame.ai.enumerate(state.G, state.ctx);
-        
         if (moves && moves.length > 0) {
             client.moves[moves[0].move](...moves[0].args);
         } else {
             client.events.endTurn();
         }
-        
         state = client.getState();
         moveCount++;
     }
 
     if (!state.ctx.gameover) {
-        // Match timed out. The bots were too cowardly and refused to discard/meld. 
-        // Return a massive penalty to aggressively breed this behavior out of the gene pool.
         return { team0: { total: -5000 }, team1: { total: -5000 } };
     }
 
     return state.ctx.gameover.scores;
 }
 
-async function train() {
-    const POPULATION_SIZE = 24;
-    const GENERATIONS = 500;
-    const MATCHES_PER_GENERATION = 12;
+export const TrainerService = {
+    
+    // Fetch a bot's current weights
+    getBotWeights: (botName) => {
+        const filePath = path.join(BOTS_DIR, `${botName}.json`);
+        if (fs.existsSync(filePath)) {
+            const data = fs.readFileSync(filePath, 'utf-8');
+            return JSON.parse(data);
+        }
+        return null;
+    },
 
-    console.log("🧠 Initializing Deep Q-Network Bot Population...");
-    let population = Array(POPULATION_SIZE).fill(null).map(() => generateRandomGenome()); 
+    // Check if a bot is currently training
+    getTrainingStatus: (botName) => {
+        if (activeTrainings.has(botName)) {
+            return { isTraining: true, progress: activeTrainings.get(botName) };
+        }
+        return { isTraining: false, progress: null };
+    },
 
-    for (let gen = 1; gen <= GENERATIONS; gen++) {
-        console.log(`\n⚔️ --- GENERATION ${gen} ---`);
-        let fitnessScores = Array(POPULATION_SIZE).fill(0);
-
-        // Every bot plays several matches to average out the luck of the deck
-        for (let botId = 0; botId < POPULATION_SIZE; botId++) {
-            for (let m = 0; m < MATCHES_PER_GENERATION; m++) {
-                // Pick 3 random opponents from the population
-                const opps = [ 
-                    Math.floor(Math.random() * POPULATION_SIZE), 
-                    Math.floor(Math.random() * POPULATION_SIZE), 
-                    Math.floor(Math.random() * POPULATION_SIZE) 
-                ];
-                
-                // Seat 0 and 2 are Team 0. Seat 1 and 3 are Team 1.
-                // Put our evaluating bot in Seat 0.
-                const matchGenomes = { 
-                    '0': population[botId], 
-                    '1': population[opps[0]], 
-                    '2': population[opps[1]], 
-                    '3': population[opps[2]] 
-                };
-                
-                const scores = runMatch(matchGenomes);
-                fitnessScores[botId] += scores.team0.total; 
-            }
+    // Async Training Loop triggered via API
+    startTraining: async (botName, rules = {}, params = {}) => {
+        if (activeTrainings.has(botName)) {
+            throw new Error(`Training is already in progress for bot: ${botName}`);
         }
 
-        const averageFitness = fitnessScores.map(score => score / MATCHES_PER_GENERATION);
+        const POPULATION_SIZE = params.populationSize || 24;
+        const GENERATIONS = params.generations || 500;
+        const MATCHES_PER_GENERATION = params.matchesPerGeneration || 12;
+
+        activeTrainings.set(botName, { currentGeneration: 0, totalGenerations: GENERATIONS, bestScore: 0 });
+
+        // Try to load existing DNA as a seed to continue training where we left off
+        const seedDNA = TrainerService.getBotWeights(botName);
+        let population;
         
-        // Sort bots by fitness (Highest score first)
-        const rankedBots = population
-            .map((genome, index) => ({ genome, score: averageFitness[index] }))
-            .sort((a, b) => b.score - a.score);
-
-        console.log(`🏆 Best Bot Score: ${rankedBots[0].score.toFixed(0)} pts`);
-        console.log(`💀 Worst Bot Score: ${rankedBots[POPULATION_SIZE - 1].score.toFixed(0)} pts`);
-
-        // SURVIVAL OF THE FITTEST: Keep the top 4 elite performers
-        const elites = rankedBots.slice(0, 4).map(b => b.genome);
-        let newPopulation = [...elites]; 
-
-        // BREEDING
-        while (newPopulation.length < POPULATION_SIZE) {
-            newPopulation.push(breed(
-                elites[Math.floor(Math.random() * elites.length)], 
-                elites[Math.floor(Math.random() * elites.length)]
-            ));
+        if (seedDNA) {
+            console.log(`🧠 Resuming training for '${botName}' from existing DNA...`);
+            // Clone the champion, then fill the rest of the population with mutations of it
+            population = Array(POPULATION_SIZE).fill(null).map((_, idx) => {
+                if (idx === 0) return seedDNA;
+                return mutate(seedDNA, 0.2, 0.5); 
+            });
+        } else {
+            console.log(`🧠 Starting fresh training for new bot '${botName}'...`);
+            population = Array(POPULATION_SIZE).fill(null).map(() => generateRandomGenome());
         }
-        population = newPopulation;
 
-        // SAVE CHAMPION DNA: Export to file instead of console due to massive size
-        if (gen % 5 === 0 || gen === GENERATIONS) {
-            fs.writeFileSync('champion_dna.json', JSON.stringify(rankedBots[0].genome));
-            console.log(`💾 Champion DNA saved to 'champion_dna.json'!`);
+        try {
+            for (let gen = 1; gen <= GENERATIONS; gen++) {
+                let fitnessScores = Array(POPULATION_SIZE).fill(0);
+
+                for (let botId = 0; botId < POPULATION_SIZE; botId++) {
+                    for (let m = 0; m < MATCHES_PER_GENERATION; m++) {
+                        const opps = [ 
+                            Math.floor(Math.random() * POPULATION_SIZE), 
+                            Math.floor(Math.random() * POPULATION_SIZE), 
+                            Math.floor(Math.random() * POPULATION_SIZE) 
+                        ];
+                        
+                        const matchGenomes = { 
+                            '0': population[botId], 
+                            '1': population[opps[0]], 
+                            '2': population[opps[1]], 
+                            '3': population[opps[2]] 
+                        };
+                        
+                        // Pass dynamic rules here
+                        const scores = runMatch(matchGenomes, rules);
+                        fitnessScores[botId] += scores.team0.total; 
+                    }
+                }
+
+                const averageFitness = fitnessScores.map(score => score / MATCHES_PER_GENERATION);
+                
+                const rankedBots = population
+                    .map((genome, index) => ({ genome, score: averageFitness[index] }))
+                    .sort((a, b) => b.score - a.score);
+
+                const bestScore = rankedBots[0].score;
+                console.log(`[${botName}] Gen ${gen}/${GENERATIONS} | Best: ${bestScore.toFixed(0)} pts`);
+
+                // Update status for the frontend
+                activeTrainings.set(botName, { 
+                    currentGeneration: gen, 
+                    totalGenerations: GENERATIONS, 
+                    bestScore: bestScore 
+                });
+
+                const elites = rankedBots.slice(0, 4).map(b => b.genome);
+                let newPopulation = [...elites]; 
+
+                while (newPopulation.length < POPULATION_SIZE) {
+                    newPopulation.push(breed(
+                        elites[Math.floor(Math.random() * elites.length)], 
+                        elites[Math.floor(Math.random() * elites.length)]
+                    ));
+                }
+                population = newPopulation;
+
+                // Save Champion DNA periodically and at the very end
+                if (gen % 5 === 0 || gen === GENERATIONS) {
+                    const filePath = path.join(BOTS_DIR, `${botName}.json`);
+                    fs.writeFileSync(filePath, JSON.stringify(rankedBots[0].genome));
+                }
+                
+                // Yield to the event loop so the server doesn't freeze during heavy training
+                await new Promise(resolve => setTimeout(resolve, 10)); 
+            }
+        } catch (error) {
+            console.error(`Error during training for ${botName}:`, error);
+        } finally {
+            console.log(`✅ Training complete for '${botName}'!`);
+            activeTrainings.delete(botName);
         }
     }
-}
+};
 
 train();
