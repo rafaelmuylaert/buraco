@@ -239,7 +239,6 @@ function buildDeck(rules) {
   return deck;
 }
 
-
 // ==========================================
 // DEEP Q-NETWORK (DQN) AI HELPERS
 // ==========================================
@@ -256,7 +255,6 @@ const nnHelpers = {
       return vec;
   },
 
-  // --- 13-Feature Sequence Extractor ---
   extractSequence: (meldCards) => {
       let vec = new Array(13).fill(0.0);
       if (!meldCards || meldCards.length === 0) return vec;
@@ -274,26 +272,25 @@ const nnHelpers = {
       const suitIdx = { '♠': 0, '♥': 1, '♦': 2, '♣': 3 };
 
       if (naturals.length > 0) {
-          vec[suitIdx[naturals[0].suit]] = 1.0; // 0-3: Main Suit (One-Hot)
+          vec[suitIdx[naturals[0].suit]] = 1.0; 
           let sortedVals = naturals.map(c => rankVal(c.rank)).sort((a,b) => a - b);
-          vec[4] = sortedVals[0]; // 4: Start Rank
-          vec[5] = sortedVals[sortedVals.length - 1]; // 5: End Rank
+          vec[4] = sortedVals[0]; 
+          vec[5] = sortedVals[sortedVals.length - 1]; 
       }
 
-      vec[6] = meldCards.length / 14.0; // 6: Length
+      vec[6] = meldCards.length / 14.0; 
 
       if (wild) {
-          vec[7] = 1.0; // 7: Has Wildcard
+          vec[7] = 1.0; 
           if (wild.rank === 'JOKER') {
-              vec[12] = 1.0; // 12: Wild is Joker
+              vec[12] = 1.0; 
           } else {
-              vec[8 + suitIdx[wild.suit]] = 1.0; // 8-11: Wild Suit (One-Hot)
+              vec[8 + suitIdx[wild.suit]] = 1.0; 
           }
       }
       return vec;
   },
 
-  // --- 13-Feature Runner Extractor ---
   extractRunner: (meldCards) => {
       let vec = new Array(13).fill(0.0);
       if (!meldCards || meldCards.length === 0) return vec;
@@ -311,32 +308,30 @@ const nnHelpers = {
       const suitIdx = { '♠': 0, '♥': 1, '♦': 2, '♣': 3 };
 
       if (naturals.length > 0) {
-          vec[0] = rankVal(naturals[0].rank); // 0: Base Rank
+          vec[0] = rankVal(naturals[0].rank); 
           meldCards.forEach(c => {
-              if (c.rank !== 'JOKER') vec[8 + suitIdx[c.suit]] += 0.25; // 8-11: Suit Counts
+              if (c.rank !== 'JOKER') vec[8 + suitIdx[c.suit]] += 0.25; 
           });
       }
 
-      vec[1] = meldCards.length / 14.0; // 1: Length
+      vec[1] = meldCards.length / 14.0; 
 
       if (wild) {
-          vec[2] = 1.0; // 2: Has Wildcard
+          vec[2] = 1.0; 
           if (wild.rank === 'JOKER') {
-              vec[7] = 1.0; // 7: Wild is Joker
+              vec[7] = 1.0; 
           } else {
-              vec[3 + suitIdx[wild.suit]] = 1.0; // 3-6: Wild Suit (One-Hot)
+              vec[3 + suitIdx[wild.suit]] = 1.0; 
           }
       }
-      return vec; // 12 is 0.0 padding to match Sequence size
+      return vec; 
   },
 
-  // --- Split Routing Algorithm ---
   meldsToSemanticMatrix: (melds) => {
       let vec = [];
       let sequences = [];
       let runners = [];
       
-      // Route melds
       melds.forEach(m => {
           const naturals = m.filter(c => c.rank !== 'JOKER' && c.rank !== '2');
           const isRunner = naturals.length >= 2 && naturals[0].rank === naturals[1].rank;
@@ -347,44 +342,37 @@ const nnHelpers = {
       sequences.sort((a, b) => b.length - a.length);
       runners.sort((a, b) => b.length - a.length);
 
-      // 15 Dedicated Sequence Slots
       for (let i = 0; i < 15; i++) {
           if (i < sequences.length) vec.push(...nnHelpers.extractSequence(sequences[i]));
           else vec.push(...new Array(13).fill(0.0));
       }
 
-      // 2 Dedicated Runner Slots
       for (let i = 0; i < 2; i++) {
           if (i < runners.length) vec.push(...nnHelpers.extractRunner(runners[i]));
           else vec.push(...new Array(13).fill(0.0));
       }
 
-      return vec; // Outputs exactly 221 features!
+      return vec; 
   },
 
   forwardPass: (inputs, weights) => {
-      // SIZE: 4 Meta + 53 Hand + 221 My Table + 221 Opp Table + 53 Discard + 56 Action = 608 Inputs!
       const INPUT_SIZE = 608; 
       const HIDDEN_SIZE = 16;
       let wIdx = 0;
       let hidden = new Array(HIDDEN_SIZE).fill(0);
       
       for (let h = 0; h < HIDDEN_SIZE; h++) {
-          let sum = weights[wIdx++]; // Bias
+          let sum = weights[wIdx++]; 
           for (let i = 0; i < INPUT_SIZE; i++) sum += inputs[i] * weights[wIdx++];
-          hidden[h] = Math.max(0, sum); // ReLU
+          hidden[h] = Math.max(0, sum); 
       }
       
-      let output = weights[wIdx++]; // Output Bias
+      let output = weights[wIdx++]; 
       for (let h = 0; h < HIDDEN_SIZE; h++) output += hidden[h] * weights[wIdx++];
       return output;
   }
 };
 
-
-// ==========================================
-// CORE BURACO ENGINE
-// ==========================================
 export const BuracoGame = {
   name: 'buraco',
   setup: ({ random, ctx }, setupData) => {
@@ -601,10 +589,8 @@ export const BuracoGame = {
       const myTeam = G.teams[p];
       const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
 
-      // Load 9761 weights!
       const DNA = G.botGenomes[p] || new Array(9761).fill(0.01);
 
-      // --- 1. BUILD THE RAW STATE VECTOR (1170 base features) ---
       let baseInputs = [];
       baseInputs.push(G.deck.length / 108.0);
       baseInputs.push(G.pots.length / 2.0);
@@ -629,7 +615,6 @@ export const BuracoGame = {
           return nnHelpers.forwardPass(fullInput, DNA);
       };
 
-      // --- 2. EVALUATE MOVES ---
       if (!G.hasDrawn) {
         if (topDiscard) {
           if (G.rules.discard === 'closed') {
@@ -654,7 +639,6 @@ export const BuracoGame = {
         let bestMove = null; let highestScore = -Infinity;
         const evaluateMove = (move, score) => { if (score > highestScore) { highestScore = score; bestMove = move; } };
 
-        // EVALUATE APPENDS
         (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIndex) => {
             hand.forEach(card => {
@@ -668,7 +652,6 @@ export const BuracoGame = {
           });
         });
 
-        // EVALUATE NEW MELDS
         for (let i = 0; i < hand.length; i++) {
           for (let j = i + 1; j < hand.length; j++) {
             for (let k = j + 1; k < hand.length; k++) {
@@ -682,7 +665,6 @@ export const BuracoGame = {
           }
         }
 
-        // EVALUATE DISCARDS
         if (hand.length > 1 || canEmptyHand(G, myTeam)) {
           hand.forEach(card => {
             let score = getScore([0.0, 0.0, 1.0], [card]);
