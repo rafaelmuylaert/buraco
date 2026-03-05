@@ -80,8 +80,11 @@ server.router.post('/api/bots/train', async (ctx) => {
         const body = await parseBody(ctx);
         const { botName, rules, trainParams } = body;
         
-        // We don't await this so it runs in the background!
-        TrainerService.startTraining(botName, rules, trainParams); 
+        // BUG FIX: Add .catch() so background errors don't crash the main server thread!
+        TrainerService.startTraining(botName, rules, trainParams).catch(err => {
+            console.error(`[TRAINER ERROR] Background crash for ${botName}:`, err);
+        }); 
+        
         ctx.body = { success: true, message: `Training started for ${botName}` };
     } catch (e) {
         ctx.status = 400;
