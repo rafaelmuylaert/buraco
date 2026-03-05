@@ -1,5 +1,6 @@
 import { Server, FlatFile } from 'boardgame.io/dist/cjs/server.js'; 
 import { BuracoGame } from './game.js';
+import { TrainerService } from './train.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -70,6 +71,30 @@ const parseBody = (ctx) => new Promise((resolve) => {
 server.router.options('/api/(.*)', (ctx) => {
   setCors(ctx);
   ctx.status = 200;
+});
+
+// Trigger Training
+server.router.post('/api/bots/train', async (req, res) => {
+    const { botName, rules, trainParams } = req.body;
+    try {
+        // We don't await this so it runs in the background!
+        TrainerService.startTraining(botName, rules, trainParams); 
+        res.json({ success: true, message: `Training started for ${botName}` });
+    } catch (e) {
+        res.status(400).json({ error: e.message });
+    }
+});
+
+// Check Status
+server.router.get('/api/bots/status/:botName', (req, res) => {
+    res.json(TrainerService.getTrainingStatus(req.params.botName));
+});
+
+// Fetch Weights for a Game
+server.router.get('/api/bots/weights/:botName', (req, res) => {
+    const weights = TrainerService.getBotWeights(req.params.botName);
+    if (!weights) return res.status(404).json({ error: "Bot not found" });
+    res.json(weights);
 });
 
 server.router.get('/api/tournaments', (ctx) => {
