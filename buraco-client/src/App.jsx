@@ -28,20 +28,31 @@ const App = () => {
   const [history, setHistory] = useState([]);
   const [tournaments, setTournaments] = useState([]);
 
-  // Add this new state for the Quick Match popup
   const [showQuickGamePopup, setShowQuickGamePopup] = useState(false);
   const [quickGameConfig, setQuickGameConfig] = useState({
     numPlayers: 4,
     format: 'points',
     targetPoints: 3000,
     maxRounds: 3,
+    botName: '',
     rules: { discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false, showKnownCards: false }
   });
 
   const [newTourney, setNewTourney] = useState({ 
     name: '', type: 'team', format: 'points', targetPoints: 3000, maxRounds: 3, 
     players: 'João, Maria, Pedro, Ana',
+    botName: '',
     rules: { numPlayers: 4, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false, showKnownCards: false }
+  });
+
+  const [availableBots, setAvailableBots] = useState([]);
+  const [showTrainBotPopup, setShowTrainBotPopup] = useState(false);
+  const [trainBotConfig, setTrainBotConfig] = useState({
+    name: 'BotPrometheus',
+    populationSize: 24,
+    generations: 500,
+    matchesPerGeneration: 12,
+    rules: { discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false }
   });
 
   const loadServerData = async () => {
@@ -64,24 +75,11 @@ const App = () => {
 
   const getSavedSessions = () => JSON.parse(localStorage.getItem('buraco_sessions') || '{}');
 
-  // --- ADD THESE NEW STATES ---
-  const [availableBots, setAvailableBots] = useState([]);
-  const [showTrainBotPopup, setShowTrainBotPopup] = useState(false);
-  const [trainBotConfig, setTrainBotConfig] = useState({
-    name: 'BotPrometheus',
-    populationSize: 24,
-    generations: 5000,
-    matchesPerGeneration: 12,
-    rules: { discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false }
-  });
-
-  // --- ADD THIS USEEFFECT TO FETCH BOTS ON LOAD ---
   useEffect(() => {
     fetch(`${window.location.origin}/buraco/api/bots/list`)
       .then(res => res.json())
       .then(data => {
           setAvailableBots(data);
-          // Set defaults for the dropdowns if bots exist
           if (data.length > 0) {
               setQuickGameConfig(prev => ({ ...prev, botName: data[0] }));
               setNewTourney(prev => ({ ...prev, botName: data[0] }));
@@ -90,7 +88,6 @@ const App = () => {
       .catch(err => console.error("Error fetching bots:", err));
   }, []);
 
-  // --- ADD THE START TRAINING HANDLER ---
   const handleStartTraining = async () => {
     if (!trainBotConfig.name.trim()) return alert("Digite um nome para o bot!");
     try {
@@ -159,9 +156,7 @@ const App = () => {
     if (shouldUpdate) saveTournamentsToAPI(updatedTournaments);
   }, [history]);
 
-  // FEATURE: Intercept Auto-Join for Tournaments and Quick Game Rematches
   useEffect(() => {
-    // 1. Handle Quick Game Rematch
     const rematchData = sessionStorage.getItem('quick_game_rematch');
     if (rematchData) {
       sessionStorage.removeItem('quick_game_rematch');
@@ -172,7 +167,6 @@ const App = () => {
 
       lobbyClient.createMatch('buraco', {
          numPlayers: numPlayers,
-         // unlisted must be false or omitted so the external Bot Runner finds it!
          setupData: { ...rules, numPlayers: numPlayers, isTournament: false, assignments: assignmentsMap }
       }).then(async ({ matchID }) => {
          const { playerCredentials } = await lobbyClient.joinMatch('buraco', matchID, { playerID: '0', playerName: myName });
@@ -186,22 +180,18 @@ const App = () => {
       return; 
     }
 
-    // 2. Handle Tournament Auto-Join
     const tourneyAutoJoin = sessionStorage.getItem('auto_join_tournament');
-    // We must wait for tournaments and matches to load from the server before processing this
     if (tourneyAutoJoin && tournaments.length > 0 && matches.length > 0) {
       const { tournamentId, playerName } = JSON.parse(tourneyAutoJoin);
       
       const t = tournaments.find(t => t.id === tournamentId);
       if (t && t.rounds && t.rounds.length > 0) {
-          // Look at the most recently generated round
           const lastRound = t.rounds[t.rounds.length - 1];
           const myAssignment = lastRound.assignments.find(a => a.team0.includes(playerName) || a.team1.includes(playerName));
           
           if (myAssignment) {
               const targetMatch = matches.find(m => m.matchID === myAssignment.matchID);
               if (targetMatch) {
-                  // We found the match! Clear the storage so we don't loop
                   sessionStorage.removeItem('auto_join_tournament');
                   
                   let targetSeatID = null;
@@ -258,7 +248,6 @@ const App = () => {
   const handleCreateTournament = async () => {
     let playerList = newTourney.players.split(',').map(p => p.trim()).filter(p => p);
     
-    // FEATURE: Auto-fill with Bots if not a multiple of numPlayers
     const remainder = playerList.length % newTourney.rules.numPlayers;
     if (remainder !== 0) {
       const botsNeeded = newTourney.rules.numPlayers - remainder;
@@ -273,6 +262,21 @@ const App = () => {
       for(let i=0; i<playerList.length; i+=2) fTeams.push([playerList[i], playerList[i+1]]);
     }
 
+    // Fetch Bot DNA for Tournament
+    let botGenomes = {};
+    const targetBotName = newTourney.botName || "UntrainedBot";
+    try {
+        const response = await fetch(`${window.location.origin}/buraco/api/bots/weights/${targetBotName}`);
+        if (response.ok) {
+            const championDNA = await response.json();
+            for (let i = 0; i < newTourney.rules.numPlayers; i++) {
+                botGenomes[i.toString()] = championDNA;
+            }
+        }
+    } catch (err) {
+        console.warn("Could not load bot weights for tournament.");
+    }
+
     const t = {
       id: Date.now().toString(),
       name: newTourney.name || `Torneio ${tournaments.length + 1}`,
@@ -282,7 +286,7 @@ const App = () => {
       maxRounds: newTourney.maxRounds,
       players: playerList,
       fixedTeams: fTeams.length > 0 ? fTeams : null,
-      rules: newTourney.rules,
+      rules: { ...newTourney.rules, botGenomes }, // Inject DNA into Tournament Rules!
       status: 'active',
       isGeneratingNext: true,
       rounds: []
@@ -299,19 +303,16 @@ const App = () => {
     const myName = "Eu";
     let assignmentsMap = { '0': myName };
     let botGenomes = {};
-    // Grab the user's selection, fallback to a safe string if empty
     const targetBotName = quickGameConfig.botName || "UntrainedBot";
     
-    // 1. Reserve the names for the bots
     for (let i = 1; i < quickGameConfig.numPlayers; i++) {
         assignmentsMap[i.toString()] = `Bot ${i}`;
     }
 
     try {
-      // 2. NEW: Fetch the Champion DNA from your backend API
       let championDNA = null;
       try {
-          const response = await fetch(`${window.location.origin}/api/bots/weights/${targetBotName}`);
+          const response = await fetch(`${window.location.origin}/buraco/api/bots/weights/${targetBotName}`);
           if (response.ok) {
               championDNA = await response.json();
           }
@@ -319,14 +320,12 @@ const App = () => {
           console.warn("Could not load bot weights, falling back to untrained AI.");
       }
 
-      // 3. Assign the fetched DNA to the bot seats
       if (championDNA) {
           for (let i = 1; i < quickGameConfig.numPlayers; i++) {
               botGenomes[i.toString()] = championDNA;
           }
       }
 
-      // 4. Create the match and pass the genomes!
       const { matchID } = await lobbyClient.createMatch('buraco', {
          numPlayers: quickGameConfig.numPlayers,
          setupData: { 
@@ -336,11 +335,10 @@ const App = () => {
              quickGameTargetPoints: quickGameConfig.format === 'points' ? quickGameConfig.targetPoints : null,
              quickGameMaxRounds: quickGameConfig.format === 'rounds' ? quickGameConfig.maxRounds : null,
              assignments: assignmentsMap,
-             botGenomes: botGenomes // <-- The DNA is injected here!
+             botGenomes: botGenomes
          }
       });
 
-      // 5. Request credentials for OUR seat ONLY.
       const { playerCredentials } = await lobbyClient.joinMatch('buraco', matchID, { playerID: '0', playerName: myName });
       
       const sessions = getSavedSessions();
@@ -514,8 +512,9 @@ const App = () => {
     } catch (e) { alert("Erro ao liberar assento."); }
   };
 
+  const allValidMatchIDs = tournaments.flatMap(t => t.rounds.flatMap(r => r.assignments.map(a => a.matchID)));
+
   if (view === 'game') {
-    // Find if this match belongs to a tournament
     const activeTournament = tournaments.find(t => t.rounds.some(r => r.assignments.some(a => a.matchID === matchID)));
     const tStats = activeTournament ? getLeaderboard(activeTournament).standings : null;
 
@@ -523,26 +522,22 @@ const App = () => {
       matchID={matchID} 
       playerID={playerID} 
       credentials={credentials} 
-      // Expose extra props to the Board component
       tournament={activeTournament}
       tournamentStandings={tStats}
     />;
   }
 
-  const allValidMatchIDs = tournaments.flatMap(t => t.rounds.flatMap(r => r.assignments.map(a => a.matchID)));
-
+  // --- ADMIN VIEW WITH POPUP PROPERLY NESTED ---
   if (view === 'admin') {
     return (
       <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #ff4d4d', paddingBottom: '20px' }}>
           <h1 style={{ color: '#ff4d4d', margin: 0 }}>🛠️ Painel de Administração</h1>
           <button onClick={() => setShowTrainBotPopup(true)} style={{ padding: '15px 30px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer', marginTop: '20px', boxShadow: '0 0 15px rgba(138, 43, 226, 0.5)' }}>
-          🧠 Laboratório de IA (Treinar Bot)
-        </button>
+            🧠 Laboratório de IA (Treinar Bot)
+          </button>
           <button onClick={() => setView('lounge')} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Sair do Modo Admin</button>
         </div>
-
-        
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'flex-start' }}>
           <div style={{ flex: '1 1 300px', background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
@@ -584,6 +579,34 @@ const App = () => {
             </div>
           </div>
         </div>
+
+        {/* AI TRAINING POPUP OVERLAY */}
+        {showTrainBotPopup && (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+            <div style={{ background: '#2b1055', padding: '30px', borderRadius: '15px', border: '2px solid #8a2be2', width: '500px', maxWidth: '90%', color: 'white' }}>
+              <h2 style={{ color: '#b088f9', marginTop: 0 }}>🧠 Treinar Nova IA</h2>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
+                <label>Nome do Bot (DNA): <input type="text" value={trainBotConfig.name} onChange={e => setTrainBotConfig({...trainBotConfig, name: e.target.value})} style={{ padding: '5px', width: '150px', marginLeft: '10px' }} /></label>
+                
+                <h4 style={{ margin: '10px 0 0 0', color: '#ffb86c' }}>Parâmetros Genéticos</h4>
+                <label>População (Bots por Geração): <input type="number" value={trainBotConfig.populationSize} onChange={e => setTrainBotConfig({...trainBotConfig, populationSize: parseInt(e.target.value)})} style={{ width: '60px', padding: '5px' }} /></label>
+                <label>Gerações (Ciclos de Evolução): <input type="number" value={trainBotConfig.generations} onChange={e => setTrainBotConfig({...trainBotConfig, generations: parseInt(e.target.value)})} style={{ width: '60px', padding: '5px' }} /></label>
+                <label>Partidas por Geração: <input type="number" value={trainBotConfig.matchesPerGeneration} onChange={e => setTrainBotConfig({...trainBotConfig, matchesPerGeneration: parseInt(e.target.value)})} style={{ width: '60px', padding: '5px' }} /></label>
+
+                <h4 style={{ margin: '10px 0 0 0', color: '#8be9fd' }}>Regras do Ambiente</h4>
+                <label>Compra do Lixo: <select value={trainBotConfig.rules.discard} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, discard: e.target.value}})}><option value="open">Aberto</option><option value="closed">Fechado</option></select></label>
+                <label>Trincas: <select value={trainBotConfig.rules.runners} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, runners: e.target.value}})}><option value="none">Nenhuma</option><option value="aces_threes">Ás e Três</option><option value="aces_kings">Ás e Reis</option><option value="any">Qualquer</option></select></label>
+              </div>
+
+              <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setShowTrainBotPopup(false)} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Cancelar</button>
+                <button onClick={handleStartTraining} style={{ padding: '10px 20px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Iniciar Mutação</button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     );
   }
@@ -625,14 +648,20 @@ const App = () => {
               <label>Trincas: <select value={newTourney.rules.runners} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, runners: e.target.value}})}><option value="none">Nenhuma</option><option value="aces_threes">Ás e Três</option><option value="aces_kings">Ás e Reis</option><option value="any">Qualquer</option></select></label>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px', background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px' }}>
+                <h4 style={{ margin: '0 0 10px 0', color: '#ffd700' }}>Inteligência Artificial</h4>
+                <label>Selecione a IA: 
+                  <select value={newTourney.botName || ''} onChange={e => setNewTourney({...newTourney, botName: e.target.value})} style={{ padding: '5px', marginLeft: '10px' }}>
+                    {availableBots.length === 0 && <option value="">(Nenhum Bot Treinado)</option>}
+                    {availableBots.map(bot => <option key={bot} value={bot}>{bot}</option>)}
+                  </select>
+                </label>
                 <label><input type="checkbox" checked={newTourney.rules.largeCanasta} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, largeCanasta: e.target.checked}})} /> Bônus Canastrão (500/1000)</label>
                 <label><input type="checkbox" checked={newTourney.rules.cleanCanastaToWin} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, cleanCanastaToWin: e.target.checked}})} /> Bater exige Canastra Limpa</label>
                 <label><input type="checkbox" checked={newTourney.rules.noJokers} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, noJokers: e.target.checked}})} /> Sem Curingas (Jokers)</label>
                 <label><input type="checkbox" checked={newTourney.rules.openDiscardView} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
-                <label><input type="checkbox" checked={newTourney.rules.showKnownCards} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas Memorizadas (Para Async)</label>
-            
+                <label><input type="checkbox" checked={newTourney.rules.showKnownCards} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas (Async)</label>
               </div>
-              </div>
+            </div>
           </div>
           <button onClick={handleCreateTournament} style={{ width: '100%', marginTop: '30px', padding: '15px', background: '#ffd700', fontSize: '1.2em', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Iniciar Torneio</button>
         </div>
@@ -643,7 +672,6 @@ const App = () => {
   const activeTournaments = tournaments.filter(t => t.status !== 'completed');
   const completedTournaments = tournaments.filter(t => t.status === 'completed');
   const savedSessions = getSavedSessions();
-
 
   return (
     <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
@@ -657,32 +685,6 @@ const App = () => {
           <button onClick={() => setView('tournaments')} style={{ padding: '15px 30px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.2em', fontWeight: 'bold', cursor: 'pointer' }}>+ Novo Torneio</button>
         </div>
       </div>
-
-      {showTrainBotPopup && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#2b1055', padding: '30px', borderRadius: '15px', border: '2px solid #8a2be2', width: '500px', maxWidth: '90%', color: 'white' }}>
-            <h2 style={{ color: '#b088f9', marginTop: 0 }}>🧠 Treinar Nova IA</h2>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
-              <label>Nome do Bot (DNA): <input type="text" value={trainBotConfig.name} onChange={e => setTrainBotConfig({...trainBotConfig, name: e.target.value})} style={{ padding: '5px', width: '150px', marginLeft: '10px' }} /></label>
-              
-              <h4 style={{ margin: '10px 0 0 0', color: '#ffb86c' }}>Parâmetros Genéticos</h4>
-              <label>População (Bots por Geração): <input type="number" value={trainBotConfig.populationSize} onChange={e => setTrainBotConfig({...trainBotConfig, populationSize: parseInt(e.target.value)})} style={{ width: '60px', padding: '5px' }} /></label>
-              <label>Gerações (Ciclos de Evolução): <input type="number" value={trainBotConfig.generations} onChange={e => setTrainBotConfig({...trainBotConfig, generations: parseInt(e.target.value)})} style={{ width: '60px', padding: '5px' }} /></label>
-              <label>Partidas por Geração: <input type="number" value={trainBotConfig.matchesPerGeneration} onChange={e => setTrainBotConfig({...trainBotConfig, matchesPerGeneration: parseInt(e.target.value)})} style={{ width: '60px', padding: '5px' }} /></label>
-
-              <h4 style={{ margin: '10px 0 0 0', color: '#8be9fd' }}>Regras do Ambiente</h4>
-              <label>Compra do Lixo: <select value={trainBotConfig.rules.discard} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, discard: e.target.value}})}><option value="open">Aberto</option><option value="closed">Fechado</option></select></label>
-              <label>Trincas: <select value={trainBotConfig.rules.runners} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, runners: e.target.value}})}><option value="none">Nenhuma</option><option value="aces_threes">Ás e Três</option><option value="aces_kings">Ás e Reis</option><option value="any">Qualquer</option></select></label>
-            </div>
-
-            <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowTrainBotPopup(false)} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={handleStartTraining} style={{ padding: '10px 20px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Iniciar Mutação</button>
-            </div>
-          </div>
-        </div>
-      )}
       
       {showQuickGamePopup && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
@@ -708,17 +710,17 @@ const App = () => {
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px' }}>
                 <h4 style={{ margin: '10px 0 0 0', color: '#ffd700' }}>Inteligência Artificial</h4>
-              <label>Selecione a IA: 
-                <select value={quickGameConfig.botName || ''} onChange={e => setQuickGameConfig({...quickGameConfig, botName: e.target.value})} style={{ padding: '5px', marginLeft: '10px' }}>
-                  {availableBots.length === 0 && <option value="">(Nenhum Bot Treinado)</option>}
-                  {availableBots.map(bot => <option key={bot} value={bot}>{bot}</option>)}
-                </select>
-              </label>
+                <label>Selecione a IA: 
+                  <select value={quickGameConfig.botName || ''} onChange={e => setQuickGameConfig({...quickGameConfig, botName: e.target.value})} style={{ padding: '5px', marginLeft: '10px' }}>
+                    {availableBots.length === 0 && <option value="">(Nenhum Bot Treinado)</option>}
+                    {availableBots.map(bot => <option key={bot} value={bot}>{bot}</option>)}
+                  </select>
+                </label>
                 <label><input type="checkbox" checked={quickGameConfig.rules.largeCanasta} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, largeCanasta: e.target.checked}})} /> Bônus Canastrão (500/1000)</label>
                 <label><input type="checkbox" checked={quickGameConfig.rules.cleanCanastaToWin} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, cleanCanastaToWin: e.target.checked}})} /> Bater exige Canastra Limpa</label>
                 <label><input type="checkbox" checked={quickGameConfig.rules.noJokers} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, noJokers: e.target.checked}})} /> Sem Curingas (Jokers)</label>
                 <label><input type="checkbox" checked={quickGameConfig.rules.openDiscardView} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
-                <label><input type="checkbox" checked={quickGameConfig.rules.showKnownCards} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas Memorizadas (Para Bot/Async)</label>
+                <label><input type="checkbox" checked={quickGameConfig.rules.showKnownCards} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas (Async)</label>
               </div>
             </div>
 
@@ -778,7 +780,6 @@ const App = () => {
                               <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', background: '#111', padding: '6px', borderRadius: '5px', alignItems: 'center' }}>
                                 <span>{seatName}</span>
                                 
-                                {/* FEATURE: Reconnect button is ALWAYS available if you have credentials, even if game is done! */}
                                 {hasLocalCredentials ? (
                                   <button onClick={() => handleReconnect(m.matchID, p.id.toString())} style={{ background: '#4da6ff', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>Reconectar</button>
                                 ) : isDone ? (
