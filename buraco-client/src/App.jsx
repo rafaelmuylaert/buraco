@@ -47,6 +47,9 @@ const App = () => {
 
   const [availableBots, setAvailableBots] = useState([]);
   const [showTrainBotPopup, setShowTrainBotPopup] = useState(false);
+  
+  const [trainingStatus, setTrainingStatus] = useState(null);
+
   const [trainBotConfig, setTrainBotConfig] = useState({
     name: 'BotPrometheus',
     populationSize: 24,
@@ -74,6 +77,23 @@ const App = () => {
   };
 
   const getSavedSessions = () => JSON.parse(localStorage.getItem('buraco_sessions') || '{}');
+
+  useEffect(() => {
+    if (view === 'admin' && trainBotConfig.name) {
+      const fetchStatus = async () => {
+        try {
+          const res = await fetch(`${window.location.origin}/buraco/api/bots/status/${trainBotConfig.name}`);
+          const data = await res.json();
+          setTrainingStatus(data);
+        } catch (err) {
+        }
+      };
+      
+      fetchStatus();
+      const interval = setInterval(fetchStatus, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [view, trainBotConfig.name]);
 
   useEffect(() => {
     fetch(`${window.location.origin}/buraco/api/bots/list`)
@@ -262,7 +282,6 @@ const App = () => {
       for(let i=0; i<playerList.length; i+=2) fTeams.push([playerList[i], playerList[i+1]]);
     }
 
-    // Fetch Bot DNA for Tournament
     let botGenomes = {};
     const targetBotName = newTourney.botName || "UntrainedBot";
     try {
@@ -286,7 +305,7 @@ const App = () => {
       maxRounds: newTourney.maxRounds,
       players: playerList,
       fixedTeams: fTeams.length > 0 ? fTeams : null,
-      rules: { ...newTourney.rules, botGenomes }, // Inject DNA into Tournament Rules!
+      rules: { ...newTourney.rules, botGenomes }, 
       status: 'active',
       isGeneratingNext: true,
       rounds: []
@@ -527,7 +546,6 @@ const App = () => {
     />;
   }
 
-  // --- ADMIN VIEW WITH POPUP PROPERLY NESTED ---
   if (view === 'admin') {
     return (
       <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
@@ -538,6 +556,19 @@ const App = () => {
           </button>
           <button onClick={() => setView('lounge')} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Sair do Modo Admin</button>
         </div>
+
+        {trainingStatus && trainingStatus.isTraining && (
+          <div style={{ width: '100%', background: '#2b1055', padding: '20px', borderRadius: '10px', border: '1px solid #8a2be2', marginBottom: '30px', boxSizing: 'border-box' }}>
+            <h3 style={{ margin: '0 0 10px 0', color: '#ffb86c' }}>⚙️ Treinamento em Andamento: {trainBotConfig.name}</h3>
+            <div style={{ background: '#111', borderRadius: '5px', width: '100%', height: '20px', overflow: 'hidden' }}>
+              <div style={{ width: `${(trainingStatus.progress.currentGeneration / trainingStatus.progress.totalGenerations) * 100}%`, background: '#8a2be2', height: '100%', transition: 'width 1s' }} />
+            </div>
+            <p style={{ margin: '10px 0 0 0', color: '#ccc' }}>
+              Geração: {trainingStatus.progress.currentGeneration} / {trainingStatus.progress.totalGenerations} | 
+              Melhor Pontuação Atual: <strong style={{color: '#ffd700'}}>{trainingStatus.progress.bestScore.toFixed(0)} pts</strong>
+            </p>
+          </div>
+        )}
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'flex-start' }}>
           <div style={{ flex: '1 1 300px', background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
@@ -580,7 +611,6 @@ const App = () => {
           </div>
         </div>
 
-        {/* AI TRAINING POPUP OVERLAY */}
         {showTrainBotPopup && (
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
             <div style={{ background: '#2b1055', padding: '30px', borderRadius: '15px', border: '2px solid #8a2be2', width: '500px', maxWidth: '90%', color: 'white' }}>
@@ -720,7 +750,7 @@ const App = () => {
                 <label><input type="checkbox" checked={quickGameConfig.rules.cleanCanastaToWin} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, cleanCanastaToWin: e.target.checked}})} /> Bater exige Canastra Limpa</label>
                 <label><input type="checkbox" checked={quickGameConfig.rules.noJokers} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, noJokers: e.target.checked}})} /> Sem Curingas (Jokers)</label>
                 <label><input type="checkbox" checked={quickGameConfig.rules.openDiscardView} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
-                <label><input type="checkbox" checked={quickGameConfig.rules.showKnownCards} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas (Async)</label>
+                <label><input type="checkbox" checked={quickGameConfig.rules.showKnownCards} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas Memorizadas (Para Bot/Async)</label>
               </div>
             </div>
 
