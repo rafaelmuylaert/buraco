@@ -247,15 +247,34 @@ const App = () => {
   const handleQuickGameSubmit = async () => {
     const myName = "Eu";
     let assignmentsMap = { '0': myName };
+    let botGenomes = {};
+    const targetBotName = "BotSauron"; // The name of the bot you trained!
     
-    // 1. Reserve the names for the bots. 
+    // 1. Reserve the names for the bots
     for (let i = 1; i < quickGameConfig.numPlayers; i++) {
         assignmentsMap[i.toString()] = `Bot ${i}`;
     }
 
     try {
-      // 2. Create the match
-      // REMOVED: unlisted: true. The external docker bot runner NEEDS to see this in the lobby API!
+      // 2. NEW: Fetch the Champion DNA from your backend API
+      let championDNA = null;
+      try {
+          const response = await fetch(`${window.location.origin}/api/bots/weights/${targetBotName}`);
+          if (response.ok) {
+              championDNA = await response.json();
+          }
+      } catch (err) {
+          console.warn("Could not load bot weights, falling back to untrained AI.");
+      }
+
+      // 3. Assign the fetched DNA to the bot seats
+      if (championDNA) {
+          for (let i = 1; i < quickGameConfig.numPlayers; i++) {
+              botGenomes[i.toString()] = championDNA;
+          }
+      }
+
+      // 4. Create the match and pass the genomes!
       const { matchID } = await lobbyClient.createMatch('buraco', {
          numPlayers: quickGameConfig.numPlayers,
          setupData: { 
@@ -264,27 +283,24 @@ const App = () => {
              isTournament: false, 
              quickGameTargetPoints: quickGameConfig.format === 'points' ? quickGameConfig.targetPoints : null,
              quickGameMaxRounds: quickGameConfig.format === 'rounds' ? quickGameConfig.maxRounds : null,
-             assignments: assignmentsMap 
+             assignments: assignmentsMap,
+             botGenomes: botGenomes // <-- The DNA is injected here!
          }
       });
 
-      // 3. Request credentials for OUR seat ONLY.
+      // 5. Request credentials for OUR seat ONLY.
       const { playerCredentials } = await lobbyClient.joinMatch('buraco', matchID, { playerID: '0', playerName: myName });
       
       const sessions = getSavedSessions();
       sessions[`${matchID}_0`] = { matchID, playerID: '0', credentials: playerCredentials };
       localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
       
-      // 4. Enter the game
       setMatchID(matchID); 
       setPlayerID('0'); 
       setCredentials(playerCredentials); 
       setShowQuickGamePopup(false);
 
-      // Give the external bot runner a few seconds to poll the lobby, see the game, and connect
-      setTimeout(() => {
-          setView('game');
-      }, 500);
+      setTimeout(() => setView('game'), 500);
 
     } catch (e) { 
         alert("Erro ao criar partida rápida. " + e.message); 
