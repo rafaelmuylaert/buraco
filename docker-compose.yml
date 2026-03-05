@@ -8,6 +8,7 @@ services:
       - "8000:8000"
     volumes:
       - ./buraco-server/db:/app/db
+      - ./buraco-server/bots:/usr/src/app/bots
     restart: unless-stopped
 
   buraco-client:
