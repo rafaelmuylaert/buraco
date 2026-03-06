@@ -3,7 +3,6 @@ import { BuracoGame } from './game.js';
 import fs from 'fs';
 import path from 'path';
 
-// DNA SIZE: 608 inputs * 16 hidden nodes + 16 biases + 16 output weights + 1 output bias = 9761
 const DNA_SIZE = 9761; 
 const BOTS_DIR = path.join(process.cwd(), 'bots');
 
@@ -33,13 +32,14 @@ function breed(parentA, parentB) {
     return mutate(child);
 }
 
-async function runMatch(genomes, rules) {
+// NEW: Accept a "seed" parameter to force deterministic shuffles
+function runMatch(genomes, rules, seed) {
     const client = Client({
         game: BuracoGame,
         numPlayers: rules.numPlayers || 4,
+        matchID: seed, // Using a string here forces boardgame.io to use a fixed random seed!
         setupData: { 
             ...rules
-            // Make sure botGenomes is NOT passed here anymore!
         }
     });
 
@@ -49,15 +49,10 @@ async function runMatch(genomes, rules) {
     const MAX_MOVES = 800; 
 
     while (!state.ctx.gameover && moveCount < MAX_MOVES) {
-        // CRITICAL FIX: Yield to the Event Loop every 25 moves
-        // This allows the Garbage Collector to wipe temporary calculation arrays!
-        if (moveCount % 25 === 0) {
-            await new Promise(resolve => setImmediate(resolve)); 
-        }
-
-        // Pass the specific bot's DNA into the enumerator
-        const currentBotDNA = genomes[state.ctx.currentPlayer];
-        const moves = BuracoGame.ai.enumerate(state.G, state.ctx, currentBotDNA);
+        const currentPlayer = state.ctx.currentPlayer;
+        const currentDNA = genomes[currentPlayer];
+        
+        const moves = BuracoGame.ai.enumerate(state.G, state.ctx, currentDNA);
         
         if (moves && moves.length > 0) {
             client.moves[moves[0].move](...moves[0].args);
@@ -70,12 +65,11 @@ async function runMatch(genomes, rules) {
 
     client.stop();
 
-    const finalScores = state.ctx.gameover ? state.ctx.gameover.scores : { team0: { total: -5000 }, team1: { total: -5000 } };
-    
-    // Nuke the state reference to help GC delete boardgame.io's history logs
-    state = null; 
-    
-    return finalScores;
+    if (!state.ctx.gameover) {
+        return { team0: { total: -5000 }, team1: { total: -5000 } };
+    }
+
+    return state.ctx.gameover.scores;
 }
 
 export const TrainerService = {
@@ -125,29 +119,34 @@ export const TrainerService = {
             for (let gen = 1; gen <= GENERATIONS; gen++) {
                 let fitnessScores = Array(POPULATION_SIZE).fill(0);
 
+                // DUPLICATE BRIDGE: Generate the exact seeds to be used by all bots this generation!
+                const generationSeeds = Array.from({ length: MATCHES_PER_GENERATION }, () => Math.random().toString());
+
                 for (let botId = 0; botId < POPULATION_SIZE; botId++) {
                     
-                    // CRITICAL FIX: The Node.js Event Loop Yield!
-                    // This forces the heavy CPU loop to pause for a microsecond.
-                    // This allows the Garbage Collector to clean RAM and the Server to answer the frontend!
                     await new Promise(resolve => setTimeout(resolve, 0));
 
                     for (let m = 0; m < MATCHES_PER_GENERATION; m++) {
-                        const opps = [ 
-                            Math.floor(Math.random() * POPULATION_SIZE), 
-                            Math.floor(Math.random() * POPULATION_SIZE), 
-                            Math.floor(Math.random() * POPULATION_SIZE) 
-                        ];
+                        // SEAT ROTATION: The bot rotates through seats 0, 1, 2, and 3
+                        const mySeat = (m % 4).toString(); 
+                        const matchGenomes = {};
+
+                        for (let i = 0; i < 4; i++) {
+                            if (i.toString() === mySeat) {
+                                matchGenomes[i.toString()] = population[botId];
+                            } else {
+                                matchGenomes[i.toString()] = population[Math.floor(Math.random() * POPULATION_SIZE)];
+                            }
+                        }
                         
-                        const matchGenomes = { 
-                            '0': population[botId], 
-                            '1': population[opps[0]], 
-                            '2': population[opps[1]], 
-                            '3': population[opps[2]] 
-                        };
+                        const scores = runMatch(matchGenomes, rules, generationSeeds[m]);
                         
-                        const scores = await runMatch(matchGenomes, rules);
-                        fitnessScores[botId] += scores.team0.total; 
+                        // Give the score to the team our evaluated bot was sitting on
+                        if (mySeat === '0' || mySeat === '2') {
+                            fitnessScores[botId] += scores.team0.total; 
+                        } else {
+                            fitnessScores[botId] += scores.team1.total;
+                        }
                     }
                 }
 
