@@ -41,10 +41,11 @@ const generateRandomGenome = () => {
 
 async function runMatch(genomes, rules) {
     const client = Client({
-        game: BuracoGame,
-        numPlayers: rules.numPlayers || 4,
-        setupData: { ...rules, botGenomes: genomes }
-    });
+    game: BuracoGame,
+    numPlayers: rules.numPlayers || 4,
+    setupData: { ...rules },  // no botGenomes here
+    debug: false,
+});
 
     client.start();
     try {
@@ -57,7 +58,7 @@ async function runMatch(genomes, rules) {
             if (moveCount % 50 === 0) await new Promise(resolve => setImmediate(resolve));
 
             const p = state.ctx.currentPlayer;
-            const moves = BuracoGame.ai.enumerate(state.G, state.ctx);
+            const moves = BuracoGame.ai.enumerate(state.G, state.ctx, genomes[state.ctx.currentPlayer]);
 
             if (!moves || moves.length === 0) {
                 if (!state.ctx.gameover) client.events.endTurn();
