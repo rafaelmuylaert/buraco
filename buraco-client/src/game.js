@@ -791,7 +791,7 @@ export const BuracoGame = {
           (G.melds[tp] || []).forEach((meld, mIndex) => {
               for (let i = 0; i < myHandCards.length; i++) {
                   let card = myHandCards[i];
-                  let parsed = appendToMeld(meld, card);
+                  let parsed = appendCardsToMeld(meld, [card]);
                   if (parsed) {
                       let cls = card >= 104 ? 52 : card % 52;
                       let sig = `append-${tp}-${mIndex}-${cls}`;
