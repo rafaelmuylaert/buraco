@@ -662,7 +662,6 @@ export const BuracoGame = {
       const partnerId = numP === 4 ? ((pInt + 2) % numP).toString() : null;
       const opp2Id = numP === 4 ? ((pInt + 3) % numP).toString() : null;
 
-      // --- ASSEMBLE 774-FEATURE BASE INPUT ---
       let baseInputs = [];
       baseInputs.push(G.deck.length / 108.0);
       baseInputs.push(G.pots.length > 0 ? 1.0 : 0.0);
@@ -690,36 +689,44 @@ export const BuracoGame = {
       baseInputs.push(...nnHelpers.cardsToVector(partnerId ? (G.knownCards[partnerId] || []) : []));
       baseInputs.push(...nnHelpers.cardsToVector(opp2Id ? (G.knownCards[opp2Id] || []) : []));
 
-      // 🚀 EVOLUTIONARY UPGRADE CHECK: Support new 49k split brains or seamlessly clone old 12k brains
       let DNA = customDNA || G.botGenomes?.[p] || new Array(49668).fill(0.01);
       if (DNA.length === 12417) {
-          DNA = [...DNA, ...DNA, ...DNA, ...DNA]; // Seamless upgrade to independent brains!
+          DNA = [...DNA, ...DNA, ...DNA, ...DNA]; 
       } else if (DNA.length !== 49668) {
           DNA = new Array(49668).fill(0.01);
       }
 
-      // 🚀 4 INDEPENDENT BRAINS
       const dnaPickup = DNA.slice(0, 12417);
       const dnaAppend = DNA.slice(12417, 24834);
       const dnaMeld = DNA.slice(24834, 37251);
       const dnaDiscard = DNA.slice(37251, 49668);
 
+      const getScore = (actionTypeArray, actionCards, activeWeights) => {
+          let input = [...baseInputs, ...actionTypeArray, ...nnHelpers.cardsToVector(actionCards)];
+          return nnHelpers.forwardPass(input, activeWeights);
+      };
+
+      // 🚀 BATCH RESOLVER: Intelligently limits the batch to prevent Hand-Size Violations
       const resolveQueue = (moves) => {
           let selected = [];
           let usedCards = new Set();
+          let projectedHandSize = myHandCards.length;
+          
+          const mortoSafe = hasClean(myTeam) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
+
           for (let m of moves) {
               let conflict = false;
               for (let c of m.cards) { if (usedCards.has(c)) { conflict = true; break; } }
               if (conflict) continue;
+
+              // Engine Rule Safety: Cannot drop to 1 card if no canasta exists!
+              if (projectedHandSize - m.cards.length < 2 && !mortoSafe) continue;
+
               for (let c of m.cards) usedCards.add(c);
               selected.push(m);
+              projectedHandSize -= m.cards.length;
           }
           return selected;
-      };
-
-      const getScore = (actionTypeArray, actionCards, activeWeights) => {
-          let input = [...baseInputs, ...actionTypeArray, ...nnHelpers.cardsToVector(actionCards)];
-          return nnHelpers.forwardPass(input, activeWeights);
       };
 
       // ==========================================
@@ -737,9 +744,17 @@ export const BuracoGame = {
                   let seenSigs = new Set();
                   for (let combo of combos) {
                       if (combo.includes(topDiscard)) {
-                          let handCardsUsed = combo.filter(c => c !== topDiscard);
+                          let handCardsUsed = [...combo];
+                          // BUGFIX: Safely remove exactly ONE instance of the top discard
+                          handCardsUsed.splice(handCardsUsed.indexOf(topDiscard), 1);
+                          
                           let parsed = buildMeld(combo, G.rules);
                           if (parsed) {
+                              let sim = [...(G.melds[p] || []), parsed];
+                              let projectedHandLength = (myHandCards.length - handCardsUsed.length) + (G.discardPile.length - 1);
+                              // Engine Rule Safety Check
+                              if (projectedHandLength < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue;
+                              
                               let sig = combo.map(c => c >= 104 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
                               if (!seenSigs.has(sig)) {
                                   seenSigs.add(sig);
@@ -770,9 +785,6 @@ export const BuracoGame = {
                   let card = myHandCards[i];
                   let parsed = appendToMeld(meld, card);
                   if (parsed) {
-                      let sim = [...G.melds[tp]]; sim[mIndex] = parsed;
-                      if (myHandCards.length - 1 < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, tp)) continue; 
-                      
                       let cls = card >= 104 ? 52 : card % 52;
                       let sig = `append-${tp}-${mIndex}-${cls}`;
                       if (!appendSigs.has(sig)) {
@@ -801,10 +813,6 @@ export const BuracoGame = {
       for (let combo of validMelds) {
           let parsed = buildMeld(combo, G.rules);
           if (parsed) {
-              if (myHandCards.length - combo.length < 2) {
-                  let sim = [...(G.melds[p] || []), parsed];
-                  if (!canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue;
-              }
               let sig = combo.map(c => c >= 104 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
               if (!meldSigs.has(sig)) {
                   meldSigs.add(sig);
@@ -826,8 +834,8 @@ export const BuracoGame = {
       let possibleDiscards = [];
       let discardSigs = new Set();
       
-      const teamHasClean = G.teamPlayers[myTeam].some(tp => G.melds[tp].some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || m[3]===0)));
-      if (myHandCards.length > 1 || teamHasClean || (G.pots.length && !G.teamMortos[myTeam])) {
+      const isMortoSafe = hasClean(myTeam) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
+      if (myHandCards.length > 1 || isMortoSafe) {
           for (let card of myHandCards) {
               let cls = card >= 104 ? 52 : card % 52;
               if (!discardSigs.has(cls)) {
