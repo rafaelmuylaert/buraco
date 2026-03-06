@@ -348,6 +348,108 @@ const nnHelpers = {
   }
 };
 
+// 🚀 TRUE O(N) INT-DISTANCE SEARCH
+function getPossibleMelds(handCards, rules) {
+    let validCombos = [];
+    let seenSignatures = new Set();
+    
+    let bySuitRank = { 1: {}, 2: {}, 3: {}, 4: {} };
+    let byRankAnySuit = {}; 
+    let wilds = [];
+
+    for (let i = 0; i < handCards.length; i++) {
+        let cId = handCards[i];
+        let s = cId >= 104 ? 5 : Math.floor((cId % 52) / 13) + 1; 
+        let r = cId >= 104 ? 2 : (cId % 13) + 1;
+        
+        if (s === 5 || r === 2) {
+            wilds.push(cId);
+        } else {
+            if (!bySuitRank[s][r]) bySuitRank[s][r] = [];
+            bySuitRank[s][r].push(cId);
+            if (r === 1) {
+                if (!bySuitRank[s][14]) bySuitRank[s][14] = [];
+                bySuitRank[s][14].push(cId);
+            }
+            if (!byRankAnySuit[r]) byRankAnySuit[r] = [];
+            byRankAnySuit[r].push(cId);
+        }
+    }
+
+    const addCombo = (c1, c2, c3) => {
+        let a = c1; let b = c2; let c = c3;
+        if (a > b) { let t = a; a = b; b = t; }
+        if (b > c) { let t = b; b = c; c = t; }
+        if (a > b) { let t = a; a = b; b = t; }
+        
+        let sig = a + (b * 108) + (c * 11664); 
+        if (!seenSignatures.has(sig)) {
+            seenSignatures.add(sig);
+            validCombos.push([c1, c2, c3]);
+        }
+    };
+
+    for (let s = 1; s <= 4; s++) {
+        let rankMap = bySuitRank[s];
+        let presentRanks = [];
+        for (let r in rankMap) presentRanks.push(Number(r));
+        
+        if (presentRanks.length === 0) continue;
+        presentRanks.sort((a,b) => a-b);
+
+        for (let i = 0; i < presentRanks.length; i++) {
+            let r1 = presentRanks[i];
+            let c1 = rankMap[r1][0];
+
+            for (let j = i + 1; j < presentRanks.length; j++) {
+                let r2 = presentRanks[j];
+                let dist = r2 - r1;
+                
+                if (dist > 2) break; 
+                
+                let c2 = rankMap[r2][0];
+
+                if (dist === 1 || dist === 2) {
+                   for (let k = j + 1; k < presentRanks.length; k++) {
+                       let r3 = presentRanks[k];
+                       if (r3 - r1 <= 2) {
+                           addCombo(c1, c2, rankMap[r3][0]);
+                       } else {
+                           break;
+                       }
+                   }
+                }
+                
+                if (wilds.length > 0 && dist <= 2) {
+                    addCombo(c1, c2, wilds[0]);
+                }
+            }
+        }
+    }
+
+    if (rules.runners !== 'none') {
+        for (let r in byRankAnySuit) {
+            let numR = parseInt(r);
+            let allowed = false;
+            if (rules.runners === 'any') allowed = true;
+            if (rules.runners === 'aces_threes' && (numR === 1 || numR === 3)) allowed = true;
+            if (rules.runners === 'aces_kings' && (numR === 1 || numR === 13)) allowed = true;
+
+            if (allowed) {
+                let rankCards = byRankAnySuit[r];
+                if (rankCards.length >= 3) {
+                    addCombo(rankCards[0], rankCards[1], rankCards[2]);
+                }
+                if (rankCards.length >= 2 && wilds.length > 0) {
+                    addCombo(rankCards[0], rankCards[1], wilds[0]);
+                }
+            }
+        }
+    }
+
+    return validCombos;
+}
+
 export const BuracoGame = {
   name: 'buraco',
   setup: ({ random, ctx }, setupData) => {
@@ -590,16 +692,12 @@ export const BuracoGame = {
 
       const DNA = customDNA || new Array(12417).fill(0.01);
 
-      // BATCH EVALUATION TO PREVENT NN BOTTLENECK
+      // 🚀 BATCH EVALUATION: Only run the NN on unique actions
       let possibleMoves = [];
-      let moveSigs = new Set(); // Prevent duplicate Neural Network passes
+      let moveSigs = new Set(); 
 
       const addMove = (moveName, args, actionType, cardsArr) => {
-          let classes = [];
-          for(let i=0; i<cardsArr.length; i++) {
-              let c = cardsArr[i];
-              classes.push(c >= 104 ? 52 : c % 52);
-          }
+          let classes = cardsArr.map(c => c >= 104 ? 52 : c % 52);
           if (moveName !== 'discardCard') classes.sort((a,b)=>a-b);
           let sig = moveName + '-' + classes.join(',');
           
@@ -612,23 +710,14 @@ export const BuracoGame = {
       if (!G.hasDrawn) {
         if (topDiscard !== null) {
           if (G.rules.discard === 'closed') {
-            for (let i = 0; i < myHandCards.length; i++) {
-              for (let j = i + 1; j < myHandCards.length; j++) {
-                let c1 = myHandCards[i]; let c2 = myHandCards[j];
-                
-                // 🚀 EXTREME INLINE BAILOUT
-                let s1 = getSuit(c1), r1 = getRank(c1);
-                let s2 = getSuit(c2), r2 = getRank(c2);
-                let sd = getSuit(topDiscard), rd = getRank(topDiscard);
-                let wCount = (s1===5||r1===2?1:0) + (s2===5||r2===2?1:0) + (sd===5||rd===2?1:0);
-                
-                if (wCount <= 1) {
-                    if (buildMeld([c1, c2, topDiscard], G.rules)) {
-                        addMove('pickUpDiscard', [[c1, c2], { type: 'new' }], [1.0, 0.0, 0.0], [c1, c2, topDiscard]);
-                    }
-                }
-              }
-            }
+             const possiblePickups = getPossibleMelds([...myHandCards, topDiscard], G.rules);
+             for (let i = 0; i < possiblePickups.length; i++) {
+                 let combo = possiblePickups[i];
+                 if (combo.includes(topDiscard)) {
+                     let handCardsUsed = combo.filter(c => c !== topDiscard);
+                     addMove('pickUpDiscard', [handCardsUsed, { type: 'new' }], [1.0, 0.0, 0.0], combo);
+                 }
+             }
           } else {
              addMove('pickUpDiscard', [], [1.0, 0.0, 0.0], G.discardPile);
           }
@@ -638,7 +727,7 @@ export const BuracoGame = {
         if (possibleMoves.length === 0) return [{ move: 'drawCard', args: [] }];
 
       } else {
-        // 1. COLLECT VALID APPENDS (Using lightweight appendToMeld)
+        // 1. COLLECT VALID APPENDS (No NN calls)
         (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIndex) => {
             for (let i = 0; i < myHandCards.length; i++) {
@@ -653,31 +742,23 @@ export const BuracoGame = {
           });
         });
 
-        // 2. COLLECT VALID MELDS (Restored fast raw loop + deduplication)
-        for (let i = 0; i < myHandCards.length; i++) {
-          for (let j = i + 1; j < myHandCards.length; j++) {
-            for (let k = j + 1; k < myHandCards.length; k++) {
-              let c1 = myHandCards[i], c2 = myHandCards[j], c3 = myHandCards[k];
-              
-              // 🚀 EXTREME INLINE BAILOUT
-              let s1 = getSuit(c1), r1 = getRank(c1);
-              let s2 = getSuit(c2), r2 = getRank(c2);
-              let s3 = getSuit(c3), r3 = getRank(c3);
-              let wCount = (s1===5||r1===2?1:0) + (s2===5||r2===2?1:0) + (s3===5||r3===2?1:0);
-              
-              if (wCount <= 1) {
-                  let parsed = buildMeld([c1, c2, c3], G.rules);
-                  if (parsed) {
-                      let sim = [...(G.melds[p] || []), parsed];
-                      if (myHandCards.length - 3 < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue; 
-                      addMove('playMeld', [[c1, c2, c3]], [0.0, 1.0, 0.0], [c1, c2, c3]);
-                  }
-              }
+        // 2. COLLECT VALID MELDS (No NN calls)
+        const validMelds = getPossibleMelds(myHandCards, G.rules);
+        for (let i = 0; i < validMelds.length; i++) {
+            let combo = validMelds[i];
+            if (myHandCards.length - combo.length < 2) {
+                let built = buildMeld(combo, G.rules);
+                if (built) {
+                    let sim = [...(G.melds[p] || []), built];
+                    if (!canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue;
+                } else {
+                    continue;
+                }
             }
-          }
+            addMove('playMeld', [combo], [0.0, 1.0, 0.0], combo);
         }
 
-        // 3. COLLECT VALID DISCARDS
+        // 3. COLLECT VALID DISCARDS (No NN calls)
         const teamHasClean = G.teamPlayers[myTeam].some(tp => G.melds[tp].some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || m[3]===0)));
         if (myHandCards.length > 1 || teamHasClean || (G.pots.length && !G.teamMortos[myTeam])) {
             for (let i = 0; i < myHandCards.length; i++) {
@@ -686,8 +767,7 @@ export const BuracoGame = {
         }
       }
 
-      // --- BATCH NN EVALUATION ---
-      // We only run the Neural Network on the final, heavily deduplicated list of valid moves!
+      // --- BLAZING FAST BATCH NN EVALUATION ---
       if (possibleMoves.length === 0) return [];
       
       let bestMove = null; 
@@ -695,6 +775,8 @@ export const BuracoGame = {
 
       for (let i = 0; i < possibleMoves.length; i++) {
           let m = possibleMoves[i];
+          
+          // Reverted to single fast mathematical pass
           let input = [...baseInputs, ...m.actionType, ...nnHelpers.cardsToVector(m.cards)];
           let score = nnHelpers.forwardPass(input, DNA);
           
