@@ -3,29 +3,16 @@
 const getSuit = c => c >= 104 ? 5 : Math.floor((c % 52) / 13) + 1; // 1:♠, 2:♥, 3:♦, 4:♣, 5:★
 const getRank = c => c >= 104 ? 2 : (c % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:K
 
-function calculateFinalScores(G) {
-  let scores = {
-    team0: { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 },
-    team1: { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 }
-  };
+export const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
+export const pointValues = { '3': 5, '4': 5, '5': 5, '6': 5, '7': 5, '8': 10, '9': 10, '10': 10, 'J': 10, 'Q': 10, 'K': 10, 'A': 15, '2': 20, 'JOKER': 50 };
+export const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
 
-  for (const teamId of ['team0', 'team1']) {
-    const players = G.teamPlayers[teamId] || [];
-    const allMelds = players.flatMap(p => G.melds[p] || []);
-    const allHandCards = players.flatMap(p => G.hands[p] || []);
-    
-    allMelds.forEach(meld => scores[teamId].table += calculateMeldPoints(meld, G.rules));
-    
-    // FIXED: Cards are integers now! Use getCardPoints(card) instead of pointValues[card.rank]
-    allHandCards.forEach(card => scores[teamId].hand -= getCardPoints(card));
-    
-    if (!G.teamMortos[teamId] || (G.teamMortos[teamId] && !G.mortoUsed[teamId])) {
-      if (players.length > 0) scores[teamId].mortoPenalty -= 100;
-    }
-
-    scores[teamId].total = scores[teamId].table + scores[teamId].hand + scores[teamId].mortoPenalty;
-  }
-  return scores;
+export function sortCards(cards) {
+  const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
+  return [...cards].sort((a, b) => {
+    if (suitValues[a.suit] !== suitValues[b.suit]) return suitValues[a.suit] - suitValues[b.suit];
+    return sortVals[a.rank] - sortVals[b.rank];
+  });
 }
 
 function appendToMeld(meld, cId) {
@@ -207,6 +194,74 @@ function buildDeck(rules) {
     for (let i = 0; i < 104; i++) deck.push(i);
     if (!rules.noJokers) for (let i = 104; i < 108; i++) deck.push(i);
     return deck;
+}
+
+function checkMorto(G, ctx) {
+  const p = ctx.currentPlayer;
+  const team = G.teams[p];
+  if (G.hands[p].length === 0 && !G.teamMortos[team] && G.pots.length > 0) {
+    G.hands[p] = G.pots.shift(); 
+    G.teamMortos[team] = true;
+  }
+}
+
+function canEmptyHand(G, team) {
+  const teamMelds = G.teamPlayers[team].flatMap(tp => G.melds[tp] || []);
+  const hasMorto = G.teamMortos[team];
+  const mortosAvailable = G.pots.length > 0;
+  
+  if (!hasMorto && mortosAvailable) return true; 
+  
+  return teamMelds.some(m => {
+    // Array format check: [suit, start, end, wildSuit, wildPos]
+    const isCanasta = m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
+    if (!isCanasta) return false;
+    if (G.rules.cleanCanastaToWin && m[3] !== 0) return false;
+    return true;
+  });
+}
+
+function canEmptyHandWithSimulatedMelds(G, team, simulatedMeldsForTarget, targetPlayerID) {
+  const teamPlayers = G.teamPlayers[team];
+  const allTeamMelds = teamPlayers.flatMap(tp => 
+    tp === targetPlayerID ? simulatedMeldsForTarget : (G.melds[tp] || [])
+  );
+  
+  const hasMorto = G.teamMortos[team];
+  const mortosAvailable = G.pots.length > 0;
+  
+  if (!hasMorto && mortosAvailable) return true; 
+  
+  return allTeamMelds.some(m => {
+    // Array format check: [suit, start, end, wildSuit, wildPos]
+    const isCanasta = m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
+    if (!isCanasta) return false;
+    if (G.rules.cleanCanastaToWin && m[3] !== 0) return false;
+    return true;
+  });
+}
+
+function calculateFinalScores(G) {
+  let scores = {
+    team0: { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 },
+    team1: { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 }
+  };
+
+  for (const teamId of ['team0', 'team1']) {
+    const players = G.teamPlayers[teamId] || [];
+    const allMelds = players.flatMap(p => G.melds[p] || []);
+    const allHandCards = players.flatMap(p => G.hands[p] || []);
+    
+    allMelds.forEach(meld => scores[teamId].table += calculateMeldPoints(meld, G.rules));
+    allHandCards.forEach(card => scores[teamId].hand -= getCardPoints(card));
+    
+    if (!G.teamMortos[teamId] || (G.teamMortos[teamId] && !G.mortoUsed[teamId])) {
+      if (players.length > 0) scores[teamId].mortoPenalty -= 100;
+    }
+
+    scores[teamId].total = scores[teamId].table + scores[teamId].hand + scores[teamId].mortoPenalty;
+  }
+  return scores;
 }
 
 const nnHelpers = {
