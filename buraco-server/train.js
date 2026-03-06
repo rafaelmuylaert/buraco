@@ -3,12 +3,11 @@ import { BuracoGame } from './game.js';
 import fs from 'fs';
 import path from 'path';
 
-const DNA_SIZE = 9761; 
+// EXACT ARCHITECTURE SIZE: 774 inputs * 16 hidden + 16 biases + 16 output + 1 output bias = 12417 weights!
+const DNA_SIZE = 12417; 
 const BOTS_DIR = path.join(process.cwd(), 'bots');
 
-if (!fs.existsSync(BOTS_DIR)) {
-    fs.mkdirSync(BOTS_DIR, { recursive: true });
-}
+if (!fs.existsSync(BOTS_DIR)) fs.mkdirSync(BOTS_DIR, { recursive: true });
 
 const activeTrainings = new Map();
 
@@ -17,9 +16,7 @@ const generateRandomGenome = () => Array.from({ length: DNA_SIZE }, () => (Math.
 function mutate(genome, mutationRate = 0.1, maxStep = 0.5) {
     const mutated = [...genome];
     for (let i = 0; i < DNA_SIZE; i++) {
-        if (Math.random() < mutationRate) {
-            mutated[i] += (Math.random() * 2 - 1) * maxStep;
-        }
+        if (Math.random() < mutationRate) mutated[i] += (Math.random() * 2 - 1) * maxStep;
     }
     return mutated;
 }
@@ -32,15 +29,14 @@ function breed(parentA, parentB) {
     return mutate(child);
 }
 
-function runMatch(genomes, rules, seed) {
+// THE PLAYOFF DUEL
+function runDuel(botA_DNA, botB_DNA, rules, seed, useTelepathy) {
     let client = Client({
         game: BuracoGame,
         numPlayers: rules.numPlayers || 4,
         matchID: seed, 
-        debug: false, // CRITICAL: Disable Redux DevTools logging to save memory
-        setupData: { 
-            ...rules
-        }
+        debug: false, 
+        setupData: { ...rules }
     });
 
     client.start();
@@ -49,11 +45,25 @@ function runMatch(genomes, rules, seed) {
     const MAX_MOVES = 800; 
 
     while (!state.ctx.gameover && moveCount < MAX_MOVES) {
-        const currentPlayer = state.ctx.currentPlayer;
-        const currentDNA = genomes[currentPlayer];
+        const p = state.ctx.currentPlayer;
+        const currentDNA = (p === '0' || p === '2') ? botA_DNA : botB_DNA;
         
-        const moves = BuracoGame.ai.enumerate(state.G, state.ctx, currentDNA);
+        let aiG = state.G;
         
+        // 🔮 TELEPATHY INJECTION (Only executed during training loop)
+        if (useTelepathy && rules.numPlayers === 4) {
+            const partnerId = (parseInt(p) + 2) % 4;
+            aiG = {
+                ...state.G,
+                knownCards: {
+                    ...state.G.knownCards,
+                    [p]: [...(state.G.knownCards[p] || [])],
+                    [partnerId.toString()]: [...(state.G.hands[partnerId.toString()] || [])] // Complete sync
+                }
+            };
+        }
+        
+        const moves = BuracoGame.ai.enumerate(aiG, state.ctx, currentDNA);
         if (moves && moves.length > 0) {
             client.moves[moves[0].move](...moves[0].args);
         } else {
@@ -63,10 +73,8 @@ function runMatch(genomes, rules, seed) {
         moveCount++;
     }
 
-    const finalScores = state.ctx.gameover ? state.ctx.gameover.scores : { team0: { total: -5000 }, team1: { total: -5000 } };
-
-    // AGGRESSIVE MEMORY CLEANUP
-    // Orphan the Redux references so the Garbage Collector can instantly destroy them
+    const finalScores = state.ctx.gameover ? state.ctx.gameover.scores : { team0: { total: -2000 }, team1: { total: -2000 } };
+    
     client.stop();
     client = null;
     state = null;
@@ -75,139 +83,118 @@ function runMatch(genomes, rules, seed) {
 }
 
 export const TrainerService = {
-    
     getBotWeights: (botName) => {
         const filePath = path.join(BOTS_DIR, `${botName}.json`);
         if (fs.existsSync(filePath)) {
-            const data = fs.readFileSync(filePath, 'utf-8');
-            return JSON.parse(data);
+            const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+            if (data.length === DNA_SIZE) return data;
         }
         return null;
     },
 
     getTrainingStatus: (botName) => {
-        if (activeTrainings.has(botName)) {
-            return { isTraining: true, progress: activeTrainings.get(botName) };
-        }
+        if (activeTrainings.has(botName)) return { isTraining: true, progress: activeTrainings.get(botName) };
         return { isTraining: false, progress: null };
     },
 
     startTraining: async (botName, rules = {}, params = {}) => {
-        if (activeTrainings.has(botName)) {
-            throw new Error(`Training is already in progress for bot: ${botName}`);
-        }
+        if (activeTrainings.has(botName)) throw new Error(`Training already in progress for: ${botName}`);
 
         const POPULATION_SIZE = params.populationSize || 24;
         const GENERATIONS = params.generations || 500;
-        // CHANGED: Default to the perfect 24 (4!) matches
-        const MATCHES_PER_GENERATION = params.matchesPerGeneration || 24; 
+        const SAVE_INTERVAL = params.saveInterval || 10; 
 
-        activeTrainings.set(botName, { currentGeneration: 0, totalGenerations: GENERATIONS, bestScore: 0 });
+        activeTrainings.set(botName, { currentGeneration: 0, totalGenerations: GENERATIONS });
 
         const seedDNA = TrainerService.getBotWeights(botName);
         let population;
         
         if (seedDNA) {
             console.log(`🧠 Resuming training for '${botName}' from existing DNA...`);
-            population = Array(POPULATION_SIZE).fill(null).map((_, idx) => {
-                if (idx === 0) return seedDNA;
-                return mutate(seedDNA, 0.2, 0.5); 
-            });
+            population = Array(POPULATION_SIZE).fill(null).map((_, idx) => idx === 0 ? seedDNA : mutate(seedDNA, 0.2, 0.5));
         } else {
             console.log(`🧠 Starting fresh training for new bot '${botName}'...`);
             population = Array(POPULATION_SIZE).fill(null).map(() => generateRandomGenome());
         }
 
+        const originalBot = [...population[0]];
+        let benchmarkDiff = 0;
+
         try {
             for (let gen = 1; gen <= GENERATIONS; gen++) {
-                let fitnessScores = Array(POPULATION_SIZE).fill(0);
+                let stats = Array(POPULATION_SIZE).fill(null).map(() => ({ diff: 0, points: 0, matches: 0 }));
 
-                const generationSeeds = Array.from({ length: MATCHES_PER_GENERATION }, () => Math.random().toString());
+                let botIndices = Array.from({ length: POPULATION_SIZE }, (_, i) => i).sort(() => Math.random() - 0.5);
+                const pools = [[], [], [], []];
+                botIndices.forEach((botId, i) => pools[i % 4].push(botId));
 
-                // 1. SHUFFLE THE POPULATION INTO GROUPS OF 4
-                let botIndices = Array.from({ length: POPULATION_SIZE }, (_, i) => i);
-                botIndices = botIndices.sort(() => Math.random() - 0.5);
-                const NUM_TABLES = Math.floor(POPULATION_SIZE / 4);
+                for (let p = 0; p < 4; p++) {
+                    const pool = pools[p];
+                    for (let i = 0; i < pool.length; i++) {
+                        for (let j = i + 1; j < pool.length; j++) {
+                            await new Promise(resolve => setTimeout(resolve, 0));
+                            
+                            const botA = pool[i]; const botB = pool[j];
+                            
+                            const seed1 = Math.random().toString();
+                            const scores1 = runDuel(population[botA], population[botB], rules, seed1, params.telepathy);
+                            stats[botA].diff += (scores1.team0.total - scores1.team1.total);
+                            stats[botA].points += scores1.team0.total; stats[botA].matches++;
+                            
+                            stats[botB].diff += (scores1.team1.total - scores1.team0.total);
+                            stats[botB].points += scores1.team1.total; stats[botB].matches++;
 
-                // ALL 24 SEATING PERMUTATIONS (4!)
-                const SEAT_PERMUTATIONS = [
-                    [0,1,2,3], [0,1,3,2], [0,2,1,3], [0,2,3,1], [0,3,1,2], [0,3,2,1],
-                    [1,0,2,3], [1,0,3,2], [1,2,0,3], [1,2,3,0], [1,3,0,2], [1,3,2,0],
-                    [2,0,1,3], [2,0,3,1], [2,1,0,3], [2,1,3,0], [2,3,0,1], [2,3,1,0],
-                    [3,0,1,2], [3,0,2,1], [3,1,0,2], [3,1,2,0], [3,2,0,1], [3,2,1,0]
-                ];
-
-                // 2. RUN THE TABLES
-                for (let table = 0; table < NUM_TABLES; table++) {
-                    const tableBots = [
-                        botIndices[table * 4],
-                        botIndices[table * 4 + 1],
-                        botIndices[table * 4 + 2],
-                        botIndices[table * 4 + 3]
-                    ];
-
-                    for (let m = 0; m < MATCHES_PER_GENERATION; m++) {
-                        // CRITICAL FIX: Yield BEFORE EVERY SINGLE MATCH!
-                        // If we process 24 matches synchronously, Node.js starves the Garbage Collector,
-                        // leading to an Out-Of-Memory crash around generation 35-40.
-                        await new Promise(resolve => setTimeout(resolve, 0));
-
-                        const matchGenomes = {};
-                        
-                        // PERFECT ROTATION: Look up the permutation layout (loops safely if m > 23)
-                        const perm = SEAT_PERMUTATIONS[m % 24];
-                        
-                        const p0 = tableBots[perm[0]];
-                        const p1 = tableBots[perm[1]];
-                        const p2 = tableBots[perm[2]];
-                        const p3 = tableBots[perm[3]];
-
-                        matchGenomes['0'] = population[p0];
-                        matchGenomes['1'] = population[p1];
-                        matchGenomes['2'] = population[p2];
-                        matchGenomes['3'] = population[p3];
-                        
-                        const scores = runMatch(matchGenomes, rules, generationSeeds[m]);
-                        
-                        // CAPTURE ALL 4 SCORES!
-                        fitnessScores[p0] += scores.team0.total; 
-                        fitnessScores[p2] += scores.team0.total; 
-                        fitnessScores[p1] += scores.team1.total;
-                        fitnessScores[p3] += scores.team1.total;
+                            const seed2 = Math.random().toString();
+                            const scores2 = runDuel(population[botB], population[botA], rules, seed2, params.telepathy);
+                            stats[botB].diff += (scores2.team0.total - scores2.team1.total);
+                            stats[botB].points += scores2.team0.total; stats[botB].matches++;
+                            
+                            stats[botA].diff += (scores2.team1.total - scores2.team0.total);
+                            stats[botA].points += scores2.team1.total; stats[botA].matches++;
+                        }
                     }
                 }
 
-                const averageFitness = fitnessScores.map(score => score / MATCHES_PER_GENERATION);
-                
-                const rankedBots = population
-                    .map((genome, index) => ({ genome, score: averageFitness[index] }))
-                    .sort((a, b) => b.score - a.score);
-
-                const bestScore = rankedBots[0].score;
-                console.log(`[${botName}] Gen ${gen}/${GENERATIONS} | Best: ${bestScore.toFixed(0)} pts`);
-
-                activeTrainings.set(botName, { 
-                    currentGeneration: gen, 
-                    totalGenerations: GENERATIONS, 
-                    bestScore: bestScore 
+                let elites = [];
+                pools.forEach(pool => {
+                    pool.sort((a, b) => (stats[b].diff / stats[b].matches) - (stats[a].diff / stats[a].matches));
+                    elites.push(population[pool[0]]);
                 });
 
-                // 3. GLOBAL TRUNCATION SELECTION (The absolute 4 best mathematically breed the next generation)
-                const elites = rankedBots.slice(0, 4).map(b => b.genome);
-                let newPopulation = [...elites]; 
+                const allAvgDiff = stats.reduce((sum, s) => sum + (s.diff / s.matches), 0) / POPULATION_SIZE;
+                const allAvgPoints = stats.reduce((sum, s) => sum + (s.points / s.matches), 0) / POPULATION_SIZE;
+                const globalBestIdx = botIndices.sort((a, b) => (stats[b].diff / stats[b].matches) - (stats[a].diff / stats[a].matches))[0];
+                const maxDiff = stats[globalBestIdx].diff / stats[globalBestIdx].matches;
+                const maxPoints = stats[globalBestIdx].points / stats[globalBestIdx].matches;
 
+                if (gen % SAVE_INTERVAL === 0 || gen === GENERATIONS) {
+                    const bScores1 = runDuel(elites[0], originalBot, rules, Math.random().toString(), params.telepathy);
+                    const bScores2 = runDuel(originalBot, elites[0], rules, Math.random().toString(), params.telepathy);
+                    
+                    const d1 = bScores1.team0.total - bScores1.team1.total;
+                    const d2 = bScores2.team1.total - bScores2.team0.total;
+                    benchmarkDiff = (d1 + d2) / 2;
+
+                    const filePath = path.join(BOTS_DIR, `${botName}.json`);
+                    fs.writeFileSync(filePath, JSON.stringify(elites[0]));
+                    console.log(`💾 Saved Weights. Gen ${gen} | Elite Diff vs Original: ${benchmarkDiff > 0 ? '+' : ''}${benchmarkDiff.toFixed(0)}`);
+                }
+
+                activeTrainings.set(botName, { 
+                    currentGeneration: gen, totalGenerations: GENERATIONS, 
+                    maxPoints, avgPoints: allAvgPoints, maxDiff, avgDiff: allAvgDiff, benchmarkDiff 
+                });
+
+                let newPopulation = [];
+                elites.forEach(e => newPopulation.push([...e])); 
+                elites.forEach(e => newPopulation.push(mutate(e, 0.1, 0.5))); 
+                
                 while (newPopulation.length < POPULATION_SIZE) {
-                    newPopulation.push(breed(
-                        elites[Math.floor(Math.random() * elites.length)], 
-                        elites[Math.floor(Math.random() * elites.length)]
-                    ));
+                    let p1 = elites[Math.floor(Math.random() * 4)];
+                    let p2 = elites[Math.floor(Math.random() * 4)];
+                    newPopulation.push(breed(p1, p2)); 
                 }
                 population = newPopulation;
-
-                if (gen % 5 === 0 || gen === GENERATIONS) {
-                    const filePath = path.join(BOTS_DIR, `${botName}.json`);
-                    fs.writeFileSync(filePath, JSON.stringify(rankedBots[0].genome));
-                }
             }
         } catch (error) {
             console.error(`Error during training for ${botName}:`, error);
