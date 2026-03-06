@@ -5,6 +5,7 @@ import { BuracoGame } from './game.js';
 const SERVER_URL = 'http://buraco-server:8000';
 const activeBots = {}; 
 const dnaCache = {};
+const activeIntervals = {}; // 🚀 NEW: Interval Tracking Map
 
 // DNA SIZE: 12417 per stage * 4 stages = 49668
 const DNA_SIZE = 49668; 
@@ -81,48 +82,58 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       console.log(`[BOT] Match ended. Shutting down ${botName}.`);
       client.stop();
       delete activeBots[clientKey];
+      if (activeIntervals[clientKey]) {
+          clearInterval(activeIntervals[clientKey]);
+          delete activeIntervals[clientKey];
+      }
       return;
     }
-
-    if (state.ctx.currentPlayer === playerID) {
-      setTimeout(() => {
-        const currentState = client.getState();
-        if (currentState.ctx.currentPlayer !== playerID) {
-            aiQueue = [];
-            return;
-        }
-
-        if (aiQueue.length === 0) {
-            const myDNA = dnaCache[targetBotName];
-            // Inject the bot's custom DNA via the botGenomes map parameter 
-            if (!currentState.G.botGenomes) currentState.G.botGenomes = {};
-            currentState.G.botGenomes[playerID] = myDNA;
-            
-            const moves = BuracoGame.ai.enumerate(currentState.G, currentState.ctx);
-            aiQueue = moves || [];
-        }
-
-        if (aiQueue.length > 0) {
-            const nextMove = aiQueue.shift();
-            
-            if ((nextMove.move === 'drawCard' || nextMove.move === 'pickUpDiscard') && currentState.G.hasDrawn) {
-                aiQueue = [];
-                return;
-            }
-            
-            console.log(`[BOT] ${botName} executes: ${nextMove.move}`);
-            client.moves[nextMove.move](...(nextMove.args || []));
-        } else {
-            // Failsafe: if enumerate returns empty queue, just end turn
-            client.events.endTurn();
-        }
-
-      }, 1000); // 1 second delay between queue actions so players can see the moves
-    } else {
-        // Flush queue when it's not our turn
-        aiQueue = [];
-    }
   });
+
+  // 🚀 AUTO-RECOVERY PROCESSOR: Runs on a strict loop so it NEVER freezes
+  const processQueue = () => {
+      const currentState = client.getState();
+      if (!currentState || currentState.ctx.gameover) return;
+      
+      if (currentState.ctx.currentPlayer !== playerID) {
+          aiQueue = [];
+          return;
+      }
+
+      if (aiQueue.length === 0) {
+          const myDNA = dnaCache[targetBotName];
+          // Inject the bot's custom DNA via the botGenomes map parameter 
+          if (!currentState.G.botGenomes) currentState.G.botGenomes = {};
+          currentState.G.botGenomes[playerID] = myDNA;
+          
+          const moves = BuracoGame.ai.enumerate(currentState.G, currentState.ctx);
+          aiQueue = moves || [];
+      }
+
+      if (aiQueue.length > 0) {
+          const nextMove = aiQueue.shift();
+          
+          if ((nextMove.move === 'drawCard' || nextMove.move === 'pickUpDiscard') && currentState.G.hasDrawn) {
+              aiQueue = [];
+              return;
+          }
+          
+          console.log(`[BOT] ${botName} executes: ${nextMove.move}`);
+          client.moves[nextMove.move](...(nextMove.args || []));
+          
+          // 🚀 FLUSH QUEUE IF INVALID: If the engine blocked the move, the state object won't update!
+          const newState = client.getState();
+          if (newState === currentState) {
+              aiQueue = [];
+          }
+      } else {
+          // Failsafe: if enumerate returns empty queue, just end turn
+          client.events.endTurn();
+      }
+  };
+
+  // Run the bot's internal processor once per second safely decoupled from boardgame.io hooks
+  activeIntervals[clientKey] = setInterval(processQueue, 1000); 
 }
 
 console.log("🤖 Buraco Bot Runner online! Polling the lobby every 5 seconds...");
