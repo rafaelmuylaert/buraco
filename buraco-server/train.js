@@ -39,7 +39,7 @@ const generateRandomGenome = () => {
     return g;
 };
 
-async function runMatch(genomes, rules) {
+function runMatch(genomes, rules) {
     const client = Client({
         game: BuracoGame,
         numPlayers: rules.numPlayers || 4,
@@ -55,8 +55,6 @@ async function runMatch(genomes, rules) {
         let lastMoveKey = null;
 
         while (!state.ctx.gameover && moveCount < MAX_MOVES) {
-            if (moveCount % 50 === 0) await new Promise(resolve => setImmediate(resolve));
-
             const p = state.ctx.currentPlayer;
             const moves = BuracoGame.ai.enumerate(state.G, state.ctx, genomes[p]);
 
@@ -69,7 +67,7 @@ async function runMatch(genomes, rules) {
             }
 
             const nextMove = moves[0];
-            const moveKey = `${nextMove.move}:${JSON.stringify(nextMove.args)}`;
+            const moveKey = `${nextMove.move}:${(nextMove.args || []).flat().join(',')}`;
 
             if (moveKey === lastMoveKey) {
                 client.events.endTurn();
@@ -86,10 +84,9 @@ async function runMatch(genomes, rules) {
             moveCount++;
         }
 
-        if (!state.ctx.gameover) {
-            return { team0: { total: -5000 }, team1: { total: -5000 } };
-        }
-        return state.ctx.gameover.scores;
+        return state.ctx.gameover
+            ? state.ctx.gameover.scores
+            : { team0: { total: -5000 }, team1: { total: -5000 } };
     } catch (e) {
         console.error('[TRAINER] runMatch crashed:', e.message);
         return { team0: { total: -5000 }, team1: { total: -5000 } };
@@ -159,6 +156,7 @@ export const TrainerService = {
                 let fitnessScores = Array(POPULATION_SIZE).fill(0);
 
                 for (let botId = 0; botId < POPULATION_SIZE; botId++) {
+                    await new Promise(resolve => setImmediate(resolve));
                     for (let m = 0; m < MATCHES_PER_GENERATION; m++) {
                         const opps = [ 
                             Math.floor(Math.random() * POPULATION_SIZE), 
@@ -174,7 +172,7 @@ export const TrainerService = {
                         };
                         
                         try {
-                            const scores = await runMatch(matchGenomes, rules);
+                            const scores = runMatch(matchGenomes, rules);
                             fitnessScores[botId] += scores.team0.total;
                         } catch (e) {
                             console.error(`[TRAINER] Match skipped due to error:`, e.message);
