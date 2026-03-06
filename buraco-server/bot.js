@@ -3,10 +3,11 @@ import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import { BuracoGame } from './game.js';
 
 const SERVER_URL = 'http://buraco-server:8000';
-const activeBots = {}; // Tracks running bots to prevent duplicates
-
-// NEW: Cache downloaded bot brains in memory so we don't spam the API
+const activeBots = {}; 
 const dnaCache = {};
+
+// DNA SIZE: 12417 per stage * 4 stages = 49668
+const DNA_SIZE = 49668; 
 
 async function pollLobby() {
   try {
@@ -18,21 +19,27 @@ async function pollLobby() {
         const assignedName = match.setupData?.assignments?.[p.id];
         const targetBotName = match.setupData?.targetBotName || "UntrainedBot";
         
-        // If the seat is pre-assigned to a "Bot" and is currently empty
         if (!p.name && assignedName && assignedName.toLowerCase().includes('bot')) {
           console.log(`[BOT] Claiming Seat ${p.id} as ${assignedName} using brain '${targetBotName}'...`);
           
-          // Pre-fetch the bot's DNA into memory before joining
           if (!dnaCache[targetBotName]) {
             try {
               const dnaRes = await fetch(`${SERVER_URL}/api/bots/weights/${targetBotName}`);
-              if (dnaRes.ok) dnaCache[targetBotName] = await dnaRes.json();
+              if (dnaRes.ok) {
+                  let loadedDNA = await dnaRes.json();
+                  // 🚀 SEAMLESS UPGRADE: Automatically upgrades old brains
+                  if (loadedDNA.length !== DNA_SIZE) {
+                      let expanded = [];
+                      while(expanded.length < DNA_SIZE) expanded.push(...loadedDNA);
+                      loadedDNA = expanded.slice(0, DNA_SIZE);
+                  }
+                  dnaCache[targetBotName] = loadedDNA;
+              }
             } catch(e) {
               console.error(`[BOT] Could not fetch DNA for ${targetBotName}`);
             }
           }
           
-          // Claim the seat and get the password (credentials)
           const joinRes = await fetch(`${SERVER_URL}/games/buraco/${match.matchID}/join`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -46,9 +53,7 @@ async function pollLobby() {
         }
       }
     }
-  } catch (e) {
-    // Fails silently if the server is offline or rebooting
-  }
+  } catch (e) {}
 }
 
 function startBotClient(matchID, playerID, credentials, botName, targetBotName) {
@@ -66,10 +71,12 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
   activeBots[clientKey] = client;
   client.start();
 
+  // 🚀 The Bot's Internal Memory Queue
+  let aiQueue = [];
+
   client.subscribe(state => {
     if (!state) return;
     
-    // Shut down the bot if the game ends
     if (state.ctx.gameover) {
       console.log(`[BOT] Match ended. Shutting down ${botName}.`);
       client.stop();
@@ -77,23 +84,43 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       return;
     }
 
-    // Is it my turn?
     if (state.ctx.currentPlayer === playerID) {
-      // Add a 2-second delay so it looks like a human thinking!
       setTimeout(() => {
         const currentState = client.getState();
-        if (currentState.ctx.currentPlayer !== playerID) return; // Abort if turn changed
-
-        // NEW: Pass the pre-downloaded DNA into the engine!
-        const myDNA = dnaCache[targetBotName];
-        const moves = BuracoGame.ai.enumerate(currentState.G, currentState.ctx, myDNA);
-        if (moves.length > 0) {
-          // Pick a random legal move
-          const randomMove = moves[Math.floor(Math.random() * moves.length)];
-          console.log(`[BOT] ${botName} executes: ${randomMove.move}`);
-          client.moves[randomMove.move](...(randomMove.args || []));
+        if (currentState.ctx.currentPlayer !== playerID) {
+            aiQueue = [];
+            return;
         }
-      }, 2000);
+
+        if (aiQueue.length === 0) {
+            const myDNA = dnaCache[targetBotName];
+            // Inject the bot's custom DNA via the botGenomes map parameter 
+            if (!currentState.G.botGenomes) currentState.G.botGenomes = {};
+            currentState.G.botGenomes[playerID] = myDNA;
+            
+            const moves = BuracoGame.ai.enumerate(currentState.G, currentState.ctx);
+            aiQueue = moves || [];
+        }
+
+        if (aiQueue.length > 0) {
+            const nextMove = aiQueue.shift();
+            
+            if ((nextMove.move === 'drawCard' || nextMove.move === 'pickUpDiscard') && currentState.G.hasDrawn) {
+                aiQueue = [];
+                return;
+            }
+            
+            console.log(`[BOT] ${botName} executes: ${nextMove.move}`);
+            client.moves[nextMove.move](...(nextMove.args || []));
+        } else {
+            // Failsafe: if enumerate returns empty queue, just end turn
+            client.events.endTurn();
+        }
+
+      }, 1000); // 1 second delay between queue actions so players can see the moves
+    } else {
+        // Flush queue when it's not our turn
+        aiQueue = [];
     }
   });
 }
