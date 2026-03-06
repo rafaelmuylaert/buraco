@@ -162,7 +162,7 @@ export function calculateMeldPoints(meld, rules) {
         }
         if (isCanasta) {
             pts += isClean ? 200 : 100;
-            if (rules?.largeCanasta) {
+            if (rules.largeCanasta) {
                 if (meld[2] - meld[1] === 12) pts += 500;
                 if (meld[2] - meld[1] >= 13) pts += 1000;
             }
@@ -174,7 +174,7 @@ export function calculateMeldPoints(meld, rules) {
         if (wSuit > 0) pts += (wSuit === 5 ? 50 : 20);
         if (isCanasta) {
             pts += (isClean ? 200 : 100);
-            if (rules?.largeCanasta) {
+            if (rules.largeCanasta) {
                 if (count === 13) pts += 500;
                 if (count >= 14) pts += 1000;
             }
@@ -313,8 +313,8 @@ const nnHelpers = {
   }
 };
 
-// 🚀 BLAZING FAST O(N) ADJACENCY SEARCH
-// Only evaluates mathematically valid adjacent neighbors instead of brute-forcing all permutations
+// 🚀 ZERO-ALLOCATION O(N) ADJACENCY SEARCH
+// Uses integer bitmasking for uniqueness instead of creating string arrays
 function getPossibleMelds(handCards, rules) {
     let validCombos = [];
     let seenSignatures = new Set();
@@ -323,69 +323,71 @@ function getPossibleMelds(handCards, rules) {
     let byRank = {};
     let wilds = [];
 
-    handCards.forEach(cId => {
-        const s = getSuit(cId); const r = getRank(cId);
+    for (let i = 0; i < handCards.length; i++) {
+        let cId = handCards[i];
+        let s = cId >= 104 ? 5 : Math.floor((cId % 52) / 13) + 1; 
+        let r = cId >= 104 ? 2 : (cId % 13) + 1;
+        
         if (s === 5 || r === 2) wilds.push(cId);
         else {
             bySuit[s].push(cId);
             if (!byRank[r]) byRank[r] = [];
             byRank[r].push(cId);
         }
-    });
+    }
 
-    const addCombo = (combo) => {
-        let sig = [...combo].sort((a,b)=>a-b).join(',');
+    // Hash function to avoid array allocations inside the loop
+    const addCombo = (c1, c2, c3) => {
+        let a = c1; let b = c2; let c = c3;
+        if (a > b) { let t = a; a = b; b = t; }
+        if (b > c) { let t = b; b = c; c = t; }
+        if (a > b) { let t = a; a = b; b = t; }
+        
+        let sig = a + (b * 108) + (c * 11664); 
         if (!seenSignatures.has(sig)) {
             seenSignatures.add(sig);
-            validCombos.push(combo);
+            validCombos.push([c1, c2, c3]);
         }
     };
 
-    // 1. SEQUENCES (Linear Search)
     for (let s = 1; s <= 4; s++) {
         let suitCards = bySuit[s];
         if (suitCards.length === 0) continue;
 
-        // Create a fast lookup map for available ranks in this suit
         let availableRanks = {};
-        suitCards.forEach(c => {
-            const r = getRank(c);
+        for (let i = 0; i < suitCards.length; i++) {
+            let c = suitCards[i];
+            let r = (c % 13) + 1;
             if (!availableRanks[r]) availableRanks[r] = [];
             availableRanks[r].push(c);
-            if (r === 1) { // Ace acts as 14 too
+            if (r === 1) { 
                 if (!availableRanks[14]) availableRanks[14] = [];
                 availableRanks[14].push(c);
             }
-        });
+        }
 
-        // Iterate exactly once over the unique ranks we actually hold
         let uniqueRanks = Object.keys(availableRanks).map(Number).sort((a,b) => a-b);
         
         for (let i = 0; i < uniqueRanks.length; i++) {
-            const r = uniqueRanks[i];
-            const c1 = availableRanks[r][0]; // Root card
+            let r = uniqueRanks[i];
+            let c1 = availableRanks[r][0]; 
 
-            // Scenario A: Clean 3-card sequence (r, r+1, r+2)
             if (availableRanks[r+1] && availableRanks[r+2]) {
-                addCombo([c1, availableRanks[r+1][0], availableRanks[r+2][0]]);
+                addCombo(c1, availableRanks[r+1][0], availableRanks[r+2][0]);
             }
 
-            // Scenario B: Dirty 3-card sequence with wildcard filling the gaps
             if (wilds.length > 0) {
-                const w = wilds[0];
-                // Middle gap: (r, W, r+2)
+                let w = wilds[0];
                 if (availableRanks[r+2]) {
-                    addCombo([c1, w, availableRanks[r+2][0]]);
+                    addCombo(c1, w, availableRanks[r+2][0]);
                 }
-                // Right append: (r, r+1, W)
                 if (availableRanks[r+1]) {
-                    addCombo([c1, availableRanks[r+1][0], w]);
+                    addCombo(c1, availableRanks[r+1][0], w);
                 }
             }
         }
     }
 
-    // 2. RUNNERS (Trincas)
     if (rules.runners !== 'none') {
         for (let r in byRank) {
             let numR = parseInt(r);
@@ -396,13 +398,11 @@ function getPossibleMelds(handCards, rules) {
 
             if (allowed) {
                 let rankCards = byRank[r];
-                // Clean 3-card runner
                 if (rankCards.length >= 3) {
-                    addCombo([rankCards[0], rankCards[1], rankCards[2]]);
+                    addCombo(rankCards[0], rankCards[1], rankCards[2]);
                 }
-                // Dirty 3-card runner
                 if (rankCards.length >= 2 && wilds.length > 0) {
-                    addCombo([rankCards[0], rankCards[1], wilds[0]]);
+                    addCombo(rankCards[0], rankCards[1], wilds[0]);
                 }
             }
         }
@@ -663,7 +663,8 @@ export const BuracoGame = {
           if (G.rules.discard === 'closed') {
              // USING THE BLAZING FAST O(N) LINEAR SEARCH
              const possiblePickups = getPossibleMelds([...myHandCards, topDiscard], G.rules);
-             for (let combo of possiblePickups) {
+             for (let i = 0; i < possiblePickups.length; i++) {
+                 let combo = possiblePickups[i];
                  if (combo.includes(topDiscard)) {
                      let handCardsUsed = combo.filter(c => c !== topDiscard);
                      let score = getScore([1.0, 0.0, 0.0], combo);
@@ -685,18 +686,20 @@ export const BuracoGame = {
 
         (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIndex) => {
-            myHandCards.forEach(card => {
+            for (let i = 0; i < myHandCards.length; i++) {
+              let card = myHandCards[i];
               if (appendCardsToMeld(meld, [card])) {
                 let score = getScore([0.0, 1.0, 0.0], [card]);
                 evaluateMove({ move: 'appendToMeld', args: [tp, mIndex, [card]] }, score);
               }
-            });
+            }
           });
         });
 
         // USING THE BLAZING FAST O(N) LINEAR SEARCH
         const validMelds = getPossibleMelds(myHandCards, G.rules);
-        for (let combo of validMelds) {
+        for (let i = 0; i < validMelds.length; i++) {
+            let combo = validMelds[i];
             let sim = [...(G.melds[p] || []), buildMeld(combo, G.rules)];
             if (myHandCards.length - combo.length < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue; 
             
@@ -706,10 +709,11 @@ export const BuracoGame = {
 
         const teamHasClean = G.teamPlayers[myTeam].some(tp => G.melds[tp].some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || m[3]===0)));
         if (myHandCards.length > 1 || teamHasClean || (G.pots.length && !G.teamMortos[myTeam])) {
-          myHandCards.forEach(card => {
+          for (let i = 0; i < myHandCards.length; i++) {
+            let card = myHandCards[i];
             let score = getScore([0.0, 0.0, 1.0], [card]);
             evaluateMove({ move: 'discardCard', args: [card] }, score);
-          });
+          }
         }
         
         if (bestMove) return [bestMove];
