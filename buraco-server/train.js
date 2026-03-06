@@ -58,26 +58,27 @@ function runMatch(genomes, rules) {
             const moves = BuracoGame.ai.enumerate(state.G, state.ctx);
 
             if (!moves || moves.length === 0) {
-                client.events.endTurn();
+                if (!state.ctx.gameover) client.events.endTurn();
                 state = client.getState();
                 moveCount++;
                 continue;
             }
 
             const nextMove = moves[0];
-            client.moves[nextMove.move](...(nextMove.args || []));
-            const newState = client.getState();
+            const prevHandSize = (state.G.hands[p] || []).length;
+            const prevHasDrawn = state.G.hasDrawn;
 
-            // If state didn't change, the move was invalid — force end turn
-            if (newState === state || (
-                newState.ctx.turn === state.ctx.turn &&
-                (newState.G.hands[p] || []).length === (state.G.hands[p] || []).length &&
-                JSON.stringify(newState.G.melds) === JSON.stringify(state.G.melds)
-            )) {
+            client.moves[nextMove.move](...(nextMove.args || []));
+            state = client.getState();
+
+            if (state.ctx.gameover) break;
+
+            const stateChanged = state.G.hasDrawn !== prevHasDrawn
+                || (state.G.hands[p] || []).length !== prevHandSize;
+
+            if (!stateChanged) {
                 client.events.endTurn();
                 state = client.getState();
-            } else {
-                state = newState;
             }
 
             moveCount++;
