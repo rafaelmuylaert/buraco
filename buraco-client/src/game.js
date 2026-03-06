@@ -313,12 +313,12 @@ const nnHelpers = {
   }
 };
 
-// 🧠 NEW: Pre-computes only valid 3-card combinations instead of checking ALL O(N^3) permutations
+// 🚀 BLAZING FAST O(N) ADJACENCY SEARCH
+// Only evaluates mathematically valid adjacent neighbors instead of brute-forcing all permutations
 function getPossibleMelds(handCards, rules) {
     let validCombos = [];
     let seenSignatures = new Set();
     
-    // Group cards by suit and rank to find natural combinations efficiently
     let bySuit = {1:[], 2:[], 3:[], 4:[]};
     let byRank = {};
     let wilds = [];
@@ -333,50 +333,59 @@ function getPossibleMelds(handCards, rules) {
         }
     });
 
-    // 1. Find Sequences
+    const addCombo = (combo) => {
+        let sig = [...combo].sort((a,b)=>a-b).join(',');
+        if (!seenSignatures.has(sig)) {
+            seenSignatures.add(sig);
+            validCombos.push(combo);
+        }
+    };
+
+    // 1. SEQUENCES (Linear Search)
     for (let s = 1; s <= 4; s++) {
         let suitCards = bySuit[s];
-        // Sort specifically for sequences (Ace can be low or high)
-        let ranks = [...new Set(suitCards.map(getRank))].sort((a,b) => a-b);
-        if (ranks.includes(1)) ranks.push(14); 
+        if (suitCards.length === 0) continue;
 
-        for (let i = 0; i < ranks.length; i++) {
-            for (let j = i + 1; j < ranks.length; j++) {
-                if (ranks[j] - ranks[i] <= 2) { 
-                    // Try with a 3rd natural card
-                    for (let k = j + 1; k < ranks.length; k++) {
-                        if (ranks[k] - ranks[i] <= 2) {
-                            let combo = [
-                                suitCards.find(c => getRank(c) === (ranks[i]===14?1:ranks[i])),
-                                suitCards.find(c => getRank(c) === (ranks[j]===14?1:ranks[j])),
-                                suitCards.find(c => getRank(c) === (ranks[k]===14?1:ranks[k]))
-                            ];
-                            let sig = [...combo].sort((a,b)=>a-b).join(',');
-                            if (!seenSignatures.has(sig)) {
-                                seenSignatures.add(sig);
-                                validCombos.push(combo);
-                            }
-                        }
-                    }
-                    // Try with a wildcard filling the gap
-                    if (wilds.length > 0) {
-                        let combo = [
-                            suitCards.find(c => getRank(c) === (ranks[i]===14?1:ranks[i])),
-                            suitCards.find(c => getRank(c) === (ranks[j]===14?1:ranks[j])),
-                            wilds[0]
-                        ];
-                        let sig = [...combo].sort((a,b)=>a-b).join(',');
-                        if (!seenSignatures.has(sig) && buildMeld(combo, rules)) {
-                            seenSignatures.add(sig);
-                            validCombos.push(combo);
-                        }
-                    }
+        // Create a fast lookup map for available ranks in this suit
+        let availableRanks = {};
+        suitCards.forEach(c => {
+            const r = getRank(c);
+            if (!availableRanks[r]) availableRanks[r] = [];
+            availableRanks[r].push(c);
+            if (r === 1) { // Ace acts as 14 too
+                if (!availableRanks[14]) availableRanks[14] = [];
+                availableRanks[14].push(c);
+            }
+        });
+
+        // Iterate exactly once over the unique ranks we actually hold
+        let uniqueRanks = Object.keys(availableRanks).map(Number).sort((a,b) => a-b);
+        
+        for (let i = 0; i < uniqueRanks.length; i++) {
+            const r = uniqueRanks[i];
+            const c1 = availableRanks[r][0]; // Root card
+
+            // Scenario A: Clean 3-card sequence (r, r+1, r+2)
+            if (availableRanks[r+1] && availableRanks[r+2]) {
+                addCombo([c1, availableRanks[r+1][0], availableRanks[r+2][0]]);
+            }
+
+            // Scenario B: Dirty 3-card sequence with wildcard filling the gaps
+            if (wilds.length > 0) {
+                const w = wilds[0];
+                // Middle gap: (r, W, r+2)
+                if (availableRanks[r+2]) {
+                    addCombo([c1, w, availableRanks[r+2][0]]);
+                }
+                // Right append: (r, r+1, W)
+                if (availableRanks[r+1]) {
+                    addCombo([c1, availableRanks[r+1][0], w]);
                 }
             }
         }
     }
 
-    // 2. Find Runners (Trincas)
+    // 2. RUNNERS (Trincas)
     if (rules.runners !== 'none') {
         for (let r in byRank) {
             let numR = parseInt(r);
@@ -387,21 +396,13 @@ function getPossibleMelds(handCards, rules) {
 
             if (allowed) {
                 let rankCards = byRank[r];
+                // Clean 3-card runner
                 if (rankCards.length >= 3) {
-                    let combo = [rankCards[0], rankCards[1], rankCards[2]];
-                    let sig = [...combo].sort((a,b)=>a-b).join(',');
-                    if (!seenSignatures.has(sig)) {
-                        seenSignatures.add(sig);
-                        validCombos.push(combo);
-                    }
+                    addCombo([rankCards[0], rankCards[1], rankCards[2]]);
                 }
+                // Dirty 3-card runner
                 if (rankCards.length >= 2 && wilds.length > 0) {
-                    let combo = [rankCards[0], rankCards[1], wilds[0]];
-                    let sig = [...combo].sort((a,b)=>a-b).join(',');
-                    if (!seenSignatures.has(sig)) {
-                        seenSignatures.add(sig);
-                        validCombos.push(combo);
-                    }
+                    addCombo([rankCards[0], rankCards[1], wilds[0]]);
                 }
             }
         }
@@ -660,7 +661,7 @@ export const BuracoGame = {
       if (!G.hasDrawn) {
         if (topDiscard !== null) {
           if (G.rules.discard === 'closed') {
-             // OPTIMIZED COMBINATORIAL SEARCH FOR PICKING UP DISCARD
+             // USING THE BLAZING FAST O(N) LINEAR SEARCH
              const possiblePickups = getPossibleMelds([...myHandCards, topDiscard], G.rules);
              for (let combo of possiblePickups) {
                  if (combo.includes(topDiscard)) {
@@ -693,7 +694,7 @@ export const BuracoGame = {
           });
         });
 
-        // 🚀 BLAZING FAST O(1) COMBINATORIAL SEARCH
+        // USING THE BLAZING FAST O(N) LINEAR SEARCH
         const validMelds = getPossibleMelds(myHandCards, G.rules);
         for (let combo of validMelds) {
             let sim = [...(G.melds[p] || []), buildMeld(combo, G.rules)];
