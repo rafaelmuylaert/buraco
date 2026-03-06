@@ -1,372 +1,226 @@
-const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
-export const pointValues = { '3': 5, '4': 5, '5': 5, '6': 5, '7': 5, '8': 10, '9': 10, '10': 10, 'J': 10, 'Q': 10, 'K': 10, 'A': 15, '2': 20, 'JOKER': 50 };
-const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
+// 🧠 STATE-FEATURE SYMMETRY: Cards are now pure integers 0-107!
+// 0-103 = 2 Decks of 52. 104-107 = 4 Jokers.
+const getSuit = c => c >= 104 ? 5 : Math.floor((c % 52) / 13) + 1; // 1:♠, 2:♥, 3:♦, 4:♣, 5:★
+const getRank = c => c >= 104 ? 2 : (c % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:K
 
-export function sortCards(cards) {
-  const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
-  return [...cards].sort((a, b) => {
-    if (suitValues[a.suit] !== suitValues[b.suit]) return suitValues[a.suit] - suitValues[b.suit];
-    return sortVals[a.rank] - sortVals[b.rank];
-  });
-}
+function appendToMeld(meld, cId) {
+    let m = [...meld];
+    let cSuit = getSuit(cId); let cRank = getRank(cId);
+    let isWild = cSuit === 5 || cRank === 2;
 
-function parseMeld(cards, rules) {
-  if (cards.length < 3) return { valid: false };
-
-  const jokers = cards.filter(c => c.rank === 'JOKER');
-  const twos = cards.filter(c => c.rank === '2');
-  const naturals = cards.filter(c => c.rank !== 'JOKER' && c.rank !== '2');
-
-  // Check for Runners (Trincas/Lavadeiras)
-  if (naturals.length > 0 && naturals.every(c => c.rank === naturals[0].rank)) {
-    const r = naturals[0].rank;
-    let allowed = false;
-    if (rules.runners === 'any') allowed = true;
-    if (rules.runners === 'aces_threes' && (r === 'A' || r === '3')) allowed = true;
-    if (rules.runners === 'aces_kings' && (r === 'A' || r === 'K')) allowed = true;
-    
-    if (allowed && jokers.length + twos.length <= 1) {
-      return { valid: true, status: (jokers.length + twos.length) === 0 ? 'clean' : 'dirty', sorted: [...naturals, ...twos, ...jokers] };
-    }
-  }
-
-  // Check for Sequences
-  if (naturals.length > 0) {
-    const suit = naturals[0].suit;
-    
-    if (naturals.every(c => c.suit === suit)) {
-      const suitedTwos = twos.filter(c => c.suit === suit);
-      const unsuitedTwos = twos.filter(c => c.suit !== suit);
-
-      if (jokers.length + unsuitedTwos.length <= 1 && suitedTwos.length <= 2) {
-        let possibleConfigs = [];
+    if (m[0] !== 0) { // Sequence
+        if (m[1] === null) {
+            if (!isWild || (cSuit === m[0] && cRank === 2)) { m[1] = cRank; m[2] = cRank; return m; }
+            return null;
+        }
         
-        if (suitedTwos.length === 0) {
-          possibleConfigs.push({ nat: [], wild: [...jokers, ...unsuitedTwos] });
-        } else if (suitedTwos.length === 1) {
-          possibleConfigs.push({ nat: [suitedTwos[0]], wild: [...jokers, ...unsuitedTwos] });
-          if (jokers.length + unsuitedTwos.length === 0) {
-            possibleConfigs.push({ nat: [], wild: [suitedTwos[0]] });
-          }
-        } else if (suitedTwos.length === 2) {
-          if (jokers.length + unsuitedTwos.length === 0) {
-            possibleConfigs.push({ nat: [suitedTwos[0]], wild: [suitedTwos[1]] });
-            possibleConfigs.push({ nat: [suitedTwos[1]], wild: [suitedTwos[0]] });
-          }
+        if (cSuit === m[0] && cRank === m[4]) {
+            if (m[2] < 14) { m[4] = m[2] + 1; m[2] = m[2] + 1; return m; }
+            if (m[1] > 1) { m[4] = m[1] - 1; m[1] = m[1] - 1; return m; }
+            return null;
+        }
+        
+        if (cSuit === m[0] && !isWild) { 
+            if (cRank === m[1] - 1) { m[1] = cRank; return m; }
+            if (cRank === m[2] + 1) { m[2] = cRank; return m; }
+            if (cRank === 1 && m[2] === 13) { m[2] = 14; return m; }
+        }
+        
+        if (cSuit === m[0] && cRank === 2) {
+            if (m[1] === 3) { m[1] = 2; return m; }
         }
 
-        const aces = naturals.filter(c => c.rank === 'A');
-        const otherNaturals = naturals.filter(c => c.rank !== 'A');
+        // Shift 'free' suited two to the end to make room
+        if (cSuit === m[0] && m[1] === 2 && m[3] === 0 && cRank === m[2] + 2) {
+            m[1] = 3; m[2] = cRank; m[3] = m[0]; m[4] = cRank - 1; return m;
+        }
+
+        if (isWild && m[3] === 0) {
+            if (m[2] < 14) { m[3] = cSuit; m[4] = m[2] + 1; m[2] = m[2] + 1; return m; }
+            if (m[1] > 1) { m[3] = cSuit; m[4] = m[1] - 1; m[1] = m[1] - 1; return m; }
+        }
+    } else { // Runner
+        if (m[1] === null) {
+            if (!isWild) { m[1] = cRank; m[2] = 1; return m; }
+            return null;
+        }
+        if (cRank === m[1] && !isWild) { m[2]++; return m; }
+        if (isWild && m[3] === 0) { m[3] = cSuit; m[2]++; return m; }
+    }
+    return null;
+}
+
+function appendCardsToMeld(meld, cards) {
+    let current = [...meld]; 
+    let remaining = [...cards];
+    
+    // --- PRE-CHECK: Fast validation to save CPU ---
+    let seenRanks = new Set();
+    let offSuitWilds = current[3] !== 0 && current[3] !== current[0] ? 1 : 0;
+    
+    if (current[0] !== 0 && current[1] !== null) {
+        for (let r = current[1]; r <= current[2]; r++) {
+            if (r !== current[4]) seenRanks.add(r > 13 ? 1 : r);
+        }
+    }
+    
+    for (let c of remaining) {
+        const s = getSuit(c); const r = getRank(c);
+        const isWild = (s === 5 || r === 2);
         
-        if (aces.length <= 2) {
-          let aceValues = [];
-          if (aces.length === 0) aceValues.push([]);
-          if (aces.length === 1) { aceValues.push([1]); aceValues.push([14]); }
-          if (aces.length === 2) { aceValues.push([1, 14]); }
+        if (!isWild) {
+            if (current[0] !== 0 && s !== current[0]) return null; 
+            if (current[0] === 0 && current[1] !== null && r !== current[1]) return null; 
+            if (current[0] !== 0 && r !== 1 && seenRanks.has(r)) return null; 
+            seenRanks.add(r);
+        } else {
+            if (s !== current[0]) offSuitWilds++; 
+        }
+    }
+    if (offSuitWilds > 1) return null;
 
-          for (let cfg of possibleConfigs) {
-            if (cfg.wild.length > 1) continue;
+    let changed = true;
+    while(changed && remaining.length > 0) {
+        changed = false;
+        for(let i=0; i<remaining.length; i++) {
+            const next = appendToMeld(current, remaining[i]);
+            if (next) { current = next; remaining.splice(i, 1); changed = true; break; }
+        }
+    }
+    return remaining.length === 0 ? current : null;
+}
 
-            for (let aVals of aceValues) {
-              let values = otherNaturals.map(c => sequenceMath[c.rank]);
-              values.push(...aVals);
-              values.push(...cfg.nat.map(c => 2));
-              values.sort((a, b) => a - b);
-
-              if (new Set(values).size !== values.length) continue;
-
-              let min = values[0];
-              let max = values[values.length - 1];
-              let gaps = 0;
-              for (let i = 1; i < values.length; i++) {
-                gaps += (values[i] - values[i-1] - 1);
-              }
-
-              if ((gaps === 0 && cfg.wild.length === 0) || 
-                  (gaps === 1 && cfg.wild.length === 1) || 
-                  (gaps === 0 && cfg.wild.length === 1)) {
-                  
-                let sorted = [];
-                let pool = [...cards];
-                let actualMin = min;
-                let actualMax = max;
-                let wildVal = -1;
-
-                if (cfg.wild.length === 1) {
-                  if (gaps === 1) {
-                    for (let i = 1; i < values.length; i++) {
-                      if (values[i] - values[i-1] > 1) {
-                        wildVal = values[i-1] + 1;
-                        break;
-                      }
-                    }
-                  } else {
-                    if (max < 14) {
-                      wildVal = max + 1;
-                      actualMax++;
-                    } else {
-                      wildVal = min - 1;
-                      actualMin--;
-                    }
-                  }
-                }
-
-                for (let v = actualMin; v <= actualMax; v++) {
-                  if (v === wildVal) {
-                    sorted.push(cfg.wild[0]);
-                  } else {
-                    let matchIndex = pool.findIndex(c => {
-                      if (v === 1 || v === 14) return c.rank === 'A';
-                      if (v === 2) return c.rank === '2' && cfg.nat.includes(c);
-                      return sequenceMath[c.rank] === v;
-                    });
-                    if (matchIndex !== -1) {
-                      sorted.push(pool[matchIndex]);
-                      pool.splice(matchIndex, 1);
-                    }
-                  }
-                }
-                
-                if (sorted.length === cards.length && sorted.every(c => c !== undefined)) {
-                  return { valid: true, status: cfg.wild.length === 0 ? 'clean' : 'dirty', sorted };
-                }
-              }
+function buildMeld(cardIds, rules) {
+    if (cardIds.length < 3) return null;
+    
+    let suitCounts = {1:0, 2:0, 3:0, 4:0};
+    let rankCounts = {};
+    
+    for (let cid of cardIds) {
+        const s = getSuit(cid); const r = getRank(cid);
+        if (s !== 5 && r !== 2) {
+            suitCounts[s] = (suitCounts[s] || 0) + 1;
+            rankCounts[r] = (rankCounts[r] || 0) + 1;
+        }
+    }
+    
+    let mainSuit = 1; let maxS = 0;
+    for (let s=1; s<=4; s++) if (suitCounts[s] > maxS) { maxS = suitCounts[s]; mainSuit = s; }
+    
+    let isRunner = false; let runnerRank = 0;
+    for (let r in rankCounts) {
+        if (rankCounts[r] >= 2) {
+            const numR = parseInt(r);
+            if (rules.runners === 'any' || 
+               (rules.runners === 'aces_threes' && (numR === 1 || numR === 3)) ||
+               (rules.runners === 'aces_kings' && (numR === 1 || numR === 13))) {
+                isRunner = true; runnerRank = numR; break;
             }
-          }
         }
-      }
     }
-  }
-
-  return { valid: false };
-}
-
-export function getCanastaStatus(meld, rules) {
-  const result = parseMeld(meld, rules);
-  if (result.valid && meld.length >= 7) return result.status;
-  return null;
-}
-
-export function calculateMeldPoints(meldGroup, rules) {
-  let pts = 0;
-  meldGroup.forEach(c => pts += pointValues[c.rank]);
-  const status = getCanastaStatus(meldGroup, rules);
-  if (status === 'clean') pts += 200;
-  if (status === 'dirty') pts += 100;
-  if (rules.largeCanasta) {
-    if (meldGroup.length === 13) pts += 500;
-    if (meldGroup.length >= 14) pts += 1000;
-  }
-  return pts;
-}
-
-function checkMorto(G, ctx) {
-  const p = ctx.currentPlayer;
-  const team = G.teams[p];
-  if (G.hands[p].length === 0 && !G.teamMortos[team] && G.pots.length > 0) {
-    G.hands[p] = G.pots.shift(); 
-    G.teamMortos[team] = true;
-  }
-}
-
-function canEmptyHand(G, team) {
-  const teamMelds = G.teamPlayers[team].flatMap(tp => G.melds[tp] || []);
-  const hasMorto = G.teamMortos[team];
-  const mortosAvailable = G.pots.length > 0;
-  
-  if (!hasMorto && mortosAvailable) return true; 
-  
-  return teamMelds.some(m => {
-    const status = getCanastaStatus(m, G.rules);
-    if (!status) return false;
-    if (G.rules.cleanCanastaToWin && status !== 'clean') return false;
-    return true;
-  });
-}
-
-function canEmptyHandWithSimulatedMelds(G, team, simulatedMeldsForTarget, targetPlayerID) {
-  const teamPlayers = G.teamPlayers[team];
-  const allTeamMelds = teamPlayers.flatMap(tp => 
-    tp === targetPlayerID ? simulatedMeldsForTarget : (G.melds[tp] || [])
-  );
-  
-  const hasMorto = G.teamMortos[team];
-  const mortosAvailable = G.pots.length > 0;
-  
-  if (!hasMorto && mortosAvailable) return true; 
-  
-  return allTeamMelds.some(m => {
-    const status = getCanastaStatus(m, G.rules);
-    if (!status) return false;
-    if (G.rules.cleanCanastaToWin && status !== 'clean') return false;
-    return true;
-  });
-}
-
-function calculateFinalScores(G) {
-  let scores = {
-    team0: { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 },
-    team1: { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 }
-  };
-
-  for (const teamId of ['team0', 'team1']) {
-    const players = G.teamPlayers[teamId] || [];
-    const allMelds = players.flatMap(p => G.melds[p] || []);
-    const allHandCards = players.flatMap(p => G.hands[p] || []);
     
-    allMelds.forEach(meld => scores[teamId].table += calculateMeldPoints(meld, G.rules));
-    allHandCards.forEach(card => scores[teamId].hand -= pointValues[card.rank]);
-    
-    if (!G.teamMortos[teamId] || (G.teamMortos[teamId] && !G.mortoUsed[teamId])) {
-      if (players.length > 0) scores[teamId].mortoPenalty -= 100;
+    if (isRunner) {
+        let res = appendCardsToMeld([0, null, 0, 0, 0], cardIds);
+        if (res) return res;
     }
+    
+    let sortedLow = [...cardIds].sort((a,b) => getRank(a) - getRank(b));
+    let resSeq = appendCardsToMeld([mainSuit, null, null, 0, 0], sortedLow);
+    if (resSeq) return resSeq;
+    
+    if (cardIds.some(c => getRank(c) === 1)) {
+        let sortedHigh = [...cardIds].sort((a,b) => (getRank(a) === 1 ? 14 : getRank(a)) - (getRank(b) === 1 ? 14 : getRank(b)));
+        let resSeqHigh = appendCardsToMeld([mainSuit, null, null, 0, 0], sortedHigh);
+        if (resSeqHigh) return resSeqHigh;
+    }
+    
+    return null;
+}
 
-    scores[teamId].total = scores[teamId].table + scores[teamId].hand + scores[teamId].mortoPenalty;
-  }
-  return scores;
+export function calculateMeldPoints(meld, rules) {
+    let pts = 0;
+    const isSeq = meld[0] !== 0;
+    const isCanasta = isSeq ? (meld[2] - meld[1] >= 6) : (meld[2] >= 7);
+    const isClean = meld[3] === 0; 
+    
+    if (isSeq) {
+        for(let r = meld[1]; r <= meld[2]; r++) {
+            if (r === meld[4]) pts += meld[3] === 5 ? 50 : 20;
+            else pts += (r === 1 || r === 14) ? 15 : (r >= 8 ? 10 : (r === 2 ? 20 : 5));
+        }
+        if (isCanasta) {
+            pts += isClean ? 200 : 100;
+            if (rules.largeCanasta) {
+                if (meld[2] - meld[1] === 12) pts += 500;
+                if (meld[2] - meld[1] >= 13) pts += 1000;
+            }
+        }
+    } else {
+        const count = meld[2]; const wSuit = meld[3];
+        const nats = wSuit > 0 ? count - 1 : count;
+        pts += nats * ((meld[1] === 1) ? 15 : (meld[1] >= 8 ? 10 : 5));
+        if (wSuit > 0) pts += (wSuit === 5 ? 50 : 20);
+        if (isCanasta) pts += (isClean ? 200 : 100);
+    }
+    return pts;
+}
+
+function getCardPoints(c) {
+    const s = getSuit(c); const r = getRank(c);
+    if (s === 5) return 50; if (r === 2) return 20; if (r === 1) return 15;
+    if (r >= 8 && r <= 13) return 10; return 5;
 }
 
 function buildDeck(rules) {
-  const suits = ['♠', '♥', '♦', '♣'];
-  const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
-  let deck = [];
-  for (let i = 0; i < 2; i++) {
-    for (let suit of suits) { for (let rank of ranks) deck.push({ rank, suit, id: `${rank}${suit}-${i}` }); }
-  }
-  if (!rules.noJokers) {
-    for (let i = 0; i < 4; i++) deck.push({ rank: 'JOKER', suit: '★', id: `Joker-${i}` });
-  }
-  return deck;
+    let deck = [];
+    for (let i = 0; i < 104; i++) deck.push(i);
+    if (!rules.noJokers) for (let i = 104; i < 108; i++) deck.push(i);
+    return deck;
 }
 
-// ==========================================
-// DEEP Q-NETWORK (DQN) AI HELPERS
-// ==========================================
 const nnHelpers = {
-  cardToIndex: (card) => {
-      if (card.rank === 'JOKER') return 52;
-      const suits = { '♠': 0, '♥': 1, '♦': 2, '♣': 3 };
-      const ranks = { 'A':0, '2':1, '3':2, '4':3, '5':4, '6':5, '7':6, '8':7, '9':8, '10':9, 'J':10, 'Q':11, 'K':12 };
-      return suits[card.suit] * 13 + ranks[card.rank];
-  },
   cardsToVector: (cards) => {
       let vec = new Array(53).fill(0);
-      cards.forEach(c => vec[nnHelpers.cardToIndex(c)] += 1);
+      cards.forEach(c => vec[c >= 104 ? 52 : c % 52] += 1);
       return vec;
-  },
-
-  extractSequence: (meldCards) => {
-      let vec = new Array(13).fill(0.0);
-      if (!meldCards || meldCards.length === 0) return vec;
-
-      const jokers = meldCards.filter(c => c.rank === 'JOKER');
-      const twos = meldCards.filter(c => c.rank === '2');
-      const naturals = meldCards.filter(c => c.rank !== 'JOKER' && c.rank !== '2');
-      const wild = jokers.length > 0 ? jokers[0] : (twos.length > 0 ? twos[0] : null);
-
-      const rankVal = (r) => {
-          if (r === 'JOKER') return 1.0;
-          const vals = { 'A':14, '2':2, '3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, '10':10, 'J':11, 'Q':12, 'K':13 };
-          return vals[r] / 14.0; 
-      };
-      const suitIdx = { '♠': 0, '♥': 1, '♦': 2, '♣': 3 };
-
-      if (naturals.length > 0) {
-          vec[suitIdx[naturals[0].suit]] = 1.0; 
-          let sortedVals = naturals.map(c => rankVal(c.rank)).sort((a,b) => a - b);
-          vec[4] = sortedVals[0]; 
-          vec[5] = sortedVals[sortedVals.length - 1]; 
-      }
-
-      vec[6] = meldCards.length / 14.0; 
-
-      if (wild) {
-          vec[7] = 1.0; 
-          if (wild.rank === 'JOKER') {
-              vec[12] = 1.0; 
-          } else {
-              vec[8 + suitIdx[wild.suit]] = 1.0; 
-          }
-      }
-      return vec;
-  },
-
-  extractRunner: (meldCards) => {
-      let vec = new Array(13).fill(0.0);
-      if (!meldCards || meldCards.length === 0) return vec;
-
-      const jokers = meldCards.filter(c => c.rank === 'JOKER');
-      const twos = meldCards.filter(c => c.rank === '2');
-      const naturals = meldCards.filter(c => c.rank !== 'JOKER' && c.rank !== '2');
-      const wild = jokers.length > 0 ? jokers[0] : (twos.length > 0 ? twos[0] : null);
-
-      const rankVal = (r) => {
-          if (r === 'JOKER') return 1.0;
-          const vals = { 'A':14, '2':2, '3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, '10':10, 'J':11, 'Q':12, 'K':13 };
-          return vals[r] / 14.0; 
-      };
-      const suitIdx = { '♠': 0, '♥': 1, '♦': 2, '♣': 3 };
-
-      if (naturals.length > 0) {
-          vec[0] = rankVal(naturals[0].rank); 
-          meldCards.forEach(c => {
-              if (c.rank !== 'JOKER') vec[8 + suitIdx[c.suit]] += 0.25; 
-          });
-      }
-
-      vec[1] = meldCards.length / 14.0; 
-
-      if (wild) {
-          vec[2] = 1.0; 
-          if (wild.rank === 'JOKER') {
-              vec[7] = 1.0; 
-          } else {
-              vec[3 + suitIdx[wild.suit]] = 1.0; 
-          }
-      }
-      return vec; 
   },
 
   meldsToSemanticMatrix: (melds) => {
       let vec = [];
-      let sequences = [];
-      let runners = [];
+      let sequences = melds.filter(m => m[0] !== 0).sort((a,b) => (b[2]-b[1]) - (a[2]-a[1]));
+      let runners = melds.filter(m => m[0] === 0).sort((a,b) => b[2] - a[2]);
+
+      for (let i=0; i<15; i++) {
+          let v = new Array(13).fill(0);
+          if (i < sequences.length) {
+              const m = sequences[i];
+              v[m[0] - 1] = 1.0; 
+              v[4] = m[1] / 14.0; v[5] = m[2] / 14.0; v[6] = (m[2] - m[1] + 1) / 14.0;
+              if (m[3] > 0) { v[7] = 1.0; if (m[3] === 5) v[12] = 1.0; else v[7 + m[3]] = 1.0; }
+          }
+          vec.push(...v);
+      }
       
-      melds.forEach(m => {
-          const naturals = m.filter(c => c.rank !== 'JOKER' && c.rank !== '2');
-          const isRunner = naturals.length >= 2 && naturals[0].rank === naturals[1].rank;
-          if (isRunner) runners.push(m);
-          else sequences.push(m);
-      });
-
-      sequences.sort((a, b) => b.length - a.length);
-      runners.sort((a, b) => b.length - a.length);
-
-      for (let i = 0; i < 15; i++) {
-          if (i < sequences.length) vec.push(...nnHelpers.extractSequence(sequences[i]));
-          else vec.push(...new Array(13).fill(0.0));
+      for(let i=0; i<2; i++) {
+          let v = new Array(13).fill(0);
+          if (i < runners.length) {
+              const m = runners[i];
+              v[0] = m[1] / 14.0; v[1] = m[2] / 14.0;
+              if (m[3] > 0) { v[2] = 1.0; if (m[3] === 5) v[7] = 1.0; else v[2 + m[3]] = 1.0; }
+          }
+          vec.push(...v);
       }
-
-      for (let i = 0; i < 2; i++) {
-          if (i < runners.length) vec.push(...nnHelpers.extractRunner(runners[i]));
-          else vec.push(...new Array(13).fill(0.0));
-      }
-
       return vec; 
   },
 
   forwardPass: (inputs, weights) => {
-      const INPUT_SIZE = 608; 
-      const HIDDEN_SIZE = 16;
-      let wIdx = 0;
-      let hidden = new Array(HIDDEN_SIZE).fill(0);
-      
+      const INPUT_SIZE = 774; const HIDDEN_SIZE = 16;
+      let wIdx = 0; let hidden = new Array(HIDDEN_SIZE).fill(0);
       for (let h = 0; h < HIDDEN_SIZE; h++) {
           let sum = weights[wIdx++]; 
           for (let i = 0; i < INPUT_SIZE; i++) sum += inputs[i] * weights[wIdx++];
           hidden[h] = Math.max(0, sum); 
       }
-      
       let output = weights[wIdx++]; 
       for (let h = 0; h < HIDDEN_SIZE; h++) output += hidden[h] * weights[wIdx++];
       return output;
@@ -398,7 +252,7 @@ export const BuracoGame = {
 
     return {
       rules, deck: initialDeck, discardPile: [initialDeck.pop()], pots, hands, melds, knownCards,
-      hasDrawn: false, teams, teamPlayers, teamMortos: { team0: false, team1: false },
+      hasDrawn: false, lastDrawnCard: null, teams, teamPlayers, teamMortos: { team0: false, team1: false },
       mortoUsed: { team0: false, team1: false }, isExhausted: false
     };
   },
@@ -406,12 +260,10 @@ export const BuracoGame = {
   moves: {
     drawCard: ({ G, ctx }) => {
       if (G.hasDrawn) return 'INVALID_MOVE';
-      if (G.deck.length === 0 && G.pots.length > 0) {
-        G.deck = G.pots.shift(); 
-      }
+      if (G.deck.length === 0 && G.pots.length > 0) G.deck = G.pots.shift(); 
       if (G.deck.length > 0) {
         const card = G.deck.pop();
-        card.isNewlyDrawn = true; 
+        G.lastDrawnCard = card; 
         G.hands[ctx.currentPlayer].push(card);
         G.hasDrawn = true;
       }
@@ -421,56 +273,53 @@ export const BuracoGame = {
       if (G.hasDrawn || G.discardPile.length === 0) return 'INVALID_MOVE';
       const hand = G.hands[ctx.currentPlayer];
       const topCard = G.discardPile[G.discardPile.length - 1];
-      const selectedCards = hand.filter(c => selectedHandIds.includes(c.id));
 
       if (G.rules.discard === 'closed') {
-        let isValid = false;
-        let sortedMeld = null;
+        let isValid = false; let parsedMeldObject = null;
 
         if (target.type === 'new') {
-          const parsed = parseMeld([...selectedCards, topCard], G.rules);
-          if (parsed.valid) { isValid = true; sortedMeld = parsed.sorted; }
+          parsedMeldObject = buildMeld([...selectedHandIds, topCard], G.rules);
+          if (parsedMeldObject) isValid = true;
         } else if (target.type === 'append') {
-          const existingMeld = G.melds[target.player][target.index];
-          const parsed = parseMeld([...existingMeld, ...selectedCards, topCard], G.rules);
-          if (parsed.valid) { isValid = true; sortedMeld = parsed.sorted; }
+          parsedMeldObject = appendCardsToMeld(G.melds[target.player][target.index], [...selectedHandIds, topCard]);
+          if (parsedMeldObject) isValid = true;
         }
 
         if (!isValid) return 'INVALID_MOVE'; 
 
-        const newHand = hand.filter(c => !selectedHandIds.includes(c.id));
+        const newHand = hand.filter(c => !selectedHandIds.includes(c));
         const restOfPile = G.discardPile.slice(0, G.discardPile.length - 1);
         const finalHandLength = newHand.length + restOfPile.length;
 
-        let newMeldsForTarget;
-        const targetPlayer = target.type === 'new' ? ctx.currentPlayer : target.player;
+        let simMelds = [...G.melds[target.player || ctx.currentPlayer]];
+        if (target.type === 'new') simMelds.push(parsedMeldObject); else simMelds[target.index] = parsedMeldObject;
 
-        if (target.type === 'new') {
-          newMeldsForTarget = [...G.melds[ctx.currentPlayer], sortedMeld];
-        } else {
-          newMeldsForTarget = [...G.melds[target.player]];
-          newMeldsForTarget[target.index] = sortedMeld;
-        }
+        const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
+        const hasClean = m => m[3] === 0;
+        const teamHasClean = G.teamPlayers[G.teams[ctx.currentPlayer]].some(tp => 
+            (tp === (target.player||ctx.currentPlayer) ? simMelds : G.melds[tp]).some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || hasClean(m)))
+        );
 
-        if (finalHandLength < 2 && !canEmptyHandWithSimulatedMelds(G, G.teams[ctx.currentPlayer], newMeldsForTarget, targetPlayer)) {
-          return 'INVALID_MOVE'; 
-        }
+        if (finalHandLength < 2 && !teamHasClean && (!G.pots.length || G.teamMortos[G.teams[ctx.currentPlayer]])) return 'INVALID_MOVE';
 
         G.hands[ctx.currentPlayer] = newHand;
-        if (target.type === 'new') G.melds[ctx.currentPlayer].push(sortedMeld);
-        else G.melds[target.player][target.index] = sortedMeld;
+        if (target.type === 'new') G.melds[ctx.currentPlayer].push(parsedMeldObject);
+        else G.melds[target.player][target.index] = parsedMeldObject;
 
         G.discardPile.pop();
-        G.discardPile.forEach(c => c.isNewlyDrawn = true);
         G.knownCards[ctx.currentPlayer].push(...G.discardPile); 
         G.hands[ctx.currentPlayer].push(...G.discardPile);
         G.discardPile = [];
         G.hasDrawn = true;
+        G.lastDrawnCard = null;
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
-        checkMorto(G, ctx);
+        
+        if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[G.teams[ctx.currentPlayer]]) {
+            G.hands[ctx.currentPlayer] = G.pots.shift(); G.teamMortos[G.teams[ctx.currentPlayer]] = true;
+        }
 
       } else {
-        G.discardPile.forEach(c => c.isNewlyDrawn = true);
+        G.lastDrawnCard = null; 
         G.knownCards[ctx.currentPlayer].push(...G.discardPile); 
         G.hands[ctx.currentPlayer].push(...G.discardPile);
         G.discardPile = [];
@@ -481,77 +330,82 @@ export const BuracoGame = {
     playMeld: ({ G, ctx }, cardIds) => {
       if (!G.hasDrawn) return 'INVALID_MOVE'; 
       const hand = G.hands[ctx.currentPlayer];
+      const parsed = buildMeld(cardIds, G.rules);
       
-      const cardsToMeld = hand.filter(card => cardIds.includes(card.id));
-      const parsed = parseMeld(cardsToMeld, G.rules);
-      
-      if (parsed.valid) {
-        const newHand = hand.filter(card => !cardIds.includes(card.id));
-        const newMelds = [...G.melds[ctx.currentPlayer], parsed.sorted];
+      if (parsed) {
+        const newHand = hand.filter(c => !cardIds.includes(c));
+        const newMelds = [...G.melds[ctx.currentPlayer], parsed];
         
-        if (newHand.length < 2 && !canEmptyHandWithSimulatedMelds(G, G.teams[ctx.currentPlayer], newMelds, ctx.currentPlayer)) {
-          return 'INVALID_MOVE'; 
-        }
+        const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
+        const hasClean = m => m[3] === 0;
+        const teamHasClean = G.teamPlayers[G.teams[ctx.currentPlayer]].some(tp => 
+            (tp === ctx.currentPlayer ? newMelds : G.melds[tp]).some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || hasClean(m)))
+        );
+
+        if (newHand.length < 2 && !teamHasClean && (!G.pots.length || G.teamMortos[G.teams[ctx.currentPlayer]])) return 'INVALID_MOVE';
 
         G.hands[ctx.currentPlayer] = newHand;
         G.melds[ctx.currentPlayer] = newMelds;
-        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => !cardIds.includes(c.id)); 
+        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => !cardIds.includes(c)); 
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
-        checkMorto(G, ctx); 
-      } else {
-        return 'INVALID_MOVE';
-      }
+        
+        if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[G.teams[ctx.currentPlayer]]) {
+            G.hands[ctx.currentPlayer] = G.pots.shift(); G.teamMortos[G.teams[ctx.currentPlayer]] = true;
+        }
+      } else return 'INVALID_MOVE';
     },
 
     appendToMeld: ({ G, ctx }, meldOwner, meldIndex, cardIds) => {
       if (!G.hasDrawn || G.teams[ctx.currentPlayer] !== G.teams[meldOwner]) return 'INVALID_MOVE';
       const hand = G.hands[ctx.currentPlayer];
+      const parsed = appendCardsToMeld(G.melds[meldOwner][meldIndex], cardIds);
       
-      const cardsToAdd = hand.filter(card => cardIds.includes(card.id));
-      const proposed = [...G.melds[meldOwner][meldIndex], ...cardsToAdd];
-      const parsed = parseMeld(proposed, G.rules);
-      
-      if (parsed.valid) {
-        const newHand = hand.filter(card => !cardIds.includes(card.id));
-        const newMeldState = [...G.melds[meldOwner]];
-        newMeldState[meldIndex] = parsed.sorted;
+      if (parsed) {
+        const newHand = hand.filter(c => !cardIds.includes(c));
+        const newMeldState = [...G.melds[meldOwner]]; newMeldState[meldIndex] = parsed;
 
-        if (newHand.length < 2 && !canEmptyHandWithSimulatedMelds(G, G.teams[ctx.currentPlayer], newMeldState, meldOwner)) {
-          return 'INVALID_MOVE'; 
-        }
+        const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
+        const hasClean = m => m[3] === 0;
+        const teamHasClean = G.teamPlayers[G.teams[ctx.currentPlayer]].some(tp => 
+            (tp === meldOwner ? newMeldState : G.melds[tp]).some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || hasClean(m)))
+        );
+
+        if (newHand.length < 2 && !teamHasClean && (!G.pots.length || G.teamMortos[G.teams[ctx.currentPlayer]])) return 'INVALID_MOVE';
 
         G.hands[ctx.currentPlayer] = newHand;
         G.melds[meldOwner] = newMeldState;
-        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => !cardIds.includes(c.id)); 
+        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => !cardIds.includes(c)); 
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
-        checkMorto(G, ctx); 
-      } else {
-        return 'INVALID_MOVE';
-      }
+        
+        if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[G.teams[ctx.currentPlayer]]) {
+            G.hands[ctx.currentPlayer] = G.pots.shift(); G.teamMortos[G.teams[ctx.currentPlayer]] = true;
+        }
+      } else return 'INVALID_MOVE';
     },
 
     discardCard: ({ G, ctx, events }, cardId) => {
       if (!G.hasDrawn) return 'INVALID_MOVE'; 
       const hand = G.hands[ctx.currentPlayer];
       
-      if (hand.length === 1 && !canEmptyHand(G, G.teams[ctx.currentPlayer])) return 'INVALID_MOVE';
+      const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
+      const hasClean = m => m[3] === 0;
+      const teamHasClean = G.teamPlayers[G.teams[ctx.currentPlayer]].some(tp => G.melds[tp].some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || hasClean(m))));
 
-      const cardIndex = hand.findIndex(card => card.id === cardId);
+      if (hand.length === 1 && !teamHasClean && (!G.pots.length || G.teamMortos[G.teams[ctx.currentPlayer]])) return 'INVALID_MOVE';
+
+      const cardIndex = hand.indexOf(cardId);
       if (cardIndex !== -1) {
-        const discardedCard = hand.splice(cardIndex, 1)[0];
-        delete discardedCard.isNewlyDrawn; 
-        
-        G.discardPile.push(discardedCard);
-        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => c.id !== cardId); 
+        G.discardPile.push(hand.splice(cardIndex, 1)[0]);
+        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => c !== cardId); 
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
         
-        checkMorto(G, ctx); 
-        G.hasDrawn = false; 
-        G.hands[ctx.currentPlayer].forEach(c => delete c.isNewlyDrawn); 
+        if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[G.teams[ctx.currentPlayer]]) {
+            G.hands[ctx.currentPlayer] = G.pots.shift(); G.teamMortos[G.teams[ctx.currentPlayer]] = true;
+        }
+        
+        G.hasDrawn = false; G.lastDrawnCard = null;
         events.endTurn();
-      } else {
-        return 'INVALID_MOVE';
-      }
+      } else return 'INVALID_MOVE';
     },
 
     declareExhausted: ({ G }) => { G.isExhausted = true; }
@@ -559,21 +413,16 @@ export const BuracoGame = {
 
   endIf: ({ G }) => {
     if (G.isExhausted) return { reason: 'Monte Esgotado', scores: calculateFinalScores(G) };
-
-    if (G.deck.length === 0 && G.pots.length === 0 && G.discardPile.length <= 1 && !G.hasDrawn) {
-        return { reason: 'Monte Esgotado', scores: calculateFinalScores(G) };
-    }
+    if (G.deck.length === 0 && G.pots.length === 0 && G.discardPile.length <= 1 && !G.hasDrawn) return { reason: 'Monte Esgotado', scores: calculateFinalScores(G) };
     
     for (let i = 0; i < G.rules.numPlayers; i++) {
-      const p = i.toString();
-      const team = G.teams[p];
-      const mortosAvailable = G.pots.length > 0;
-      
-      if (G.hands[p] && G.hands[p].length === 0 && (G.teamMortos[team] || !mortosAvailable)) {
-        if (canEmptyHand(G, team)) {
+      const p = i.toString(); const team = G.teams[p];
+      if (G.hands[p] && G.hands[p].length === 0 && (G.teamMortos[team] || G.pots.length === 0)) {
+        const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
+        const teamHasClean = G.teamPlayers[team].some(tp => G.melds[tp].some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || m[3]===0)));
+        if (teamHasClean) {
           let finalScores = calculateFinalScores(G);
-          finalScores[team].baterBonus = 100;
-          finalScores[team].total += 100;
+          finalScores[team].baterBonus = 100; finalScores[team].total += 100;
           return { winner: team, reason: 'Bateu!', scores: finalScores };
         }
       }
@@ -581,49 +430,57 @@ export const BuracoGame = {
   },
 
   ai: {
-    // Add injectedDNA parameter here
-    enumerate: (G, ctx, injectedDNA) => {
-      const p = ctx.currentPlayer;
-      const hand = G.hands[p] || [];
+    enumerate: (G, ctx, customDNA) => {
+      const p = ctx.currentPlayer; const myTeam = G.teams[p]; const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
+      const myHandCards = G.hands[p] || [];
       const topDiscard = G.discardPile.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
-      const myTeam = G.teams[p];
-      const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
-
-      // Use injected DNA instead of G.botGenomes
-      const DNA = injectedDNA || new Array(9761).fill(0.01);
+      
+      const numP = G.rules.numPlayers || 4; const pInt = parseInt(p);
+      const opp1Id = ((pInt + 1) % numP).toString();
+      const partnerId = numP === 4 ? ((pInt + 2) % numP).toString() : null;
+      const opp2Id = numP === 4 ? ((pInt + 3) % numP).toString() : null;
 
       let baseInputs = [];
       baseInputs.push(G.deck.length / 108.0);
-      baseInputs.push(G.pots.length / 2.0);
+      baseInputs.push(G.pots.length > 0 ? 1.0 : 0.0);
+      baseInputs.push(G.pots.length > 1 ? 1.0 : 0.0);
       baseInputs.push(G.teamMortos[myTeam] ? 1.0 : 0.0);
       baseInputs.push(G.teamMortos[oppTeam] ? 1.0 : 0.0);
-
-      const myHandVec = nnHelpers.cardsToVector(hand);
       
+      const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
+      const hasClean = teamId => (G.teamPlayers[teamId] || []).some(tp => G.melds[tp].some(m => isCanasta(m) && m[3]===0)) ? 1.0 : 0.0;
+      baseInputs.push(hasClean(myTeam)); baseInputs.push(hasClean(oppTeam));
+
+      baseInputs.push(myHandCards.length / 14.0);
+      baseInputs.push((G.hands[opp1Id] || []).length / 14.0);
+      baseInputs.push(partnerId ? ((G.hands[partnerId] || []).length / 14.0) : 0);
+      baseInputs.push(opp2Id ? ((G.hands[opp2Id] || []).length / 14.0) : 0);
+
       const myMelds = (G.teamPlayers[myTeam] || []).flatMap(tp => G.melds[tp] || []);
-      const myTableMatrix = nnHelpers.meldsToSemanticMatrix(myMelds);
-      
+      baseInputs.push(...nnHelpers.meldsToSemanticMatrix(myMelds));
       const oppMelds = (G.teamPlayers[oppTeam] || []).flatMap(tp => G.melds[tp] || []);
-      const oppTableMatrix = nnHelpers.meldsToSemanticMatrix(oppMelds);
-      
-      const discardVec = nnHelpers.cardsToVector(G.discardPile);
+      baseInputs.push(...nnHelpers.meldsToSemanticMatrix(oppMelds));
 
-      baseInputs.push(...myHandVec, ...myTableMatrix, ...oppTableMatrix, ...discardVec);
+      baseInputs.push(...nnHelpers.cardsToVector(G.discardPile));
+      baseInputs.push(...nnHelpers.cardsToVector(myHandCards));
+      baseInputs.push(...nnHelpers.cardsToVector(G.knownCards[opp1Id] || []));
+      baseInputs.push(...nnHelpers.cardsToVector(partnerId ? (G.knownCards[partnerId] || []) : []));
+      baseInputs.push(...nnHelpers.cardsToVector(opp2Id ? (G.knownCards[opp2Id] || []) : []));
+
+      const DNA = customDNA || new Array(12417).fill(0.01);
 
       const getScore = (actionTypeArray, actionCards) => {
-          const actionVec = nnHelpers.cardsToVector(actionCards);
-          const fullInput = [...baseInputs, ...actionTypeArray, ...actionVec];
-          return nnHelpers.forwardPass(fullInput, DNA);
+          return nnHelpers.forwardPass([...baseInputs, ...actionTypeArray, ...nnHelpers.cardsToVector(actionCards)], DNA);
       };
 
       if (!G.hasDrawn) {
-        if (topDiscard) {
+        if (topDiscard !== null) {
           if (G.rules.discard === 'closed') {
-            for (let i = 0; i < hand.length; i++) {
-              for (let j = i + 1; j < hand.length; j++) {
-                if (parseMeld([hand[i], hand[j], topDiscard], G.rules).valid) {
-                  let score = getScore([1.0, 0.0, 0.0], [hand[i], hand[j], topDiscard]);
-                  if (score > 0) return [{ move: 'pickUpDiscard', args: [[hand[i].id, hand[j].id], { type: 'new' }] }];
+            for (let i = 0; i < myHandCards.length; i++) {
+              for (let j = i + 1; j < myHandCards.length; j++) {
+                if (buildMeld([myHandCards[i], myHandCards[j], topDiscard], G.rules)) {
+                  let score = getScore([1.0, 0.0, 0.0], [myHandCards[i], myHandCards[j], topDiscard]);
+                  if (score > 0) return [{ move: 'pickUpDiscard', args: [[myHandCards[i], myHandCards[j]], { type: 'new' }] }];
                 }
               }
             }
@@ -642,34 +499,31 @@ export const BuracoGame = {
 
         (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIndex) => {
-            hand.forEach(card => {
-              if (parseMeld([...meld, card], G.rules).valid) {
-                let sim = [...G.melds[tp]]; sim[mIndex] = parseMeld([...meld, card], G.rules).sorted;
-                if (hand.length - 1 < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, tp)) return; 
+            myHandCards.forEach(card => {
+              if (appendCardsToMeld(meld, [card])) {
                 let score = getScore([0.0, 1.0, 0.0], [card]);
-                evaluateMove({ move: 'appendToMeld', args: [tp, mIndex, [card.id]] }, score);
+                evaluateMove({ move: 'appendToMeld', args: [tp, mIndex, [card]] }, score);
               }
             });
           });
         });
 
-        for (let i = 0; i < hand.length; i++) {
-          for (let j = i + 1; j < hand.length; j++) {
-            for (let k = j + 1; k < hand.length; k++) {
-              if (parseMeld([hand[i], hand[j], hand[k]], G.rules).valid) {
-                let sim = [...(G.melds[p] || []), parseMeld([hand[i], hand[j], hand[k]], G.rules).sorted];
-                if (hand.length - 3 < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue; 
-                let score = getScore([0.0, 1.0, 0.0], [hand[i], hand[j], hand[k]]);
-                evaluateMove({ move: 'playMeld', args: [[hand[i].id, hand[j].id, hand[k].id]] }, score);
+        for (let i = 0; i < myHandCards.length; i++) {
+          for (let j = i + 1; j < myHandCards.length; j++) {
+            for (let k = j + 1; k < myHandCards.length; k++) {
+              if (buildMeld([myHandCards[i], myHandCards[j], myHandCards[k]], G.rules)) {
+                let score = getScore([0.0, 1.0, 0.0], [myHandCards[i], myHandCards[j], myHandCards[k]]);
+                evaluateMove({ move: 'playMeld', args: [[myHandCards[i], myHandCards[j], myHandCards[k]]] }, score);
               }
             }
           }
         }
 
-        if (hand.length > 1 || canEmptyHand(G, myTeam)) {
-          hand.forEach(card => {
+        const teamHasClean = G.teamPlayers[myTeam].some(tp => G.melds[tp].some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || m[3]===0)));
+        if (myHandCards.length > 1 || teamHasClean || (G.pots.length && !G.teamMortos[myTeam])) {
+          myHandCards.forEach(card => {
             let score = getScore([0.0, 0.0, 1.0], [card]);
-            evaluateMove({ move: 'discardCard', args: [card.id] }, score);
+            evaluateMove({ move: 'discardCard', args: [card] }, score);
           });
         }
         
