@@ -716,26 +716,36 @@ export const BuracoGame = {
 
       // 🚀 BATCH RESOLVER: Intelligently limits the batch to prevent Hand-Size Violations
       const resolveQueue = (moves) => {
-          let selected = [];
-          let usedCards = new Set();
-          let projectedHandSize = myHandCards.length;
-          
-          const mortoSafe = hasClean(myTeam) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
+        let selected = [];
+        let usedCards = new Set();
+        let projectedHandSize = myHandCards.length;
+        let projectedMelds = {}; // track meld state as we commit moves
+        
+        const mortoSafe = hasClean(myTeam) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
 
-          for (let m of moves) {
-              let conflict = false;
-              for (let c of m.cards) { if (usedCards.has(c)) { conflict = true; break; } }
-              if (conflict) continue;
+        for (let m of moves) {
+            let conflict = false;
+            for (let c of m.cards) { if (usedCards.has(c)) { conflict = true; break; } }
+            if (conflict) continue;
 
-              // Engine Rule Safety: Cannot drop to 1 card if no canasta exists!
-              if (projectedHandSize - m.cards.length < 2 && !mortoSafe) continue;
+            if (projectedHandSize - m.cards.length < 2 && !mortoSafe) continue;
 
-              for (let c of m.cards) usedCards.add(c);
-              selected.push(m);
-              projectedHandSize -= m.cards.length;
-          }
-          return selected;
-      };
+            // Re-validate appends against projected meld state
+            if (m.move === 'appendToMeld') {
+                const [tp, mIndex] = m.args;
+                const key = `${tp}-${mIndex}`;
+                const currentMeld = projectedMelds[key] || G.melds[tp][mIndex];
+                const revalidated = appendCardsToMeld(currentMeld, m.cards);
+                if (!revalidated) continue;
+                projectedMelds[key] = revalidated; // update projected state
+            }
+
+            for (let c of m.cards) usedCards.add(c);
+            selected.push(m);
+            projectedHandSize -= m.cards.length;
+        }
+        return selected;
+    };
 
       // ==========================================
       // STAGE 1: PICKUP
