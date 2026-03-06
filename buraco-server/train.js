@@ -41,56 +41,48 @@ const generateRandomGenome = () => {
 
 async function runMatch(genomes, rules) {
     const client = Client({
-    game: BuracoGame,
-    numPlayers: rules.numPlayers || 4,
-    setupData: { ...rules },  // no botGenomes here
-    debug: false,
-});
+        game: BuracoGame,
+        numPlayers: rules.numPlayers || 4,
+        setupData: { ...rules },
+        debug: false,
+    });
 
     client.start();
     try {
         let state = client.getState();
         let moveCount = 0;
         const MAX_MOVES = 800;
-        let consecutiveFails = 0;
+        let lastMoveKey = null;
 
         while (!state.ctx.gameover && moveCount < MAX_MOVES) {
             if (moveCount % 50 === 0) await new Promise(resolve => setImmediate(resolve));
 
             const p = state.ctx.currentPlayer;
-            const moves = BuracoGame.ai.enumerate(state.G, state.ctx, genomes[state.ctx.currentPlayer]);
+            const moves = BuracoGame.ai.enumerate(state.G, state.ctx, genomes[p]);
 
             if (!moves || moves.length === 0) {
                 if (!state.ctx.gameover) client.events.endTurn();
                 state = client.getState();
+                lastMoveKey = null;
                 moveCount++;
-                consecutiveFails = 0;
                 continue;
             }
 
             const nextMove = moves[0];
-            const prevHandSize = (state.G.hands[p] || []).length;
-            const prevHasDrawn = state.G.hasDrawn;
+            const moveKey = `${nextMove.move}:${JSON.stringify(nextMove.args)}`;
 
-            client.moves[nextMove.move](...(nextMove.args || []));
-            state = client.getState();
-
-            if (state.ctx.gameover) break;
-
-            const stateChanged = state.G.hasDrawn !== prevHasDrawn
-                || (state.G.hands[p] || []).length !== prevHandSize;
-
-            if (!stateChanged) {
-                consecutiveFails++;
-                if (consecutiveFails >= 3) {
-                    if (!state.ctx.gameover) client.events.endTurn();
-                    state = client.getState();
-                    consecutiveFails = 0;
-                }
-            } else {
-                consecutiveFails = 0;
+            if (moveKey === lastMoveKey) {
+                client.events.endTurn();
+                state = client.getState();
+                lastMoveKey = null;
+                moveCount++;
+                continue;
             }
 
+            lastMoveKey = moveKey;
+            client.moves[nextMove.move](...(nextMove.args || []));
+            state = client.getState();
+            if (state.ctx.gameover) break;
             moveCount++;
         }
 
