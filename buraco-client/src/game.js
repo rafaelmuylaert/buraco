@@ -101,7 +101,6 @@ function appendCardsToMeld(meld, cards) {
     return remaining.length === 0 ? current : null;
 }
 
-// 🚀 ZERO-ALLOCATION BUILD MELD: No object maps or array filters, purely primitive math
 function buildMeld(cardIds, rules) {
     if (cardIds.length < 3) return null;
 
@@ -348,15 +347,16 @@ const nnHelpers = {
   }
 };
 
-// 🚀 TRUE O(N) INT-DISTANCE SEARCH
-function getPossibleMelds(handCards, rules) {
+// 🚀 O(N) ALL-LENGTH MELD GENERATOR
+// Automatically finds all valid combinations of 3, 4, 5+ cards!
+function getAllValidMelds(handCards, rules) {
     let validCombos = [];
-    let seenSignatures = new Set();
     
     let bySuitRank = { 1: {}, 2: {}, 3: {}, 4: {} };
     let byRankAnySuit = {}; 
     let wilds = [];
 
+    // 1. O(N) Grouping
     for (let i = 0; i < handCards.length; i++) {
         let cId = handCards[i];
         let s = cId >= 104 ? 5 : Math.floor((cId % 52) / 13) + 1; 
@@ -367,7 +367,7 @@ function getPossibleMelds(handCards, rules) {
         } else {
             if (!bySuitRank[s][r]) bySuitRank[s][r] = [];
             bySuitRank[s][r].push(cId);
-            if (r === 1) {
+            if (r === 1) { // Ace acts as high 14
                 if (!bySuitRank[s][14]) bySuitRank[s][14] = [];
                 bySuitRank[s][14].push(cId);
             }
@@ -376,57 +376,64 @@ function getPossibleMelds(handCards, rules) {
         }
     }
 
-    const addCombo = (c1, c2, c3) => {
-        let a = c1; let b = c2; let c = c3;
-        if (a > b) { let t = a; a = b; b = t; }
-        if (b > c) { let t = b; b = c; c = t; }
-        if (a > b) { let t = a; a = b; b = t; }
-        
-        let sig = a + (b * 108) + (c * 11664); 
-        if (!seenSignatures.has(sig)) {
-            seenSignatures.add(sig);
-            validCombos.push([c1, c2, c3]);
-        }
-    };
-
+    // 2. Extract sequences of ANY length >= 3
     for (let s = 1; s <= 4; s++) {
-        let rankMap = bySuitRank[s];
-        let presentRanks = [];
-        for (let r in rankMap) presentRanks.push(Number(r));
-        
-        if (presentRanks.length === 0) continue;
-        presentRanks.sort((a,b) => a-b);
+        let ranks = Object.keys(bySuitRank[s]).map(Number).sort((a,b)=>a-b);
+        if (ranks.length === 0) continue;
 
-        for (let i = 0; i < presentRanks.length; i++) {
-            let r1 = presentRanks[i];
-            let c1 = rankMap[r1][0];
-
-            for (let j = i + 1; j < presentRanks.length; j++) {
-                let r2 = presentRanks[j];
-                let dist = r2 - r1;
+        for (let i = 0; i < ranks.length; i++) {
+            let currentClean = [bySuitRank[s][ranks[i]][0]];
+            let lastCleanRank = ranks[i];
+            
+            // Clean Sequences (3,4,5,6,7...)
+            for (let j = i + 1; j < ranks.length; j++) {
+                if (ranks[j] - lastCleanRank === 1) {
+                    currentClean.push(bySuitRank[s][ranks[j]][0]);
+                    lastCleanRank = ranks[j];
+                    if (currentClean.length >= 3) validCombos.push([...currentClean]);
+                } else {
+                    break;
+                }
+            }
+            
+            // Dirty Sequences (Using 1 Wildcard to bridge gaps or extend)
+            if (wilds.length > 0) {
+                let w = wilds[0];
+                let currentDirty = [bySuitRank[s][ranks[i]][0]];
+                let lastDirtyRank = ranks[i];
+                let wildUsed = false;
                 
-                if (dist > 2) break; 
-                
-                let c2 = rankMap[r2][0];
-
-                if (dist === 1 || dist === 2) {
-                   for (let k = j + 1; k < presentRanks.length; k++) {
-                       let r3 = presentRanks[k];
-                       if (r3 - r1 <= 2) {
-                           addCombo(c1, c2, rankMap[r3][0]);
-                       } else {
-                           break;
-                       }
-                   }
+                for (let j = i + 1; j < ranks.length; j++) {
+                    let gap = ranks[j] - lastDirtyRank - 1;
+                    
+                    if (gap === 0) {
+                        currentDirty.push(bySuitRank[s][ranks[j]][0]);
+                        lastDirtyRank = ranks[j];
+                        if (currentDirty.length >= 3) validCombos.push([...currentDirty]);
+                    } else if (gap === 1 && !wildUsed) {
+                        wildUsed = true;
+                        currentDirty.push(w);
+                        currentDirty.push(bySuitRank[s][ranks[j]][0]);
+                        lastDirtyRank = ranks[j];
+                        if (currentDirty.length >= 3) validCombos.push([...currentDirty]);
+                    } else {
+                        break;
+                    }
                 }
                 
-                if (wilds.length > 0 && dist <= 2) {
-                    addCombo(c1, c2, wilds[0]);
+                // If we didn't need the wild to fill a gap, we can append it to the end of any valid 2+ card sequence
+                if (!wildUsed && currentDirty.length >= 2) {
+                    let temp = [currentDirty[0]];
+                    for(let j=1; j<currentDirty.length; j++) {
+                        temp.push(currentDirty[j]);
+                        validCombos.push([...temp, w]);
+                    }
                 }
             }
         }
     }
 
+    // 3. Extract Runners of ANY length >= 3
     if (rules.runners !== 'none') {
         for (let r in byRankAnySuit) {
             let numR = parseInt(r);
@@ -436,12 +443,16 @@ function getPossibleMelds(handCards, rules) {
             if (rules.runners === 'aces_kings' && (numR === 1 || numR === 13)) allowed = true;
 
             if (allowed) {
-                let rankCards = byRankAnySuit[r];
-                if (rankCards.length >= 3) {
-                    addCombo(rankCards[0], rankCards[1], rankCards[2]);
+                let cards = byRankAnySuit[r];
+                // Clean Runners (3, 4, 5+ of a kind)
+                for (let len = 3; len <= cards.length; len++) {
+                    validCombos.push(cards.slice(0, len));
                 }
-                if (rankCards.length >= 2 && wilds.length > 0) {
-                    addCombo(rankCards[0], rankCards[1], wilds[0]);
+                // Dirty Runners
+                if (cards.length >= 2 && wilds.length > 0) {
+                    for (let len = 2; len <= cards.length; len++) {
+                        validCombos.push([...cards.slice(0, len), wilds[0]]);
+                    }
                 }
             }
         }
@@ -455,6 +466,7 @@ export const BuracoGame = {
   setup: ({ random, ctx }, setupData) => {
     const numPlayers = ctx.numPlayers || 4; 
     const rules = setupData || { numPlayers, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false };
+    const botGenomes = setupData?.botGenomes || {};
     
     let initialDeck = random.Shuffle(buildDeck(rules));
     const pots = [initialDeck.splice(0, 11), initialDeck.splice(0, 11)];
@@ -476,7 +488,7 @@ export const BuracoGame = {
     return {
       rules, deck: initialDeck, discardPile: [initialDeck.pop()], pots, hands, melds, knownCards,
       hasDrawn: false, lastDrawnCard: null, teams, teamPlayers, teamMortos: { team0: false, team1: false },
-      mortoUsed: { team0: false, team1: false }, isExhausted: false
+      mortoUsed: { team0: false, team1: false }, isExhausted: false, botGenomes
     };
   },
 
@@ -690,9 +702,8 @@ export const BuracoGame = {
       baseInputs.push(...nnHelpers.cardsToVector(partnerId ? (G.knownCards[partnerId] || []) : []));
       baseInputs.push(...nnHelpers.cardsToVector(opp2Id ? (G.knownCards[opp2Id] || []) : []));
 
-      const DNA = customDNA || new Array(12417).fill(0.01);
+      const DNA = customDNA || G.botGenomes?.[p] || new Array(12417).fill(0.01);
 
-      // 🚀 BATCH EVALUATION: Only run the NN on unique actions
       let possibleMoves = [];
       let moveSigs = new Set(); 
 
@@ -710,12 +721,16 @@ export const BuracoGame = {
       if (!G.hasDrawn) {
         if (topDiscard !== null) {
           if (G.rules.discard === 'closed') {
-             const possiblePickups = getPossibleMelds([...myHandCards, topDiscard], G.rules);
+             // FIND ALL MULTI-CARD PICKUPS
+             const possiblePickups = getAllValidMelds([...myHandCards, topDiscard], G.rules);
              for (let i = 0; i < possiblePickups.length; i++) {
                  let combo = possiblePickups[i];
                  if (combo.includes(topDiscard)) {
                      let handCardsUsed = combo.filter(c => c !== topDiscard);
-                     addMove('pickUpDiscard', [handCardsUsed, { type: 'new' }], [1.0, 0.0, 0.0], combo);
+                     let parsed = buildMeld(combo, G.rules);
+                     if (parsed) {
+                         addMove('pickUpDiscard', [handCardsUsed, { type: 'new' }], [1.0, 0.0, 0.0], combo);
+                     }
                  }
              }
           } else {
@@ -727,7 +742,7 @@ export const BuracoGame = {
         if (possibleMoves.length === 0) return [{ move: 'drawCard', args: [] }];
 
       } else {
-        // 1. COLLECT VALID APPENDS (No NN calls)
+        // 1. COLLECT VALID APPENDS 
         (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIndex) => {
             for (let i = 0; i < myHandCards.length; i++) {
@@ -742,23 +757,21 @@ export const BuracoGame = {
           });
         });
 
-        // 2. COLLECT VALID MELDS (No NN calls)
-        const validMelds = getPossibleMelds(myHandCards, G.rules);
+        // 2. COLLECT VALID MELDS OF ANY LENGTH
+        const validMelds = getAllValidMelds(myHandCards, G.rules);
         for (let i = 0; i < validMelds.length; i++) {
             let combo = validMelds[i];
-            if (myHandCards.length - combo.length < 2) {
-                let built = buildMeld(combo, G.rules);
-                if (built) {
-                    let sim = [...(G.melds[p] || []), built];
+            let parsed = buildMeld(combo, G.rules);
+            if (parsed) {
+                if (myHandCards.length - combo.length < 2) {
+                    let sim = [...(G.melds[p] || []), parsed];
                     if (!canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue;
-                } else {
-                    continue;
                 }
+                addMove('playMeld', [combo], [0.0, 1.0, 0.0], combo);
             }
-            addMove('playMeld', [combo], [0.0, 1.0, 0.0], combo);
         }
 
-        // 3. COLLECT VALID DISCARDS (No NN calls)
+        // 3. COLLECT VALID DISCARDS
         const teamHasClean = G.teamPlayers[myTeam].some(tp => G.melds[tp].some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || m[3]===0)));
         if (myHandCards.length > 1 || teamHasClean || (G.pots.length && !G.teamMortos[myTeam])) {
             for (let i = 0; i < myHandCards.length; i++) {
@@ -767,26 +780,54 @@ export const BuracoGame = {
         }
       }
 
-      // --- BLAZING FAST BATCH NN EVALUATION ---
+      // --- SINGLE PASS NN BATCHING ---
       if (possibleMoves.length === 0) return [];
       
-      let bestMove = null; 
-      let highestScore = -Infinity;
+      for (let i = 0; i < possibleMoves.length; i++) {
+          let m = possibleMoves[i];
+          let input = [...baseInputs, ...m.actionType, ...nnHelpers.cardsToVector(m.cards)];
+          m.score = nnHelpers.forwardPass(input, DNA);
+      }
+
+      possibleMoves.sort((a, b) => b.score - a.score);
+
+      if (!G.hasDrawn) {
+          return [{ move: possibleMoves[0].move, args: possibleMoves[0].args }];
+      }
+
+      // --- ASSEMBLE NON-CONFLICTING BATCH QUEUE ---
+      let selectedMoves = [];
+      let usedCards = new Set();
+      let hasDiscarded = false;
 
       for (let i = 0; i < possibleMoves.length; i++) {
           let m = possibleMoves[i];
           
-          // Reverted to single fast mathematical pass
-          let input = [...baseInputs, ...m.actionType, ...nnHelpers.cardsToVector(m.cards)];
-          let score = nnHelpers.forwardPass(input, DNA);
-          
-          if (score > highestScore) { 
-              highestScore = score; 
-              bestMove = { move: m.move, args: m.args }; 
+          let conflict = false;
+          for (let c of m.cards) {
+              if (usedCards.has(c)) { conflict = true; break; }
           }
+          if (conflict) continue;
+
+          if (m.move === 'discardCard') {
+              if (hasDiscarded) continue; 
+              hasDiscarded = true;
+          }
+
+          for (let c of m.cards) usedCards.add(c);
+          selectedMoves.push(m);
       }
 
-      return [bestMove]; 
+      let others = selectedMoves.filter(m => m.move !== 'discardCard');
+      let discards = selectedMoves.filter(m => m.move === 'discardCard');
+
+      let finalQueue = [...others];
+      
+      if (finalQueue.length === 0 && discards.length > 0) {
+          finalQueue.push(discards[0]);
+      }
+
+      return finalQueue.map(m => ({ move: m.move, args: m.args }));
     }
   }
 };
