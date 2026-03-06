@@ -3,6 +3,29 @@
 const getSuit = c => c >= 104 ? 5 : Math.floor((c % 52) / 13) + 1; // 1:♠, 2:♥, 3:♦, 4:♣, 5:★
 const getRank = c => c >= 104 ? 2 : (c % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:K
 
+function calculateFinalScores(G) {
+  let scores = {
+    team0: { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 },
+    team1: { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 }
+  };
+
+  for (const teamId of ['team0', 'team1']) {
+    const players = G.teamPlayers[teamId] || [];
+    const allMelds = players.flatMap(p => G.melds[p] || []);
+    const allHandCards = players.flatMap(p => G.hands[p] || []);
+    
+    allMelds.forEach(meld => scores[teamId].table += calculateMeldPoints(meld, G.rules));
+    allHandCards.forEach(card => scores[teamId].hand -= pointValues[card.rank]);
+    
+    if (!G.teamMortos[teamId] || (G.teamMortos[teamId] && !G.mortoUsed[teamId])) {
+      if (players.length > 0) scores[teamId].mortoPenalty -= 100;
+    }
+
+    scores[teamId].total = scores[teamId].table + scores[teamId].hand + scores[teamId].mortoPenalty;
+  }
+  return scores;
+}
+
 function appendToMeld(meld, cId) {
     let m = [...meld];
     let cSuit = getSuit(cId); let cRank = getRank(cId);
