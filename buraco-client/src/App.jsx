@@ -47,15 +47,15 @@ const App = () => {
 
   const [availableBots, setAvailableBots] = useState([]);
   const [showTrainBotPopup, setShowTrainBotPopup] = useState(false);
-  
   const [trainingStatus, setTrainingStatus] = useState(null);
 
   const [trainBotConfig, setTrainBotConfig] = useState({
     name: 'BotPrometheus',
     populationSize: 24,
     generations: 500,
-    matchesPerGeneration: 12,
-    rules: { discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false }
+    saveInterval: 10,
+    telepathy: false, // Injected purely as a parameter, NOT rule config!
+    rules: { discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false, showKnownCards: false }
   });
 
   const loadServerData = async () => {
@@ -85,8 +85,7 @@ const App = () => {
           const res = await fetch(`${window.location.origin}/buraco/api/bots/status/${trainBotConfig.name}`);
           const data = await res.json();
           setTrainingStatus(data);
-        } catch (err) {
-        }
+        } catch (err) {}
       };
       
       fetchStatus();
@@ -120,7 +119,8 @@ const App = () => {
            trainParams: {
               populationSize: trainBotConfig.populationSize,
               generations: trainBotConfig.generations,
-              matchesPerGeneration: trainBotConfig.matchesPerGeneration
+              saveInterval: trainBotConfig.saveInterval,
+              telepathy: trainBotConfig.telepathy
            }
         })
       });
@@ -293,9 +293,7 @@ const App = () => {
       maxRounds: newTourney.maxRounds,
       players: playerList,
       fixedTeams: fTeams.length > 0 ? fTeams : null,
-      
-      // Pass the name string (targetBotName) instead of the massive array!
-      rules: { ...newTourney.rules, targetBotName: newTourney.botName || "UntrainedBot" }, 
+      rules: { ...newTourney.rules, targetBotName }, 
       status: 'active',
       isGeneratingNext: true,
       rounds: []
@@ -318,8 +316,6 @@ const App = () => {
     }
 
     try {
-      // DELETE the entire 'try/catch' block that fetches championDNA
-      
       const { matchID } = await lobbyClient.createMatch('buraco', {
          numPlayers: quickGameConfig.numPlayers,
          setupData: { 
@@ -329,8 +325,6 @@ const App = () => {
              quickGameTargetPoints: quickGameConfig.format === 'points' ? quickGameConfig.targetPoints : null,
              quickGameMaxRounds: quickGameConfig.format === 'rounds' ? quickGameConfig.maxRounds : null,
              assignments: assignmentsMap,
-             
-             // Pass the name string instead of the array!
              targetBotName: targetBotName
          }
       });
@@ -540,10 +534,18 @@ const App = () => {
             <div style={{ background: '#111', borderRadius: '5px', width: '100%', height: '20px', overflow: 'hidden' }}>
               <div style={{ width: `${(trainingStatus.progress.currentGeneration / trainingStatus.progress.totalGenerations) * 100}%`, background: '#8a2be2', height: '100%', transition: 'width 1s' }} />
             </div>
-            <p style={{ margin: '10px 0 0 0', color: '#ccc' }}>
-              Geração: {trainingStatus.progress.currentGeneration} / {trainingStatus.progress.totalGenerations} | 
-              Melhor Pontuação Atual: <strong style={{color: '#ffd700'}}>{trainingStatus.progress.bestScore.toFixed(0)} pts</strong>
-            </p>
+            
+            <div style={{ marginTop: '15px', color: '#ccc', fontSize: '0.9em', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <span>Geração: <strong style={{color: 'white'}}>{trainingStatus.progress.currentGeneration} / {trainingStatus.progress.totalGenerations}</strong></span>
+              <span>🏆 Máx Pontos/Mesa: <strong style={{color: '#ffd700'}}>{trainingStatus.progress.maxPoints?.toFixed(0)}</strong></span>
+              <span>📈 Máx Dif. de Pontos (Vitória): <strong style={{color: '#50fa7b'}}>{trainingStatus.progress.maxDiff?.toFixed(0)}</strong></span>
+              <span>📊 Média Pontos: <strong style={{color: '#4da6ff'}}>{trainingStatus.progress.avgPoints?.toFixed(0)}</strong></span>
+              <span>📉 Média Dif. de Pontos: <strong style={{color: '#ffb86c'}}>{trainingStatus.progress.avgDiff?.toFixed(0)}</strong></span>
+              
+              <span style={{ gridColumn: 'span 2', textAlign: 'center', marginTop: '10px', fontSize: '1.1em', fontWeight: 'bold', color: trainingStatus.progress.benchmarkDiff >= 0 ? '#50fa7b' : '#ff5555' }}>
+                ⚔️ Evolução vs Bot Original (Bench): {trainingStatus.progress.benchmarkDiff > 0 ? '+' : ''}{trainingStatus.progress.benchmarkDiff?.toFixed(0)} pts
+              </span>
+            </div>
           </div>
         )}
 
@@ -597,13 +599,23 @@ const App = () => {
                 <label>Nome do Bot (DNA): <input type="text" value={trainBotConfig.name} onChange={e => setTrainBotConfig({...trainBotConfig, name: e.target.value})} style={{ padding: '5px', width: '150px', marginLeft: '10px' }} /></label>
                 
                 <h4 style={{ margin: '10px 0 0 0', color: '#ffb86c' }}>Parâmetros Genéticos</h4>
-                <label>População (Bots por Geração): <input type="number" value={trainBotConfig.populationSize} onChange={e => setTrainBotConfig({...trainBotConfig, populationSize: parseInt(e.target.value)})} style={{ width: '60px', padding: '5px' }} /></label>
-                <label>Gerações (Ciclos de Evolução): <input type="number" value={trainBotConfig.generations} onChange={e => setTrainBotConfig({...trainBotConfig, generations: parseInt(e.target.value)})} style={{ width: '60px', padding: '5px' }} /></label>
-                <label>Partidas por Geração: <input type="number" value={trainBotConfig.matchesPerGeneration} onChange={e => setTrainBotConfig({...trainBotConfig, matchesPerGeneration: parseInt(e.target.value)})} style={{ width: '60px', padding: '5px' }} /></label>
+                <div style={{display: 'flex', gap: '10px'}}>
+                    <label>Bots: <input type="number" value={trainBotConfig.populationSize} onChange={e => setTrainBotConfig({...trainBotConfig, populationSize: parseInt(e.target.value)})} style={{ width: '50px', padding: '5px' }} /></label>
+                    <label>Gerações: <input type="number" value={trainBotConfig.generations} onChange={e => setTrainBotConfig({...trainBotConfig, generations: parseInt(e.target.value)})} style={{ width: '50px', padding: '5px' }} /></label>
+                    <label>Salvar a cada: <input type="number" value={trainBotConfig.saveInterval} onChange={e => setTrainBotConfig({...trainBotConfig, saveInterval: parseInt(e.target.value)})} style={{ width: '50px', padding: '5px' }} /> (Gen)</label>
+                </div>
 
-                <h4 style={{ margin: '10px 0 0 0', color: '#8be9fd' }}>Regras do Ambiente</h4>
-                <label>Compra do Lixo: <select value={trainBotConfig.rules.discard} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, discard: e.target.value}})}><option value="open">Aberto</option><option value="closed">Fechado</option></select></label>
-                <label>Trincas: <select value={trainBotConfig.rules.runners} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, runners: e.target.value}})}><option value="none">Nenhuma</option><option value="aces_threes">Ás e Três</option><option value="aces_kings">Ás e Reis</option><option value="any">Qualquer</option></select></label>
+                <h4 style={{ margin: '10px 0 0 0', color: '#8be9fd' }}>Regras do Ambiente de Treino</h4>
+                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '5px'}}>
+                    <label>Lixo: <select value={trainBotConfig.rules.discard} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, discard: e.target.value}})}><option value="open">Aberto</option><option value="closed">Fechado</option></select></label>
+                    <label>Trincas: <select value={trainBotConfig.rules.runners} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, runners: e.target.value}})}><option value="none">Nenhuma</option><option value="aces_threes">Ás/Três</option><option value="aces_kings">Ás/Reis</option><option value="any">Qualquer</option></select></label>
+                    <label><input type="checkbox" checked={trainBotConfig.rules.largeCanasta} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, largeCanasta: e.target.checked}})} /> Bônus 500/1000</label>
+                    <label><input type="checkbox" checked={trainBotConfig.rules.cleanCanastaToWin} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, cleanCanastaToWin: e.target.checked}})} /> Bater Limpo</label>
+                    <label><input type="checkbox" checked={trainBotConfig.rules.noJokers} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, noJokers: e.target.checked}})} /> Sem Curingas</label>
+                    <label><input type="checkbox" checked={trainBotConfig.rules.openDiscardView} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, openDiscardView: e.target.checked}})} /> Lixo Visível</label>
+                    <label><input type="checkbox" checked={trainBotConfig.rules.showKnownCards} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, showKnownCards: e.target.checked}})} /> Memorizadas</label>
+                    <label style={{color: '#ffb86c'}}><input type="checkbox" checked={trainBotConfig.telepathy} onChange={e => setTrainBotConfig({...trainBotConfig, telepathy: e.target.checked})} /> Telepatia Parça</label>
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
