@@ -601,14 +601,31 @@ export const BuracoGame = {
           return nnHelpers.forwardPass([...baseInputs, ...actionTypeArray, ...nnHelpers.cardsToVector(actionCards)], DNA);
       };
 
+      // 🚀 CACHE: Convert hand to canonical identities (0-53) to completely eliminate duplicate evaluations
+      const uniqueHandCardClasses = [...new Set(myHandCards.map(c => c >= 104 ? 52 : c % 52))];
+      // Helper to get one actual card ID back from a canonical class
+      const getCardOfClass = (cls) => myHandCards.find(c => (c >= 104 ? 52 : c % 52) === cls);
+
       if (!G.hasDrawn) {
         if (topDiscard !== null) {
           if (G.rules.discard === 'closed') {
-            for (let i = 0; i < myHandCards.length; i++) {
-              for (let j = i + 1; j < myHandCards.length; j++) {
-                if (buildMeld([myHandCards[i], myHandCards[j], topDiscard], G.rules)) {
-                  let score = getScore([1.0, 0.0, 0.0], [myHandCards[i], myHandCards[j], topDiscard]);
-                  if (score > 0) return [{ move: 'pickUpDiscard', args: [[myHandCards[i], myHandCards[j]], { type: 'new' }] }];
+            for (let i = 0; i < uniqueHandCardClasses.length; i++) {
+              for (let j = i; j < uniqueHandCardClasses.length; j++) {
+                  
+                let c1 = getCardOfClass(uniqueHandCardClasses[i]);
+                let c2 = getCardOfClass(uniqueHandCardClasses[j]);
+                
+                // If it's the exact same card class, we must hold at least two of them in hand to test this pair
+                if (i === j) {
+                    let matchingCards = myHandCards.filter(c => (c >= 104 ? 52 : c % 52) === uniqueHandCardClasses[i]);
+                    if (matchingCards.length < 2) continue;
+                    c1 = matchingCards[0];
+                    c2 = matchingCards[1];
+                }
+
+                if (buildMeld([c1, c2, topDiscard], G.rules)) {
+                  let score = getScore([1.0, 0.0, 0.0], [c1, c2, topDiscard]);
+                  if (score > 0) return [{ move: 'pickUpDiscard', args: [[c1, c2], { type: 'new' }] }];
                 }
               }
             }
@@ -625,10 +642,11 @@ export const BuracoGame = {
         let bestMove = null; let highestScore = -Infinity;
         const evaluateMove = (move, score) => { if (score > highestScore) { highestScore = score; bestMove = move; } };
 
-        // 🚀 EVALUATE APPENDS: Fast lazy evaluation using lightweight appendToMeld
+        // 🚀 EVALUATE APPENDS (Deduplicated)
         (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIndex) => {
-            myHandCards.forEach(card => {
+            uniqueHandCardClasses.forEach(cls => {
+              let card = getCardOfClass(cls);
               let parsed = appendToMeld(meld, card);
               if (parsed) {
                 let sim = [...G.melds[tp]]; sim[mIndex] = parsed;
@@ -640,24 +658,47 @@ export const BuracoGame = {
           });
         });
 
-        // 🚀 EVALUATE MELDS: Back to fast nested loops with early bailouts
-        for (let i = 0; i < myHandCards.length; i++) {
-          for (let j = i + 1; j < myHandCards.length; j++) {
-            for (let k = j + 1; k < myHandCards.length; k++) {
-              let parsed = buildMeld([myHandCards[i], myHandCards[j], myHandCards[k]], G.rules);
+        // 🚀 EVALUATE MELDS (Deduplicated inputs)
+        for (let i = 0; i < uniqueHandCardClasses.length; i++) {
+          for (let j = i; j < uniqueHandCardClasses.length; j++) {
+            for (let k = j; k < uniqueHandCardClasses.length; k++) {
+                
+                let matchingI = myHandCards.filter(c => (c >= 104 ? 52 : c % 52) === uniqueHandCardClasses[i]);
+                let matchingJ = myHandCards.filter(c => (c >= 104 ? 52 : c % 52) === uniqueHandCardClasses[j]);
+                let matchingK = myHandCards.filter(c => (c >= 104 ? 52 : c % 52) === uniqueHandCardClasses[k]);
+
+                let c1, c2, c3;
+                
+                // Tricky logic to ensure we actually have enough copies of the card to form this combo
+                if (i === j && j === k) {
+                    if (matchingI.length < 3) continue;
+                    c1 = matchingI[0]; c2 = matchingI[1]; c3 = matchingI[2];
+                } else if (i === j) {
+                    if (matchingI.length < 2) continue;
+                    c1 = matchingI[0]; c2 = matchingI[1]; c3 = matchingK[0];
+                } else if (j === k) {
+                    if (matchingJ.length < 2) continue;
+                    c1 = matchingI[0]; c2 = matchingJ[0]; c3 = matchingJ[1];
+                } else {
+                    c1 = matchingI[0]; c2 = matchingJ[0]; c3 = matchingK[0];
+                }
+
+              let parsed = buildMeld([c1, c2, c3], G.rules);
               if (parsed) {
                 let sim = [...(G.melds[p] || []), parsed];
                 if (myHandCards.length - 3 < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue; 
-                let score = getScore([0.0, 1.0, 0.0], [myHandCards[i], myHandCards[j], myHandCards[k]]);
-                evaluateMove({ move: 'playMeld', args: [[myHandCards[i], myHandCards[j], myHandCards[k]]] }, score);
+                let score = getScore([0.0, 1.0, 0.0], [c1, c2, c3]);
+                evaluateMove({ move: 'playMeld', args: [[c1, c2, c3]] }, score);
               }
             }
           }
         }
 
+        // 🚀 EVALUATE DISCARDS (Deduplicated)
         const teamHasClean = G.teamPlayers[myTeam].some(tp => G.melds[tp].some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || m[3]===0)));
         if (myHandCards.length > 1 || teamHasClean || (G.pots.length && !G.teamMortos[myTeam])) {
-          myHandCards.forEach(card => {
+          uniqueHandCardClasses.forEach(cls => {
+            let card = getCardOfClass(cls);
             let score = getScore([0.0, 0.0, 1.0], [card]);
             evaluateMove({ move: 'discardCard', args: [card] }, score);
           });
