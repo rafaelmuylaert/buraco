@@ -69,15 +69,14 @@ function runMatch(genomes, rules) {
                 }
                 const prevTurn = state.ctx.turn;
                 const prevHandSize = (state.G.hands[p] || []).length;
-                const prevMeldCount = Object.values(state.G.melds).reduce((s, m) => s + m.length, 0);
+                const prevMeldCards = Object.values(state.G.melds).reduce((s, m) => s + m.reduce((ms, meld) => ms + (meld[0] !== 0 ? (meld[2] - meld[1] + 1) : meld[2]), 0), 0);
 
                 client.moves[nextMove.move](...(nextMove.args || []));
                 state = client.getState();
 
-                // If nothing changed, the move was invalid — flush the queue
                 const stateChanged = state.ctx.turn !== prevTurn
                     || (state.G.hands[p] || []).length !== prevHandSize
-                    || Object.values(state.G.melds).reduce((s, m) => s + m.length, 0) !== prevMeldCount;
+                    || Object.values(state.G.melds).reduce((s, m) => s + m.reduce((ms, meld) => ms + (meld[0] !== 0 ? (meld[2] - meld[1] + 1) : meld[2]), 0), 0) !== prevMeldCards;
 
                 if (!stateChanged) aiQueue = [];
             } else {
