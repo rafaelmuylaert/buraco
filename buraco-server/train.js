@@ -33,10 +33,11 @@ function breed(parentA, parentB) {
 }
 
 function runMatch(genomes, rules, seed) {
-    const client = Client({
+    let client = Client({
         game: BuracoGame,
         numPlayers: rules.numPlayers || 4,
         matchID: seed, 
+        debug: false, // CRITICAL: Disable Redux DevTools logging to save memory
         setupData: { 
             ...rules
         }
@@ -62,13 +63,15 @@ function runMatch(genomes, rules, seed) {
         moveCount++;
     }
 
+    const finalScores = state.ctx.gameover ? state.ctx.gameover.scores : { team0: { total: -5000 }, team1: { total: -5000 } };
+
+    // AGGRESSIVE MEMORY CLEANUP
+    // Orphan the Redux references so the Garbage Collector can instantly destroy them
     client.stop();
+    client = null;
+    state = null;
 
-    if (!state.ctx.gameover) {
-        return { team0: { total: -5000 }, team1: { total: -5000 } };
-    }
-
-    return state.ctx.gameover.scores;
+    return finalScores;
 }
 
 export const TrainerService = {
@@ -136,8 +139,6 @@ export const TrainerService = {
 
                 // 2. RUN THE TABLES
                 for (let table = 0; table < NUM_TABLES; table++) {
-                    await new Promise(resolve => setTimeout(resolve, 0)); 
-
                     const tableBots = [
                         botIndices[table * 4],
                         botIndices[table * 4 + 1],
@@ -146,6 +147,11 @@ export const TrainerService = {
                     ];
 
                     for (let m = 0; m < MATCHES_PER_GENERATION; m++) {
+                        // CRITICAL FIX: Yield BEFORE EVERY SINGLE MATCH!
+                        // If we process 24 matches synchronously, Node.js starves the Garbage Collector,
+                        // leading to an Out-Of-Memory crash around generation 35-40.
+                        await new Promise(resolve => setTimeout(resolve, 0));
+
                         const matchGenomes = {};
                         
                         // PERFECT ROTATION: Look up the permutation layout (loops safely if m > 23)
