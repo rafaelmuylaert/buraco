@@ -101,55 +101,53 @@ function appendCardsToMeld(meld, cards) {
     return remaining.length === 0 ? current : null;
 }
 
-// 🚀 REVERTED TO HIGH-SPEED "EARLY BAILOUT" LOGIC
+// 🚀 ZERO-ALLOCATION BUILD MELD: No object maps or array filters, purely primitive math
 function buildMeld(cardIds, rules) {
     if (cardIds.length < 3) return null;
 
-    let naturals = []; let wilds = [];
+    let nats = []; let wilds = [];
     for (let i = 0; i < cardIds.length; i++) {
         let c = cardIds[i];
         let s = getSuit(c); let r = getRank(c);
-        if (s === 5 || r === 2) wilds.push({c, s, r});
-        else naturals.push({c, s, r});
+        if (s === 5 || r === 2) wilds.push(c);
+        else nats.push(c);
     }
 
-    if (naturals.length === 0) return null;
+    if (nats.length === 0) return null;
 
-    // Check for Runners (Trincas)
-    let firstNat = naturals[0];
+    let firstNatRank = getRank(nats[0]);
+    let firstNatSuit = getSuit(nats[0]);
+    
     let isSameRank = true;
-    for (let i = 1; i < naturals.length; i++) {
-        if (naturals[i].r !== firstNat.r) { isSameRank = false; break; }
+    let isSameSuit = true;
+
+    for (let i = 1; i < nats.length; i++) {
+        if (getRank(nats[i]) !== firstNatRank) isSameRank = false;
+        if (getSuit(nats[i]) !== firstNatSuit) isSameSuit = false;
     }
 
     if (isSameRank) {
-        let r = firstNat.r;
+        let r = firstNatRank;
         let allowed = false;
         if (rules.runners === 'any') allowed = true;
         if (rules.runners === 'aces_threes' && (r === 1 || r === 3)) allowed = true;
         if (rules.runners === 'aces_kings' && (r === 1 || r === 13)) allowed = true;
         
         if (allowed && wilds.length <= 1) {
-            return [0, r, cardIds.length, wilds.length ? wilds[0].s : 0, 0];
+            return [0, r, cardIds.length, wilds.length ? getSuit(wilds[0]) : 0, 0];
         }
-    }
-
-    // Check for Sequences
-    let isSameSuit = true;
-    let suit = firstNat.s;
-    for (let i = 1; i < naturals.length; i++) {
-        if (naturals[i].s !== suit) { isSameSuit = false; break; }
     }
 
     if (isSameSuit) {
         let trueWilds = []; let natTwos = 0;
         for (let i = 0; i < wilds.length; i++) {
-            if (wilds[i].s === suit && wilds[i].r === 2 && natTwos === 0) natTwos++;
+            let ws = getSuit(wilds[i]);
+            if (ws === firstNatSuit && getRank(wilds[i]) === 2 && natTwos === 0) natTwos++;
             else trueWilds.push(wilds[i]);
         }
 
         if (trueWilds.length <= 1) {
-            let ranks = naturals.map(n => n.r);
+            let ranks = nats.map(c => getRank(c));
             if (natTwos > 0) ranks.push(2);
             let hasAce = ranks.includes(1);
             ranks = ranks.filter(r => r !== 1).sort((a,b) => a-b);
@@ -162,28 +160,23 @@ function buildMeld(cardIds, rules) {
             }
             
             let min = ranks[0]; let max = ranks[ranks.length-1]; let gaps = 0;
-            for (let i = 1; i < ranks.length; i++) {
-                gaps += (ranks[i] - ranks[i-1] - 1);
-            }
+            for (let i = 1; i < ranks.length; i++) gaps += (ranks[i] - ranks[i-1] - 1);
             
-            if (gaps === 0 && trueWilds.length === 0) return [suit, min, max, 0, 0];
+            if (gaps === 0 && trueWilds.length === 0) return [firstNatSuit, min, max, 0, 0];
             
             if (gaps === 1 && trueWilds.length === 1) {
                 let wildPos = -1;
                 for (let i = 1; i < ranks.length; i++) {
-                    if (ranks[i] - ranks[i-1] > 1) {
-                        wildPos = ranks[i-1] + 1;
-                        break;
-                    }
+                    if (ranks[i] - ranks[i-1] > 1) { wildPos = ranks[i-1] + 1; break; }
                 }
-                return [suit, min, max, trueWilds[0].s, wildPos];
+                return [firstNatSuit, min, max, getSuit(trueWilds[0]), wildPos];
             }
             
             if (gaps === 0 && trueWilds.length === 1) {
                 let wildPos = max < 14 ? max + 1 : min - 1;
                 let newMin = max < 14 ? min : min - 1;
                 let newMax = max < 14 ? max + 1 : max;
-                return [suit, newMin, newMax, trueWilds[0].s, wildPos];
+                return [firstNatSuit, newMin, newMax, getSuit(trueWilds[0]), wildPos];
             }
         }
     }
@@ -204,7 +197,7 @@ export function calculateMeldPoints(meld, rules) {
         }
         if (isCanasta) {
             pts += isClean ? 200 : 100;
-            if (rules?.largeCanasta) {
+            if (rules.largeCanasta) {
                 if (meld[2] - meld[1] === 12) pts += 500;
                 if (meld[2] - meld[1] >= 13) pts += 1000;
             }
@@ -216,7 +209,7 @@ export function calculateMeldPoints(meld, rules) {
         if (wSuit > 0) pts += (wSuit === 5 ? 50 : 20);
         if (isCanasta) {
             pts += (isClean ? 200 : 100);
-            if (rules?.largeCanasta) {
+            if (rules.largeCanasta) {
                 if (count === 13) pts += 500;
                 if (count >= 14) pts += 1000;
             }
@@ -597,116 +590,121 @@ export const BuracoGame = {
 
       const DNA = customDNA || new Array(12417).fill(0.01);
 
-      const getScore = (actionTypeArray, actionCards) => {
-          return nnHelpers.forwardPass([...baseInputs, ...actionTypeArray, ...nnHelpers.cardsToVector(actionCards)], DNA);
-      };
+      // BATCH EVALUATION TO PREVENT NN BOTTLENECK
+      let possibleMoves = [];
+      let moveSigs = new Set(); // Prevent duplicate Neural Network passes
 
-      // 🚀 CACHE: Convert hand to canonical identities (0-53) to completely eliminate duplicate evaluations
-      const uniqueHandCardClasses = [...new Set(myHandCards.map(c => c >= 104 ? 52 : c % 52))];
-      // Helper to get one actual card ID back from a canonical class
-      const getCardOfClass = (cls) => myHandCards.find(c => (c >= 104 ? 52 : c % 52) === cls);
+      const addMove = (moveName, args, actionType, cardsArr) => {
+          let classes = [];
+          for(let i=0; i<cardsArr.length; i++) {
+              let c = cardsArr[i];
+              classes.push(c >= 104 ? 52 : c % 52);
+          }
+          if (moveName !== 'discardCard') classes.sort((a,b)=>a-b);
+          let sig = moveName + '-' + classes.join(',');
+          
+          if (!moveSigs.has(sig)) {
+              moveSigs.add(sig);
+              possibleMoves.push({ move: moveName, args, actionType, cards: cardsArr });
+          }
+      };
 
       if (!G.hasDrawn) {
         if (topDiscard !== null) {
           if (G.rules.discard === 'closed') {
-            for (let i = 0; i < uniqueHandCardClasses.length; i++) {
-              for (let j = i; j < uniqueHandCardClasses.length; j++) {
-                  
-                let c1 = getCardOfClass(uniqueHandCardClasses[i]);
-                let c2 = getCardOfClass(uniqueHandCardClasses[j]);
+            for (let i = 0; i < myHandCards.length; i++) {
+              for (let j = i + 1; j < myHandCards.length; j++) {
+                let c1 = myHandCards[i]; let c2 = myHandCards[j];
                 
-                // If it's the exact same card class, we must hold at least two of them in hand to test this pair
-                if (i === j) {
-                    let matchingCards = myHandCards.filter(c => (c >= 104 ? 52 : c % 52) === uniqueHandCardClasses[i]);
-                    if (matchingCards.length < 2) continue;
-                    c1 = matchingCards[0];
-                    c2 = matchingCards[1];
-                }
-
-                if (buildMeld([c1, c2, topDiscard], G.rules)) {
-                  let score = getScore([1.0, 0.0, 0.0], [c1, c2, topDiscard]);
-                  if (score > 0) return [{ move: 'pickUpDiscard', args: [[c1, c2], { type: 'new' }] }];
+                // 🚀 EXTREME INLINE BAILOUT
+                let s1 = getSuit(c1), r1 = getRank(c1);
+                let s2 = getSuit(c2), r2 = getRank(c2);
+                let sd = getSuit(topDiscard), rd = getRank(topDiscard);
+                let wCount = (s1===5||r1===2?1:0) + (s2===5||r2===2?1:0) + (sd===5||rd===2?1:0);
+                
+                if (wCount <= 1) {
+                    if (buildMeld([c1, c2, topDiscard], G.rules)) {
+                        addMove('pickUpDiscard', [[c1, c2], { type: 'new' }], [1.0, 0.0, 0.0], [c1, c2, topDiscard]);
+                    }
                 }
               }
             }
           } else {
-             let score = getScore([1.0, 0.0, 0.0], G.discardPile);
-             if (score > 0) return [{ move: 'pickUpDiscard', args: [] }];
+             addMove('pickUpDiscard', [], [1.0, 0.0, 0.0], G.discardPile);
           }
         }
         
         if (G.deck.length === 0 && G.pots.length === 0) return [{ move: 'declareExhausted', args: [] }];
-        return [{ move: 'drawCard', args: [] }];
+        if (possibleMoves.length === 0) return [{ move: 'drawCard', args: [] }];
 
       } else {
-        let bestMove = null; let highestScore = -Infinity;
-        const evaluateMove = (move, score) => { if (score > highestScore) { highestScore = score; bestMove = move; } };
-
-        // 🚀 EVALUATE APPENDS (Deduplicated)
+        // 1. COLLECT VALID APPENDS (Using lightweight appendToMeld)
         (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIndex) => {
-            uniqueHandCardClasses.forEach(cls => {
-              let card = getCardOfClass(cls);
+            for (let i = 0; i < myHandCards.length; i++) {
+              let card = myHandCards[i];
               let parsed = appendToMeld(meld, card);
               if (parsed) {
                 let sim = [...G.melds[tp]]; sim[mIndex] = parsed;
-                if (myHandCards.length - 1 < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, tp)) return; 
-                let score = getScore([0.0, 1.0, 0.0], [card]);
-                evaluateMove({ move: 'appendToMeld', args: [tp, mIndex, [card]] }, score);
+                if (myHandCards.length - 1 < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, tp)) continue; 
+                addMove('appendToMeld', [tp, mIndex, [card]], [0.0, 1.0, 0.0], [card]);
               }
-            });
+            }
           });
         });
 
-        // 🚀 EVALUATE MELDS (Deduplicated inputs)
-        for (let i = 0; i < uniqueHandCardClasses.length; i++) {
-          for (let j = i; j < uniqueHandCardClasses.length; j++) {
-            for (let k = j; k < uniqueHandCardClasses.length; k++) {
-                
-                let matchingI = myHandCards.filter(c => (c >= 104 ? 52 : c % 52) === uniqueHandCardClasses[i]);
-                let matchingJ = myHandCards.filter(c => (c >= 104 ? 52 : c % 52) === uniqueHandCardClasses[j]);
-                let matchingK = myHandCards.filter(c => (c >= 104 ? 52 : c % 52) === uniqueHandCardClasses[k]);
-
-                let c1, c2, c3;
-                
-                // Tricky logic to ensure we actually have enough copies of the card to form this combo
-                if (i === j && j === k) {
-                    if (matchingI.length < 3) continue;
-                    c1 = matchingI[0]; c2 = matchingI[1]; c3 = matchingI[2];
-                } else if (i === j) {
-                    if (matchingI.length < 2) continue;
-                    c1 = matchingI[0]; c2 = matchingI[1]; c3 = matchingK[0];
-                } else if (j === k) {
-                    if (matchingJ.length < 2) continue;
-                    c1 = matchingI[0]; c2 = matchingJ[0]; c3 = matchingJ[1];
-                } else {
-                    c1 = matchingI[0]; c2 = matchingJ[0]; c3 = matchingK[0];
-                }
-
-              let parsed = buildMeld([c1, c2, c3], G.rules);
-              if (parsed) {
-                let sim = [...(G.melds[p] || []), parsed];
-                if (myHandCards.length - 3 < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue; 
-                let score = getScore([0.0, 1.0, 0.0], [c1, c2, c3]);
-                evaluateMove({ move: 'playMeld', args: [[c1, c2, c3]] }, score);
+        // 2. COLLECT VALID MELDS (Restored fast raw loop + deduplication)
+        for (let i = 0; i < myHandCards.length; i++) {
+          for (let j = i + 1; j < myHandCards.length; j++) {
+            for (let k = j + 1; k < myHandCards.length; k++) {
+              let c1 = myHandCards[i], c2 = myHandCards[j], c3 = myHandCards[k];
+              
+              // 🚀 EXTREME INLINE BAILOUT
+              let s1 = getSuit(c1), r1 = getRank(c1);
+              let s2 = getSuit(c2), r2 = getRank(c2);
+              let s3 = getSuit(c3), r3 = getRank(c3);
+              let wCount = (s1===5||r1===2?1:0) + (s2===5||r2===2?1:0) + (s3===5||r3===2?1:0);
+              
+              if (wCount <= 1) {
+                  let parsed = buildMeld([c1, c2, c3], G.rules);
+                  if (parsed) {
+                      let sim = [...(G.melds[p] || []), parsed];
+                      if (myHandCards.length - 3 < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue; 
+                      addMove('playMeld', [[c1, c2, c3]], [0.0, 1.0, 0.0], [c1, c2, c3]);
+                  }
               }
             }
           }
         }
 
-        // 🚀 EVALUATE DISCARDS (Deduplicated)
+        // 3. COLLECT VALID DISCARDS
         const teamHasClean = G.teamPlayers[myTeam].some(tp => G.melds[tp].some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || m[3]===0)));
         if (myHandCards.length > 1 || teamHasClean || (G.pots.length && !G.teamMortos[myTeam])) {
-          uniqueHandCardClasses.forEach(cls => {
-            let card = getCardOfClass(cls);
-            let score = getScore([0.0, 0.0, 1.0], [card]);
-            evaluateMove({ move: 'discardCard', args: [card] }, score);
-          });
+            for (let i = 0; i < myHandCards.length; i++) {
+                addMove('discardCard', [myHandCards[i]], [0.0, 0.0, 1.0], [myHandCards[i]]);
+            }
         }
-        
-        if (bestMove) return [bestMove];
-        return []; 
       }
+
+      // --- BATCH NN EVALUATION ---
+      // We only run the Neural Network on the final, heavily deduplicated list of valid moves!
+      if (possibleMoves.length === 0) return [];
+      
+      let bestMove = null; 
+      let highestScore = -Infinity;
+
+      for (let i = 0; i < possibleMoves.length; i++) {
+          let m = possibleMoves[i];
+          let input = [...baseInputs, ...m.actionType, ...nnHelpers.cardsToVector(m.cards)];
+          let score = nnHelpers.forwardPass(input, DNA);
+          
+          if (score > highestScore) { 
+              highestScore = score; 
+              bestMove = { move: m.move, args: m.args }; 
+          }
+      }
+
+      return [bestMove]; 
     }
   }
 };
