@@ -3,18 +3,6 @@
 const getSuit = c => c >= 104 ? 5 : Math.floor((c % 52) / 13) + 1; // 1:♠, 2:♥, 3:♦, 4:♣, 5:★
 const getRank = c => c >= 104 ? 2 : (c % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:K
 
-export const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
-export const pointValues = { '3': 5, '4': 5, '5': 5, '6': 5, '7': 5, '8': 10, '9': 10, '10': 10, 'J': 10, 'Q': 10, 'K': 10, 'A': 15, '2': 20, 'JOKER': 50 };
-export const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
-
-export function sortCards(cards) {
-  const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
-  return [...cards].sort((a, b) => {
-    if (suitValues[a.suit] !== suitValues[b.suit]) return suitValues[a.suit] - suitValues[b.suit];
-    return sortVals[a.rank] - sortVals[b.rank];
-  });
-}
-
 function appendToMeld(meld, cId) {
     let m = [...meld];
     let cSuit = getSuit(cId); let cRank = getRank(cId);
