@@ -298,38 +298,38 @@ function calculateFinalScores(G) {
 
 const nnHelpers = {
   cardsToVector: (cards) => {
-      let vec = new Array(53).fill(0);
-      cards.forEach(c => vec[c >= 104 ? 52 : c % 52] += 1);
-      return vec;
-  },
+    const vec = new Float32Array(53); // Float32Array is zero-initialized by default
+    for (let i = 0; i < cards.length; i++) {
+        vec[cards[i] >= 104 ? 52 : cards[i] % 52] += 1;
+    }
+    return vec;
+},
 
-  meldsToSemanticMatrix: (melds) => {
-      let vec = [];
-      let sequences = melds.filter(m => m[0] !== 0).sort((a,b) => (b[2]-b[1]) - (a[2]-a[1]));
-      let runners = melds.filter(m => m[0] === 0).sort((a,b) => b[2] - a[2]);
+ meldsToSemanticMatrix: (melds) => {
+    const SLOTS = 17; // 15 sequences + 2 runners
+    const vec = new Float32Array(SLOTS * 13); // zero-initialized
+    let sequences = melds.filter(m => m[0] !== 0).sort((a,b) => (b[2]-b[1]) - (a[2]-a[1]));
+    let runners   = melds.filter(m => m[0] === 0).sort((a,b) => b[2] - a[2]);
 
-      for (let i=0; i<15; i++) {
-          let v = new Array(13).fill(0);
-          if (i < sequences.length) {
-              const m = sequences[i];
-              v[m[0] - 1] = 1.0; 
-              v[4] = m[1] / 14.0; v[5] = m[2] / 14.0; v[6] = (m[2] - m[1] + 1) / 14.0;
-              if (m[3] > 0) { v[7] = 1.0; if (m[3] === 5) v[12] = 1.0; else v[7 + m[3]] = 1.0; }
-          }
-          vec.push(...v);
-      }
-      
-      for(let i=0; i<2; i++) {
-          let v = new Array(13).fill(0);
-          if (i < runners.length) {
-              const m = runners[i];
-              v[0] = m[1] / 14.0; v[1] = m[2] / 14.0;
-              if (m[3] > 0) { v[2] = 1.0; if (m[3] === 5) v[7] = 1.0; else v[2 + m[3]] = 1.0; }
-          }
-          vec.push(...v);
-      }
-      return vec; 
-  },
+    for (let i = 0; i < 15; i++) {
+        const base = i * 13;
+        if (i < sequences.length) {
+            const m = sequences[i];
+            vec[base + m[0] - 1] = 1.0;
+            vec[base + 4] = m[1] / 14.0; vec[base + 5] = m[2] / 14.0; vec[base + 6] = (m[2] - m[1] + 1) / 14.0;
+            if (m[3] > 0) { vec[base + 7] = 1.0; if (m[3] === 5) vec[base + 12] = 1.0; else vec[base + 7 + m[3]] = 1.0; }
+        }
+    }
+    for (let i = 0; i < 2; i++) {
+        const base = (15 + i) * 13;
+        if (i < runners.length) {
+            const m = runners[i];
+            vec[base + 0] = m[1] / 14.0; vec[base + 1] = m[2] / 14.0;
+            if (m[3] > 0) { vec[base + 2] = 1.0; if (m[3] === 5) vec[base + 7] = 1.0; else vec[base + 2 + m[3]] = 1.0; }
+        }
+    }
+    return vec;
+},
 
   forwardPass: (inputs, weights) => {
       const INPUT_SIZE = 774; const HIDDEN_SIZE = 16;
@@ -696,15 +696,23 @@ export const BuracoGame = {
           DNA = new Array(49668).fill(0.01);
       }
 
-      const dnaPickup = DNA.slice(0, 12417);
-      const dnaAppend = DNA.slice(12417, 24834);
-      const dnaMeld = DNA.slice(24834, 37251);
-      const dnaDiscard = DNA.slice(37251, 49668);
+        const dnaPickup  = DNA.subarray ? DNA.subarray(0, 12417)  : DNA.slice(0, 12417);
+        const dnaAppend  = DNA.subarray ? DNA.subarray(12417, 24834) : DNA.slice(12417, 24834);
+        const dnaMeld    = DNA.subarray ? DNA.subarray(24834, 37251) : DNA.slice(24834, 37251);
+        const dnaDiscard = DNA.subarray ? DNA.subarray(37251, 49668) : DNA.slice(37251, 49668);
 
-      const getScore = (actionTypeArray, actionCards, activeWeights) => {
-          let input = [...baseInputs, ...actionTypeArray, ...nnHelpers.cardsToVector(actionCards)];
-          return nnHelpers.forwardPass(input, activeWeights);
-      };
+        const INPUT_SIZE = 774;
+        const inputBuffer = new Float32Array(INPUT_SIZE);
+        inputBuffer.set(baseInputs); // write base once
+
+        const getScore = (actionTypeArray, actionCards, activeWeights) => {
+            inputBuffer[inputBuffer.length - 56] = actionTypeArray[0]; // offsets for actionType (3) + cardsVec (53)
+            inputBuffer[inputBuffer.length - 55] = actionTypeArray[1];
+            inputBuffer[inputBuffer.length - 54] = actionTypeArray[2];
+            const cv = nnHelpers.cardsToVector(actionCards);
+            inputBuffer.set(cv, INPUT_SIZE - 53);
+            return nnHelpers.forwardPass(inputBuffer, activeWeights);
+        };
 
       // 🚀 BATCH RESOLVER: Intelligently limits the batch to prevent Hand-Size Violations
       const resolveQueue = (moves) => {

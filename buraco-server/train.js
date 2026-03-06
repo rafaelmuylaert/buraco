@@ -13,10 +13,10 @@ if (!fs.existsSync(BOTS_DIR)) {
 
 const activeTrainings = new Map();
 
-const generateRandomGenome = () => Array.from({ length: DNA_SIZE }, () => (Math.random() - 0.5));
+//const generateRandomGenome = () => Array.from({ length: DNA_SIZE }, () => (Math.random() - 0.5));
 
 function mutate(genome, mutationRate = 0.1, maxStep = 0.5) {
-    const mutated = [...genome];
+    const mutated = new Float32Array(genome);
     for (let i = 0; i < DNA_SIZE; i++) {
         if (Math.random() < mutationRate) {
             mutated[i] += (Math.random() * 2 - 1) * maxStep;
@@ -26,12 +26,18 @@ function mutate(genome, mutationRate = 0.1, maxStep = 0.5) {
 }
 
 function breed(parentA, parentB) {
-    const child = new Array(DNA_SIZE);
+    const child = new Float32Array(DNA_SIZE);
     for (let i = 0; i < DNA_SIZE; i++) {
         child[i] = Math.random() > 0.5 ? parentA[i] : parentB[i];
     }
     return mutate(child);
 }
+
+const generateRandomGenome = () => {
+    const g = new Float32Array(DNA_SIZE);
+    for (let i = 0; i < DNA_SIZE; i++) g[i] = (Math.random() - 0.5);
+    return g;
+};
 
 function runMatch(genomes, rules) {
     const client = Client({
@@ -196,12 +202,12 @@ export const TrainerService = {
                 }
                 population = newPopulation;
 
-                if (gen % 5 === 0 || gen === GENERATIONS) {
+                if (gen % 25 === 0 || gen === GENERATIONS) {
                     const filePath = path.join(BOTS_DIR, `${botName}.json`);
                     fs.writeFileSync(filePath, JSON.stringify(rankedBots[0].genome));
                 }
                 
-                await new Promise(resolve => setTimeout(resolve, 10)); 
+                await new Promise(resolve => setImmediate(resolve));
             }
         } catch (error) {
             console.error(`Error during training for ${botName}:`, error);
