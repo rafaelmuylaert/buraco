@@ -674,71 +674,110 @@ export const BuracoGame = {
 
       const DNA = customDNA || new Array(12417).fill(0.01);
 
-      const getScore = (actionTypeArray, actionCards) => {
-          return nnHelpers.forwardPass([...baseInputs, ...actionTypeArray, ...nnHelpers.cardsToVector(actionCards)], DNA);
-      };
+      // BATCH EVALUATION TO PREVENT NN BOTTLENECK
+      let possibleMoves = [];
 
       if (!G.hasDrawn) {
         if (topDiscard !== null) {
           if (G.rules.discard === 'closed') {
-             // USING THE BLAZING FAST O(N) LINEAR SEARCH
              const possiblePickups = getPossibleMelds([...myHandCards, topDiscard], G.rules);
              for (let i = 0; i < possiblePickups.length; i++) {
                  let combo = possiblePickups[i];
                  if (combo.includes(topDiscard)) {
                      let handCardsUsed = combo.filter(c => c !== topDiscard);
-                     let score = getScore([1.0, 0.0, 0.0], combo);
-                     if (score > 0) return [{ move: 'pickUpDiscard', args: [handCardsUsed, { type: 'new' }] }];
+                     possibleMoves.push({ 
+                         move: 'pickUpDiscard', args: [handCardsUsed, { type: 'new' }], 
+                         actionType: [1.0, 0.0, 0.0], cards: combo 
+                     });
                  }
              }
           } else {
-             let score = getScore([1.0, 0.0, 0.0], G.discardPile);
-             if (score > 0) return [{ move: 'pickUpDiscard', args: [] }];
+             possibleMoves.push({ 
+                 move: 'pickUpDiscard', args: [], 
+                 actionType: [1.0, 0.0, 0.0], cards: G.discardPile 
+             });
           }
         }
         
         if (G.deck.length === 0 && G.pots.length === 0) return [{ move: 'declareExhausted', args: [] }];
-        return [{ move: 'drawCard', args: [] }];
+        if (possibleMoves.length === 0) return [{ move: 'drawCard', args: [] }];
 
       } else {
-        let bestMove = null; let highestScore = -Infinity;
-        const evaluateMove = (move, score) => { if (score > highestScore) { highestScore = score; bestMove = move; } };
-
+        // 1. COLLECT VALID APPENDS (No NN calls yet)
         (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIndex) => {
             for (let i = 0; i < myHandCards.length; i++) {
               let card = myHandCards[i];
               if (appendCardsToMeld(meld, [card])) {
-                let score = getScore([0.0, 1.0, 0.0], [card]);
-                evaluateMove({ move: 'appendToMeld', args: [tp, mIndex, [card]] }, score);
+                  possibleMoves.push({
+                      move: 'appendToMeld', args: [tp, mIndex, [card]],
+                      actionType: [0.0, 1.0, 0.0], cards: [card]
+                  });
               }
             }
           });
         });
 
-        // USING THE BLAZING FAST O(N) LINEAR SEARCH
+        // 2. COLLECT VALID MELDS (No NN calls yet)
         const validMelds = getPossibleMelds(myHandCards, G.rules);
         for (let i = 0; i < validMelds.length; i++) {
             let combo = validMelds[i];
-            let sim = [...(G.melds[p] || []), buildMeld(combo, G.rules)];
-            if (myHandCards.length - combo.length < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue; 
             
-            let score = getScore([0.0, 1.0, 0.0], combo);
-            evaluateMove({ move: 'playMeld', args: [combo] }, score);
+            // Fast validation without creating heavy arrays
+            if (myHandCards.length - combo.length < 2) {
+                // If this move would empty our hand, we MUST check if it's legal
+                let sim = [];
+                for(let m of (G.melds[p] || [])) sim.push(m);
+                let built = buildMeld(combo, G.rules);
+                if(built) sim.push(built);
+                
+                if (!canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue;
+            }
+
+            possibleMoves.push({
+                move: 'playMeld', args: [combo],
+                actionType: [0.0, 1.0, 0.0], cards: combo
+            });
         }
 
+        // 3. COLLECT VALID DISCARDS (No NN calls yet)
         const teamHasClean = G.teamPlayers[myTeam].some(tp => G.melds[tp].some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || m[3]===0)));
         if (myHandCards.length > 1 || teamHasClean || (G.pots.length && !G.teamMortos[myTeam])) {
+          
+          // PRE-FILTER DISCARDS: Only discard unique ranks to save NN evaluations
+          let uniqueDiscards = new Set();
           for (let i = 0; i < myHandCards.length; i++) {
             let card = myHandCards[i];
-            let score = getScore([0.0, 0.0, 1.0], [card]);
-            evaluateMove({ move: 'discardCard', args: [card] }, score);
+            if (!uniqueDiscards.has(card)) {
+                uniqueDiscards.add(card);
+                possibleMoves.push({
+                    move: 'discardCard', args: [card],
+                    actionType: [0.0, 0.0, 1.0], cards: [card]
+                });
+            }
           }
         }
-        
-        if (bestMove) return [bestMove];
-        return []; 
       }
+
+      // --- BATCH NN EVALUATION ---
+      // We only run the Neural Network on the final, filtered list of completely valid, unique moves.
+      if (possibleMoves.length === 0) return [];
+      
+      let bestMove = null; 
+      let highestScore = -Infinity;
+
+      for (let i = 0; i < possibleMoves.length; i++) {
+          let m = possibleMoves[i];
+          let input = [...baseInputs, ...m.actionType, ...nnHelpers.cardsToVector(m.cards)];
+          let score = nnHelpers.forwardPass(input, DNA);
+          
+          if (score > highestScore) { 
+              highestScore = score; 
+              bestMove = { move: m.move, args: m.args }; 
+          }
+      }
+
+      return [bestMove]; 
     }
   }
 };
