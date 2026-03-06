@@ -39,7 +39,7 @@ const generateRandomGenome = () => {
     return g;
 };
 
-function runMatch(genomes, rules) {
+async function runMatch(genomes, rules) {
     const client = Client({
         game: BuracoGame,
         numPlayers: rules.numPlayers || 4,
@@ -51,9 +51,11 @@ function runMatch(genomes, rules) {
         let state = client.getState();
         let moveCount = 0;
         const MAX_MOVES = 800;
-        let aiQueue = [];
+        let consecutiveFails = 0;
 
         while (!state.ctx.gameover && moveCount < MAX_MOVES) {
+            if (moveCount % 50 === 0) await new Promise(resolve => setImmediate(resolve));
+
             const p = state.ctx.currentPlayer;
             const moves = BuracoGame.ai.enumerate(state.G, state.ctx);
 
@@ -61,6 +63,7 @@ function runMatch(genomes, rules) {
                 if (!state.ctx.gameover) client.events.endTurn();
                 state = client.getState();
                 moveCount++;
+                consecutiveFails = 0;
                 continue;
             }
 
@@ -77,8 +80,14 @@ function runMatch(genomes, rules) {
                 || (state.G.hands[p] || []).length !== prevHandSize;
 
             if (!stateChanged) {
-                client.events.endTurn();
-                state = client.getState();
+                consecutiveFails++;
+                if (consecutiveFails >= 3) {
+                    if (!state.ctx.gameover) client.events.endTurn();
+                    state = client.getState();
+                    consecutiveFails = 0;
+                }
+            } else {
+                consecutiveFails = 0;
             }
 
             moveCount++;
@@ -172,7 +181,7 @@ export const TrainerService = {
                         };
                         
                         try {
-                            const scores = runMatch(matchGenomes, rules);
+                            const scores = await runMatch(matchGenomes, rules);
                             fitnessScores[botId] += scores.team0.total;
                         } catch (e) {
                             console.error(`[TRAINER] Match skipped due to error:`, e.message);
