@@ -1,5 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import { sortCards, getCanastaStatus, calculateMeldPoints } from './game.js';
+import { sortCards, calculateMeldPoints } from './game.js';
+
+// NEW: Integers are converted to display ranks/suits on the fly!
+const getSuitChar = s => ['♠', '♥', '♦', '♣', '★'][s - 1];
+const getRankChar = r => r === 1 ? 'A' : r === 11 ? 'J' : r === 12 ? 'Q' : r === 13 ? 'K' : r === 14 ? 'A' : r.toString();
+
+function intToCardObj(c) {
+    const s = c >= 104 ? 5 : Math.floor((c % 52) / 13) + 1;
+    const r = c >= 104 ? 2 : (c % 13) + 1;
+    return { rank: s === 5 ? 'JOKER' : getRankChar(r), suit: getSuitChar(s), id: c };
+}
+
+function meldToCards(meld) {
+    let cards = [];
+    if (meld[0] === 0) { // Runner
+        for (let i = 0; i < meld[2]; i++) {
+            if (meld[3] !== 0 && i === meld[2] - 1) {
+                cards.push({ rank: meld[3] === 5 ? 'JOKER' : '2', suit: meld[3] === 5 ? '★' : getSuitChar(meld[3]), id: `w-${i}` });
+            } else {
+                cards.push({ rank: getRankChar(meld[1]), suit: '♠', id: `r-${i}` }); 
+            }
+        }
+    } else { // Sequence
+        for (let r = meld[1]; r <= meld[2]; r++) {
+            if (r === meld[4]) {
+                cards.push({ rank: meld[3] === 5 ? 'JOKER' : '2', suit: meld[3] === 5 ? '★' : getSuitChar(meld[3]), id: `w-${r}` });
+            } else {
+                cards.push({ rank: getRankChar(r > 13 ? 1 : r), suit: getSuitChar(meld[0]), id: `n-${r}` });
+            }
+        }
+    }
+    return cards;
+}
 
 const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle }) => {
   const isRed = card.suit === '♥' || card.suit === '♦';
@@ -37,16 +69,9 @@ const CardBack = ({ label, count, onClick }) => (
   </div>
 );
 
-const isRunner = (meld) => {
-  const naturals = meld.filter(c => c.rank !== 'JOKER' && c.rank !== '2');
-  if (naturals.length >= 2) return naturals[0].rank === naturals[1].rank;
-  return false;
-};
-
-export function BuracoBoard(props) {
-  const { ctx, G, moves, playerID, matchID, tournament = null, tournamentStandings = null } = props;
-  
+export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = null, tournamentStandings = null }) {
   const [selectedCards, setSelectedCards] = useState([]);
+  const isMyTurn = ctx.currentPlayer === playerID;
 
   useEffect(() => {
     if (ctx && G && ctx.phase === 'waitingRoom' && G.players && !G.players.includes(playerID)) {
@@ -60,9 +85,7 @@ export function BuracoBoard(props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matchID, date: new Date().toLocaleString(), scores: ctx.gameover.scores })
-      }).then(() => {
-        window.dispatchEvent(new Event('history_updated')); 
-      });
+      }).then(() => window.dispatchEvent(new Event('history_updated')));
     }
   }, [ctx?.gameover, matchID]);
 
@@ -75,7 +98,6 @@ export function BuracoBoard(props) {
     const team1NamesArr = (G.teamPlayers.team1 || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`);
     const team0Names = team0NamesArr.join(' & ');
     const team1Names = team1NamesArr.join(' & ');
-
     const myName = G.rules?.assignments?.[playerID] || "Eu";
     const isTournament = !!tournament;
     const isTournamentComplete = tournament && tournament.status === 'completed';
@@ -157,10 +179,9 @@ export function BuracoBoard(props) {
     );
   }
 
-
-  const rawHand = G.hands[playerID] || []; 
-  const sortedHand = sortCards(rawHand); 
-  const topDiscard = G.discardPile[G.discardPile.length - 1];
+  // Pre-process hand map to JS objects for rendering
+  const sortedHandObj = Object.values(G.hands[playerID] || []).sort((a,b) => a-b).map(intToCardObj);
+  const topDiscard = G.discardPile.length > 0 ? intToCardObj(G.discardPile[G.discardPile.length - 1]) : null;
   
   const myTeam = G.teams[playerID];
   const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
@@ -170,7 +191,7 @@ export function BuracoBoard(props) {
   const chunkedDiscard = [];
   if (G.discardPile && G.discardPile.length > 0) {
     for (let i = 0; i < G.discardPile.length; i += 5) {
-      chunkedDiscard.push(G.discardPile.slice(i, i + 5));
+      chunkedDiscard.push(G.discardPile.slice(i, i + 5).map(intToCardObj));
     }
   }
 
@@ -184,6 +205,8 @@ export function BuracoBoard(props) {
   const toggleCardSelection = (cardId) => setSelectedCards(prev => prev.includes(cardId) ? prev.filter(id => id !== cardId) : [...prev, cardId]);
 
   const handleDiscardPileClick = () => {
+    if (!isMyTurn) return; 
+    
     if (selectedCards.length === 1 && G.hasDrawn) {
       moves.discardCard(selectedCards[0]);
       setSelectedCards([]);
@@ -208,10 +231,13 @@ export function BuracoBoard(props) {
       
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'flex-start' }}>
         {teamPlayers.map(p => (G.melds[p] || []).map((meldGroup, index) => {
-          const status = getCanastaStatus(meldGroup, G.rules);
+          const isSeq = meldGroup[0] !== 0;
+          const isCanasta = isSeq ? (meldGroup[2] - meldGroup[1] >= 6) : (meldGroup[2] >= 7);
+          const status = isCanasta ? (meldGroup[3] === 0 ? 'clean' : 'dirty') : null;
           const points = calculateMeldPoints(meldGroup, G.rules);
           const borderColor = status === 'clean' ? '#ffd700' : (status === 'dirty' ? '#c0c0c0' : 'transparent');
-          const runner = isRunner(meldGroup);
+          
+          const renderedCards = meldToCards(meldGroup);
 
           return (
             <div key={`${p}-${index}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -219,6 +245,7 @@ export function BuracoBoard(props) {
                 {points} pts
               </div>
               <div onClick={() => { 
+                  if (!isMyTurn) return; 
                   if (isMyTeam) {
                     if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) {
                       moves.pickUpDiscard(selectedCards, { type: 'append', player: p, index });
@@ -231,18 +258,18 @@ export function BuracoBoard(props) {
                 }}
                 style={{ 
                   display: 'flex', 
-                  flexDirection: runner ? 'column' : 'row', 
+                  flexDirection: !isSeq ? 'column' : 'row', 
                   background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', 
                   border: `2px solid ${borderColor}`, 
-                  cursor: (isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default' 
+                  cursor: (isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default' 
                 }}>
-                {meldGroup.map((card, i) => (
+                {renderedCards.map((card, i) => (
                   <Card 
                     key={card.id} 
                     card={card} 
                     customStyle={{ 
-                      marginLeft: (!runner && i > 0) ? '-40px' : '0', 
-                      marginTop: (runner && i > 0) ? '-60px' : '0',   
+                      marginLeft: (isSeq && i > 0) ? '-40px' : '0', 
+                      marginTop: (!isSeq && i > 0) ? '-60px' : '0',   
                       zIndex: i 
                     }} 
                   />
@@ -254,6 +281,8 @@ export function BuracoBoard(props) {
 
         {isMyTeam && (
           <div onClick={() => { 
+              if (!isMyTurn) return; 
+              
               if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) {
                 moves.pickUpDiscard(selectedCards, { type: 'new' });
                 setSelectedCards([]);
@@ -262,41 +291,43 @@ export function BuracoBoard(props) {
                 setSelectedCards([]); 
               } 
             }} 
-            style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (selectedCards.length >= 3 || (!G.hasDrawn && G.rules.discard === 'closed')) ? 'pointer' : 'default', color: '#888' }}>
+            style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && (selectedCards.length >= 3 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default', color: '#888' }}>
             + Baixar Jogo
           </div>
         )}
       </div>
     </div>
   );
+
   const deckEmpty = G.deck.length === 0 && G.pots.length === 0;
   const deckCount = G.deck.length === 0 && G.pots.length > 0 ? 11 : G.deck.length;
+
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100vh', boxSizing: 'border-box', overflow: 'hidden', padding: '15px', fontFamily: 'sans-serif', backgroundColor: '#2d6a4f', color: 'white', display: 'flex', gap: '15px' }}>
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: G.rules?.openDiscardView ? '150px' : '90px', minWidth: G.rules?.openDiscardView ? '150px' : '90px', flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
-         <div style={{ textAlign: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
           <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Monte</h4>
           {deckEmpty ? (
             <div 
-              onClick={() => { if(!G.hasDrawn) moves.declareExhausted(); }} 
+              onClick={isMyTurn && !G.hasDrawn ? () => moves.declareExhausted() : undefined} 
               style={{
                 border: '2px dashed #ff4d4d', borderRadius: '8px', width: '60px', height: '90px', margin: '2px auto',
                 backgroundColor: 'rgba(255, 77, 77, 0.1)', display: 'flex', flexDirection: 'column', 
-                justifyContent: 'center', alignItems: 'center', color: '#ff4d4d', cursor: !G.hasDrawn ? 'pointer' : 'default', textAlign: 'center',
+                justifyContent: 'center', alignItems: 'center', color: '#ff4d4d', cursor: (isMyTurn && !G.hasDrawn) ? 'pointer' : 'default', textAlign: 'center',
                 boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', transition: 'all 0.2s'
               }}>
               <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>Fim de</span>
               <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>Jogo</span>
             </div>
           ) : (
-            <CardBack label="Comprar" count={deckCount} onClick={() => { if(!G.hasDrawn) moves.drawCard(); }} />
+            <CardBack label="Comprar" count={deckCount} onClick={isMyTurn && !G.hasDrawn ? () => moves.drawCard() : undefined} />
           )}
         </div>
         
         <div style={{ textAlign: 'center', width: '100%' }}>
           <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Lixo ({G.discardPile.length})</h4>
-          <div onClick={handleDiscardPileClick} style={{ cursor: (!G.hasDrawn || (selectedCards.length === 1 && G.hasDrawn)) ? 'pointer' : 'not-allowed' }}>
+          <div onClick={handleDiscardPileClick} style={{ cursor: (isMyTurn && (!G.hasDrawn || (selectedCards.length === 1 && G.hasDrawn))) ? 'pointer' : 'not-allowed' }}>
             {G.discardPile.length > 0 ? (
               G.rules?.openDiscardView ? (
                 chunkedDiscard.map((row, rIdx) => (
@@ -320,7 +351,7 @@ export function BuracoBoard(props) {
         <div style={{ flexShrink: 0 }}>
           <h2 style={{ fontSize: '1.2em', margin: '0 0 10px 0' }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-            {sortedHand.map(card => <Card key={card.id} card={card} isSelected={selectedCards.includes(card.id)} isNewlyDrawn={card.isNewlyDrawn} onClick={() => toggleCardSelection(card.id)} />)}
+            {sortedHandObj.map(card => <Card key={card.id} card={card} isSelected={selectedCards.includes(card.id)} isNewlyDrawn={card.id === G.lastDrawnCard} onClick={() => toggleCardSelection(card.id)} />)}
           </div>
         </div>
       </div>
@@ -382,11 +413,14 @@ export function BuracoBoard(props) {
                 <div key={p} style={{ marginBottom: '8px' }}>
                   <div style={{ fontSize: '0.7em', color: '#888', marginBottom: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}:</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
-                    {G.knownCards[p].map((c, i) => (
-                      <div key={i} style={{ background: 'white', color: (c.suit==='♥'||c.suit==='♦')?'red':'black', padding: '1px 3px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold' }}>
-                        {c.rank}{c.suit}
-                      </div>
-                    ))}
+                    {G.knownCards[p].map((cId, i) => {
+                      const c = intToCardObj(cId);
+                      return (
+                        <div key={i} style={{ background: 'white', color: (c.suit==='♥'||c.suit==='♦')?'red':'black', padding: '1px 3px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold' }}>
+                          {c.rank}{c.suit}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )
