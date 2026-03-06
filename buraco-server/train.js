@@ -55,36 +55,31 @@ function runMatch(genomes, rules) {
 
         while (!state.ctx.gameover && moveCount < MAX_MOVES) {
             const p = state.ctx.currentPlayer;
+            const moves = BuracoGame.ai.enumerate(state.G, state.ctx);
 
-            if (aiQueue.length === 0) {
-                const moves = BuracoGame.ai.enumerate(state.G, state.ctx);
-                aiQueue = moves || [];
-            }
-
-            if (aiQueue.length > 0) {
-                const nextMove = aiQueue.shift();
-                if ((nextMove.move === 'drawCard' || nextMove.move === 'pickUpDiscard') && state.G.hasDrawn) {
-                    aiQueue = [];
-                    continue;
-                }
-                const prevTurn = state.ctx.turn;
-                const prevHandSize = (state.G.hands[p] || []).length;
-                const prevMeldCards = Object.values(state.G.melds).reduce((s, m) => s + m.reduce((ms, meld) => ms + (meld[0] !== 0 ? (meld[2] - meld[1] + 1) : meld[2]), 0), 0);
-
-                client.moves[nextMove.move](...(nextMove.args || []));
-                state = client.getState();
-
-                const stateChanged = state.ctx.turn !== prevTurn
-                    || (state.G.hands[p] || []).length !== prevHandSize
-                    || Object.values(state.G.melds).reduce((s, m) => s + m.reduce((ms, meld) => ms + (meld[0] !== 0 ? (meld[2] - meld[1] + 1) : meld[2]), 0), 0) !== prevMeldCards;
-
-                if (!stateChanged) aiQueue = [];
-            } else {
+            if (!moves || moves.length === 0) {
                 client.events.endTurn();
                 state = client.getState();
+                moveCount++;
+                continue;
             }
 
-            if (state.ctx.currentPlayer !== p) aiQueue = [];
+            const nextMove = moves[0];
+            client.moves[nextMove.move](...(nextMove.args || []));
+            const newState = client.getState();
+
+            // If state didn't change, the move was invalid — force end turn
+            if (newState === state || (
+                newState.ctx.turn === state.ctx.turn &&
+                (newState.G.hands[p] || []).length === (state.G.hands[p] || []).length &&
+                JSON.stringify(newState.G.melds) === JSON.stringify(state.G.melds)
+            )) {
+                client.events.endTurn();
+                state = client.getState();
+            } else {
+                state = newState;
+            }
+
             moveCount++;
         }
 
