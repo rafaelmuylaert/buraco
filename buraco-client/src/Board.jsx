@@ -1,5 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { sortCards, calculateMeldPoints } from './game.js';
+import { calculateMeldPoints } from './game.js';
+
+export const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
+export const pointValues = { '3': 5, '4': 5, '5': 5, '6': 5, '7': 5, '8': 10, '9': 10, '10': 10, 'J': 10, 'Q': 10, 'K': 10, 'A': 15, '2': 20, 'JOKER': 50 };
+export const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
+
+
+export function sortCards(cards) {
+  const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
+  return [...cards].sort((a, b) => {
+    if (suitValues[a.suit] !== suitValues[b.suit]) return suitValues[a.suit] - suitValues[b.suit];
+    return sortVals[a.rank] - sortVals[b.rank];
+  });
+}
 
 // NEW: Integers are converted to display ranks/suits on the fly!
 const getSuitChar = s => ['♠', '♥', '♦', '♣', '★'][s - 1];
