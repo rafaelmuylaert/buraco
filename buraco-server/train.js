@@ -32,12 +32,11 @@ function breed(parentA, parentB) {
     return mutate(child);
 }
 
-// NEW: Accept a "seed" parameter to force deterministic shuffles
 function runMatch(genomes, rules, seed) {
     const client = Client({
         game: BuracoGame,
         numPlayers: rules.numPlayers || 4,
-        matchID: seed, // Using a string here forces boardgame.io to use a fixed random seed!
+        matchID: seed, 
         setupData: { 
             ...rules
         }
@@ -97,7 +96,8 @@ export const TrainerService = {
 
         const POPULATION_SIZE = params.populationSize || 24;
         const GENERATIONS = params.generations || 500;
-        const MATCHES_PER_GENERATION = params.matchesPerGeneration || 12;
+        // CHANGED: Default to the perfect 24 (4!) matches
+        const MATCHES_PER_GENERATION = params.matchesPerGeneration || 24; 
 
         activeTrainings.set(botName, { currentGeneration: 0, totalGenerations: GENERATIONS, bestScore: 0 });
 
@@ -119,34 +119,55 @@ export const TrainerService = {
             for (let gen = 1; gen <= GENERATIONS; gen++) {
                 let fitnessScores = Array(POPULATION_SIZE).fill(0);
 
-                // DUPLICATE BRIDGE: Generate the exact seeds to be used by all bots this generation!
                 const generationSeeds = Array.from({ length: MATCHES_PER_GENERATION }, () => Math.random().toString());
 
-                for (let botId = 0; botId < POPULATION_SIZE; botId++) {
-                    
-                    await new Promise(resolve => setTimeout(resolve, 0));
+                // 1. SHUFFLE THE POPULATION INTO GROUPS OF 4
+                let botIndices = Array.from({ length: POPULATION_SIZE }, (_, i) => i);
+                botIndices = botIndices.sort(() => Math.random() - 0.5);
+                const NUM_TABLES = Math.floor(POPULATION_SIZE / 4);
+
+                // ALL 24 SEATING PERMUTATIONS (4!)
+                const SEAT_PERMUTATIONS = [
+                    [0,1,2,3], [0,1,3,2], [0,2,1,3], [0,2,3,1], [0,3,1,2], [0,3,2,1],
+                    [1,0,2,3], [1,0,3,2], [1,2,0,3], [1,2,3,0], [1,3,0,2], [1,3,2,0],
+                    [2,0,1,3], [2,0,3,1], [2,1,0,3], [2,1,3,0], [2,3,0,1], [2,3,1,0],
+                    [3,0,1,2], [3,0,2,1], [3,1,0,2], [3,1,2,0], [3,2,0,1], [3,2,1,0]
+                ];
+
+                // 2. RUN THE TABLES
+                for (let table = 0; table < NUM_TABLES; table++) {
+                    await new Promise(resolve => setTimeout(resolve, 0)); 
+
+                    const tableBots = [
+                        botIndices[table * 4],
+                        botIndices[table * 4 + 1],
+                        botIndices[table * 4 + 2],
+                        botIndices[table * 4 + 3]
+                    ];
 
                     for (let m = 0; m < MATCHES_PER_GENERATION; m++) {
-                        // SEAT ROTATION: The bot rotates through seats 0, 1, 2, and 3
-                        const mySeat = (m % 4).toString(); 
                         const matchGenomes = {};
+                        
+                        // PERFECT ROTATION: Look up the permutation layout (loops safely if m > 23)
+                        const perm = SEAT_PERMUTATIONS[m % 24];
+                        
+                        const p0 = tableBots[perm[0]];
+                        const p1 = tableBots[perm[1]];
+                        const p2 = tableBots[perm[2]];
+                        const p3 = tableBots[perm[3]];
 
-                        for (let i = 0; i < 4; i++) {
-                            if (i.toString() === mySeat) {
-                                matchGenomes[i.toString()] = population[botId];
-                            } else {
-                                matchGenomes[i.toString()] = population[Math.floor(Math.random() * POPULATION_SIZE)];
-                            }
-                        }
+                        matchGenomes['0'] = population[p0];
+                        matchGenomes['1'] = population[p1];
+                        matchGenomes['2'] = population[p2];
+                        matchGenomes['3'] = population[p3];
                         
                         const scores = runMatch(matchGenomes, rules, generationSeeds[m]);
                         
-                        // Give the score to the team our evaluated bot was sitting on
-                        if (mySeat === '0' || mySeat === '2') {
-                            fitnessScores[botId] += scores.team0.total; 
-                        } else {
-                            fitnessScores[botId] += scores.team1.total;
-                        }
+                        // CAPTURE ALL 4 SCORES!
+                        fitnessScores[p0] += scores.team0.total; 
+                        fitnessScores[p2] += scores.team0.total; 
+                        fitnessScores[p1] += scores.team1.total;
+                        fitnessScores[p3] += scores.team1.total;
                     }
                 }
 
@@ -165,6 +186,7 @@ export const TrainerService = {
                     bestScore: bestScore 
                 });
 
+                // 3. GLOBAL TRUNCATION SELECTION (The absolute 4 best mathematically breed the next generation)
                 const elites = rankedBots.slice(0, 4).map(b => b.genome);
                 let newPopulation = [...elites]; 
 
