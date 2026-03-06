@@ -37,60 +37,52 @@ function runMatch(genomes, rules) {
     const client = Client({
         game: BuracoGame,
         numPlayers: rules.numPlayers || 4,
-        setupData: { 
-            ...rules,
-            botGenomes: genomes 
-        }
+        setupData: { ...rules, botGenomes: genomes }
     });
 
     client.start();
-    let state = client.getState();
-    let moveCount = 0;
-    const MAX_MOVES = 800; 
+    try {
+        let state = client.getState();
+        let moveCount = 0;
+        const MAX_MOVES = 800;
+        let aiQueue = [];
 
-    // 🚀 THE SEQUENTIAL BOT PIPELINE QUEUE
-    let aiQueue = [];
+        while (!state.ctx.gameover && moveCount < MAX_MOVES) {
+            const p = state.ctx.currentPlayer;
+            const prevState = state;
 
-    while (!state.ctx.gameover && moveCount < MAX_MOVES) {
-        const p = state.ctx.currentPlayer;
-        const prevState = state;
-
-        // If queue is empty, calculate the next active stage
-        if (aiQueue.length === 0) {
-            const moves = BuracoGame.ai.enumerate(state.G, state.ctx);
-            aiQueue = moves || [];
-        }
-        
-        if (aiQueue.length > 0) {
-            const nextMove = aiQueue.shift();
-            // Safety check: Don't accidentally execute a queued draw if we already drew
-            if ((nextMove.move === 'drawCard' || nextMove.move === 'pickUpDiscard') && state.G.hasDrawn) {
-                aiQueue = [];
-                continue;
+            if (aiQueue.length === 0) {
+                const moves = BuracoGame.ai.enumerate(state.G, state.ctx);
+                aiQueue = moves || [];
             }
-            client.moves[nextMove.move](...(nextMove.args || []));
-        } else {
-            client.events.endTurn();
-        }
-        
-        state = client.getState();
-        if (prevState === state) { aiQueue = []; /* force end turn if completely stuck */ }
-        
-        // Flush queue if turn passed
-        if (state.ctx.currentPlayer !== p) {
-            aiQueue = [];
-        }
-        
-        moveCount++;
-    }
 
-    client.stop();
+            if (aiQueue.length > 0) {
+                const nextMove = aiQueue.shift();
+                if ((nextMove.move === 'drawCard' || nextMove.move === 'pickUpDiscard') && state.G.hasDrawn) {
+                    aiQueue = [];
+                    continue;
+                }
+                client.moves[nextMove.move](...(nextMove.args || []));
+            } else {
+                client.events.endTurn();
+            }
 
-    if (!state.ctx.gameover) {
+            state = client.getState();
+            if (prevState === state) { aiQueue = []; }
+            if (state.ctx.currentPlayer !== p) { aiQueue = []; }
+            moveCount++;
+        }
+
+        if (!state.ctx.gameover) {
+            return { team0: { total: -5000 }, team1: { total: -5000 } };
+        }
+        return state.ctx.gameover.scores;
+    } catch (e) {
+        console.error('[TRAINER] runMatch crashed:', e.message);
         return { team0: { total: -5000 }, team1: { total: -5000 } };
+    } finally {
+        client.stop();
     }
-
-    return state.ctx.gameover.scores;
 }
 
 export const TrainerService = {
@@ -168,8 +160,13 @@ export const TrainerService = {
                             '3': population[opps[2]] 
                         };
                         
-                        const scores = runMatch(matchGenomes, rules);
-                        fitnessScores[botId] += scores.team0.total; 
+                        try {
+                            const scores = runMatch(matchGenomes, rules);
+                            fitnessScores[botId] += scores.team0.total;
+                        } catch (e) {
+                            console.error(`[TRAINER] Match skipped due to error:`, e.message);
+                            fitnessScores[botId] += -5000;
+                        }
                     }
                 }
 
