@@ -247,7 +247,6 @@ function canEmptyHand(G, team) {
   if (!hasMorto && mortosAvailable) return true; 
   
   return teamMelds.some(m => {
-    // Array format check: [suit, start, end, wildSuit, wildPos]
     const isCanasta = m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
     if (!isCanasta) return false;
     if (G.rules.cleanCanastaToWin && m[3] !== 0) return false;
@@ -267,7 +266,6 @@ function canEmptyHandWithSimulatedMelds(G, team, simulatedMeldsForTarget, target
   if (!hasMorto && mortosAvailable) return true; 
   
   return allTeamMelds.some(m => {
-    // Array format check: [suit, start, end, wildSuit, wildPos]
     const isCanasta = m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
     if (!isCanasta) return false;
     if (G.rules.cleanCanastaToWin && m[3] !== 0) return false;
@@ -347,16 +345,12 @@ const nnHelpers = {
   }
 };
 
-// 🚀 O(N) ALL-LENGTH MELD GENERATOR
-// Automatically finds all valid combinations of 3, 4, 5+ cards!
 function getAllValidMelds(handCards, rules) {
     let validCombos = [];
-    
     let bySuitRank = { 1: {}, 2: {}, 3: {}, 4: {} };
     let byRankAnySuit = {}; 
     let wilds = [];
 
-    // 1. O(N) Grouping
     for (let i = 0; i < handCards.length; i++) {
         let cId = handCards[i];
         let s = cId >= 104 ? 5 : Math.floor((cId % 52) / 13) + 1; 
@@ -367,7 +361,7 @@ function getAllValidMelds(handCards, rules) {
         } else {
             if (!bySuitRank[s][r]) bySuitRank[s][r] = [];
             bySuitRank[s][r].push(cId);
-            if (r === 1) { // Ace acts as high 14
+            if (r === 1) { 
                 if (!bySuitRank[s][14]) bySuitRank[s][14] = [];
                 bySuitRank[s][14].push(cId);
             }
@@ -376,7 +370,6 @@ function getAllValidMelds(handCards, rules) {
         }
     }
 
-    // 2. Extract sequences of ANY length >= 3
     for (let s = 1; s <= 4; s++) {
         let ranks = Object.keys(bySuitRank[s]).map(Number).sort((a,b)=>a-b);
         if (ranks.length === 0) continue;
@@ -385,7 +378,6 @@ function getAllValidMelds(handCards, rules) {
             let currentClean = [bySuitRank[s][ranks[i]][0]];
             let lastCleanRank = ranks[i];
             
-            // Clean Sequences (3,4,5,6,7...)
             for (let j = i + 1; j < ranks.length; j++) {
                 if (ranks[j] - lastCleanRank === 1) {
                     currentClean.push(bySuitRank[s][ranks[j]][0]);
@@ -396,7 +388,6 @@ function getAllValidMelds(handCards, rules) {
                 }
             }
             
-            // Dirty Sequences (Using 1 Wildcard to bridge gaps or extend)
             if (wilds.length > 0) {
                 let w = wilds[0];
                 let currentDirty = [bySuitRank[s][ranks[i]][0]];
@@ -421,7 +412,6 @@ function getAllValidMelds(handCards, rules) {
                     }
                 }
                 
-                // If we didn't need the wild to fill a gap, we can append it to the end of any valid 2+ card sequence
                 if (!wildUsed && currentDirty.length >= 2) {
                     let temp = [currentDirty[0]];
                     for(let j=1; j<currentDirty.length; j++) {
@@ -433,7 +423,6 @@ function getAllValidMelds(handCards, rules) {
         }
     }
 
-    // 3. Extract Runners of ANY length >= 3
     if (rules.runners !== 'none') {
         for (let r in byRankAnySuit) {
             let numR = parseInt(r);
@@ -444,11 +433,9 @@ function getAllValidMelds(handCards, rules) {
 
             if (allowed) {
                 let cards = byRankAnySuit[r];
-                // Clean Runners (3, 4, 5+ of a kind)
                 for (let len = 3; len <= cards.length; len++) {
                     validCombos.push(cards.slice(0, len));
                 }
-                // Dirty Runners
                 if (cards.length >= 2 && wilds.length > 0) {
                     for (let len = 2; len <= cards.length; len++) {
                         validCombos.push([...cards.slice(0, len), wilds[0]]);
@@ -675,6 +662,7 @@ export const BuracoGame = {
       const partnerId = numP === 4 ? ((pInt + 2) % numP).toString() : null;
       const opp2Id = numP === 4 ? ((pInt + 3) % numP).toString() : null;
 
+      // --- ASSEMBLE 774-FEATURE BASE INPUT ---
       let baseInputs = [];
       baseInputs.push(G.deck.length / 108.0);
       baseInputs.push(G.pots.length > 0 ? 1.0 : 0.0);
@@ -702,132 +690,160 @@ export const BuracoGame = {
       baseInputs.push(...nnHelpers.cardsToVector(partnerId ? (G.knownCards[partnerId] || []) : []));
       baseInputs.push(...nnHelpers.cardsToVector(opp2Id ? (G.knownCards[opp2Id] || []) : []));
 
-      const DNA = customDNA || G.botGenomes?.[p] || new Array(12417).fill(0.01);
+      // 🚀 EVOLUTIONARY UPGRADE CHECK: Support new 49k split brains or seamlessly clone old 12k brains
+      let DNA = customDNA || G.botGenomes?.[p] || new Array(49668).fill(0.01);
+      if (DNA.length === 12417) {
+          DNA = [...DNA, ...DNA, ...DNA, ...DNA]; // Seamless upgrade to independent brains!
+      } else if (DNA.length !== 49668) {
+          DNA = new Array(49668).fill(0.01);
+      }
 
-      let possibleMoves = [];
-      let moveSigs = new Set(); 
+      // 🚀 4 INDEPENDENT BRAINS
+      const dnaPickup = DNA.slice(0, 12417);
+      const dnaAppend = DNA.slice(12417, 24834);
+      const dnaMeld = DNA.slice(24834, 37251);
+      const dnaDiscard = DNA.slice(37251, 49668);
 
-      const addMove = (moveName, args, actionType, cardsArr) => {
-          let classes = cardsArr.map(c => c >= 104 ? 52 : c % 52);
-          if (moveName !== 'discardCard') classes.sort((a,b)=>a-b);
-          let sig = moveName + '-' + classes.join(',');
-          
-          if (!moveSigs.has(sig)) {
-              moveSigs.add(sig);
-              possibleMoves.push({ move: moveName, args, actionType, cards: cardsArr });
+      const resolveQueue = (moves) => {
+          let selected = [];
+          let usedCards = new Set();
+          for (let m of moves) {
+              let conflict = false;
+              for (let c of m.cards) { if (usedCards.has(c)) { conflict = true; break; } }
+              if (conflict) continue;
+              for (let c of m.cards) usedCards.add(c);
+              selected.push(m);
           }
+          return selected;
       };
 
+      const getScore = (actionTypeArray, actionCards, activeWeights) => {
+          let input = [...baseInputs, ...actionTypeArray, ...nnHelpers.cardsToVector(actionCards)];
+          return nnHelpers.forwardPass(input, activeWeights);
+      };
+
+      // ==========================================
+      // STAGE 1: PICKUP
+      // ==========================================
       if (!G.hasDrawn) {
-        if (topDiscard !== null) {
-          if (G.rules.discard === 'closed') {
-             // FIND ALL MULTI-CARD PICKUPS
-             const possiblePickups = getAllValidMelds([...myHandCards, topDiscard], G.rules);
-             for (let i = 0; i < possiblePickups.length; i++) {
-                 let combo = possiblePickups[i];
-                 if (combo.includes(topDiscard)) {
-                     let handCardsUsed = combo.filter(c => c !== topDiscard);
-                     let parsed = buildMeld(combo, G.rules);
-                     if (parsed) {
-                         addMove('pickUpDiscard', [handCardsUsed, { type: 'new' }], [1.0, 0.0, 0.0], combo);
-                     }
-                 }
-             }
-          } else {
-             addMove('pickUpDiscard', [], [1.0, 0.0, 0.0], G.discardPile);
-          }
-        }
-        
-        if (G.deck.length === 0 && G.pots.length === 0) return [{ move: 'declareExhausted', args: [] }];
-        if (possibleMoves.length === 0) return [{ move: 'drawCard', args: [] }];
-
-      } else {
-        // 1. COLLECT VALID APPENDS 
-        (G.teamPlayers[myTeam] || []).forEach(tp => {
-          (G.melds[tp] || []).forEach((meld, mIndex) => {
-            for (let i = 0; i < myHandCards.length; i++) {
-              let card = myHandCards[i];
-              let parsed = appendToMeld(meld, card);
-              if (parsed) {
-                let sim = [...G.melds[tp]]; sim[mIndex] = parsed;
-                if (myHandCards.length - 1 < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, tp)) continue; 
-                addMove('appendToMeld', [tp, mIndex, [card]], [0.0, 1.0, 0.0], [card]);
-              }
-            }
-          });
-        });
-
-        // 2. COLLECT VALID MELDS OF ANY LENGTH
-        const validMelds = getAllValidMelds(myHandCards, G.rules);
-        for (let i = 0; i < validMelds.length; i++) {
-            let combo = validMelds[i];
-            let parsed = buildMeld(combo, G.rules);
-            if (parsed) {
-                if (myHandCards.length - combo.length < 2) {
-                    let sim = [...(G.melds[p] || []), parsed];
-                    if (!canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue;
-                }
-                addMove('playMeld', [combo], [0.0, 1.0, 0.0], combo);
-            }
-        }
-
-        // 3. COLLECT VALID DISCARDS
-        const teamHasClean = G.teamPlayers[myTeam].some(tp => G.melds[tp].some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || m[3]===0)));
-        if (myHandCards.length > 1 || teamHasClean || (G.pots.length && !G.teamMortos[myTeam])) {
-            for (let i = 0; i < myHandCards.length; i++) {
-                addMove('discardCard', [myHandCards[i]], [0.0, 0.0, 1.0], [myHandCards[i]]);
-            }
-        }
-      }
-
-      // --- SINGLE PASS NN BATCHING ---
-      if (possibleMoves.length === 0) return [];
-      
-      for (let i = 0; i < possibleMoves.length; i++) {
-          let m = possibleMoves[i];
-          let input = [...baseInputs, ...m.actionType, ...nnHelpers.cardsToVector(m.cards)];
-          m.score = nnHelpers.forwardPass(input, DNA);
-      }
-
-      possibleMoves.sort((a, b) => b.score - a.score);
-
-      if (!G.hasDrawn) {
-          return [{ move: possibleMoves[0].move, args: possibleMoves[0].args }];
-      }
-
-      // --- ASSEMBLE NON-CONFLICTING BATCH QUEUE ---
-      let selectedMoves = [];
-      let usedCards = new Set();
-      let hasDiscarded = false;
-
-      for (let i = 0; i < possibleMoves.length; i++) {
-          let m = possibleMoves[i];
+          if (G.deck.length === 0 && G.pots.length === 0) return [{ move: 'declareExhausted', args: [] }];
           
-          let conflict = false;
-          for (let c of m.cards) {
-              if (usedCards.has(c)) { conflict = true; break; }
+          let possiblePickups = [];
+          possiblePickups.push({ move: 'drawCard', args: [], actionType: [0,0,0], cards: [] });
+          
+          if (topDiscard !== null) {
+              if (G.rules.discard === 'closed') {
+                  const combos = getAllValidMelds([...myHandCards, topDiscard], G.rules);
+                  let seenSigs = new Set();
+                  for (let combo of combos) {
+                      if (combo.includes(topDiscard)) {
+                          let handCardsUsed = combo.filter(c => c !== topDiscard);
+                          let parsed = buildMeld(combo, G.rules);
+                          if (parsed) {
+                              let sig = combo.map(c => c >= 104 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
+                              if (!seenSigs.has(sig)) {
+                                  seenSigs.add(sig);
+                                  possiblePickups.push({ move: 'pickUpDiscard', args: [handCardsUsed, { type: 'new' }], actionType: [1.0, 0.0, 0.0], cards: combo });
+                              }
+                          }
+                      }
+                  }
+              } else {
+                  possiblePickups.push({ move: 'pickUpDiscard', args: [], actionType: [1.0, 0.0, 0.0], cards: G.discardPile });
+              }
           }
-          if (conflict) continue;
 
-          if (m.move === 'discardCard') {
-              if (hasDiscarded) continue; 
-              hasDiscarded = true;
-          }
-
-          for (let c of m.cards) usedCards.add(c);
-          selectedMoves.push(m);
-      }
-
-      let others = selectedMoves.filter(m => m.move !== 'discardCard');
-      let discards = selectedMoves.filter(m => m.move === 'discardCard');
-
-      let finalQueue = [...others];
+          for (let m of possiblePickups) m.score = getScore(m.actionType, m.cards, dnaPickup);
+          possiblePickups.sort((a, b) => b.score - a.score);
+          return [{ move: possiblePickups[0].move, args: possiblePickups[0].args }];
+      } 
       
-      if (finalQueue.length === 0 && discards.length > 0) {
-          finalQueue.push(discards[0]);
+      // ==========================================
+      // STAGE 2: APPEND
+      // ==========================================
+      let possibleAppends = [];
+      let appendSigs = new Set();
+      
+      (G.teamPlayers[myTeam] || []).forEach(tp => {
+          (G.melds[tp] || []).forEach((meld, mIndex) => {
+              for (let i = 0; i < myHandCards.length; i++) {
+                  let card = myHandCards[i];
+                  let parsed = appendToMeld(meld, card);
+                  if (parsed) {
+                      let sim = [...G.melds[tp]]; sim[mIndex] = parsed;
+                      if (myHandCards.length - 1 < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, tp)) continue; 
+                      
+                      let cls = card >= 104 ? 52 : card % 52;
+                      let sig = `append-${tp}-${mIndex}-${cls}`;
+                      if (!appendSigs.has(sig)) {
+                          appendSigs.add(sig);
+                          possibleAppends.push({ move: 'appendToMeld', args: [tp, mIndex, [card]], actionType: [0.0, 1.0, 0.0], cards: [card] });
+                      }
+                  }
+              }
+          });
+      });
+
+      if (possibleAppends.length > 0) {
+          for (let m of possibleAppends) m.score = getScore(m.actionType, m.cards, dnaAppend);
+          possibleAppends = possibleAppends.filter(m => m.score >= 0).sort((a,b) => b.score - a.score);
+          let queue = resolveQueue(possibleAppends);
+          if (queue.length > 0) return queue.map(m => ({ move: m.move, args: m.args }));
       }
 
-      return finalQueue.map(m => ({ move: m.move, args: m.args }));
+      // ==========================================
+      // STAGE 3: MELD
+      // ==========================================
+      let possibleMelds = [];
+      let meldSigs = new Set();
+      
+      const validMelds = getAllValidMelds(myHandCards, G.rules);
+      for (let combo of validMelds) {
+          let parsed = buildMeld(combo, G.rules);
+          if (parsed) {
+              if (myHandCards.length - combo.length < 2) {
+                  let sim = [...(G.melds[p] || []), parsed];
+                  if (!canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue;
+              }
+              let sig = combo.map(c => c >= 104 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
+              if (!meldSigs.has(sig)) {
+                  meldSigs.add(sig);
+                  possibleMelds.push({ move: 'playMeld', args: [combo], actionType: [0.0, 1.0, 0.0], cards: combo });
+              }
+          }
+      }
+
+      if (possibleMelds.length > 0) {
+          for (let m of possibleMelds) m.score = getScore(m.actionType, m.cards, dnaMeld);
+          possibleMelds = possibleMelds.filter(m => m.score >= 0).sort((a,b) => b.score - a.score);
+          let queue = resolveQueue(possibleMelds);
+          if (queue.length > 0) return queue.map(m => ({ move: m.move, args: m.args }));
+      }
+
+      // ==========================================
+      // STAGE 4: DISCARD
+      // ==========================================
+      let possibleDiscards = [];
+      let discardSigs = new Set();
+      
+      const teamHasClean = G.teamPlayers[myTeam].some(tp => G.melds[tp].some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || m[3]===0)));
+      if (myHandCards.length > 1 || teamHasClean || (G.pots.length && !G.teamMortos[myTeam])) {
+          for (let card of myHandCards) {
+              let cls = card >= 104 ? 52 : card % 52;
+              if (!discardSigs.has(cls)) {
+                  discardSigs.add(cls);
+                  possibleDiscards.push({ move: 'discardCard', args: [card], actionType: [0.0, 0.0, 1.0], cards: [card] });
+              }
+          }
+      }
+
+      if (possibleDiscards.length > 0) {
+          for (let m of possibleDiscards) m.score = getScore(m.actionType, m.cards, dnaDiscard);
+          possibleDiscards.sort((a,b) => b.score - a.score);
+          return [{ move: possibleDiscards[0].move, args: possibleDiscards[0].args }];
+      }
+
+      return []; 
     }
   }
 };
