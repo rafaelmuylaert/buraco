@@ -55,7 +55,6 @@ function runMatch(genomes, rules) {
 
         while (!state.ctx.gameover && moveCount < MAX_MOVES) {
             const p = state.ctx.currentPlayer;
-            const prevState = state;
 
             if (aiQueue.length === 0) {
                 const moves = BuracoGame.ai.enumerate(state.G, state.ctx);
@@ -68,14 +67,25 @@ function runMatch(genomes, rules) {
                     aiQueue = [];
                     continue;
                 }
+                const prevTurn = state.ctx.turn;
+                const prevHandSize = (state.G.hands[p] || []).length;
+                const prevMeldCount = Object.values(state.G.melds).reduce((s, m) => s + m.length, 0);
+
                 client.moves[nextMove.move](...(nextMove.args || []));
+                state = client.getState();
+
+                // If nothing changed, the move was invalid — flush the queue
+                const stateChanged = state.ctx.turn !== prevTurn
+                    || (state.G.hands[p] || []).length !== prevHandSize
+                    || Object.values(state.G.melds).reduce((s, m) => s + m.length, 0) !== prevMeldCount;
+
+                if (!stateChanged) aiQueue = [];
             } else {
                 client.events.endTurn();
+                state = client.getState();
             }
 
-            state = client.getState();
-            if (prevState === state) { aiQueue = []; }
-            if (state.ctx.currentPlayer !== p) { aiQueue = []; }
+            if (state.ctx.currentPlayer !== p) aiQueue = [];
             moveCount++;
         }
 
