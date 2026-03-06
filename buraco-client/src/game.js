@@ -15,7 +15,9 @@ function calculateFinalScores(G) {
     const allHandCards = players.flatMap(p => G.hands[p] || []);
     
     allMelds.forEach(meld => scores[teamId].table += calculateMeldPoints(meld, G.rules));
-    allHandCards.forEach(card => scores[teamId].hand -= pointValues[card.rank]);
+    
+    // FIXED: Cards are integers now! Use getCardPoints(card) instead of pointValues[card.rank]
+    allHandCards.forEach(card => scores[teamId].hand -= getCardPoints(card));
     
     if (!G.teamMortos[teamId] || (G.teamMortos[teamId] && !G.mortoUsed[teamId])) {
       if (players.length > 0) scores[teamId].mortoPenalty -= 100;
