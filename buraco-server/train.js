@@ -53,6 +53,7 @@ function runMatch(genomes, rules) {
 
     while (!state.ctx.gameover && moveCount < MAX_MOVES) {
         const p = state.ctx.currentPlayer;
+        const prevState = state;
 
         // If queue is empty, calculate the next active stage
         if (aiQueue.length === 0) {
@@ -73,6 +74,7 @@ function runMatch(genomes, rules) {
         }
         
         state = client.getState();
+        if (prevState === state) { aiQueue = []; /* force end turn if completely stuck */ }
         
         // Flush queue if turn passed
         if (state.ctx.currentPlayer !== p) {
@@ -131,7 +133,11 @@ export const TrainerService = {
                 // 🚀 SEAMLESS UPGRADE: Automatically upgrades old 9k or 12k brains to 49k 4-stage brains
                 if (activeDNA.length !== DNA_SIZE) {
                     let expanded = [];
-                    while(expanded.length < DNA_SIZE) expanded.push(...activeDNA);
+                    // Keep duplicating the old DNA array until it's large enough
+                    while(expanded.length < DNA_SIZE) {
+                        expanded.push(...activeDNA);
+                    }
+                    // Trim off any excess to ensure it's exactly 49668
                     activeDNA = expanded.slice(0, DNA_SIZE);
                 }
                 
