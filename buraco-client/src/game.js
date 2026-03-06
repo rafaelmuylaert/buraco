@@ -313,36 +313,49 @@ const nnHelpers = {
   }
 };
 
-// 🚀 ZERO-ALLOCATION O(N) ADJACENCY SEARCH
-// Uses integer bitmasking for uniqueness instead of creating string arrays
+// 🚀 TRUE O(N) INT-DISTANCE SEARCH
 function getPossibleMelds(handCards, rules) {
     let validCombos = [];
     let seenSignatures = new Set();
     
-    let bySuit = {1:[], 2:[], 3:[], 4:[]};
-    let byRank = {};
+    // Arrays to hold the *card IDs* representing each rank, grouped by suit.
+    // e.g. bySuitRank[suit][rank] = cardId
+    let bySuitRank = { 1: {}, 2: {}, 3: {}, 4: {} };
+    let byRankAnySuit = {}; // For Runners
     let wilds = [];
 
+    // 1. Group the cards in a single pass O(N)
     for (let i = 0; i < handCards.length; i++) {
         let cId = handCards[i];
         let s = cId >= 104 ? 5 : Math.floor((cId % 52) / 13) + 1; 
         let r = cId >= 104 ? 2 : (cId % 13) + 1;
         
-        if (s === 5 || r === 2) wilds.push(cId);
-        else {
-            bySuit[s].push(cId);
-            if (!byRank[r]) byRank[r] = [];
-            byRank[r].push(cId);
+        if (s === 5 || r === 2) {
+            wilds.push(cId);
+        } else {
+            // Group for Sequences
+            if (!bySuitRank[s][r]) bySuitRank[s][r] = [];
+            bySuitRank[s][r].push(cId);
+            
+            // Treat Ace as 14 as well
+            if (r === 1) {
+                if (!bySuitRank[s][14]) bySuitRank[s][14] = [];
+                bySuitRank[s][14].push(cId);
+            }
+
+            // Group for Runners
+            if (!byRankAnySuit[r]) byRankAnySuit[r] = [];
+            byRankAnySuit[r].push(cId);
         }
     }
 
-    // Hash function to avoid array allocations inside the loop
     const addCombo = (c1, c2, c3) => {
         let a = c1; let b = c2; let c = c3;
         if (a > b) { let t = a; a = b; b = t; }
         if (b > c) { let t = b; b = c; c = t; }
         if (a > b) { let t = a; a = b; b = t; }
         
+        // Fast, collision-free hash for 3 card IDs up to 108
         let sig = a + (b * 108) + (c * 11664); 
         if (!seenSignatures.has(sig)) {
             seenSignatures.add(sig);
@@ -350,46 +363,54 @@ function getPossibleMelds(handCards, rules) {
         }
     };
 
+    // 2. Extract and check distances O(M log M) where M is unique ranks (max 14)
     for (let s = 1; s <= 4; s++) {
-        let suitCards = bySuit[s];
-        if (suitCards.length === 0) continue;
-
-        let availableRanks = {};
-        for (let i = 0; i < suitCards.length; i++) {
-            let c = suitCards[i];
-            let r = (c % 13) + 1;
-            if (!availableRanks[r]) availableRanks[r] = [];
-            availableRanks[r].push(c);
-            if (r === 1) { 
-                if (!availableRanks[14]) availableRanks[14] = [];
-                availableRanks[14].push(c);
-            }
+        let rankMap = bySuitRank[s];
+        // Get the unique integer ranks present for this suit
+        let presentRanks = [];
+        for (let r in rankMap) {
+            presentRanks.push(Number(r));
         }
-
-        let uniqueRanks = Object.keys(availableRanks).map(Number).sort((a,b) => a-b);
         
-        for (let i = 0; i < uniqueRanks.length; i++) {
-            let r = uniqueRanks[i];
-            let c1 = availableRanks[r][0]; 
+        if (presentRanks.length === 0) continue;
+        presentRanks.sort((a,b) => a-b);
 
-            if (availableRanks[r+1] && availableRanks[r+2]) {
-                addCombo(c1, availableRanks[r+1][0], availableRanks[r+2][0]);
-            }
+        for (let i = 0; i < presentRanks.length; i++) {
+            let r1 = presentRanks[i];
+            let c1 = rankMap[r1][0];
 
-            if (wilds.length > 0) {
-                let w = wilds[0];
-                if (availableRanks[r+2]) {
-                    addCombo(c1, w, availableRanks[r+2][0]);
+            for (let j = i + 1; j < presentRanks.length; j++) {
+                let r2 = presentRanks[j];
+                let dist = r2 - r1;
+                
+                // If the next card is too far away to ever form a 3-card meld (even with a wild), break inner loop
+                if (dist > 2) break; 
+                
+                let c2 = rankMap[r2][0];
+
+                // Check for a Trio (Clean)
+                if (dist === 1 || dist === 2) {
+                   for (let k = j + 1; k < presentRanks.length; k++) {
+                       let r3 = presentRanks[k];
+                       if (r3 - r1 <= 2) {
+                           addCombo(c1, c2, rankMap[r3][0]);
+                       } else {
+                           break;
+                       }
+                   }
                 }
-                if (availableRanks[r+1]) {
-                    addCombo(c1, availableRanks[r+1][0], w);
+                
+                // Check for a Pair + Wild (Dirty)
+                if (wilds.length > 0 && dist <= 2) {
+                    addCombo(c1, c2, wilds[0]);
                 }
             }
         }
     }
 
+    // 3. Find Runners (Trincas) O(K) where K is unique ranks (max 13)
     if (rules.runners !== 'none') {
-        for (let r in byRank) {
+        for (let r in byRankAnySuit) {
             let numR = parseInt(r);
             let allowed = false;
             if (rules.runners === 'any') allowed = true;
@@ -397,7 +418,7 @@ function getPossibleMelds(handCards, rules) {
             if (rules.runners === 'aces_kings' && (numR === 1 || numR === 13)) allowed = true;
 
             if (allowed) {
-                let rankCards = byRank[r];
+                let rankCards = byRankAnySuit[r];
                 if (rankCards.length >= 3) {
                     addCombo(rankCards[0], rankCards[1], rankCards[2]);
                 }
@@ -410,7 +431,6 @@ function getPossibleMelds(handCards, rules) {
 
     return validCombos;
 }
-
 
 export const BuracoGame = {
   name: 'buraco',
