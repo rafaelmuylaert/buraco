@@ -49,32 +49,66 @@ function toBuffer(genome) {
     return buf;
 }
 
-// Run a batch of playoff matches across worker threads in parallel
-function runMatchBatch(matchPairs, rules) {
-    return new Promise((resolve, reject) => {
-        // Split pairs across workers
-        const chunkSize = Math.ceil(matchPairs.length / NUM_WORKERS);
-        const chunks = [];
-        for (let i = 0; i < matchPairs.length; i += chunkSize)
-            chunks.push(matchPairs.slice(i, i + chunkSize));
-
-        const allResults = new Array(matchPairs.length);
-        let completed = 0;
-        let offset = 0;
-
-        chunks.forEach((chunk, ci) => {
-            const chunkOffset = ci * chunkSize;
-            const worker = new Worker(WORKER_PATH, {
-                workerData: { matches: chunk, rules }
+// Persistent worker pool — workers stay alive for the duration of training
+class WorkerPool {
+    constructor(size, path) {
+        this.queue = [];
+        this.workers = Array.from({ length: size }, () => {
+            const w = new Worker(path, { workerData: { matches: [], rules: {} } });
+            w.idle = true;
+            w.on('message', (results) => {
+                const { resolve, size: batchSize, offset, allResults, remaining, onDone } = w.currentJob;
+                results.forEach((r, i) => allResults[offset + i] = r);
+                remaining.count--;
+                w.idle = true;
+                w.currentJob = null;
+                if (remaining.count === 0) onDone(allResults);
+                else this._dispatch();
             });
-            worker.on('message', (results) => {
-                results.forEach((r, i) => allResults[chunkOffset + i] = r);
-                completed++;
-                if (completed === chunks.length) resolve(allResults);
-            });
-            worker.on('error', reject);
+            return w;
         });
-    });
+    }
+
+    run(matchPairs, rules) {
+        return new Promise((resolve) => {
+            const allResults = new Array(matchPairs.length);
+            const chunkSize = Math.max(1, Math.ceil(matchPairs.length / this.workers.length));
+            const chunks = [];
+            for (let i = 0; i < matchPairs.length; i += chunkSize)
+                chunks.push({ chunk: matchPairs.slice(i, i + chunkSize), offset: i });
+            const remaining = { count: chunks.length };
+            const onDone = resolve;
+            for (const { chunk, offset } of chunks)
+                this.queue.push({ matches: chunk, rules, offset, allResults, remaining, onDone });
+            this._dispatch();
+        });
+    }
+
+    _dispatch() {
+        for (const w of this.workers) {
+            if (!w.idle || this.queue.length === 0) continue;
+            const job = this.queue.shift();
+            w.idle = false;
+            w.currentJob = { ...job, size: job.matches.length };
+            w.postMessage({ matches: job.matches, rules: job.rules });
+        }
+    }
+
+    broadcastDeck(deck) {
+        for (const w of this.workers) w.postMessage({ type: 'shuffleDeck', deck });
+    }
+
+    terminate() { this.workers.forEach(w => w.terminate()); }
+}
+
+let _pool = null;
+function getPool() {
+    if (!_pool) _pool = new WorkerPool(NUM_WORKERS, WORKER_PATH);
+    return _pool;
+}
+
+function runMatchBatch(matchPairs, rules) {
+    return getPool().run(matchPairs, rules);
 }
 
 // Single-elimination playoff tournament, all rounds dispatched in parallel batches
@@ -158,10 +192,18 @@ export const TrainerService = {
         });
 
         const NUM_ISLANDS = 4;
-        const MIGRATE_EVERY = 5;
+
+        // Deck built once; shuffled each generation unless fixedDeck
+        const baseDeck = [];
+        for (let i = 0; i < 52; i++) baseDeck.push(i);
+        for (let i = 0; i < 52; i++) baseDeck.push(i);
+        if (!rules.noJokers) baseDeck.push(54, 54);
+
         const islandPops = Array.from({ length: NUM_ISLANDS }, () =>
             population.slice(0, POPULATION_SIZE).map(g => new Float32Array(g))
         );
+        // Shared champions: each island deposits its best here; others read on next gen
+        const islandElites = new Array(NUM_ISLANDS).fill(null);
 
         // Run one generation for a single island, returns { rankedFinalists, bestDiff, avgDiff }
         const runIslandGeneration = async (pop) => {
@@ -201,59 +243,78 @@ export const TrainerService = {
             };
         };
 
-        try {
-            for (let gen = 1; gen <= GENERATIONS; gen++) {
-                // Run all islands in parallel
-                const islandResults = await Promise.all(islandPops.map(pop => runIslandGeneration(pop)));
+        // Shuffle deck once before training starts; workers receive it
+        if (!rules.fixedDeck) shuffle(baseDeck);
+        getPool().broadcastDeck(baseDeck);
 
-                // Update island populations
-                islandResults.forEach((r, k) => { islandPops[k] = r.nextPop; });
+        let completedIslands = 0;
+        const islandErrors = [];
 
-                // Migration: every MIGRATE_EVERY gens, best of each island replaces a random non-elite in every other island
-                if (gen % MIGRATE_EVERY === 0) {
-                    const elites = islandResults.map(r => r.rankedFinalists[0]);
-                    for (let k = 0; k < NUM_ISLANDS; k++) {
-                        for (let src = 0; src < NUM_ISLANDS; src++) {
-                            if (src === k) continue;
-                            // Replace a random member beyond the top 2 clones
-                            const replaceIdx = 2 + Math.floor(Math.random() * (islandPops[k].length - 2));
-                            islandPops[k][replaceIdx] = new Float32Array(elites[src]);
+        const runIsland = async (islandIdx) => {
+            try {
+                for (let gen = 1; gen <= GENERATIONS; gen++) {
+                    // Shuffle deck each generation (all islands share the same shuffle signal)
+                    if (!rules.fixedDeck && islandIdx === 0) {
+                        shuffle(baseDeck);
+                        getPool().broadcastDeck(baseDeck);
+                    }
+
+                    const result = await runIslandGeneration(islandPops[islandIdx]);
+                    islandPops[islandIdx] = result.nextPop;
+
+                    // Inject any available elites from other islands
+                    for (let src = 0; src < NUM_ISLANDS; src++) {
+                        if (src === islandIdx || !islandElites[src]) continue;
+                        const replaceIdx = 2 + Math.floor(Math.random() * (islandPops[islandIdx].length - 2));
+                        islandPops[islandIdx][replaceIdx] = new Float32Array(islandElites[src]);
+                    }
+
+                    // Broadcast champion + update stats every SAVE_EVERY gens
+                    if (gen % SAVE_EVERY === 0 || gen === GENERATIONS) {
+                        islandElites[islandIdx] = result.rankedFinalists[0];
+
+                        const prevProgress = activeTrainings.get(botName);
+                        const progress = {
+                            currentGeneration: gen,
+                            totalGenerations: GENERATIONS,
+                            maxDiff: result.bestDiff,
+                            avgDiff: result.avgDiff,
+                            maxPoints: result.bestDiff + 5000,
+                            avgPoints: result.avgDiff + 5000,
+                            benchmarkDiff: prevProgress?.benchmarkDiff ?? null,
+                            island: islandIdx
+                        };
+
+                        const filePath = path.join(BOTS_DIR, `${botName}.json`);
+                        fs.writeFileSync(filePath, JSON.stringify(Array.from(result.rankedFinalists[0])));
+
+                        if (originalDNA) {
+                            const [[benchScore]] = await runMatchBatch(
+                                [{ dnaA: toBuffer(result.rankedFinalists[0]), dnaB: toBuffer(originalDNA) }], rules
+                            );
+                            progress.benchmarkDiff = benchScore;
                         }
+
+                        activeTrainings.set(botName, progress);
+                        console.log(`[${botName}] Island ${islandIdx} Gen ${gen}/${GENERATIONS} | MaxDiff: ${result.bestDiff.toFixed(0)} | AvgDiff: ${result.avgDiff.toFixed(0)} | Bench: ${progress.benchmarkDiff ?? 'N/A'}`);
                     }
                 }
-
-                // Aggregate stats across islands
-                const bestDiff = Math.max(...islandResults.map(r => r.bestDiff));
-                const avgDiff = islandResults.reduce((s, r) => s + r.avgDiff, 0) / NUM_ISLANDS;
-                const bestIsland = islandResults.reduce((best, r, k) => r.bestDiff > best.diff ? { k, diff: r.bestDiff, r } : best, { k: 0, diff: -Infinity, r: islandResults[0] });
-                const bestGenome = bestIsland.r.rankedFinalists[0];
-
-                const prevProgress = activeTrainings.get(botName);
-                const progress = {
-                    currentGeneration: gen, totalGenerations: GENERATIONS,
-                    maxDiff: bestDiff, avgDiff,
-                    maxPoints: bestDiff + 5000, avgPoints: avgDiff + 5000,
-                    benchmarkDiff: prevProgress?.benchmarkDiff ?? null
-                };
-
-                if (gen % SAVE_EVERY === 0 || gen === GENERATIONS) {
-                    const filePath = path.join(BOTS_DIR, `${botName}.json`);
-                    fs.writeFileSync(filePath, JSON.stringify(Array.from(bestGenome)));
-                    if (originalDNA) {
-                        const [[benchScore]] = await runMatchBatch(
-                            [{ dnaA: toBuffer(bestGenome), dnaB: toBuffer(originalDNA) }], rules
-                        );
-                        progress.benchmarkDiff = benchScore;
-                    }
-                }
-
-                activeTrainings.set(botName, progress);
-                console.log(`[${botName}] Gen ${gen}/${GENERATIONS} | MaxDiff: ${bestDiff.toFixed(0)} | AvgDiff: ${avgDiff.toFixed(0)} | Bench: ${progress.benchmarkDiff ?? 'N/A'}`);
+            } catch (err) {
+                islandErrors.push(err);
+                console.error(`[TRAINER] Island ${islandIdx} error:`, err);
+            } finally {
+                completedIslands++;
             }
+        };
+
+        try {
+            await Promise.all(Array.from({ length: NUM_ISLANDS }, (_, k) => runIsland(k)));
+            if (islandErrors.length) console.error(`[TRAINER] ${islandErrors.length} island(s) failed for ${botName}`);
         } catch (error) {
             console.error(`[TRAINER] Error for ${botName}:`, error);
         } finally {
             console.log(`✅ Training complete for '${botName}'!`);
+            if (_pool) { _pool.terminate(); _pool = null; }
             activeTrainings.delete(botName);
         }
     }

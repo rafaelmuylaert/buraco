@@ -1,8 +1,6 @@
 import { workerData, parentPort } from 'worker_threads';
 import { BuracoGame } from './game.js';
 
-const DNA_SIZE = 49668;
-
 function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -67,21 +65,35 @@ function runMatch(genomes, rules, fixedDeck) {
     }
 }
 
-// Process a batch of matches: [ { dnaA: SharedArrayBuffer, dnaB: SharedArrayBuffer } ]
 const { matches, rules } = workerData;
 
-const deck = [];
-for (let i = 0; i < 52; i++) deck.push(i);
-for (let i = 0; i < 52; i++) deck.push(i);
-if (!rules.noJokers) for (let i = 0; i < 2; i++) deck.push(54);
-const fixedDeck = rules.fixedDeck ? deck : shuffle(deck);
+// Build deck once at startup
+const _baseDeck = [];
+for (let i = 0; i < 52; i++) _baseDeck.push(i);
+for (let i = 0; i < 52; i++) _baseDeck.push(i);
+// jokers added per-rules in processJob
 
-const results = matches.map(({ dnaA, dnaB }) => {
-    const botA = new Float32Array(dnaA);
-    const botB = new Float32Array(dnaB);
-    const g1 = runMatch({ '0': botA, '1': botB, '2': botA, '3': botB }, rules, fixedDeck);
-    const g2 = runMatch({ '0': botB, '1': botA, '2': botB, '3': botA }, rules, fixedDeck);
-    const diffA = g1 + (-g2);
-    return [diffA, -diffA];
-});
-parentPort.postMessage(results);
+let _currentDeck = [..._baseDeck];
+
+function processJob(matches, rules) {
+    const deck = rules.noJokers ? [..._baseDeck] : [..._baseDeck, 54, 54];
+    const fixedDeck = rules.fixedDeck ? deck : _currentDeck;
+
+    return matches.map(({ dnaA, dnaB }) => {
+        const botA = new Float32Array(dnaA);
+        const botB = new Float32Array(dnaB);
+        const g1 = runMatch({ '0': botA, '1': botB, '2': botA, '3': botB }, rules, fixedDeck);
+        const g2 = runMatch({ '0': botB, '1': botA, '2': botB, '3': botA }, rules, fixedDeck);
+        return [g1 + (-g2), g2 + (-g1)];
+    });
+}
+
+// Pool mode: respond to postMessage jobs
+if (workerData.matches.length === 0) {
+    parentPort.on('message', ({ type, matches, rules, deck }) => {
+        if (type === 'shuffleDeck') { _currentDeck = deck; return; }
+        parentPort.postMessage(processJob(matches, rules));
+    });
+} else {
+    parentPort.postMessage(processJob(matches, rules));
+}
