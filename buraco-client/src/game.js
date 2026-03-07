@@ -34,8 +34,15 @@ function appendToMeld(meld, cId) {
         
         if (cSuit === m[0] && !isWild) { 
             if (cRank === m[1] - 1) { m[1] = cRank; return m; }
-            if (cRank === m[2] + 1) { m[2] = cRank; return m; }
+            if (cRank === m[2] + 1 && m[2] < 14) { m[2] = cRank; return m; }
             if (cRank === 1 && m[2] === 13) { m[2] = 14; return m; }
+            if (cRank === 1 && m[1] === 2) { m[1] = 1; return m; }
+            // Ace at low end: move wild to rank-2 slot (from either end)
+            if (cRank === 1 && m[1] === 3 && m[3] !== 0) {
+                m[4] = 2; m[1] = 1;
+                if (m[3] === m[0]) { m[3] = 0; m[4] = 0; }
+                return m;
+            }
         }
         
         if (cSuit === m[0] && cRank === 2) {
@@ -258,6 +265,15 @@ function getCardPoints(c) {
     const s = getSuit(c); const r = getRank(c);
     if (s === 5) return 50; if (r === 2) return 20; if (r === 1) return 15;
     if (r >= 8 && r <= 13) return 10; return 5;
+}
+
+function removeCards(hand, cardIds) {
+    const remaining = [...hand];
+    for (const c of cardIds) {
+        const idx = remaining.indexOf(c);
+        if (idx !== -1) remaining.splice(idx, 1);
+    }
+    return remaining;
 }
 
 function buildDeck(rules) {
@@ -547,7 +563,7 @@ export const BuracoGame = {
 
         if (!isValid) return 'INVALID_MOVE'; 
 
-        const newHand = hand.filter(c => !selectedHandIds.includes(c));
+        const newHand = removeCards(hand, selectedHandIds);
         const restOfPile = G.discardPile.slice(0, G.discardPile.length - 1);
         const finalHandLength = newHand.length + restOfPile.length;
 
@@ -593,7 +609,7 @@ export const BuracoGame = {
       const parsed = buildMeld(cardIds, G.rules);
       
       if (parsed) {
-        const newHand = hand.filter(c => !cardIds.includes(c));
+        const newHand = removeCards(hand, cardIds);
         const newMelds = [...G.melds[ctx.currentPlayer], parsed];
         
         const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
@@ -606,7 +622,7 @@ export const BuracoGame = {
 
         G.hands[ctx.currentPlayer] = newHand;
         G.melds[ctx.currentPlayer] = newMelds;
-        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => !cardIds.includes(c)); 
+        G.knownCards[ctx.currentPlayer] = removeCards(G.knownCards[ctx.currentPlayer], cardIds); 
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
         
         if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[G.teams[ctx.currentPlayer]]) {
@@ -621,7 +637,7 @@ export const BuracoGame = {
       const parsed = appendCardsToMeld(G.melds[meldOwner][meldIndex], cardIds);
       
       if (parsed) {
-        const newHand = hand.filter(c => !cardIds.includes(c));
+        const newHand = removeCards(hand, cardIds);
         const newMeldState = [...G.melds[meldOwner]]; newMeldState[meldIndex] = parsed;
 
         const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
@@ -634,7 +650,7 @@ export const BuracoGame = {
 
         G.hands[ctx.currentPlayer] = newHand;
         G.melds[meldOwner] = newMeldState;
-        G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => !cardIds.includes(c)); 
+        G.knownCards[ctx.currentPlayer] = removeCards(G.knownCards[ctx.currentPlayer], cardIds); 
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
         
         if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[G.teams[ctx.currentPlayer]]) {
