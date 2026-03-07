@@ -583,11 +583,12 @@ export const BuracoGame = {
         else G.melds[target.player][target.index] = parsedMeldObject;
 
         G.discardPile.pop();
+        const pickedUp = [...G.discardPile];
         G.knownCards[ctx.currentPlayer].push(...G.discardPile); 
         G.hands[ctx.currentPlayer].push(...G.discardPile);
         G.discardPile = [];
         G.hasDrawn = true;
-        G.lastDrawnCard = null;
+        G.lastDrawnCard = pickedUp;
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
         
         if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[G.teams[ctx.currentPlayer]]) {
@@ -596,10 +597,12 @@ export const BuracoGame = {
 
       } else {
         G.lastDrawnCard = null; 
+        const openPickedUp = [...G.discardPile];
         G.knownCards[ctx.currentPlayer].push(...G.discardPile); 
         G.hands[ctx.currentPlayer].push(...G.discardPile);
         G.discardPile = [];
         G.hasDrawn = true;
+        G.lastDrawnCard = openPickedUp;
       }
     },
     

@@ -368,7 +368,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
         <div style={{ flexShrink: 0 }}>
           <h2 style={{ fontSize: '1.2em', margin: '0 0 10px 0' }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-            {sortedHandObj.map(card => <Card key={card.handIdx} card={card} isSelected={selectedCards.includes(card.handIdx)} isNewlyDrawn={card.id === G.lastDrawnCard} onClick={() => toggleCardSelection(card.handIdx)} />)}
+            {sortedHandObj.map(card => <Card key={card.handIdx} card={card} isSelected={selectedCards.includes(card.handIdx)} isNewlyDrawn={isMyTurn && (Array.isArray(G.lastDrawnCard) ? G.lastDrawnCard.includes(card.id) : card.id === G.lastDrawnCard)} onClick={() => toggleCardSelection(card.handIdx)} />)}
           </div>
         </div>
       </div>
