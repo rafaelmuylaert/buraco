@@ -39,6 +39,7 @@ function appendToMeld(meld, cId) {
             if (cRank === 1 && m[1] === 2) { m[1] = 1; return m; }
             // Ace at low end: move wild to rank-2 slot (from either end)
             if (cRank === 1 && m[1] === 3 && m[3] !== 0) {
+                if (m[4] === m[2]) m[2] = m[2] - 1; // wild was at high end, shrink range
                 m[4] = 2; m[1] = 1;
                 if (m[3] === m[0]) { m[3] = 0; m[4] = 0; }
                 return m;
