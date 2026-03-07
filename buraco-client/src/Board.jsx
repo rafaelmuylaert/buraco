@@ -86,6 +86,8 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
   const [selectedCards, setSelectedCards] = useState([]);
   const isMyTurn = ctx.currentPlayer === playerID;
 
+  useEffect(() => { setSelectedCards([]); }, [G.hands[playerID]?.length, G.hasDrawn]);
+
   useEffect(() => {
     if (ctx && G && ctx.phase === 'waitingRoom' && G.players && !G.players.includes(playerID)) {
       moves.joinTable(playerID);
