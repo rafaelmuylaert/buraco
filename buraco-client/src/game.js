@@ -27,8 +27,8 @@ function appendToMeld(meld, cId) {
         }
         
         if (cSuit === m[0] && cRank === m[4]) {
+            if (m[1] > 2) { m[4] = m[1] - 1; m[1] = m[1] - 1; return m; }
             if (m[2] < 14) { m[4] = m[2] + 1; m[2] = m[2] + 1; return m; }
-            if (m[1] > 1) { m[4] = m[1] - 1; m[1] = m[1] - 1; return m; }
             return null;
         }
         
@@ -56,11 +56,6 @@ function appendToMeld(meld, cId) {
         
         if (cSuit === m[0] && cRank === 2) {
             if (m[1] === 3) { m[1] = 2; return m; }
-        }
-
-        // Shift 'free' suited two to the end to make room
-        if (cSuit === m[0] && m[1] === 2 && m[3] === 0 && cRank === m[2] + 2) {
-            m[1] = 3; m[2] = cRank; m[3] = m[0]; m[4] = cRank - 1; return m;
         }
 
         if (isWild && m[3] === 0) {
@@ -913,12 +908,22 @@ export const BuracoGame = {
       // ==========================================
       let possibleAppends = [];
       
+      const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
+      const teamHasCleanNow = G.teamPlayers[myTeam].some(tp => G.melds[tp].some(m => isCanasta(m) && m[3] === 0));
+      const mortoAvailable = G.pots.length > 0 && !G.teamMortos[myTeam];
+
       (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIndex) => {
               for (let i = 0; i < myHandCards.length; i++) {
                   let card = myHandCards[i];
                   let parsed = appendCardsToMeld(meld, [card]);
                   if (parsed) {
+                      const newHandSize = myHandCards.length - 1;
+                      const newMeldState = G.melds[tp].map((m, i) => i === mIndex ? parsed : m);
+                      const cleanAfter = G.teamPlayers[myTeam].some(tp2 =>
+                          (tp2 === tp ? newMeldState : G.melds[tp2]).some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || m[3] === 0))
+                      );
+                      if (newHandSize < 2 && !cleanAfter && !mortoAvailable) continue;
                       possibleAppends.push({ move: 'appendToMeld', args: [tp, mIndex, [card]], actionType: [0.0, 1.0, 0.0], cards: [card] });
                   }
               }
