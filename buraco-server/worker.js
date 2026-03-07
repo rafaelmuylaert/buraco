@@ -81,7 +81,8 @@ function playoffMatch(dnaA, dnaB, rules) {
     const botB = new Float32Array(dnaB);
     const g1 = runMatch({ '0': botA, '1': botB, '2': botA, '3': botB }, rules, fixedDeck);
     const g2 = runMatch({ '0': botB, '1': botA, '2': botB, '3': botA }, rules, fixedDeck);
-    return g1 + (-g2);
+    const diffA = g1 + (-g2);
+    return [diffA, -diffA]; // [scoreA, scoreB] — zero-sum, both from same 2 games
 }
 
 // Process a batch of matches: [ { dnaA: SharedArrayBuffer, dnaB: SharedArrayBuffer } ]

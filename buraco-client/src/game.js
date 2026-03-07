@@ -791,10 +791,15 @@ export const BuracoGame = {
 
         for (let m of moves) {
             let conflict = false;
-            for (let c of m.cards) { if (usedCards.has(c)) { conflict = true; break; } }
+            const tempUsed = [];
+            for (let c of m.cards) {
+                const key = `${c}-${tempUsed.filter(x => x === c).length}`;
+                if (usedCards.has(key)) { conflict = true; break; }
+                tempUsed.push(c);
+            }
             if (conflict) continue;
 
-            if (projectedHandSize - m.cards.length < 2 && !mortoSafe) continue;
+            if (projectedHandSize - m.cards.length < 1 && !mortoSafe) continue;
 
             // Re-validate appends against projected meld state
             if (m.move === 'appendToMeld') {
@@ -806,7 +811,8 @@ export const BuracoGame = {
                 projectedMelds[key] = revalidated; // update projected state
             }
 
-            for (let c of m.cards) usedCards.add(c);
+            const counts = {};
+            for (let c of m.cards) { counts[c] = (counts[c] || 0); usedCards.add(`${c}-${counts[c]}`); counts[c]++; }
             selected.push(m);
             projectedHandSize -= m.cards.length;
         }
@@ -847,6 +853,18 @@ export const BuracoGame = {
                           }
                       }
                   }
+                  // Pickup by appending top discard to an existing team meld
+                  (G.teamPlayers[myTeam] || []).forEach(tp => {
+                      (G.melds[tp] || []).forEach((meld, mIndex) => {
+                          const parsed = appendCardsToMeld(meld, [topDiscard]);
+                          if (parsed) {
+                              const projectedHandLength = myHandCards.length + (G.discardPile.length - 1);
+                              const simMelds = G.melds[tp].map((m, i) => i === mIndex ? parsed : m);
+                              if (projectedHandLength < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, simMelds, tp)) return;
+                              possiblePickups.push({ move: 'pickUpDiscard', args: [[], { type: 'append', player: tp, index: mIndex }], actionType: [1.0, 0.0, 0.0], cards: [topDiscard] });
+                          }
+                      });
+                  });
               } else {
                   possiblePickups.push({ move: 'pickUpDiscard', args: [], actionType: [1.0, 0.0, 0.0], cards: G.discardPile });
               }
@@ -861,7 +879,6 @@ export const BuracoGame = {
       // STAGE 2: APPEND
       // ==========================================
       let possibleAppends = [];
-      let appendSigs = new Set();
       
       (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIndex) => {
@@ -869,12 +886,7 @@ export const BuracoGame = {
                   let card = myHandCards[i];
                   let parsed = appendCardsToMeld(meld, [card]);
                   if (parsed) {
-                      let cls = card === 54 ? 52 : card % 52;
-                      let sig = `append-${tp}-${mIndex}-${cls}`;
-                      if (!appendSigs.has(sig)) {
-                          appendSigs.add(sig);
-                          possibleAppends.push({ move: 'appendToMeld', args: [tp, mIndex, [card]], actionType: [0.0, 1.0, 0.0], cards: [card] });
-                      }
+                      possibleAppends.push({ move: 'appendToMeld', args: [tp, mIndex, [card]], actionType: [0.0, 1.0, 0.0], cards: [card] });
                   }
               }
           });
@@ -882,8 +894,8 @@ export const BuracoGame = {
 
       if (possibleAppends.length > 0) {
           for (let m of possibleAppends) m.score = getScore(m.actionType, m.cards, dnaAppend);
-          possibleAppends = possibleAppends.filter(m => m.score >= 0).sort((a,b) => b.score - a.score);
-          let queue = resolveQueue(possibleAppends);
+          possibleAppends.sort((a,b) => b.score - a.score);
+          const queue = resolveQueue(possibleAppends.filter(m => m.score >= 0));
           if (queue.length > 0) return queue.map(m => ({ move: m.move, args: m.args }));
       }
 
@@ -907,8 +919,8 @@ export const BuracoGame = {
 
       if (possibleMelds.length > 0) {
           for (let m of possibleMelds) m.score = getScore(m.actionType, m.cards, dnaMeld);
-          possibleMelds = possibleMelds.filter(m => m.score >= 0).sort((a,b) => b.score - a.score);
-          let queue = resolveQueue(possibleMelds);
+          possibleMelds.sort((a,b) => b.score - a.score);
+          const queue = resolveQueue(possibleMelds.filter(m => m.score >= 0));
           if (queue.length > 0) return queue.map(m => ({ move: m.move, args: m.args }));
       }
 

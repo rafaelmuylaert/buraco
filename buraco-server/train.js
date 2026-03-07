@@ -99,7 +99,8 @@ async function runPlayoffTournament(population, rules) {
         let scoreIdx = 0;
         remaining = pairIndices.map(({ a, b, bye }) => {
             if (bye) return a || b;
-            return scores[scoreIdx++] >= 0 ? a : b;
+            const [sA] = scores[scoreIdx++]; // use scoreA to determine winner
+            return sA >= 0 ? a : b;
         });
     }
 
@@ -156,52 +157,90 @@ export const TrainerService = {
             benchmarkDiff: null
         });
 
+        const NUM_ISLANDS = 4;
+        const MIGRATE_EVERY = 5;
+        const islandPops = Array.from({ length: NUM_ISLANDS }, () =>
+            population.slice(0, POPULATION_SIZE).map(g => new Float32Array(g))
+        );
+
+        // Run one generation for a single island, returns { rankedFinalists, bestDiff, avgDiff }
+        const runIslandGeneration = async (pop) => {
+            const finalists = await runPlayoffTournament(pop, rules);
+            const statPairs = [], statMeta = [];
+            for (let i = 0; i < finalists.length; i++)
+                for (let j = i + 1; j < finalists.length; j++) {
+                    statPairs.push({ dnaA: toBuffer(finalists[i]), dnaB: toBuffer(finalists[j]) });
+                    statMeta.push([i, j]);
+                }
+            const allDiffs = [];
+            const finalistScores = new Array(finalists.length).fill(0);
+            if (statPairs.length > 0) {
+                const results = await runMatchBatch(statPairs, rules);
+                results.forEach(([sA], idx) => {
+                    const [i, j] = statMeta[idx];
+                    allDiffs.push(Math.abs(sA));
+                    if (sA > 0) finalistScores[i]++; else finalistScores[j]++;
+                });
+            } else { allDiffs.push(0); }
+            const rankedFinalists = finalists
+                .map((f, i) => ({ genome: f, score: finalistScores[i] }))
+                .sort((a, b) => b.score - a.score)
+                .map(x => x.genome);
+            const clones = rankedFinalists.slice(0, 2).map(f => new Float32Array(f));
+            const mutations = rankedFinalists.map(f => mutate(f, 0.1, 0.3));
+            const crossbreeds = [];
+            while (crossbreeds.length < pop.length - clones.length - mutations.length) {
+                const pick = () => rankedFinalists[Math.floor(Math.random() * Math.random() * rankedFinalists.length)];
+                crossbreeds.push(breed(pick(), pick()));
+            }
+            return {
+                nextPop: [...clones, ...mutations, ...crossbreeds],
+                rankedFinalists,
+                bestDiff: Math.max(...allDiffs),
+                avgDiff: allDiffs.reduce((a, b) => a + b, 0) / allDiffs.length
+            };
+        };
+
         try {
             for (let gen = 1; gen <= GENERATIONS; gen++) {
-                // --- PLAYOFF TOURNAMENT to find top 4 ---
-                const finalists = await runPlayoffTournament(population, rules);
+                // Run all islands in parallel
+                const islandResults = await Promise.all(islandPops.map(pop => runIslandGeneration(pop)));
 
-                // --- STATS: play each finalist vs the rest in parallel ---
-                const statPairs = [];
-                for (const f of finalists)
-                    for (const opp of finalists)
-                        if (f !== opp) statPairs.push({ dnaA: toBuffer(f), dnaB: toBuffer(opp) });
+                // Update island populations
+                islandResults.forEach((r, k) => { islandPops[k] = r.nextPop; });
 
-                const allDiffs = statPairs.length > 0 ? await runMatchBatch(statPairs, rules) : [0];
-
-                const bestDiff = Math.max(...allDiffs);
-                const avgDiff = allDiffs.reduce((a, b) => a + b, 0) / allDiffs.length;
-
-                // --- BUILD NEXT GENERATION ---
-                // 4 clones, 4 mutations, rest are crossbreeds
-                const clones = finalists.map(f => new Float32Array(f));
-                const mutations = finalists.map(f => mutate(f, 0.1, 0.3));
-                const crossbreeds = [];
-                while (crossbreeds.length < POPULATION_SIZE - 8) {
-                    const a = finalists[Math.floor(Math.random() * finalists.length)];
-                    const b = finalists[Math.floor(Math.random() * finalists.length)];
-                    crossbreeds.push(breed(a, b));
+                // Migration: every MIGRATE_EVERY gens, best of each island replaces a random non-elite in every other island
+                if (gen % MIGRATE_EVERY === 0) {
+                    const elites = islandResults.map(r => r.rankedFinalists[0]);
+                    for (let k = 0; k < NUM_ISLANDS; k++) {
+                        for (let src = 0; src < NUM_ISLANDS; src++) {
+                            if (src === k) continue;
+                            // Replace a random member beyond the top 2 clones
+                            const replaceIdx = 2 + Math.floor(Math.random() * (islandPops[k].length - 2));
+                            islandPops[k][replaceIdx] = new Float32Array(elites[src]);
+                        }
+                    }
                 }
-                population = [...clones, ...mutations, ...crossbreeds];
+
+                // Aggregate stats across islands
+                const bestDiff = Math.max(...islandResults.map(r => r.bestDiff));
+                const avgDiff = islandResults.reduce((s, r) => s + r.avgDiff, 0) / NUM_ISLANDS;
+                const bestIsland = islandResults.reduce((best, r, k) => r.bestDiff > best.diff ? { k, diff: r.bestDiff, r } : best, { k: 0, diff: -Infinity, r: islandResults[0] });
+                const bestGenome = bestIsland.r.rankedFinalists[0];
 
                 const prevProgress = activeTrainings.get(botName);
                 const progress = {
                     currentGeneration: gen, totalGenerations: GENERATIONS,
-                    maxDiff: bestDiff,
-                    avgDiff,
-                    maxPoints: Math.max(...allDiffs.map(d => d + 5000)), // approximate absolute score
-                    avgPoints: avgDiff + 5000,
+                    maxDiff: bestDiff, avgDiff,
+                    maxPoints: bestDiff + 5000, avgPoints: avgDiff + 5000,
                     benchmarkDiff: prevProgress?.benchmarkDiff ?? null
                 };
 
-                // --- SAVE & BENCHMARK vs original in a worker ---
                 if (gen % SAVE_EVERY === 0 || gen === GENERATIONS) {
-                    const bestGenome = finalists[0];
                     const filePath = path.join(BOTS_DIR, `${botName}.json`);
                     fs.writeFileSync(filePath, JSON.stringify(Array.from(bestGenome)));
-
                     if (originalDNA) {
-                        const [benchScore] = await runMatchBatch(
+                        const [[benchScore]] = await runMatchBatch(
                             [{ dnaA: toBuffer(bestGenome), dnaB: toBuffer(originalDNA) }], rules
                         );
                         progress.benchmarkDiff = benchScore;
@@ -210,7 +249,6 @@ export const TrainerService = {
 
                 activeTrainings.set(botName, progress);
                 console.log(`[${botName}] Gen ${gen}/${GENERATIONS} | MaxDiff: ${bestDiff.toFixed(0)} | AvgDiff: ${avgDiff.toFixed(0)} | Bench: ${progress.benchmarkDiff ?? 'N/A'}`);
-
             }
         } catch (error) {
             console.error(`[TRAINER] Error for ${botName}:`, error);
