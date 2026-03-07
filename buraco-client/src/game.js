@@ -72,7 +72,7 @@ function appendToMeld(meld, cId) {
             if (!isWild) { m[1] = cRank; m[2] = 1; return m; }
             return null;
         }
-        if (cRank === m[1] && !isWild) { m[2]++; return m; }
+        if (cRank === m[1] && !isWild) { m[2]++; m[4 + cSuit - 1]++; return m; }
         if (isWild && m[3] === 0) { m[3] = cSuit; m[2]++; return m; }
     }
     return null;
@@ -149,7 +149,9 @@ function buildMeld(cardIds, rules) {
         if (rules.runners === 'aces_kings' && (r === 1 || r === 13)) allowed = true;
         
         if (allowed && wilds.length <= 1) {
-            return [0, r, cardIds.length, wilds.length ? getSuit(wilds[0]) : 0, 0];
+            const suitCounts = [0, 0, 0, 0];
+            for (const c of nats) suitCounts[getSuit(c) - 1]++;
+            return [0, r, cardIds.length, wilds.length ? getSuit(wilds[0]) : 0, suitCounts[0], suitCounts[1], suitCounts[2], suitCounts[3]];
         }
     }
 
@@ -249,7 +251,7 @@ export function calculateMeldPoints(meld, rules) {
         }
         if (isCanasta) {
             pts += isClean ? 200 : 100;
-            if (rules.largeCanasta) {
+            if (rules.largeCanasta && isClean) {
                 if (meld[2] - meld[1] === 12) pts += 500;
                 if (meld[2] - meld[1] >= 13) pts += 1000;
             }
@@ -261,7 +263,7 @@ export function calculateMeldPoints(meld, rules) {
         if (wSuit > 0) pts += (wSuit === 5 ? 50 : 20);
         if (isCanasta) {
             pts += (isClean ? 200 : 100);
-            if (rules.largeCanasta) {
+            if (rules.largeCanasta && isClean) {
                 if (count === 13) pts += 500;
                 if (count >= 14) pts += 1000;
             }
@@ -389,6 +391,11 @@ const nnHelpers = {
             const m = runners[i];
             vec[base + 0] = m[1] / 14.0; vec[base + 1] = m[2] / 14.0;
             if (m[3] > 0) { vec[base + 2] = 1.0; if (m[3] === 5) vec[base + 7] = 1.0; else vec[base + 2 + m[3]] = 1.0; }
+            // suit counts in slots 8-11
+            vec[base + 8]  = (m[4] || 0) / 8.0;
+            vec[base + 9]  = (m[5] || 0) / 8.0;
+            vec[base + 10] = (m[6] || 0) / 8.0;
+            vec[base + 11] = (m[7] || 0) / 8.0;
         }
     }
     return vec;

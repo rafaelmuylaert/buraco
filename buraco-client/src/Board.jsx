@@ -27,13 +27,15 @@ function intToCardObj(c) {
 function meldToCards(meld) {
     let cards = [];
     if (meld[0] === 0) { // Runner
-        for (let i = 0; i < meld[2]; i++) {
-            if (meld[3] !== 0 && i === meld[2] - 1) {
-                cards.push({ rank: meld[3] === 5 ? 'JOKER' : '2', suit: meld[3] === 5 ? '★' : getSuitChar(meld[3]), id: `w-${i}` });
-            } else {
-                cards.push({ rank: getRankChar(meld[1]), suit: '♠', id: `r-${i}` }); 
-            }
+        const suitChars = ['♠', '♥', '♦', '♣'];
+        // meld[4..7] = count per suit (♠♥♦♣); meld[3] = wild suit
+        for (let s = 0; s < 4; s++) {
+            const cnt = meld[4 + s] || 0;
+            for (let i = 0; i < cnt; i++)
+                cards.push({ rank: getRankChar(meld[1]), suit: suitChars[s], id: `r-${s}-${i}` });
         }
+        if (meld[3] !== 0)
+            cards.push({ rank: meld[3] === 5 ? 'JOKER' : '2', suit: meld[3] === 5 ? '★' : getSuitChar(meld[3]), id: 'w-0' });
     } else { // Sequence
         for (let r = meld[1]; r <= meld[2]; r++) {
             if (r === meld[4]) {
