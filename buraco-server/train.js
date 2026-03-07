@@ -1,4 +1,3 @@
-import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { BuracoGame } from './game.js';
 import fs from 'fs';
 import path from 'path';
@@ -39,59 +38,86 @@ const generateRandomGenome = () => {
     return g;
 };
 
-function runMatch(genomes, rules) {
-    const client = Client({
-        game: BuracoGame,
-        numPlayers: rules.numPlayers || 4,
-        setupData: { ...rules },
-        debug: false,
-    });
+// Minimal pseudo-random for shuffle (avoids boardgame.io's random wrapper)
+function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
 
-    client.start();
+function initState(rules, numPlayers) {
+    // Replicate BuracoGame.setup without the boardgame.io wrapper
+    const fakeRandom = { Shuffle: shuffle };
+    const fakeCtx = { numPlayers };
+    return BuracoGame.setup({ random: fakeRandom, ctx: fakeCtx }, rules);
+}
+
+function applyMove(G, ctx, moveName, args) {
+    const result = BuracoGame.moves[moveName]({ G, ctx, events: { endTurn: () => { ctx._endTurn = true; } } }, ...args);
+    return result !== 'INVALID_MOVE';
+}
+
+function checkGameOver(G, ctx) {
+    return BuracoGame.endIf({ G, ctx });
+}
+
+function runMatch(genomes, rules) {
+    const numPlayers = rules.numPlayers || 4;
+    const G = initState(rules, numPlayers);
+    const ctx = {
+        currentPlayer: '0',
+        numPlayers,
+        turn: 1,
+        gameover: undefined,
+        _endTurn: false,
+    };
+
     try {
-        let state = client.getState();
         let moveCount = 0;
         const MAX_MOVES = 800;
         let lastMoveKey = null;
 
-        while (!state.ctx.gameover && moveCount < MAX_MOVES) {
-            const p = state.ctx.currentPlayer;
-            const moves = BuracoGame.ai.enumerate(state.G, state.ctx, genomes[p]);
+        while (!ctx.gameover && moveCount < MAX_MOVES) {
+            const p = ctx.currentPlayer;
+            const moves = BuracoGame.ai.enumerate(G, ctx, genomes[p]);
 
             if (!moves || moves.length === 0) {
-                if (!state.ctx.gameover) client.events.endTurn();
-                state = client.getState();
-                lastMoveKey = null;
-                moveCount++;
-                continue;
+                // end turn
+                ctx._endTurn = true;
+            } else {
+                const nextMove = moves[0];
+                const moveKey = `${nextMove.move}:${(nextMove.args || []).flat().join(',')}`;
+
+                if (moveKey === lastMoveKey) {
+                    ctx._endTurn = true;
+                } else {
+                    lastMoveKey = moveKey;
+                    ctx._endTurn = false;
+                    applyMove(G, ctx, nextMove.move, nextMove.args || []);
+                }
             }
 
-            const nextMove = moves[0];
-            const moveKey = `${nextMove.move}:${(nextMove.args || []).flat().join(',')}`;
-
-            if (moveKey === lastMoveKey) {
-                client.events.endTurn();
-                state = client.getState();
+            if (ctx._endTurn) {
+                ctx.currentPlayer = String((parseInt(ctx.currentPlayer) + 1) % numPlayers);
+                ctx.turn++;
+                G.hasDrawn = false;
+                G.lastDrawnCard = null;
                 lastMoveKey = null;
-                moveCount++;
-                continue;
+                ctx._endTurn = false;
             }
 
-            lastMoveKey = moveKey;
-            client.moves[nextMove.move](...(nextMove.args || []));
-            state = client.getState();
-            if (state.ctx.gameover) break;
+            ctx.gameover = checkGameOver(G, ctx);
             moveCount++;
         }
 
-        return state.ctx.gameover
-            ? state.ctx.gameover.scores
+        return ctx.gameover
+            ? ctx.gameover.scores
             : { team0: { total: -5000 }, team1: { total: -5000 } };
     } catch (e) {
         console.error('[TRAINER] runMatch crashed:', e.message);
         return { team0: { total: -5000 }, team1: { total: -5000 } };
-    } finally {
-        client.stop();
     }
 }
 
