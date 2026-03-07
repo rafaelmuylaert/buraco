@@ -164,7 +164,9 @@ export const TrainerService = {
     getBotWeights: (botName) => {
         const filePath = path.join(BOTS_DIR, `${botName}.json`);
         if (!fs.existsSync(filePath)) return null;
-        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        // Handle both plain arrays and object-serialized Float32Arrays
+        return Array.isArray(raw) ? raw : Object.values(raw);
     },
 
     getTrainingStatus: (botName) => {
