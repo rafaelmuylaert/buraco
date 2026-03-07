@@ -43,6 +43,14 @@ function appendToMeld(meld, cId) {
                 if (m[3] === m[0]) { m[3] = 0; m[4] = 0; }
                 return m;
             }
+            // Card 2 below low end: move wild from high end to fill the gap
+            if (cRank === m[1] - 2 && m[3] !== 0 && m[4] === m[2] && m[1] > 2) {
+                m[2] = m[2] - 1; m[4] = m[1] - 1; m[1] = cRank; return m;
+            }
+            // Card 2 above high end: move wild from low end to fill the gap
+            if (cRank === m[2] + 2 && m[3] !== 0 && m[4] === m[1] && m[2] < 13) {
+                m[1] = m[1] + 1; m[4] = m[2] + 1; m[2] = cRank; return m;
+            }
         }
         
         if (cSuit === m[0] && cRank === 2) {

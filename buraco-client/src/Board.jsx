@@ -196,6 +196,22 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
 
   // Pre-process hand map to JS objects for rendering
   const sortedHand = Object.values(G.hands[playerID] || []).sort((a,b) => a-b);
+  const newlyDrawnIdxSet = (() => {
+    if (!isMyTurn || G.lastDrawnCard === null) return new Set();
+    if (Array.isArray(G.lastDrawnCard)) {
+      // pile pickup: highlight all matching indices (one per value)
+      const seen = new Set(); const result = new Set();
+      for (let i = 0; i < sortedHand.length; i++) {
+        const v = sortedHand[i];
+        if (G.lastDrawnCard.includes(v) && !seen.has(v)) { seen.add(v); result.add(i); }
+      }
+      return result;
+    }
+    // single draw: highlight last occurrence only
+    let found = -1;
+    for (let i = 0; i < sortedHand.length; i++) { if (sortedHand[i] === G.lastDrawnCard) found = i; }
+    return found === -1 ? new Set() : new Set([found]);
+  })();
   const sortedHandObj = sortedHand.map((c, i) => ({ ...intToCardObj(c), handIdx: i }));
   const topDiscard = G.discardPile.length > 0 ? intToCardObj(G.discardPile[G.discardPile.length - 1]) : null;
   
@@ -368,7 +384,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
         <div style={{ flexShrink: 0 }}>
           <h2 style={{ fontSize: '1.2em', margin: '0 0 10px 0' }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-            {sortedHandObj.map(card => <Card key={card.handIdx} card={card} isSelected={selectedCards.includes(card.handIdx)} isNewlyDrawn={isMyTurn && (Array.isArray(G.lastDrawnCard) ? G.lastDrawnCard.includes(card.id) : card.id === G.lastDrawnCard)} onClick={() => toggleCardSelection(card.handIdx)} />)}
+            {sortedHandObj.map(card => <Card key={card.handIdx} card={card} isSelected={selectedCards.includes(card.handIdx)} isNewlyDrawn={newlyDrawnIdxSet.has(card.handIdx)} onClick={() => toggleCardSelection(card.handIdx)} />)}
           </div>
         </div>
       </div>
