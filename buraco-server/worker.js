@@ -29,34 +29,30 @@ function revealAllHands(G) {
 function runMatch(genomes, rules, fixedDeck) {
     const numPlayers = rules.numPlayers || 4;
     const G = initState(rules, numPlayers, fixedDeck);
-    revealAllHands(G);
+    if (rules.telepathy) revealAllHands(G);
     const ctx = { currentPlayer: '0', numPlayers, turn: 1, gameover: undefined, _endTurn: false };
 
     try {
-        let moveCount = 0, lastMoveKey = null;
+        let moveCount = 0;
         while (!ctx.gameover && moveCount < 800) {
             const p = ctx.currentPlayer;
             const moves = BuracoGame.ai.enumerate(G, ctx, genomes[p]);
             if (!moves || moves.length === 0) {
                 ctx._endTurn = true;
             } else {
-                const nextMove = moves[0];
-                const moveKey = `${nextMove.move}:${(nextMove.args || []).flat().join(',')}`;
-                if (moveKey === lastMoveKey) {
-                    ctx._endTurn = true;
-                } else {
-                    lastMoveKey = moveKey;
-                    ctx._endTurn = false;
-                    applyMove(G, ctx, nextMove.move, nextMove.args || []);
-                    revealAllHands(G);
+                let stuck = true;
+                for (const move of moves) {
+                    const ok = applyMove(G, ctx, move.move, move.args || []);
+                    if (ok) { stuck = false; if (rules.telepathy) revealAllHands(G); }
+                    if (ctx._endTurn) break;
                 }
+                if (stuck) ctx._endTurn = true;
             }
             if (ctx._endTurn) {
                 ctx.currentPlayer = String((parseInt(ctx.currentPlayer) + 1) % numPlayers);
                 ctx.turn++;
                 G.hasDrawn = false;
                 G.lastDrawnCard = null;
-                lastMoveKey = null;
                 ctx._endTurn = false;
             }
             ctx.gameover = BuracoGame.endIf({ G, ctx });
@@ -71,21 +67,21 @@ function runMatch(genomes, rules, fixedDeck) {
     }
 }
 
-function playoffMatch(dnaA, dnaB, rules) {
-    const deck = [];
-    for (let i = 0; i < 52; i++) deck.push(i);
-    for (let i = 0; i < 52; i++) deck.push(i);
-    if (!rules.noJokers) for (let i = 0; i < 2; i++) deck.push(54);
-    const fixedDeck = shuffle(deck);
+// Process a batch of matches: [ { dnaA: SharedArrayBuffer, dnaB: SharedArrayBuffer } ]
+const { matches, rules } = workerData;
+
+const deck = [];
+for (let i = 0; i < 52; i++) deck.push(i);
+for (let i = 0; i < 52; i++) deck.push(i);
+if (!rules.noJokers) for (let i = 0; i < 2; i++) deck.push(54);
+const fixedDeck = rules.fixedDeck ? deck : shuffle(deck);
+
+const results = matches.map(({ dnaA, dnaB }) => {
     const botA = new Float32Array(dnaA);
     const botB = new Float32Array(dnaB);
     const g1 = runMatch({ '0': botA, '1': botB, '2': botA, '3': botB }, rules, fixedDeck);
     const g2 = runMatch({ '0': botB, '1': botA, '2': botB, '3': botA }, rules, fixedDeck);
     const diffA = g1 + (-g2);
-    return [diffA, -diffA]; // [scoreA, scoreB] — zero-sum, both from same 2 games
-}
-
-// Process a batch of matches: [ { dnaA: SharedArrayBuffer, dnaB: SharedArrayBuffer } ]
-const { matches, rules } = workerData;
-const results = matches.map(({ dnaA, dnaB }) => playoffMatch(dnaA, dnaB, rules));
+    return [diffA, -diffA];
+});
 parentPort.postMessage(results);

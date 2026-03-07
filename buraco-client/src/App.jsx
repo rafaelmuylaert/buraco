@@ -54,7 +54,8 @@ const App = () => {
     populationSize: 24,
     generations: 500,
     saveInterval: 10,
-    telepathy: false, // Injected purely as a parameter, NOT rule config!
+    telepathy: false,
+    fixedDeck: false,
     rules: { discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false, showKnownCards: false }
   });
 
@@ -120,7 +121,8 @@ const App = () => {
               populationSize: trainBotConfig.populationSize,
               generations: trainBotConfig.generations,
               saveInterval: trainBotConfig.saveInterval,
-              telepathy: trainBotConfig.telepathy
+              telepathy: trainBotConfig.telepathy,
+              fixedDeck: trainBotConfig.fixedDeck
            }
         })
       });
@@ -615,6 +617,7 @@ const App = () => {
                     <label><input type="checkbox" checked={trainBotConfig.rules.openDiscardView} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, openDiscardView: e.target.checked}})} /> Lixo Visível</label>
                     <label><input type="checkbox" checked={trainBotConfig.rules.showKnownCards} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, showKnownCards: e.target.checked}})} /> Memorizadas</label>
                     <label style={{color: '#ffb86c'}}><input type="checkbox" checked={trainBotConfig.telepathy} onChange={e => setTrainBotConfig({...trainBotConfig, telepathy: e.target.checked})} /> Telepatia Parça</label>
+                    <label style={{color: '#ff5555'}}><input type="checkbox" checked={trainBotConfig.fixedDeck} onChange={e => setTrainBotConfig({...trainBotConfig, fixedDeck: e.target.checked})} /> Baralho Fixo (Teste)</label>
                 </div>
               </div>
 
