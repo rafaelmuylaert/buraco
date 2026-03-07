@@ -908,9 +908,6 @@ export const BuracoGame = {
       // ==========================================
       let possibleAppends = [];
       
-      const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
-      const teamHasCleanNow = G.teamPlayers[myTeam].some(tp => G.melds[tp].some(m => isCanasta(m) && m[3] === 0));
-      const mortoAvailable = G.pots.length > 0 && !G.teamMortos[myTeam];
 
       (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIndex) => {
@@ -923,7 +920,7 @@ export const BuracoGame = {
                       const cleanAfter = G.teamPlayers[myTeam].some(tp2 =>
                           (tp2 === tp ? newMeldState : G.melds[tp2]).some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || m[3] === 0))
                       );
-                      if (newHandSize < 2 && !cleanAfter && !mortoAvailable) continue;
+                      if (newHandSize < 2 && !cleanAfter && (!G.pots.length || G.teamMortos[myTeam])) continue;
                       possibleAppends.push({ move: 'appendToMeld', args: [tp, mIndex, [card]], actionType: [0.0, 1.0, 0.0], cards: [card] });
                   }
               }

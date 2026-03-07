@@ -15,7 +15,7 @@ export function sortCards(cards) {
 }
 
 // NEW: Integers are converted to display ranks/suits on the fly!
-const getSuitChar = s => ['♠', '♥', '♦', '♣', '★'][s - 1];
+const getSuitChar = s => ['♠', '♥', '♣', '♦', '★'][s - 1];
 const getRankChar = r => r === 1 ? 'A' : r === 11 ? 'J' : r === 12 ? 'Q' : r === 13 ? 'K' : r === 14 ? 'A' : r.toString();
 
 function intToCardObj(c) {
