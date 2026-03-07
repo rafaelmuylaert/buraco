@@ -720,7 +720,7 @@ export const BuracoGame = {
   },
 
   ai: {
-    enumerate: (G, ctx, customDNA) => {
+    enumerate: (G, ctx, customDNA, matchCtx) => {
       const p = ctx.currentPlayer; const myTeam = G.teams[p]; const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
       const myHandCards = G.hands[p] || [];
       const topDiscard = G.discardPile.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
@@ -731,7 +731,7 @@ export const BuracoGame = {
       const opp2Id = numP === 4 ? ((pInt + 3) % numP).toString() : null;
 
       const INPUT_SIZE = 774;
-      const inputBuffer = new Float32Array(INPUT_SIZE);
+      const inputBuffer = matchCtx ? matchCtx.inputBuffer : new Float32Array(INPUT_SIZE);
       let off = 0;
 
       inputBuffer[off++] = G.deck.length / 106.0;
@@ -742,18 +742,37 @@ export const BuracoGame = {
 
       const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
       const hasClean = teamId => (G.teamPlayers[teamId] || []).some(tp => G.melds[tp].some(m => isCanasta(m) && m[3]===0)) ? 1.0 : 0.0;
-      inputBuffer[off++] = hasClean(myTeam);
-      inputBuffer[off++] = hasClean(oppTeam);
+
+      if (matchCtx) {
+          if (matchCtx.meldsDirty) {
+              for (const t of ['team0', 'team1']) {
+                  const tm = (G.teamPlayers[t] || []).flatMap(tp => G.melds[tp] || []);
+                  matchCtx.meldVec[t].set(nnHelpers.meldsToSemanticMatrix(tm));
+                  matchCtx.hasClean[t] = (G.teamPlayers[t] || []).some(tp => G.melds[tp].some(m => isCanasta(m) && m[3]===0)) ? 1.0 : 0.0;
+              }
+              matchCtx.meldsDirty = false;
+          }
+          inputBuffer[off++] = matchCtx.hasClean[myTeam];
+          inputBuffer[off++] = matchCtx.hasClean[oppTeam];
+      } else {
+          inputBuffer[off++] = hasClean(myTeam);
+          inputBuffer[off++] = hasClean(oppTeam);
+      }
 
       inputBuffer[off++] = myHandCards.length / 14.0;
       inputBuffer[off++] = (G.hands[opp1Id] || []).length / 14.0;
       inputBuffer[off++] = partnerId ? (G.hands[partnerId] || []).length / 14.0 : 0;
       inputBuffer[off++] = opp2Id ? (G.hands[opp2Id] || []).length / 14.0 : 0;
 
-      const myMelds = (G.teamPlayers[myTeam] || []).flatMap(tp => G.melds[tp] || []);
-      inputBuffer.set(nnHelpers.meldsToSemanticMatrix(myMelds), off); off += 221;
-      const oppMelds = (G.teamPlayers[oppTeam] || []).flatMap(tp => G.melds[tp] || []);
-      inputBuffer.set(nnHelpers.meldsToSemanticMatrix(oppMelds), off); off += 221;
+      if (matchCtx) {
+          inputBuffer.set(matchCtx.meldVec[myTeam], off); off += 221;
+          inputBuffer.set(matchCtx.meldVec[oppTeam], off); off += 221;
+      } else {
+          const myMelds = (G.teamPlayers[myTeam] || []).flatMap(tp => G.melds[tp] || []);
+          inputBuffer.set(nnHelpers.meldsToSemanticMatrix(myMelds), off); off += 221;
+          const oppMelds = (G.teamPlayers[oppTeam] || []).flatMap(tp => G.melds[tp] || []);
+          inputBuffer.set(nnHelpers.meldsToSemanticMatrix(oppMelds), off); off += 221;
+      }
 
       inputBuffer.set(nnHelpers.cardsToVector(G.discardPile), off); off += 53;
       inputBuffer.set(nnHelpers.cardsToVector(myHandCards), off); off += 53;
@@ -762,17 +781,22 @@ export const BuracoGame = {
       inputBuffer.set(nnHelpers.cardsToVector(opp2Id ? (G.knownCards[opp2Id] || []) : []), off); off += 53;
       // off is now 721; remaining 53 slots (721-773) = actionType(3) + cardsVec(53) written per-action
 
-      let DNA = customDNA || G.botGenomes?.[p] || new Float32Array(49668).fill(0.01);
-      if (DNA.length === 12417) {
-          const d = new Float32Array(49668); d.set(DNA); d.set(DNA, 12417); d.set(DNA, 24834); d.set(DNA, 37251); DNA = d;
-      } else if (DNA.length !== 49668) {
-          DNA = new Float32Array(49668).fill(0.01);
+      let dnaPickup, dnaAppend, dnaMeld, dnaDiscard;
+      if (matchCtx) {
+          const dna = matchCtx.genomes[p];
+          dnaPickup = dna.pickup; dnaAppend = dna.append; dnaMeld = dna.meld; dnaDiscard = dna.discard;
+      } else {
+          let DNA = customDNA || G.botGenomes?.[p] || new Float32Array(49668).fill(0.01);
+          if (DNA.length === 12417) {
+              const d = new Float32Array(49668); d.set(DNA); d.set(DNA, 12417); d.set(DNA, 24834); d.set(DNA, 37251); DNA = d;
+          } else if (DNA.length !== 49668) {
+              DNA = new Float32Array(49668).fill(0.01);
+          }
+          dnaPickup  = DNA.subarray ? DNA.subarray(0, 12417)  : DNA.slice(0, 12417);
+          dnaAppend  = DNA.subarray ? DNA.subarray(12417, 24834) : DNA.slice(12417, 24834);
+          dnaMeld    = DNA.subarray ? DNA.subarray(24834, 37251) : DNA.slice(24834, 37251);
+          dnaDiscard = DNA.subarray ? DNA.subarray(37251, 49668) : DNA.slice(37251, 49668);
       }
-
-      const dnaPickup  = DNA.subarray ? DNA.subarray(0, 12417)  : DNA.slice(0, 12417);
-      const dnaAppend  = DNA.subarray ? DNA.subarray(12417, 24834) : DNA.slice(12417, 24834);
-      const dnaMeld    = DNA.subarray ? DNA.subarray(24834, 37251) : DNA.slice(24834, 37251);
-      const dnaDiscard = DNA.subarray ? DNA.subarray(37251, 49668) : DNA.slice(37251, 49668);
 
       const getScore = (actionTypeArray, actionCards, activeWeights) => {
           inputBuffer[INPUT_SIZE - 56] = actionTypeArray[0];
@@ -789,7 +813,7 @@ export const BuracoGame = {
         let projectedHandSize = myHandCards.length;
         let projectedMelds = {}; // track meld state as we commit moves
         
-        const mortoSafe = hasClean(myTeam) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
+        const mortoSafe = (matchCtx ? matchCtx.hasClean[myTeam] : hasClean(myTeam)) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
 
         for (let m of moves) {
             let conflict = false;
@@ -932,7 +956,7 @@ export const BuracoGame = {
       let possibleDiscards = [];
       let discardSigs = new Set();
       
-      const isMortoSafe = hasClean(myTeam) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
+      const isMortoSafe = (matchCtx ? matchCtx.hasClean[myTeam] : hasClean(myTeam)) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
       if (myHandCards.length > 1 || isMortoSafe) {
           for (let card of myHandCards) {
               let cls = card === 54 ? 52 : card % 52;

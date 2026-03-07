@@ -24,24 +24,54 @@ function revealAllHands(G) {
         G.knownCards[p] = [...G.hands[p]];
 }
 
+function prepareGenome(raw) {
+    let dna = raw instanceof Float32Array ? raw : new Float32Array(raw);
+    if (dna.length === 12417) {
+        const d = new Float32Array(49668); d.set(dna); d.set(dna, 12417); d.set(dna, 24834); d.set(dna, 37251); dna = d;
+    } else if (dna.length !== 49668) {
+        dna = new Float32Array(49668).fill(0.01);
+    }
+    return {
+        pickup:  dna.subarray(0, 12417),
+        append:  dna.subarray(12417, 24834),
+        meld:    dna.subarray(24834, 37251),
+        discard: dna.subarray(37251, 49668)
+    };
+}
+
 function runMatch(genomes, rules, fixedDeck) {
     const numPlayers = rules.numPlayers || 4;
     const G = initState(rules, numPlayers, fixedDeck);
     if (rules.telepathy) revealAllHands(G);
     const ctx = { currentPlayer: '0', numPlayers, turn: 1, gameover: undefined, _endTurn: false };
 
+    // Per-match persistent state: split DNA once, allocate inputBuffer once
+    const matchCtx = {
+        genomes: Object.fromEntries(Object.entries(genomes).map(([k, v]) => [k, prepareGenome(v)])),
+        inputBuffer: new Float32Array(774),
+        meldVec: { team0: new Float32Array(221), team1: new Float32Array(221) },
+        hasClean: { team0: 0, team1: 0 },
+        meldsDirty: true
+    };
+
+    const MELD_MOVES = new Set(['playMeld', 'appendToMeld', 'pickUpDiscard']);
+
     try {
         let moveCount = 0;
         while (!ctx.gameover && moveCount < 800) {
             const p = ctx.currentPlayer;
-            const moves = BuracoGame.ai.enumerate(G, ctx, genomes[p]);
+            const moves = BuracoGame.ai.enumerate(G, ctx, null, matchCtx);
             if (!moves || moves.length === 0) {
                 ctx._endTurn = true;
             } else {
                 let stuck = true;
                 for (const move of moves) {
                     const ok = applyMove(G, ctx, move.move, move.args || []);
-                    if (ok) { stuck = false; if (rules.telepathy) revealAllHands(G); }
+                    if (ok) {
+                        stuck = false;
+                        if (MELD_MOVES.has(move.move)) matchCtx.meldsDirty = true;
+                        if (rules.telepathy) revealAllHands(G);
+                    }
                     if (ctx._endTurn) break;
                 }
                 if (stuck) ctx._endTurn = true;
