@@ -1,7 +1,7 @@
-// 🧠 STATE-FEATURE SYMMETRY: Cards are now pure integers 0-107!
-// 0-103 = 2 Decks of 52. 104-107 = 4 Jokers.
-const getSuit = c => c >= 104 ? 5 : Math.floor((c % 52) / 13) + 1; // 1:♠, 2:♥, 3:♦, 4:♣, 5:★
-const getRank = c => c >= 104 ? 2 : (c % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:K
+// Cards: 0-51 = normal (two copies each), 54 = Joker (two copies). Card 53 unused.
+// getSuit: 0-12=♠(1), 13-25=♥(2), 26-38=♦(3), 39-51=♣(4), 54=★(5)
+const getSuit = c => c === 54 ? 5 : Math.floor(c / 13) + 1;
+const getRank = c => c === 54 ? 2 : (c % 13) + 1;
 
 export const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
 export const pointValues = { '3': 5, '4': 5, '5': 5, '6': 5, '7': 5, '8': 10, '9': 10, '10': 10, 'J': 10, 'Q': 10, 'K': 10, 'A': 15, '2': 20, 'JOKER': 50 };
@@ -225,8 +225,9 @@ function getCardPoints(c) {
 
 function buildDeck(rules) {
     let deck = [];
-    for (let i = 0; i < 104; i++) deck.push(i);
-    if (!rules.noJokers) for (let i = 104; i < 108; i++) deck.push(i);
+    for (let i = 0; i < 52; i++) deck.push(i);
+    for (let i = 0; i < 52; i++) deck.push(i);
+    if (!rules.noJokers) for (let i = 0; i < 2; i++) deck.push(54);
     return deck;
 }
 
@@ -298,9 +299,9 @@ function calculateFinalScores(G) {
 
 const nnHelpers = {
   cardsToVector: (cards) => {
-    const vec = new Float32Array(53); // Float32Array is zero-initialized by default
+    const vec = new Float32Array(53);
     for (let i = 0; i < cards.length; i++) {
-        vec[cards[i] >= 104 ? 52 : cards[i] % 52] += 1;
+        vec[cards[i] === 54 ? 52 : cards[i] % 52] += 1;
     }
     return vec;
 },
@@ -353,8 +354,8 @@ function getAllValidMelds(handCards, rules) {
 
     for (let i = 0; i < handCards.length; i++) {
         let cId = handCards[i];
-        let s = cId >= 104 ? 5 : Math.floor((cId % 52) / 13) + 1; 
-        let r = cId >= 104 ? 2 : (cId % 13) + 1;
+        let s = getSuit(cId);
+        let r = getRank(cId);
         
         if (s === 5 || r === 2) {
             wilds.push(cId);
@@ -663,7 +664,7 @@ export const BuracoGame = {
       const opp2Id = numP === 4 ? ((pInt + 3) % numP).toString() : null;
 
       let baseInputs = [];
-      baseInputs.push(G.deck.length / 108.0);
+      baseInputs.push(G.deck.length / 106.0);
       baseInputs.push(G.pots.length > 0 ? 1.0 : 0.0);
       baseInputs.push(G.pots.length > 1 ? 1.0 : 0.0);
       baseInputs.push(G.teamMortos[myTeam] ? 1.0 : 0.0);
@@ -773,7 +774,7 @@ export const BuracoGame = {
                               // Engine Rule Safety Check
                               if (projectedHandLength < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue;
                               
-                              let sig = combo.map(c => c >= 104 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
+                              let sig = combo.map(c => c === 54 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
                               if (!seenSigs.has(sig)) {
                                   seenSigs.add(sig);
                                   possiblePickups.push({ move: 'pickUpDiscard', args: [handCardsUsed, { type: 'new' }], actionType: [1.0, 0.0, 0.0], cards: combo });
@@ -803,7 +804,7 @@ export const BuracoGame = {
                   let card = myHandCards[i];
                   let parsed = appendCardsToMeld(meld, [card]);
                   if (parsed) {
-                      let cls = card >= 104 ? 52 : card % 52;
+                      let cls = card === 54 ? 52 : card % 52;
                       let sig = `append-${tp}-${mIndex}-${cls}`;
                       if (!appendSigs.has(sig)) {
                           appendSigs.add(sig);
@@ -831,7 +832,7 @@ export const BuracoGame = {
       for (let combo of validMelds) {
           let parsed = buildMeld(combo, G.rules);
           if (parsed) {
-              let sig = combo.map(c => c >= 104 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
+              let sig = combo.map(c => c === 54 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
               if (!meldSigs.has(sig)) {
                   meldSigs.add(sig);
                   possibleMelds.push({ move: 'playMeld', args: [combo], actionType: [0.0, 1.0, 0.0], cards: combo });
@@ -855,7 +856,7 @@ export const BuracoGame = {
       const isMortoSafe = hasClean(myTeam) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
       if (myHandCards.length > 1 || isMortoSafe) {
           for (let card of myHandCards) {
-              let cls = card >= 104 ? 52 : card % 52;
+              let cls = card === 54 ? 52 : card % 52;
               if (!discardSigs.has(cls)) {
                   discardSigs.add(cls);
                   possibleDiscards.push({ move: 'discardCard', args: [card], actionType: [0.0, 0.0, 1.0], cards: [card] });

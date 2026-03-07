@@ -19,8 +19,8 @@ const getSuitChar = s => ['♠', '♥', '♦', '♣', '★'][s - 1];
 const getRankChar = r => r === 1 ? 'A' : r === 11 ? 'J' : r === 12 ? 'Q' : r === 13 ? 'K' : r === 14 ? 'A' : r.toString();
 
 function intToCardObj(c) {
-    const s = c >= 104 ? 5 : Math.floor((c % 52) / 13) + 1;
-    const r = c >= 104 ? 2 : (c % 13) + 1;
+    const s = c === 54 ? 5 : Math.floor(c / 13) + 1;
+    const r = c === 54 ? 2 : (c % 13) + 1;
     return { rank: s === 5 ? 'JOKER' : getRankChar(r), suit: getSuitChar(s), id: c };
 }
 
@@ -193,7 +193,8 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
   }
 
   // Pre-process hand map to JS objects for rendering
-  const sortedHandObj = Object.values(G.hands[playerID] || []).sort((a,b) => a-b).map(intToCardObj);
+  const sortedHand = Object.values(G.hands[playerID] || []).sort((a,b) => a-b);
+  const sortedHandObj = sortedHand.map((c, i) => ({ ...intToCardObj(c), handIdx: i }));
   const topDiscard = G.discardPile.length > 0 ? intToCardObj(G.discardPile[G.discardPile.length - 1]) : null;
   
   const myTeam = G.teams[playerID];
@@ -215,17 +216,18 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
     return total;
   };
 
-  const toggleCardSelection = (cardId) => setSelectedCards(prev => prev.includes(cardId) ? prev.filter(id => id !== cardId) : [...prev, cardId]);
+  const selectedCardValues = selectedCards.map(i => sortedHand[i]);
+  const toggleCardSelection = (handIdx) => setSelectedCards(prev => prev.includes(handIdx) ? prev.filter(i => i !== handIdx) : [...prev, handIdx]);
 
   const handleDiscardPileClick = () => {
     if (!isMyTurn) return; 
     
     if (selectedCards.length === 1 && G.hasDrawn) {
-      moves.discardCard(selectedCards[0]);
+      moves.discardCard(selectedCardValues[0]);
       setSelectedCards([]);
     } else if (!G.hasDrawn && G.discardPile.length > 0) {
       if (G.rules.discard === 'closed') {
-        moves.pickUpDiscard(selectedCards, { type: 'new' });
+        moves.pickUpDiscard(selectedCardValues, { type: 'new' });
         setSelectedCards([]);
       } else {
         moves.pickUpDiscard();
@@ -261,10 +263,10 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
                   if (!isMyTurn) return; 
                   if (isMyTeam) {
                     if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) {
-                      moves.pickUpDiscard(selectedCards, { type: 'append', player: p, index });
+                      moves.pickUpDiscard(selectedCardValues, { type: 'append', player: p, index });
                       setSelectedCards([]);
                     } else if (selectedCards.length > 0) {
-                      moves.appendToMeld(p, index, selectedCards); 
+                      moves.appendToMeld(p, index, selectedCardValues); 
                       setSelectedCards([]);
                     }
                   }
@@ -297,10 +299,10 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
               if (!isMyTurn) return; 
               
               if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) {
-                moves.pickUpDiscard(selectedCards, { type: 'new' });
+                moves.pickUpDiscard(selectedCardValues, { type: 'new' });
                 setSelectedCards([]);
               } else if (selectedCards.length >= 3) { 
-                moves.playMeld(selectedCards); 
+                moves.playMeld(selectedCardValues); 
                 setSelectedCards([]); 
               } 
             }} 
@@ -364,7 +366,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
         <div style={{ flexShrink: 0 }}>
           <h2 style={{ fontSize: '1.2em', margin: '0 0 10px 0' }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-            {sortedHandObj.map(card => <Card key={card.id} card={card} isSelected={selectedCards.includes(card.id)} isNewlyDrawn={card.id === G.lastDrawnCard} onClick={() => toggleCardSelection(card.id)} />)}
+            {sortedHandObj.map(card => <Card key={card.handIdx} card={card} isSelected={selectedCards.includes(card.handIdx)} isNewlyDrawn={card.id === G.lastDrawnCard} onClick={() => toggleCardSelection(card.handIdx)} />)}
           </div>
         </div>
       </div>

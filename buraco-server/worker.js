@@ -13,7 +13,7 @@ function shuffle(arr) {
 
 function initState(rules, numPlayers, fixedDeck) {
     const fakeRandom = { Shuffle: (arr) => fixedDeck ? [...fixedDeck] : shuffle(arr) };
-    return BuracoGame.setup({ random: fakeRandom, ctx: { numPlayers } }, rules);
+    return BuracoGame.setup({ random: fakeRandom, ctx: { numPlayers } }, { ...rules, numPlayers });
 }
 
 function applyMove(G, ctx, moveName, args) {
@@ -72,8 +72,11 @@ function runMatch(genomes, rules, fixedDeck) {
 }
 
 function playoffMatch(dnaA, dnaB, rules) {
-    const deckSize = rules.noJokers ? 104 : 108;
-    const fixedDeck = shuffle(Array.from({ length: deckSize }, (_, i) => i));
+    const deck = [];
+    for (let i = 0; i < 52; i++) deck.push(i);
+    for (let i = 0; i < 52; i++) deck.push(i);
+    if (!rules.noJokers) for (let i = 0; i < 2; i++) deck.push(54);
+    const fixedDeck = shuffle(deck);
     const botA = new Float32Array(dnaA);
     const botB = new Float32Array(dnaB);
     const g1 = runMatch({ '0': botA, '1': botB, '2': botA, '3': botB }, rules, fixedDeck);
