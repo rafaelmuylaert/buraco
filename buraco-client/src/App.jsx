@@ -536,18 +536,25 @@ const App = () => {
             <div style={{ background: '#111', borderRadius: '5px', width: '100%', height: '20px', overflow: 'hidden' }}>
               <div style={{ width: `${(trainingStatus.progress.currentGeneration / trainingStatus.progress.totalGenerations) * 100}%`, background: '#8a2be2', height: '100%', transition: 'width 1s' }} />
             </div>
-            
-            <div style={{ marginTop: '15px', color: '#ccc', fontSize: '0.9em', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <span>Geração: <strong style={{color: 'white'}}>{trainingStatus.progress.currentGeneration} / {trainingStatus.progress.totalGenerations}</strong></span>
-              <span>🏆 Máx Pontos/Mesa: <strong style={{color: '#ffd700'}}>{trainingStatus.progress.maxPoints?.toFixed(0)}</strong></span>
-              <span>📈 Máx Dif. de Pontos (Vitória): <strong style={{color: '#50fa7b'}}>{trainingStatus.progress.maxDiff?.toFixed(0)}</strong></span>
-              <span>📊 Média Pontos: <strong style={{color: '#4da6ff'}}>{trainingStatus.progress.avgPoints?.toFixed(0)}</strong></span>
-              <span>📉 Média Dif. de Pontos: <strong style={{color: '#ffb86c'}}>{trainingStatus.progress.avgDiff?.toFixed(0)}</strong></span>
-              
-              <span style={{ gridColumn: 'span 2', textAlign: 'center', marginTop: '10px', fontSize: '1.1em', fontWeight: 'bold', color: trainingStatus.progress.benchmarkDiff >= 0 ? '#50fa7b' : '#ff5555' }}>
-                ⚔️ Evolução vs Bot Original (Bench): {trainingStatus.progress.benchmarkDiff > 0 ? '+' : ''}{trainingStatus.progress.benchmarkDiff?.toFixed(0)} pts
-              </span>
+            <div style={{ marginTop: '8px', color: '#aaa', fontSize: '0.85em', textAlign: 'right' }}>
+              Geração mais avançada: <strong style={{color:'white'}}>{trainingStatus.progress.currentGeneration} / {trainingStatus.progress.totalGenerations}</strong>
             </div>
+
+            <div style={{ marginTop: '15px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px' }}>
+              {(trainingStatus.progress.islands || []).map((island, k) => island && (
+                <div key={k} style={{ background: '#1a0a33', border: '1px solid #5a2a9a', borderRadius: '8px', padding: '10px', fontSize: '0.85em' }}>
+                  <div style={{ color: '#b088f9', fontWeight: 'bold', marginBottom: '6px' }}>🏝️ Ilha {k + 1} — Gen {island.gen}</div>
+                  <div>🏆 MaxDiff: <strong style={{color:'#ffd700'}}>{island.bestDiff?.toFixed(0)}</strong></div>
+                  <div>📊 AvgDiff: <strong style={{color:'#4da6ff'}}>{island.avgDiff?.toFixed(0)}</strong></div>
+                </div>
+              ))}
+            </div>
+
+            {trainingStatus.progress.benchmarkDiff != null && (
+              <div style={{ marginTop: '15px', textAlign: 'center', fontSize: '1.1em', fontWeight: 'bold', color: trainingStatus.progress.benchmarkDiff >= 0 ? '#50fa7b' : '#ff5555' }}>
+                ⚔️ Evolução vs Bot Original (Bench): {trainingStatus.progress.benchmarkDiff > 0 ? '+' : ''}{trainingStatus.progress.benchmarkDiff?.toFixed(0)} pts
+              </div>
+            )}
           </div>
         )}
 

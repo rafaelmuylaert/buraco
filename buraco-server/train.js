@@ -186,12 +186,11 @@ export const TrainerService = {
 
         activeTrainings.set(botName, {
             currentGeneration: 0, totalGenerations: GENERATIONS,
-            maxDiff: 0, avgDiff: 0,
-            maxPoints: 0, avgPoints: 0,
-            benchmarkDiff: null
+            benchmarkDiff: null,
+            islands: []
         });
 
-        const NUM_ISLANDS = 4;
+        const NUM_ISLANDS = Math.max(2, cpus().length - 1);
 
         // Deck built once; shuffled each generation unless fixedDeck
         const baseDeck = [];
@@ -273,30 +272,22 @@ export const TrainerService = {
                     if (gen % SAVE_EVERY === 0 || gen === GENERATIONS) {
                         islandElites[islandIdx] = result.rankedFinalists[0];
 
+                        // Each island saves to its own file — no race condition
+                        fs.writeFileSync(
+                            path.join(BOTS_DIR, `${botName}_${islandIdx}.json`),
+                            JSON.stringify(Array.from(result.rankedFinalists[0]))
+                        );
+
                         const prevProgress = activeTrainings.get(botName);
-                        const progress = {
-                            currentGeneration: gen,
+                        const islands = [...(prevProgress?.islands || [])];
+                        islands[islandIdx] = { gen, bestDiff: result.bestDiff, avgDiff: result.avgDiff };
+                        activeTrainings.set(botName, {
+                            ...prevProgress,
+                            currentGeneration: Math.max(...islands.map(x => x?.gen || 0)),
                             totalGenerations: GENERATIONS,
-                            maxDiff: result.bestDiff,
-                            avgDiff: result.avgDiff,
-                            maxPoints: result.bestDiff + 5000,
-                            avgPoints: result.avgDiff + 5000,
-                            benchmarkDiff: prevProgress?.benchmarkDiff ?? null,
-                            island: islandIdx
-                        };
-
-                        const filePath = path.join(BOTS_DIR, `${botName}.json`);
-                        fs.writeFileSync(filePath, JSON.stringify(Array.from(result.rankedFinalists[0])));
-
-                        if (originalDNA) {
-                            const [[benchScore]] = await runMatchBatch(
-                                [{ dnaA: toBuffer(result.rankedFinalists[0]), dnaB: toBuffer(originalDNA) }], rules
-                            );
-                            progress.benchmarkDiff = benchScore;
-                        }
-
-                        activeTrainings.set(botName, progress);
-                        console.log(`[${botName}] Island ${islandIdx} Gen ${gen}/${GENERATIONS} | MaxDiff: ${result.bestDiff.toFixed(0)} | AvgDiff: ${result.avgDiff.toFixed(0)} | Bench: ${progress.benchmarkDiff ?? 'N/A'}`);
+                            islands
+                        });
+                        console.log(`[${botName}] Island ${islandIdx} Gen ${gen}/${GENERATIONS} | MaxDiff: ${result.bestDiff.toFixed(0)} | AvgDiff: ${result.avgDiff.toFixed(0)}`);
                     }
                 }
             } catch (err) {
@@ -308,7 +299,52 @@ export const TrainerService = {
         };
 
         try {
-            await Promise.all(Array.from({ length: NUM_ISLANDS }, (_, k) => runIsland(k)));
+            await Promise.all([
+                // Island evolution loops
+                ...Array.from({ length: NUM_ISLANDS }, (_, k) => runIsland(k)),
+                // Championship loop: runs independently, crowns best island bot
+                (async () => {
+                    while (completedIslands < NUM_ISLANDS) {
+                        await new Promise(r => setTimeout(r, SAVE_EVERY * 800)); // rough cadence
+                        const candidates = [];
+                        for (let k = 0; k < NUM_ISLANDS; k++) {
+                            const fp = path.join(BOTS_DIR, `${botName}_${k}.json`);
+                            if (!fs.existsSync(fp)) continue;
+                            const raw = JSON.parse(fs.readFileSync(fp, 'utf-8'));
+                            candidates.push({ k, genome: new Float32Array(Array.isArray(raw) ? raw : Object.values(raw)) });
+                        }
+                        if (candidates.length < 2) continue;
+
+                        // Round-robin among available island champions
+                        const wins = new Array(candidates.length).fill(0);
+                        const pairs = [];
+                        for (let i = 0; i < candidates.length; i++)
+                            for (let j = i + 1; j < candidates.length; j++)
+                                pairs.push({ i, j, dnaA: toBuffer(candidates[i].genome), dnaB: toBuffer(candidates[j].genome) });
+
+                        const results = await runMatchBatch(pairs.map(p => ({ dnaA: p.dnaA, dnaB: p.dnaB })), rules);
+                        results.forEach(([sA], idx) => {
+                            if (sA > 0) wins[pairs[idx].i]++; else wins[pairs[idx].j]++;
+                        });
+
+                        const bestIdx = wins.indexOf(Math.max(...wins));
+                        const champion = candidates[bestIdx].genome;
+                        fs.writeFileSync(path.join(BOTS_DIR, `${botName}.json`), JSON.stringify(Array.from(champion)));
+
+                        let benchmarkDiff = null;
+                        if (originalDNA) {
+                            const [[benchScore]] = await runMatchBatch(
+                                [{ dnaA: toBuffer(champion), dnaB: toBuffer(originalDNA) }], rules
+                            );
+                            benchmarkDiff = benchScore;
+                        }
+
+                        const prev = activeTrainings.get(botName);
+                        if (prev) activeTrainings.set(botName, { ...prev, benchmarkDiff });
+                        console.log(`[${botName}] 🏆 Champion: Island ${candidates[bestIdx].k} | Bench: ${benchmarkDiff ?? 'N/A'}`);
+                    }
+                })()
+            ]);
             if (islandErrors.length) console.error(`[TRAINER] ${islandErrors.length} island(s) failed for ${botName}`);
         } catch (error) {
             console.error(`[TRAINER] Error for ${botName}:`, error);
