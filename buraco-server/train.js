@@ -1,6 +1,11 @@
 import { BuracoGame } from './game.js';
 import fs from 'fs';
 import path from 'path';
+import { Worker } from 'worker_threads';
+import { cpus } from 'os';
+
+const NUM_WORKERS = Math.max(1, cpus().length - 1); // leave 1 core for the server
+const WORKER_PATH = new URL('./worker.js', import.meta.url).pathname;
 
 const DNA_SIZE = 49668;
 const BOTS_DIR = path.join(process.cwd(), 'bots');
@@ -37,123 +42,65 @@ function shuffle(arr) {
     return arr;
 }
 
-function initState(rules, numPlayers, fixedDeck = null) {
-    const fakeRandom = { Shuffle: (arr) => fixedDeck ? [...fixedDeck] : shuffle(arr) };
-    return BuracoGame.setup({ random: fakeRandom, ctx: { numPlayers } }, rules);
+// Transfer genome to a transferable ArrayBuffer for zero-copy worker dispatch
+function toBuffer(genome) {
+    const buf = new SharedArrayBuffer(DNA_SIZE * 4);
+    new Float32Array(buf).set(genome);
+    return buf;
 }
 
-function applyMove(G, ctx, moveName, args) {
-    const result = BuracoGame.moves[moveName]({ G, ctx, events: { endTurn: () => { ctx._endTurn = true; } } }, ...args);
-    return result !== 'INVALID_MOVE';
+// Run a batch of playoff matches across worker threads in parallel
+function runMatchBatch(matchPairs, rules) {
+    return new Promise((resolve, reject) => {
+        // Split pairs across workers
+        const chunkSize = Math.ceil(matchPairs.length / NUM_WORKERS);
+        const chunks = [];
+        for (let i = 0; i < matchPairs.length; i += chunkSize)
+            chunks.push(matchPairs.slice(i, i + chunkSize));
+
+        const allResults = new Array(matchPairs.length);
+        let completed = 0;
+        let offset = 0;
+
+        chunks.forEach((chunk, ci) => {
+            const chunkOffset = ci * chunkSize;
+            const worker = new Worker(WORKER_PATH, {
+                workerData: { matches: chunk, rules }
+            });
+            worker.on('message', (results) => {
+                results.forEach((r, i) => allResults[chunkOffset + i] = r);
+                completed++;
+                if (completed === chunks.length) resolve(allResults);
+            });
+            worker.on('error', reject);
+        });
+    });
 }
 
-// Expose all hands as knownCards so bots can't develop discard-based signaling
-function revealAllHands(G) {
-    for (const p of Object.keys(G.hands))
-        G.knownCards[p] = [...G.hands[p]];
-}
-
-// Run a single match. Returns { team0total, team1total, pointsDiff } from team0's perspective.
-function runMatch(genomes, rules, fixedDeck = null) {
-    const numPlayers = rules.numPlayers || 4;
-    const G = initState(rules, numPlayers, fixedDeck);
-    revealAllHands(G);
-
-    const ctx = { currentPlayer: '0', numPlayers, turn: 1, gameover: undefined, _endTurn: false };
-
-    try {
-        let moveCount = 0;
-        const MAX_MOVES = 800;
-        let lastMoveKey = null;
-
-        while (!ctx.gameover && moveCount < MAX_MOVES) {
-            const p = ctx.currentPlayer;
-            const moves = BuracoGame.ai.enumerate(G, ctx, genomes[p]);
-
-            if (!moves || moves.length === 0) {
-                ctx._endTurn = true;
-            } else {
-                const nextMove = moves[0];
-                const moveKey = `${nextMove.move}:${(nextMove.args || []).flat().join(',')}`;
-                if (moveKey === lastMoveKey) {
-                    ctx._endTurn = true;
-                } else {
-                    lastMoveKey = moveKey;
-                    ctx._endTurn = false;
-                    applyMove(G, ctx, nextMove.move, nextMove.args || []);
-                    // Re-reveal hands after every move (new drawn cards etc.)
-                    revealAllHands(G);
-                }
-            }
-
-            if (ctx._endTurn) {
-                ctx.currentPlayer = String((parseInt(ctx.currentPlayer) + 1) % numPlayers);
-                ctx.turn++;
-                G.hasDrawn = false;
-                G.lastDrawnCard = null;
-                lastMoveKey = null;
-                ctx._endTurn = false;
-            }
-
-            ctx.gameover = BuracoGame.endIf({ G, ctx });
-            moveCount++;
-        }
-
-        const scores = ctx.gameover
-            ? ctx.gameover.scores
-            : { team0: { total: -5000 }, team1: { total: -5000 } };
-
-        return {
-            team0: scores.team0.total,
-            team1: scores.team1.total,
-            diff: scores.team0.total - scores.team1.total
-        };
-    } catch (e) {
-        console.error('[TRAINER] runMatch crashed:', e.message);
-        return { team0: -5000, team1: -5000, diff: 0 };
-    }
-}
-
-// A "playoff match" = same deck played twice, swapping team positions.
-// botA plays seats 0+2 in game1, seats 1+3 in game2.
-// Score = sum of pointsDiff from botA's perspective across both games.
-function playoffMatch(botA, botB, rules) {
-    // Generate a fixed deck for both games
-    const deckSize = rules.noJokers ? 104 : 108;
-    const fixedDeck = shuffle(Array.from({ length: deckSize }, (_, i) => i));
-
-    // Game 1: botA = team0 (seats 0,2), botB = team1 (seats 1,3)
-    const g1 = runMatch({ '0': botA, '1': botB, '2': botA, '3': botB }, rules, fixedDeck);
-    // Game 2: botA = team1 (seats 1,3), botB = team0 (seats 0,2)
-    const g2 = runMatch({ '0': botB, '1': botA, '2': botB, '3': botA }, rules, fixedDeck);
-
-    // botA's score: g1.diff (team0=botA) + (-g2.diff) (team1=botA in g2)
-    return g1.diff + (-g2.diff);
-}
-
-// Single-elimination playoff tournament among all bots.
-// Returns indices of the 4 finalists.
+// Single-elimination playoff tournament, all rounds dispatched in parallel batches
 async function runPlayoffTournament(population, rules) {
-    let remaining = population.map((genome, i) => ({ genome, id: i }));
-
-    // Seed randomly
+    let remaining = population.map((genome, i) => ({ genome, id: i, buf: toBuffer(genome) }));
     shuffle(remaining);
-
-    // Pad to next power of 2 if needed (byes go through automatically)
     while (remaining.length & (remaining.length - 1)) remaining.push(null);
 
     while (remaining.length > 4) {
-        const nextRound = [];
+        // Build all match pairs for this round
+        const pairs = [];
+        const pairIndices = [];
         for (let i = 0; i < remaining.length; i += 2) {
-            await new Promise(resolve => setImmediate(resolve));
-            const a = remaining[i];
-            const b = remaining[i + 1];
-            if (!a) { nextRound.push(b); continue; }
-            if (!b) { nextRound.push(a); continue; }
-            const score = playoffMatch(a.genome, b.genome, rules);
-            nextRound.push(score >= 0 ? a : b);
+            const a = remaining[i], b = remaining[i + 1];
+            if (!a || !b) { pairIndices.push({ a, b, bye: true }); continue; }
+            pairs.push({ dnaA: a.buf, dnaB: b.buf });
+            pairIndices.push({ a, b, bye: false });
         }
-        remaining = nextRound;
+
+        // Run all non-bye matches in parallel across workers
+        const scores = pairs.length > 0 ? await runMatchBatch(pairs, rules) : [];
+        let scoreIdx = 0;
+        remaining = pairIndices.map(({ a, b, bye }) => {
+            if (bye) return a || b;
+            return scores[scoreIdx++] >= 0 ? a : b;
+        });
     }
 
     return remaining.filter(Boolean).map(r => r.genome);
@@ -214,15 +161,13 @@ export const TrainerService = {
                 // --- PLAYOFF TOURNAMENT to find top 4 ---
                 const finalists = await runPlayoffTournament(population, rules);
 
-                // --- STATS: play each finalist vs the rest to get scores ---
-                let allDiffs = [];
-                for (const f of finalists) {
-                    await new Promise(resolve => setImmediate(resolve));
-                    for (const opp of finalists) {
-                        if (f === opp) continue;
-                        allDiffs.push(playoffMatch(f, opp, rules));
-                    }
-                }
+                // --- STATS: play each finalist vs the rest in parallel ---
+                const statPairs = [];
+                for (const f of finalists)
+                    for (const opp of finalists)
+                        if (f !== opp) statPairs.push({ dnaA: toBuffer(f), dnaB: toBuffer(opp) });
+
+                const allDiffs = statPairs.length > 0 ? await runMatchBatch(statPairs, rules) : [0];
 
                 const bestDiff = Math.max(...allDiffs);
                 const avgDiff = allDiffs.reduce((a, b) => a + b, 0) / allDiffs.length;
@@ -249,21 +194,23 @@ export const TrainerService = {
                     benchmarkDiff: prevProgress?.benchmarkDiff ?? null
                 };
 
-                // --- SAVE & BENCHMARK vs original ---
+                // --- SAVE & BENCHMARK vs original in a worker ---
                 if (gen % SAVE_EVERY === 0 || gen === GENERATIONS) {
                     const bestGenome = finalists[0];
                     const filePath = path.join(BOTS_DIR, `${botName}.json`);
                     fs.writeFileSync(filePath, JSON.stringify(Array.from(bestGenome)));
 
                     if (originalDNA) {
-                        progress.benchmarkDiff = playoffMatch(bestGenome, originalDNA, rules);
+                        const [benchScore] = await runMatchBatch(
+                            [{ dnaA: toBuffer(bestGenome), dnaB: toBuffer(originalDNA) }], rules
+                        );
+                        progress.benchmarkDiff = benchScore;
                     }
                 }
 
                 activeTrainings.set(botName, progress);
                 console.log(`[${botName}] Gen ${gen}/${GENERATIONS} | MaxDiff: ${bestDiff.toFixed(0)} | AvgDiff: ${avgDiff.toFixed(0)} | Bench: ${progress.benchmarkDiff ?? 'N/A'}`);
 
-                await new Promise(resolve => setImmediate(resolve));
             }
         } catch (error) {
             console.error(`[TRAINER] Error for ${botName}:`, error);
