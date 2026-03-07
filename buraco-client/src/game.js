@@ -147,7 +147,6 @@ function buildMeld(cardIds, rules) {
 
         if (trueWilds.length <= 1) {
             let ranks = nats.map(c => getRank(c));
-            if (natTwos > 0) ranks.push(2);
             let hasAce = ranks.includes(1);
             ranks = ranks.filter(r => r !== 1).sort((a,b) => a-b);
             
@@ -157,25 +156,63 @@ function buildMeld(cardIds, rules) {
                 else if (ranks[ranks.length-1] >= 12) ranks.push(14);
                 else ranks.unshift(1);
             }
-            
-            let min = ranks[0]; let max = ranks[ranks.length-1]; let gaps = 0;
-            for (let i = 1; i < ranks.length; i++) gaps += (ranks[i] - ranks[i-1] - 1);
-            
-            if (gaps === 0 && trueWilds.length === 0) return [firstNatSuit, min, max, 0, 0];
-            
-            if (gaps === 1 && trueWilds.length === 1) {
-                let wildPos = -1;
-                for (let i = 1; i < ranks.length; i++) {
-                    if (ranks[i] - ranks[i-1] > 1) { wildPos = ranks[i-1] + 1; break; }
+
+            // Try with natTwos as natural first, fall back to wild if it doesn't fit
+            const tryBuild = (useNatTwoAsNatural) => {
+                let r = [...ranks];
+                let wilds = [...trueWilds];
+                if (natTwos > 0) {
+                    if (useNatTwoAsNatural) r = [...r, 2].sort((a,b) => a-b);
+                    else wilds = [...wilds, natTwos > 0 ? firstNatSuit : null].filter(Boolean); // placeholder
                 }
-                return [firstNatSuit, min, max, getSuit(trueWilds[0]), wildPos];
-            }
-            
-            if (gaps === 0 && trueWilds.length === 1) {
-                let wildPos = max < 14 ? max + 1 : min - 1;
-                let newMin = max < 14 ? min : min - 1;
-                let newMax = max < 14 ? max + 1 : max;
-                return [firstNatSuit, newMin, newMax, getSuit(trueWilds[0]), wildPos];
+                let min = r[0]; let max = r[r.length-1]; let gaps = 0;
+                for (let i = 1; i < r.length; i++) gaps += (r[i] - r[i-1] - 1);
+                if (gaps === 0 && wilds.length === 0) return [firstNatSuit, min, max, 0, 0];
+                if (gaps === 1 && wilds.length === 1) {
+                    let wildPos = -1;
+                    for (let i = 1; i < r.length; i++) {
+                        if (r[i] - r[i-1] > 1) { wildPos = r[i-1] + 1; break; }
+                    }
+                    return [firstNatSuit, min, max, getSuit(wilds[0]), wildPos];
+                }
+                if (gaps === 0 && wilds.length === 1) {
+                    let wildPos = max < 14 ? max + 1 : min - 1;
+                    let newMin = max < 14 ? min : min - 1;
+                    let newMax = max < 14 ? max + 1 : max;
+                    return [firstNatSuit, newMin, newMax, getSuit(wilds[0]), wildPos];
+                }
+                return null;
+            };
+
+            if (natTwos > 0) {
+                // Find the suited-2 card to use as wild
+                const suitedTwo = wilds.find(c => getSuit(c) === firstNatSuit && getRank(c) === 2) 
+                                  || cardIds.find(c => getSuit(c) === firstNatSuit && getRank(c) === 2);
+                const result = tryBuild(true) || (() => {
+                    // retry with suited-2 as a true wild
+                    const r2 = [...ranks];
+                    const w2 = suitedTwo ? [suitedTwo] : [];
+                    let min = r2[0]; let max = r2[r2.length-1]; let gaps = 0;
+                    for (let i = 1; i < r2.length; i++) gaps += (r2[i] - r2[i-1] - 1);
+                    if (gaps === 1 && w2.length === 1) {
+                        let wildPos = -1;
+                        for (let i = 1; i < r2.length; i++) {
+                            if (r2[i] - r2[i-1] > 1) { wildPos = r2[i-1] + 1; break; }
+                        }
+                        return [firstNatSuit, min, max, getSuit(w2[0]), wildPos];
+                    }
+                    if (gaps === 0 && w2.length === 1) {
+                        let wildPos = max < 14 ? max + 1 : min - 1;
+                        let newMin = max < 14 ? min : min - 1;
+                        let newMax = max < 14 ? max + 1 : max;
+                        return [firstNatSuit, newMin, newMax, getSuit(w2[0]), wildPos];
+                    }
+                    return null;
+                })();
+                if (result) return result;
+            } else {
+                const result = tryBuild(false);
+                if (result) return result;
             }
         }
     }
