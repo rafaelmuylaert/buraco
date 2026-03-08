@@ -6,4 +6,4 @@ COPY . .
 RUN npm run build
 # Expose the Vite Preview port
 EXPOSE 4173
-CMD ["npm", "run", "preview", "--", "--port", "4173", "--host"]
+CMD ["npm", "run", "dev", "--", "--port", "4173", "--host"]
