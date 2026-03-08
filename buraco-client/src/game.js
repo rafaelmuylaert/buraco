@@ -147,6 +147,14 @@ function appendCardsToMeld(meld, cards) {
 // A meld is clean if it has no wild, or its only wild is a suited-2 at the natural rank-2 position
 function isMeldClean(m) { return m[3] === 0 || (m[3] === m[0] && m[4] === 2); }
 
+function meldCleanness(meld) {
+    if (!meld) return 0;
+    if (isMeldClean(meld)) return 0;
+    const wSuit = meld[3];
+    if (wSuit > 0 && wSuit !== 5 && wSuit === meld[0]) return 1;
+    return 2;
+}
+
 export function calculateMeldPoints(meld, rules) {
     let pts = 0;
     const isSeq = meld[0] !== 0;
@@ -666,17 +674,10 @@ export const BuracoGame = {
 
       const INPUT_SIZE = 524;
       const inputBuffer = matchCtx ? matchCtx.inputBuffer : new Float32Array(INPUT_SIZE);
-      let off = 0;
-
-      inputBuffer[off++] = G.deck.length / 106.0;
-      inputBuffer[off++] = G.pots.length > 0 ? 1.0 : 0.0;
-      inputBuffer[off++] = G.pots.length > 1 ? 1.0 : 0.0;
-      inputBuffer[off++] = G.teamMortos[myTeam] ? 1.0 : 0.0;
-      inputBuffer[off++] = G.teamMortos[oppTeam] ? 1.0 : 0.0;
-
       const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
       const hasClean = teamId => (G.teamPlayers[teamId] || []).some(tp => G.melds[tp].some(m => isCanasta(m) && isMeldClean(m))) ? 1.0 : 0.0;
 
+      // ---- Rebuild meld-derived caches when dirty ----
       if (matchCtx) {
           if (matchCtx.meldsDirty) {
               for (const t of ['team0', 'team1']) {
@@ -684,36 +685,95 @@ export const BuracoGame = {
                   nnHelpers.meldsToSemanticMatrix(tm, matchCtx.meldVec[t], 0);
                   matchCtx.hasClean[t] = (G.teamPlayers[t] || []).some(tp => G.melds[tp].some(m => isCanasta(m) && isMeldClean(m))) ? 1.0 : 0.0;
               }
+              // Rebuild meldAppendSets and meldCleannessCache
+              matchCtx.meldAppendSets = {};
+              matchCtx.meldCleannessCache = {};
+              for (const t of ['team0', 'team1']) {
+                  (G.teamPlayers[t] || []).forEach(tp => {
+                      (G.melds[tp] || []).forEach((meld, mi) => {
+                          const key = tp + ':' + mi;
+                          matchCtx.meldCleannessCache[key] = meldCleanness(meld);
+                          const s = new Set();
+                          if (meld[0] !== 0) { // sequence: same suit naturals
+                              const suit = meld[0];
+                              for (let r = 1; r <= 13; r++) s.add((suit - 1) * 13 + (r - 1));
+                              s.add(54); // joker
+                              for (let suit2 = 1; suit2 <= 4; suit2++) s.add((suit2 - 1) * 13 + 1); // 2s
+                          } else { // runner: same rank naturals
+                              const rank = meld[1];
+                              for (let suit2 = 1; suit2 <= 4; suit2++) s.add((suit2 - 1) * 13 + (rank - 1));
+                              s.add(54);
+                              for (let suit2 = 1; suit2 <= 4; suit2++) s.add((suit2 - 1) * 13 + 1);
+                          }
+                          matchCtx.meldAppendSets[key] = s;
+                      });
+                  });
+              }
               matchCtx.meldsDirty = false;
           }
-          inputBuffer[off++] = matchCtx.hasClean[myTeam];
-          inputBuffer[off++] = matchCtx.hasClean[oppTeam];
+
+          // Rebuild per-player hand/known vecs when dirty
+          for (const pid of [pInt, (pInt+1)%numP, partnerId !== null ? (pInt+2)%numP : -1, opp2Id !== null ? (pInt+3)%numP : -1]) {
+              if (pid < 0) continue;
+              if (matchCtx.handDirty[pid]) {
+                  nnHelpers.cardsToVector(G.hands[pid] || [], matchCtx.handVec[pid], 0);
+                  nnHelpers.cardsToVector(G.knownCards[pid] || [], matchCtx.knownVec[pid], 0);
+                  matchCtx.handDirty[pid] = false;
+              }
+          }
+
+          // Build inputBuffer from cached parts
+          // Offsets 0-4: deck/pots/mortos — but mortos/pots can change without meldsDirty, update inline
+          inputBuffer[0] = G.deck.length / 106.0;
+          inputBuffer[1] = G.pots.length > 0 ? 1.0 : 0.0;
+          inputBuffer[2] = G.pots.length > 1 ? 1.0 : 0.0;
+          inputBuffer[3] = G.teamMortos[myTeam] ? 1.0 : 0.0;
+          inputBuffer[4] = G.teamMortos[oppTeam] ? 1.0 : 0.0;
+          inputBuffer[5] = matchCtx.hasClean[myTeam];
+          inputBuffer[6] = matchCtx.hasClean[oppTeam];
+          inputBuffer[7]  = myHandCards.length / 14.0;
+          inputBuffer[8]  = (G.hands[opp1Id] || []).length / 14.0;
+          inputBuffer[9]  = partnerId ? (G.hands[partnerId] || []).length / 14.0 : 0;
+          inputBuffer[10] = opp2Id ? (G.hands[opp2Id] || []).length / 14.0 : 0;
+          // meld vecs: myTeam at 11, oppTeam at 107
+          if (myTeam === 'team0') {
+              inputBuffer.set(matchCtx.meldVec['team0'], 11);
+              inputBuffer.set(matchCtx.meldVec['team1'], 107);
+          } else {
+              inputBuffer.set(matchCtx.meldVec['team1'], 11);
+              inputBuffer.set(matchCtx.meldVec['team0'], 107);
+          }
+          // card vecs at 203
+          nnHelpers.cardsToVector(G.discardPile, inputBuffer, 203);
+          inputBuffer.set(matchCtx.handVec[pInt], 256);
+          inputBuffer.set(matchCtx.knownVec[(pInt+1)%numP], 309);
+          if (partnerId !== null) inputBuffer.set(matchCtx.knownVec[(pInt+2)%numP], 362); else inputBuffer.fill(0, 362, 415);
+          if (opp2Id !== null) inputBuffer.set(matchCtx.knownVec[(pInt+3)%numP], 415); else inputBuffer.fill(0, 415, 468);
       } else {
+          // Non-matchCtx path (live game): compute everything fresh
+          let off = 0;
+          inputBuffer[off++] = G.deck.length / 106.0;
+          inputBuffer[off++] = G.pots.length > 0 ? 1.0 : 0.0;
+          inputBuffer[off++] = G.pots.length > 1 ? 1.0 : 0.0;
+          inputBuffer[off++] = G.teamMortos[myTeam] ? 1.0 : 0.0;
+          inputBuffer[off++] = G.teamMortos[oppTeam] ? 1.0 : 0.0;
           inputBuffer[off++] = hasClean(myTeam);
           inputBuffer[off++] = hasClean(oppTeam);
-      }
-
-      inputBuffer[off++] = myHandCards.length / 14.0;
-      inputBuffer[off++] = (G.hands[opp1Id] || []).length / 14.0;
-      inputBuffer[off++] = partnerId ? (G.hands[partnerId] || []).length / 14.0 : 0;
-      inputBuffer[off++] = opp2Id ? (G.hands[opp2Id] || []).length / 14.0 : 0;
-
-      if (matchCtx) {
-          inputBuffer.set(matchCtx.meldVec[myTeam], off); off += 96;
-          inputBuffer.set(matchCtx.meldVec[oppTeam], off); off += 96;
-      } else {
+          inputBuffer[off++] = myHandCards.length / 14.0;
+          inputBuffer[off++] = (G.hands[opp1Id] || []).length / 14.0;
+          inputBuffer[off++] = partnerId ? (G.hands[partnerId] || []).length / 14.0 : 0;
+          inputBuffer[off++] = opp2Id ? (G.hands[opp2Id] || []).length / 14.0 : 0;
           const myMelds = (G.teamPlayers[myTeam] || []).flatMap(tp => G.melds[tp] || []);
           nnHelpers.meldsToSemanticMatrix(myMelds, inputBuffer, off); off += 96;
           const oppMelds = (G.teamPlayers[oppTeam] || []).flatMap(tp => G.melds[tp] || []);
           nnHelpers.meldsToSemanticMatrix(oppMelds, inputBuffer, off); off += 96;
+          nnHelpers.cardsToVector(G.discardPile, inputBuffer, off); off += 53;
+          nnHelpers.cardsToVector(myHandCards, inputBuffer, off); off += 53;
+          nnHelpers.cardsToVector(G.knownCards[opp1Id] || [], inputBuffer, off); off += 53;
+          nnHelpers.cardsToVector(partnerId ? (G.knownCards[partnerId] || []) : [], inputBuffer, off); off += 53;
+          nnHelpers.cardsToVector(opp2Id ? (G.knownCards[opp2Id] || []) : [], inputBuffer, off); off += 53;
       }
-
-      nnHelpers.cardsToVector(G.discardPile, inputBuffer, off); off += 53;
-      nnHelpers.cardsToVector(myHandCards, inputBuffer, off); off += 53;
-      nnHelpers.cardsToVector(G.knownCards[opp1Id] || [], inputBuffer, off); off += 53;
-      nnHelpers.cardsToVector(partnerId ? (G.knownCards[partnerId] || []) : [], inputBuffer, off); off += 53;
-      nnHelpers.cardsToVector(opp2Id ? (G.knownCards[opp2Id] || []) : [], inputBuffer, off); off += 53;
-      // off is now 471; remaining 53 slots (471-523) = actionType(3) + cardsVec(53) written per-action
+      // off is now 468; slots 468-470 = actionType(3), 471-523 = actionCards(53)
 
       let dnaPickup, dnaMeld, dnaDiscard;
       if (matchCtx) {
@@ -731,20 +791,11 @@ export const BuracoGame = {
           dnaDiscard = DNA.subarray ? DNA.subarray(16834, 25251) : DNA.slice(16834, 25251);
       }
 
-      // actionType: [isAppend(0=new,1=append), meldClean(0=clean,1=cleanable,2=dirty), cleanAfter(0=clean,1=cleanable,2=dirty)]
-      const meldCleanness = (meld) => {
-          if (!meld) return 0;
-          if (isMeldClean(meld)) return 0;
-          // cleanable: only wild is a suited-2 that could be at rank-2 position if meld extended
-          const wSuit = meld[3];
-          if (wSuit > 0 && wSuit !== 5 && wSuit === meld[0]) return 1; // suited-2 wild, potentially cleanable
-          return 2;
-      };
       const getScore = (actionTypeArray, actionCards, activeWeights) => {
-          inputBuffer[INPUT_SIZE - 56] = actionTypeArray[0];
-          inputBuffer[INPUT_SIZE - 55] = actionTypeArray[1];
-          inputBuffer[INPUT_SIZE - 54] = actionTypeArray[2];
-          nnHelpers.cardsToVector(actionCards, inputBuffer, INPUT_SIZE - 53);
+          inputBuffer[468] = actionTypeArray[0];
+          inputBuffer[469] = actionTypeArray[1];
+          inputBuffer[470] = actionTypeArray[2];
+          nnHelpers.cardsToVector(actionCards, inputBuffer, 471);
           return nnHelpers.forwardPass(inputBuffer, activeWeights);
       };
 
@@ -861,7 +912,12 @@ export const BuracoGame = {
       const mortoAvail = G.pots.length > 0 && !G.teamMortos[myTeam];
       (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((baseMeld, mIndex) => {
-              const beforeClean = meldCleanness(baseMeld);
+              const key = tp + ':' + mIndex;
+              const appendSet = matchCtx?.meldAppendSets?.[key];
+              // Fast pre-filter: skip meld if no hand card is appendable
+              if (appendSet && !myHandCards.some(c => appendSet.has(c))) return;
+
+              const beforeClean = matchCtx?.meldCleannessCache?.[key] ?? meldCleanness(baseMeld);
               const isRunner = baseMeld[0] === 0;
               const meldRank = isRunner ? baseMeld[1] : null;
               const meldSuit = isRunner ? null : baseMeld[0];
@@ -870,6 +926,7 @@ export const BuracoGame = {
                   if (cs === 5 || cr === 2) return true;
                   return isRunner ? cr === meldRank : cs === meldSuit;
               });
+              if (relevantCards.length === 0) return;
 
               const tpInt = parseInt(tp);
               for (let i = 0; i < relevantCards.length; i++) {

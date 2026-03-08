@@ -44,15 +44,25 @@ function runMatch(genomes, rules, fixedDeck) {
     if (rules.telepathy) revealAllHands(G);
     const ctx = { currentPlayer: '0', numPlayers, turn: 1, gameover: undefined, _endTurn: false };
 
-    // Per-match persistent state: split DNA once, allocate inputBuffer once
     const matchCtx = {
         genomes: Object.fromEntries(Object.entries(genomes).map(([k, v]) => [k, prepareGenome(v)])),
         inputBuffer: new Float32Array(524),
         meldVec: { team0: new Float32Array(96), team1: new Float32Array(96) },
         hasClean: { team0: 0, team1: 0 },
         meldsDirty: true,
+        handDirty: {},   // per-player flag
+        handVec: {},     // per-player Float32Array(53)
+        knownVec: {},    // per-player Float32Array(53)
+        meldAppendSets: {},  // 'tp:mIndex' -> Set of appendable card IDs
+        meldCleannessCache: {}, // 'tp:mIndex' -> cleanness value
         rejectedSigs: {}
     };
+    // init per-player hand/known vecs
+    for (let i = 0; i < numPlayers; i++) {
+        matchCtx.handVec[i] = new Float32Array(53);
+        matchCtx.knownVec[i] = new Float32Array(53);
+        matchCtx.handDirty[i] = true;
+    }
 
     const MELD_MOVES = new Set(['playMeld', 'appendToMeld', 'pickUpDiscard']);
 
@@ -62,7 +72,6 @@ function runMatch(genomes, rules, fixedDeck) {
             const p = ctx.currentPlayer;
             const moves = BuracoGame.ai.enumerate(G, ctx, null, matchCtx);
             if (!moves || moves.length === 0) {
-                // Truly stuck: if drawn, force discard the first card; otherwise force draw
                 if (G.hasDrawn && G.hands[p]?.length > 0) {
                     applyMove(G, ctx, 'discardCard', [G.hands[p][0]]);
                     if (!ctx._endTurn) ctx._endTurn = true;
@@ -75,18 +84,16 @@ function runMatch(genomes, rules, fixedDeck) {
                     const ok = applyMove(G, ctx, move.move, move.args || []);
                     if (ok) {
                         stuck = false;
-                        if (MELD_MOVES.has(move.move)) matchCtx.meldsDirty = true;
-                        if (rules.telepathy) revealAllHands(G);
+                        if (MELD_MOVES.has(move.move)) { matchCtx.meldsDirty = true; matchCtx.handDirty[parseInt(p)] = true; }
+                        if (rules.telepathy) { revealAllHands(G); for (let i = 0; i < numPlayers; i++) matchCtx.handDirty[i] = true; }
                     }
                     if (ctx._endTurn) break;
                 }
                 if (stuck) {
-                    // Record rejected sigs so next enumerate skips re-scoring them
                     if (matchCtx.rejectedSigs) {
                         if (!matchCtx.rejectedSigs[p]) matchCtx.rejectedSigs[p] = new Set();
                         for (const move of moves) if (move._sig !== undefined) matchCtx.rejectedSigs[p].add(move._sig);
                     }
-                    // All proposed moves failed — force discard or end turn
                     if (G.hasDrawn && G.hands[p]?.length > 0) {
                         applyMove(G, ctx, 'discardCard', [G.hands[p][0]]);
                         if (!ctx._endTurn) ctx._endTurn = true;
@@ -97,7 +104,9 @@ function runMatch(genomes, rules, fixedDeck) {
             }
             if (ctx._endTurn) {
                 if (matchCtx.rejectedSigs) matchCtx.rejectedSigs[ctx.currentPlayer] = null;
-                ctx.currentPlayer = String((parseInt(ctx.currentPlayer) + 1) % numPlayers);
+                const pInt = parseInt(ctx.currentPlayer);
+                matchCtx.handDirty[pInt] = true; // discard changed hand
+                ctx.currentPlayer = String((pInt + 1) % numPlayers);
                 ctx.turn++;
                 G.hasDrawn = false;
                 G.lastDrawnCard = null;
