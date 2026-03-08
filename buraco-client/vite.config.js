@@ -7,7 +7,7 @@ export default defineConfig({
   base: '/buraco/', // THIS IS CRITICAL FOR NGINX SUB-PATHS
 preview: {
     allowedHosts: true, // This tells Vite to trust your Nginx proxy hostname
-    port: 4173,
+    port: 5173,
     host: true
   }
 
