@@ -33,8 +33,14 @@ function appendToMeld(meld, cId) {
         }
         
         if (cSuit === m[0] && !isWild) { 
-            if (cRank === m[1] - 1) { m[1] = cRank; return m; }
-            if (cRank === m[2] + 1 && m[2] < 14) { m[2] = cRank; return m; }
+            if (cRank === m[1] - 1) {
+                if (m[3] !== 0 && m[4] === m[1]) { m[4] = m[2] + 1; m[2] = m[2] + 1; } // wild was at low end, move to high end
+                m[1] = cRank; return m;
+            }
+            if (cRank === m[2] + 1 && m[2] < 14) {
+                if (m[3] !== 0 && m[4] === m[2]) { m[4] = m[1] - 1; m[1] = m[1] - 1; } // wild was at high end, move to low end
+                m[2] = cRank; return m;
+            }
             if (cRank === 1 && m[2] === 13) { m[2] = 14; return m; }
             if (cRank === 1 && m[1] === 2) { m[1] = 1; return m; }
             // Ace at low end: move wild to rank-2 slot (from either end)

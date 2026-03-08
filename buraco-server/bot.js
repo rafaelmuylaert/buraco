@@ -74,6 +74,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
 
   // 🚀 The Bot's Internal Memory Queue
   let aiQueue = [];
+  let failStreak = 0;
 
   client.subscribe(state => {
     if (!state) return;
@@ -97,6 +98,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       
       if (currentState.ctx.currentPlayer !== playerID) {
           aiQueue = [];
+          failStreak = 0;
           return;
       }
 
@@ -117,18 +119,56 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
               aiQueue = [];
               return;
           }
-          
-          console.log(`[BOT] ${botName} executes: ${nextMove.move}`);
+
+          // Build a readable description for logging
+          const getSuitChar = s => ['\u2660','\u2665','\u2666','\u2663','\u2605'][s-1];
+          const getRankChar = r => r===1?'A':r===11?'J':r===12?'Q':r===13?'K':r===14?'A':r.toString();
+          const cardStr = c => c===54?'JOKER':getRankChar((c%13)+1)+getSuitChar(Math.floor(c/13)+1);
+          const meldStr = m => m ? `[${m[0]===0?'Runner':'Seq'} ${JSON.stringify(m)}]` : '';
+
+          let moveDesc = nextMove.move;
+          if (nextMove.move === 'appendToMeld') {
+              const [tp, mIdx, cards] = nextMove.args;
+              const meld = currentState.G.melds[tp]?.[mIdx];
+              moveDesc += ` cards=[${cards.map(cardStr).join(',')}] onto ${meldStr(meld)}`;
+          } else if (nextMove.move === 'playMeld') {
+              moveDesc += ` cards=[${(nextMove.args[0]||[]).map(cardStr).join(',')}]`;
+          } else if (nextMove.move === 'discardCard') {
+              moveDesc += ` card=${cardStr(nextMove.args[0])}`;
+          } else if (nextMove.move === 'pickUpDiscard') {
+              const top = currentState.G.discardPile.slice(-1)[0];
+              moveDesc += ` top=${top!=null?cardStr(top):'none'}`;
+          }
+
+          console.log(`[BOT] ${botName} executes: ${moveDesc}`);
           client.moves[nextMove.move](...(nextMove.args || []));
           
           // 🚀 FLUSH QUEUE IF INVALID: If the engine blocked the move, the state object won't update!
           const newState = client.getState();
           if (newState === currentState) {
+              console.warn(`[BOT] ${botName} INVALID MOVE rejected: ${moveDesc} | hand=${currentState.G.hands[playerID]?.map(cardStr).join(',')}`);
               aiQueue = [];
+              failStreak++;
+              if (failStreak >= 3) {
+                  console.warn(`[BOT] ${botName} failStreak=${failStreak}, forcing discard to unstick`);
+                  const hand = currentState.G.hands[playerID] || [];
+                  if (currentState.G.hasDrawn && hand.length > 0) {
+                      client.moves.discardCard(hand[0]);
+                  }
+                  failStreak = 0;
+              }
+          } else {
+              failStreak = 0;
           }
       } else {
           // Failsafe: if enumerate returns empty queue, just end turn
-          client.events.endTurn();
+          console.warn(`[BOT] ${botName} enumerate returned empty, forcing discard`);
+          const hand = currentState.G.hands[playerID] || [];
+          if (currentState.G.hasDrawn && hand.length > 0) {
+              client.moves.discardCard(hand[0]);
+          } else {
+              client.events.endTurn();
+          }
       }
   };
 
