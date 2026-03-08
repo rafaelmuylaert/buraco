@@ -147,8 +147,8 @@ export const TrainerService = {
         const filePath = path.join(BOTS_DIR, `${botName}.json`);
         if (!fs.existsSync(filePath)) return null;
         const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-        // Handle both plain arrays and object-serialized Float32Arrays
-        return Array.isArray(raw) ? raw : Object.values(raw);
+        const arr = Array.isArray(raw) ? raw : Object.values(raw);
+        return arr.length > DNA_SIZE ? arr.slice(0, DNA_SIZE) : arr;
     },
 
     getTrainingStatus: (botName) => {

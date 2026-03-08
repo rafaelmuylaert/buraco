@@ -34,7 +34,9 @@ async function pollLobby() {
               const dnaRes = await fetch(`${SERVER_URL}/api/bots/weights/${targetBotName}`);
               if (dnaRes.ok) {
                 let loadedDNA = await dnaRes.json();
-                if (loadedDNA.length !== DNA_SIZE) {
+                if (loadedDNA.length > DNA_SIZE) {
+                  loadedDNA = loadedDNA.slice(0, DNA_SIZE);
+                } else if (loadedDNA.length !== DNA_SIZE) {
                   let expanded = [];
                   while (expanded.length < DNA_SIZE) expanded.push(...loadedDNA);
                   loadedDNA = expanded.slice(0, DNA_SIZE);
