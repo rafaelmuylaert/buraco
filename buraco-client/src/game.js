@@ -15,162 +15,35 @@ export function sortCards(cards) {
   });
 }
 
-function appendToMeld(meld, cId) {
-    let m = [...meld];
-    const cSuit = getSuit(cId), cRank = getRank(cId);
-    const isWild = cSuit === 5 || cRank === 2;
-
-    if (m[0] !== 0) { // Sequence
-        if (m[1] === null) {
-            if (!isWild || (cSuit === m[0] && cRank === 2)) { m[1] = cRank; m[2] = cRank; return m; }
-            return null;
-        }
-
-        const suit = m[0], lo = m[1], hi = m[2], wSuit = m[3], wPos = m[4];
-        // Normalise: Ace stored as 1 at low end, 14 at high end
-        const loR = lo, hiR = hi; // hi may be 14 (high-Ace)
-
-        // --- Natural card fills the wild's slot ---
-        if (!isWild && cSuit === suit) {
-            const normRank = (cRank === 1 && wPos === 14) ? 14 : cRank;
-            if (wSuit !== 0 && normRank === wPos) {
-                // Wild is displaced: try to push it to the opposite end
-                const newLo = loR, newHi = hiR;
-                // Try high end first, then low end, then just clear it
-                if (newHi < 14) { m[4] = newHi + 1; m[2] = newHi + 1; m[3] = wSuit; return m; }
-                if (newLo > 1)  { m[4] = newLo - 1; m[1] = newLo - 1; m[3] = wSuit; return m; }
-                // No room — wild is simply cleared (natural card took its spot)
-                m[3] = 0; m[4] = 0; return m;
+function expandMeld(meld) {
+    if (meld[0] !== 0) { // Sequence: [suit, lo, hi, wSuit, wPos]
+        const [suit, lo, hi, wSuit, wPos] = meld;
+        const cards = [];
+        for (let r = lo; r <= hi; r++) {
+            if (r === wPos) {
+                cards.push(wSuit === 5 ? 54 : (wSuit - 1) * 13 + 1); // wild card ID
+            } else {
+                const rank = r > 13 ? 1 : r; // 14 → Ace
+                cards.push((suit - 1) * 13 + (rank - 1));
             }
         }
-
-        // --- Natural card extends the sequence ---
-        if (!isWild && cSuit === suit) {
-            // Extend low end (including Ace below 2)
-            const extendsLow = (cRank === loR - 1) ||
-                               (cRank === 1 && loR === 2) ||
-                               (cRank === 1 && loR === 3 && wSuit !== 0 && wPos === 2);
-            if (extendsLow) {
-                const newLo = (cRank === 1) ? 1 : cRank;
-                // If wild was at the low end, displace it to the high end
-                if (wSuit !== 0 && wPos === loR) {
-                    if (hiR < 14) { m[4] = hiR + 1; m[2] = hiR + 1; }
-                    else          { m[3] = 0; m[4] = 0; } // no room, clear wild
-                }
-                // If wild was filling rank-2 gap and Ace slides in below, clear it (suited-2 case)
-                if (wSuit !== 0 && wPos === 2 && wSuit === suit && cRank === 1) { m[3] = 0; m[4] = 0; }
-                m[1] = newLo;
-                return m;
-            }
-            // Extend high end (including Ace above K)
-            const extendsHigh = (cRank === hiR + 1 && hiR < 14) ||
-                                (cRank === 1 && hiR === 13);
-            if (extendsHigh) {
-                const newHi = (cRank === 1 && hiR === 13) ? 14 : cRank;
-                // If wild was at the high end, displace it to the low end
-                if (wSuit !== 0 && wPos === hiR) {
-                    if (loR > 1) { m[4] = loR - 1; m[1] = loR - 1; }
-                    else         { m[3] = 0; m[4] = 0; }
-                }
-                m[2] = newHi;
-                return m;
-            }
-            // Extend 2 steps with wild bridging the gap (wild moves from opposite end)
-            // wPos may be at the outer end OR at the natural-2 slot
-            if (cRank === loR - 2 && wSuit !== 0 && (wPos === hiR || wPos === 2) && loR > 2) {
-                m[2] = hiR - 1; m[4] = loR - 1; m[1] = cRank; return m;
-            }
-            if (cRank === hiR + 2 && wSuit !== 0 && (wPos === loR || wPos === 2) && hiR < 13) {
-                m[1] = loR + 1; m[4] = hiR + 1; m[2] = cRank; return m;
-            }
-        }
-
-        // --- Suited-2 at the natural rank-2 slot (recorded as wild — makes meld dirty) ---
-        if (cSuit === suit && cRank === 2 && loR === 3 && wSuit === 0) {
-            m[3] = cSuit; m[4] = 2; m[1] = 2; return m;
-        }
-
-        // --- Wild card appended ---
-        if (isWild && wSuit === 0) {
-            // Prefer rank-2 slot at low end (natural home for a 2-wild)
-            if (loR === 3)  { m[3] = cSuit; m[4] = 2; m[1] = 2; return m; }
-            if (hiR < 14)   { m[3] = cSuit; m[4] = hiR + 1; m[2] = hiR + 1; return m; }
-            if (loR > 1)    { m[3] = cSuit; m[4] = loR - 1; m[1] = loR - 1; return m; }
-        }
-
-    } else { // Runner
-        if (m[1] === null) {
-            if (!isWild) { m[1] = cRank; m[2] = 1; return m; }
-            return null;
-        }
-        if (cRank === m[1] && !isWild) { m[2]++; m[4 + cSuit - 1]++; return m; }
-        if (isWild && m[3] === 0) { m[3] = cSuit; m[2]++; return m; }
+        return cards;
+    } else { // Runner: [0, rank, count, wSuit, sc1, sc2, sc3, sc4]
+        const [, rank, count, wSuit, sc1, sc2, sc3, sc4] = meld;
+        const cards = [];
+        const suitCounts = [sc1 || 0, sc2 || 0, sc3 || 0, sc4 || 0];
+        for (let s = 1; s <= 4; s++)
+            for (let i = 0; i < suitCounts[s - 1]; i++)
+                cards.push((s - 1) * 13 + (rank - 1));
+        if (wSuit > 0) cards.push(wSuit === 5 ? 54 : (wSuit - 1) * 13 + 1);
+        return cards;
     }
-    return null;
-}
-
-function appendCardsToMeld(meld, cards) {
-    let current = [...meld]; 
-    let remaining = [...cards];
-    
-    let seenRanks = new Set();
-    let offSuitWilds = current[3] !== 0 && current[3] !== current[0] ? 1 : 0;
-    
-    if (current[0] !== 0 && current[1] !== null) {
-        for (let r = current[1]; r <= current[2]; r++) {
-            if (r !== current[4]) seenRanks.add(r > 13 ? 1 : r);
-        }
-    }
-    
-    for (let c of remaining) {
-        const s = getSuit(c); const r = getRank(c);
-        const isWild = (s === 5 || r === 2);
-        
-        if (!isWild) {
-            if (current[0] !== 0 && s !== current[0]) return null; 
-            if (current[0] === 0 && current[1] !== null && r !== current[1]) return null; 
-            if (current[0] !== 0 && r !== 1 && seenRanks.has(r)) return null; 
-            seenRanks.add(r);
-        } else {
-            if (s !== current[0]) offSuitWilds++; 
-        }
-    }
-    if (offSuitWilds > 1) return null;
-
-    // If the meld starts at 3 and has no wild, promote the suited-2 to wild at rank-2 position
-    // so the loop can displace it freely to fill gaps elsewhere.
-    let hasSuitedTwoPromotion = false;
-    if (current[0] !== 0 && current[1] !== null &&
-        (current[3] === 0 || (current[3] === current[0] && current[4] === 2))) {
-        const alreadySeated = current[3] !== 0; // suited-2 already in meld at rank 2
-        const incomingIdx = !alreadySeated
-            ? remaining.findIndex(c => getSuit(c) === current[0] && getRank(c) === 2)
-            : -1;
-        if (alreadySeated || incomingIdx !== -1) {
-            if (incomingIdx !== -1) remaining.splice(incomingIdx, 1);
-            if (current[3] === 0) { current[3] = current[0]; current[4] = 2; }
-            if (current[1] === 3) current[1] = 2; // only extend lo if meld starts at 3
-            hasSuitedTwoPromotion = true;
-        }
-    }
-
-    let changed = true;
-    while(changed && remaining.length > 0) {
-        changed = false;
-        for(let i=0; i<remaining.length; i++) {
-            const next = appendToMeld(current, remaining[i]);
-            if (next) { current = next; remaining.splice(i, 1); changed = true; break; }
-        }
-    }
-    if (remaining.length !== 0) return null;
-
-    return normalizeMeld(current);
 }
 
 function buildMeld(cardIds, rules) {
     if (cardIds.length < 3) return null;
 
-    let nats = [], wilds = [];
+    const nats = [], wilds = [];
     for (const c of cardIds) {
         const s = getSuit(c), r = getRank(c);
         if (s === 5 || r === 2) wilds.push(c); else nats.push(c);
@@ -181,7 +54,7 @@ function buildMeld(cardIds, rules) {
     const firstNatRank = getRank(nats[0]);
 
     // --- Runner ---
-    if (nats.every(c => getRank(c) === firstNatRank)) {
+    if (rules.runners !== 'none' && nats.every(c => getRank(c) === firstNatRank)) {
         let allowed = false;
         if (rules.runners === 'any') allowed = true;
         if (rules.runners === 'aces_threes' && (firstNatRank === 1 || firstNatRank === 3)) allowed = true;
@@ -201,14 +74,12 @@ function buildMeld(cardIds, rules) {
     const unsuitedWilds = wilds.filter(c => !(getSuit(c) === firstNatSuit && getRank(c) === 2));
     if (unsuitedWilds.length > 1) return null;
 
-    // Build candidate configs: { natTwos: Card[], wildCard: Card|null }
     const configs = [];
     if (suitedTwos.length === 0) {
         configs.push({ natTwos: [], wildCard: unsuitedWilds[0] ?? null });
     } else if (suitedTwos.length === 1) {
         configs.push({ natTwos: [suitedTwos[0]], wildCard: unsuitedWilds[0] ?? null });
-        if (unsuitedWilds.length === 0)
-            configs.push({ natTwos: [], wildCard: suitedTwos[0] });
+        if (unsuitedWilds.length === 0) configs.push({ natTwos: [], wildCard: suitedTwos[0] });
     } else if (suitedTwos.length === 2 && unsuitedWilds.length === 0) {
         configs.push({ natTwos: [suitedTwos[0]], wildCard: suitedTwos[1] });
         configs.push({ natTwos: [suitedTwos[1]], wildCard: suitedTwos[0] });
@@ -219,7 +90,6 @@ function buildMeld(cardIds, rules) {
     const aceOptions = aces.length === 0 ? [[]] : aces.length === 1 ? [[1], [14]] : [[1, 14]];
 
     for (const cfg of configs) {
-        if (cfg.wildCard !== null && unsuitedWilds.length > 1) continue;
         for (const aVals of aceOptions) {
             const values = [
                 ...others.map(c => getRank(c)),
@@ -231,31 +101,47 @@ function buildMeld(cardIds, rules) {
 
             const min = values[0], max = values[values.length - 1];
             let gaps = 0;
-            for (let i = 1; i < values.length; i++) gaps += values[i] - values[i-1] - 1;
+            for (let i = 1; i < values.length; i++) gaps += values[i] - values[i - 1] - 1;
 
-            let wildPos = 0, actualMin = min, actualMax = max;
             if (cfg.wildCard === null && gaps === 0) {
                 return [firstNatSuit, min, max, 0, 0];
             } else if (cfg.wildCard !== null && gaps === 1) {
+                let wildPos = 0;
                 for (let i = 1; i < values.length; i++)
-                    if (values[i] - values[i-1] > 1) { wildPos = values[i-1] + 1; break; }
+                    if (values[i] - values[i - 1] > 1) { wildPos = values[i - 1] + 1; break; }
+                // clear wild flag if suited-2 lands at its natural rank-2 position
+                if (getSuit(cfg.wildCard) === firstNatSuit && wildPos === 2) return [firstNatSuit, min, max, 0, 0];
                 return [firstNatSuit, min, max, getSuit(cfg.wildCard), wildPos];
             } else if (cfg.wildCard !== null && gaps === 0) {
+                let wildPos, actualMin = min, actualMax = max;
                 if (max < 14) { wildPos = max + 1; actualMax = max + 1; }
                 else          { wildPos = min - 1; actualMin = min - 1; }
-                return normalizeMeld([firstNatSuit, actualMin, actualMax, getSuit(cfg.wildCard), wildPos]);
+                // clear wild flag if suited-2 lands at its natural rank-2 position
+                if (getSuit(cfg.wildCard) === firstNatSuit && wildPos === 2) return [firstNatSuit, actualMin, actualMax, 0, 0];
+                return [firstNatSuit, actualMin, actualMax, getSuit(cfg.wildCard), wildPos];
             }
         }
     }
     return null;
 }
 
-// Normalize a sequence meld: if wild is at the high end and meld doesn't start with Ace,
-// move it to the low end; then clear flags if suited-2 is at its natural rank-2 position.
-function normalizeMeld(m) {
-    if (m[0] === 0 || m[3] === 0) return m;
-    if (m[4] === m[2] && m[1] !== 1 && m[1] - 1 === 2) { m[1]--; m[4] = m[1]; m[2]--; }
-    if (m[3] === m[0] && m[4] === 2) { m[3] = 0; m[4] = 0; }
+function appendCardsToMeld(meld, cards) {
+    if (meld[0] !== 0) { // Sequence: expand → combine → rebuild
+        return buildMeld([...expandMeld(meld), ...cards], { runners: 'none' });
+    }
+    // Runner: direct incremental logic
+    const m = [...meld];
+    for (const c of cards) {
+        const s = getSuit(c), r = getRank(c);
+        const isWild = s === 5 || r === 2;
+        if (!isWild) {
+            if (r !== m[1]) return null;
+            m[2]++; m[4 + s - 1]++;
+        } else {
+            if (m[3] !== 0) return null;
+            m[3] = s; m[2]++;
+        }
+    }
     return m;
 }
 
