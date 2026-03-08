@@ -273,7 +273,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
           }));
           if (!runners.length) return null;
           return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', flexShrink: 0, alignItems: 'flex-start' }}>
               {runners.map(({ p, index, meldGroup }) => {
                 const isCanasta = meldGroup[2] >= 7;
                 const status = isCanasta ? (meldGroup[3] === 0 ? 'clean' : 'dirty') : null;

@@ -156,6 +156,13 @@ export const TrainerService = {
         return { isTraining: true, progress: activeTrainings.get(botName) };
     },
 
+    getAllTrainingStatuses: () => {
+        const result = [];
+        for (const [botName, progress] of activeTrainings.entries())
+            result.push({ botName, isTraining: true, progress });
+        return result;
+    },
+
     startTraining: async (botName, rules = {}, params = {}) => {
         if (activeTrainings.has(botName)) throw new Error(`Training already in progress for: ${botName}`);
 

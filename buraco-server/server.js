@@ -96,6 +96,11 @@ server.router.get('/api/bots/status/:botName', (ctx) => {
     ctx.body = TrainerService.getTrainingStatus(ctx.params.botName);
 });
 
+server.router.get('/api/bots/status', (ctx) => {
+    setCors(ctx);
+    ctx.body = TrainerService.getAllTrainingStatuses();
+});
+
 server.router.get('/api/bots/list', (ctx) => {
     setCors(ctx);
     const botsDir = path.join(process.cwd(), 'bots');
@@ -165,9 +170,12 @@ server.router.post('/api/admin/kick', async (ctx) => {
       const playerID = body.playerID.toString();
 
       const data = await server.db.fetch(matchID, { metadata: true });
-      if (data && data.metadata && data.metadata.players && data.metadata.players[playerID]) {
-        data.metadata.players[playerID] = { id: Number(playerID) }; 
-        await server.db.setMetadata(matchID, data.metadata); 
+      if (data && data.metadata && data.metadata.players) {
+        const idx = Number(playerID);
+        if (data.metadata.players[idx] !== undefined) {
+          data.metadata.players[idx] = { id: idx };
+          await server.db.setMetadata(matchID, data.metadata);
+        }
       }
     }
     ctx.body = { success: true };
@@ -175,6 +183,17 @@ server.router.post('/api/admin/kick', async (ctx) => {
     ctx.status = 500;
     ctx.body = { error: 'Failed to kick player' };
   }
+});
+
+server.router.get('/api/admin/credentials/:matchID/:playerID', async (ctx) => {
+  setCors(ctx);
+  try {
+    const { matchID, playerID } = ctx.params;
+    const data = await server.db.fetch(matchID, { metadata: true });
+    const player = data?.metadata?.players?.[Number(playerID)];
+    if (!player?.credentials) { ctx.status = 404; ctx.body = { error: 'Not found' }; return; }
+    ctx.body = { credentials: player.credentials };
+  } catch (e) { ctx.status = 500; ctx.body = { error: 'Failed' }; }
 });
 
 server.router.post('/api/admin/delete-match', async (ctx) => {

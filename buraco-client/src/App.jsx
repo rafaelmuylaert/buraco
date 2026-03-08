@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Client } from 'boardgame.io/react';
 import { SocketIO } from 'boardgame.io/multiplayer';
 import { LobbyClient } from 'boardgame.io/client';
+import { io } from 'socket.io-client';
 import { BuracoGame } from './game.js';
 import { BuracoBoard } from './Board.jsx';
 
@@ -13,10 +14,20 @@ const BuracoClient = Client({
   board: BuracoBoard, 
   multiplayer: SocketIO({ 
     server: window.location.origin, 
-    socketOpts: { path: '/buraco/socket.io' } 
+    socketOpts: { path: '/buraco/socket.io', reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000 } 
   }), 
   debug: false 
 });
+
+function ReconnectingClient({ matchID, playerID, credentials, tournament, tournamentStandings }) {
+  const [key, setKey] = React.useState(0);
+  React.useEffect(() => {
+    const socket = io(window.location.origin, { path: '/buraco/socket.io', autoConnect: true, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000 });
+    socket.on('reconnect', () => setKey(k => k + 1));
+    return () => socket.close();
+  }, []);
+  return <BuracoClient key={key} matchID={matchID} playerID={playerID} credentials={credentials} tournament={tournament} tournamentStandings={tournamentStandings} />;
+}
 
 const App = () => {
   const [view, setView] = useState('lounge'); 
@@ -47,6 +58,7 @@ const App = () => {
 
   const [availableBots, setAvailableBots] = useState([]);
   const [showTrainBotPopup, setShowTrainBotPopup] = useState(false);
+  const [trainBotIsNew, setTrainBotIsNew] = useState(false);
   const [trainingStatus, setTrainingStatus] = useState(null);
 
   const [trainBotConfig, setTrainBotConfig] = useState({
@@ -80,26 +92,25 @@ const App = () => {
   const getSavedSessions = () => JSON.parse(localStorage.getItem('buraco_sessions') || '{}');
 
   useEffect(() => {
-    if (view === 'admin' && trainBotConfig.name) {
+    if (view === 'admin') {
       const fetchStatus = async () => {
         try {
-          const res = await fetch(`${window.location.origin}/buraco/api/bots/status/${trainBotConfig.name}`);
+          const res = await fetch(`${window.location.origin}/buraco/api/bots/status`);
           const data = await res.json();
-          setTrainingStatus(data);
+          setTrainingStatus(data.length > 0 ? { isTraining: true, sessions: data } : { isTraining: false, sessions: [] });
         } catch (err) {}
       };
-      
       fetchStatus();
       const interval = setInterval(fetchStatus, 2000);
       return () => clearInterval(interval);
     }
-  }, [view, trainBotConfig.name]);
+  }, [view]);
 
   useEffect(() => {
     fetch(`${window.location.origin}/buraco/api/bots/list`)
       .then(res => res.json())
       .then(data => {
-          setAvailableBots(data);
+          setAvailableBots(data.filter(b => !/_\d+$/.test(b)));
           if (data.length > 0) {
               setQuickGameConfig(prev => ({ ...prev, botName: data[0] }));
               setNewTourney(prev => ({ ...prev, botName: data[0] }));
@@ -129,6 +140,7 @@ const App = () => {
       const data = await res.json();
       alert(`Laboratório Iniciado: ${data.message || "Treinamento em andamento no servidor!"}`);
       setShowTrainBotPopup(false);
+      setTrainBotIsNew(false);
     } catch (e) {
       alert("Erro ao iniciar o laboratório de IA.");
     }
@@ -205,37 +217,35 @@ const App = () => {
     const tourneyAutoJoin = sessionStorage.getItem('auto_join_tournament');
     if (tourneyAutoJoin && tournaments.length > 0 && matches.length > 0) {
       const { tournamentId, playerName } = JSON.parse(tourneyAutoJoin);
-      
       const t = tournaments.find(t => t.id === tournamentId);
       if (t && t.rounds && t.rounds.length > 0) {
           const lastRound = t.rounds[t.rounds.length - 1];
           const myAssignment = lastRound.assignments.find(a => a.team0.includes(playerName) || a.team1.includes(playerName));
-          
           if (myAssignment) {
               const targetMatch = matches.find(m => m.matchID === myAssignment.matchID);
               if (targetMatch) {
                   sessionStorage.removeItem('auto_join_tournament');
-                  
                   let targetSeatID = null;
                   const assignments = targetMatch.setupData?.assignments || {};
                   for (let seatId in assignments) {
-                      if (assignments[seatId] === playerName) {
-                          targetSeatID = seatId; break;
-                      }
+                      if (assignments[seatId] === playerName) { targetSeatID = seatId; break; }
                   }
                   if (!targetSeatID) {
                       const empty = targetMatch.players.find(p => !p.name);
                       if (empty) targetSeatID = empty.id.toString();
                   }
-
                   if (targetSeatID) {
-                      lobbyClient.joinMatch('buraco', targetMatch.matchID, { playerID: targetSeatID, playerName }).then(({ playerCredentials }) => {
+                      (async () => {
+                          let creds;
+                          const credRes = await fetch(`${API_ADDRESS}/api/admin/credentials/${targetMatch.matchID}/${targetSeatID}`);
+                          if (credRes.ok) { const d = await credRes.json(); creds = d.credentials; }
+                          if (!creds) { ({ playerCredentials: creds } = await lobbyClient.joinMatch('buraco', targetMatch.matchID, { playerID: targetSeatID, playerName })); }
                           const sessions = getSavedSessions();
-                          sessions[`${targetMatch.matchID}_${targetSeatID}`] = { matchID: targetMatch.matchID, playerID: targetSeatID, credentials: playerCredentials };
+                          sessions[`${targetMatch.matchID}_${targetSeatID}`] = { matchID: targetMatch.matchID, playerID: targetSeatID, credentials: creds };
                           localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
-                          setMatchID(targetMatch.matchID); setPlayerID(targetSeatID); setCredentials(playerCredentials); 
+                          setMatchID(targetMatch.matchID); setPlayerID(targetSeatID); setCredentials(creds);
                           setView('game');
-                      }).catch(e => console.error(e));
+                      })();
                   }
               }
           }
@@ -247,13 +257,23 @@ const App = () => {
     const assignedName = match.setupData?.assignments?.[seatID];
     const pName = assignedName || prompt("Digite seu nome para entrar na mesa:");
     if (!pName) return;
-    
     try {
-      const { playerCredentials } = await lobbyClient.joinMatch('buraco', match.matchID, { playerID: seatID, playerName: pName });
+      let playerCredentials;
+      if (assignedName) {
+        // Tournament seat: fetch stored credentials so any device can rejoin
+        const res = await fetch(`${API_ADDRESS}/api/admin/credentials/${match.matchID}/${seatID}`);
+        if (res.ok) {
+          const data = await res.json();
+          playerCredentials = data.credentials;
+        }
+      }
+      if (!playerCredentials) {
+        ({ playerCredentials } = await lobbyClient.joinMatch('buraco', match.matchID, { playerID: seatID, playerName: pName }));
+      }
       const sessions = getSavedSessions();
       sessions[`${match.matchID}_${seatID}`] = { matchID: match.matchID, playerID: seatID, credentials: playerCredentials };
       localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
-      setMatchID(match.matchID); setPlayerID(seatID); setCredentials(playerCredentials); 
+      setMatchID(match.matchID); setPlayerID(seatID); setCredentials(playerCredentials);
       setView('game');
     } catch (e) { alert("Erro ao entrar no assento."); }
   };
@@ -510,7 +530,7 @@ const App = () => {
     const activeTournament = tournaments.find(t => t.rounds.some(r => r.assignments.some(a => a.matchID === matchID)));
     const tStats = activeTournament ? getLeaderboard(activeTournament).standings : null;
 
-    return <BuracoClient 
+    return <ReconnectingClient 
       matchID={matchID} 
       playerID={playerID} 
       credentials={credentials} 
@@ -524,24 +544,24 @@ const App = () => {
       <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #ff4d4d', paddingBottom: '20px' }}>
           <h1 style={{ color: '#ff4d4d', margin: 0 }}>🛠️ Painel de Administração</h1>
-          <button onClick={() => setShowTrainBotPopup(true)} style={{ padding: '15px 30px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer', marginTop: '20px', boxShadow: '0 0 15px rgba(138, 43, 226, 0.5)' }}>
+          <button onClick={() => { setTrainBotIsNew(availableBots.length === 0); setTrainBotConfig(prev => ({ ...prev, name: availableBots[0] || 'BotPrometheus' })); setShowTrainBotPopup(true); }} style={{ padding: '15px 30px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer', marginTop: '20px', boxShadow: '0 0 15px rgba(138, 43, 226, 0.5)' }}>
             🧠 Laboratório de IA (Treinar Bot)
           </button>
           <button onClick={() => setView('lounge')} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Sair do Modo Admin</button>
         </div>
 
-        {trainingStatus && trainingStatus.isTraining && (
-          <div style={{ width: '100%', background: '#2b1055', padding: '20px', borderRadius: '10px', border: '1px solid #8a2be2', marginBottom: '30px', boxSizing: 'border-box' }}>
-            <h3 style={{ margin: '0 0 10px 0', color: '#ffb86c' }}>⚙️ Treinamento em Andamento: {trainBotConfig.name}</h3>
+        {trainingStatus && trainingStatus.isTraining && trainingStatus.sessions.map(session => (
+          <div key={session.botName} style={{ width: '100%', background: '#2b1055', padding: '20px', borderRadius: '10px', border: '1px solid #8a2be2', marginBottom: '30px', boxSizing: 'border-box' }}>
+            <h3 style={{ margin: '0 0 10px 0', color: '#ffb86c' }}>⚙️ Treinamento em Andamento: {session.botName}</h3>
             <div style={{ background: '#111', borderRadius: '5px', width: '100%', height: '20px', overflow: 'hidden' }}>
-              <div style={{ width: `${(trainingStatus.progress.currentGeneration / trainingStatus.progress.totalGenerations) * 100}%`, background: '#8a2be2', height: '100%', transition: 'width 1s' }} />
+              <div style={{ width: `${(session.progress.currentGeneration / session.progress.totalGenerations) * 100}%`, background: '#8a2be2', height: '100%', transition: 'width 1s' }} />
             </div>
             <div style={{ marginTop: '8px', color: '#aaa', fontSize: '0.85em', textAlign: 'right' }}>
-              Geração mais avançada: <strong style={{color:'white'}}>{trainingStatus.progress.currentGeneration} / {trainingStatus.progress.totalGenerations}</strong>
+              Geração mais avançada: <strong style={{color:'white'}}>{session.progress.currentGeneration} / {session.progress.totalGenerations}</strong>
             </div>
 
             <div style={{ marginTop: '15px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px' }}>
-              {(trainingStatus.progress.islands || []).map((island, k) => island && (
+              {(session.progress.islands || []).map((island, k) => island && (
                 <div key={k} style={{ background: '#1a0a33', border: '1px solid #5a2a9a', borderRadius: '8px', padding: '10px', fontSize: '0.85em' }}>
                   <div style={{ color: '#b088f9', fontWeight: 'bold', marginBottom: '6px' }}>🏝️ Ilha {k + 1} — Gen {island.gen}</div>
                   <div>🏆 MaxDiff: <strong style={{color:'#ffd700'}}>{island.bestDiff?.toFixed(0)}</strong></div>
@@ -550,13 +570,13 @@ const App = () => {
               ))}
             </div>
 
-            {trainingStatus.progress.benchmarkDiff != null && (
-              <div style={{ marginTop: '15px', textAlign: 'center', fontSize: '1.1em', fontWeight: 'bold', color: trainingStatus.progress.benchmarkDiff >= 0 ? '#50fa7b' : '#ff5555' }}>
-                ⚔️ Evolução vs Bot Original (Bench): {trainingStatus.progress.benchmarkDiff > 0 ? '+' : ''}{trainingStatus.progress.benchmarkDiff?.toFixed(0)} pts
+            {session.progress.benchmarkDiff != null && (
+              <div style={{ marginTop: '15px', textAlign: 'center', fontSize: '1.1em', fontWeight: 'bold', color: session.progress.benchmarkDiff >= 0 ? '#50fa7b' : '#ff5555' }}>
+                ⚔️ Evolução vs Bot Original (Bench): {session.progress.benchmarkDiff > 0 ? '+' : ''}{session.progress.benchmarkDiff?.toFixed(0)} pts
               </div>
             )}
           </div>
-        )}
+        ))}
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'flex-start' }}>
           <div style={{ flex: '1 1 300px', background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
@@ -581,9 +601,19 @@ const App = () => {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
               {matches.map(m => {
                 const isOrphan = !allValidMatchIDs.includes(m.matchID);
+                const owningTournament = tournaments.find(t => t.rounds.some(r => r.assignments.some(a => a.matchID === m.matchID)));
+                const tableLabel = owningTournament ? owningTournament.name : `Mesa: ${m.matchID.substring(0,6)}...`;
                 return (
                   <div key={m.matchID} style={{ background: '#111', border: `1px solid ${isOrphan ? '#ff4d4d' : '#333'}`, borderRadius: '8px', padding: '15px', width: '300px' }}>
-                    <h4 style={{ margin: '0 0 10px 0', color: isOrphan ? '#ff4d4d' : '#ccc' }}>Mesa: {m.matchID.substring(0,6)}... {isOrphan && '(Órfã)'}</h4>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <h4 style={{ margin: 0, color: isOrphan ? '#ff4d4d' : '#ccc' }}>{tableLabel} {isOrphan && '(Órfã)'}</h4>
+                      {isOrphan && (
+                        <button onClick={async () => {
+                          await fetch(`${API_ADDRESS}/api/admin/delete-match`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matchID: m.matchID }) });
+                          window.location.reload();
+                        }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '3px 8px', fontSize: '0.8em', fontWeight: 'bold', cursor: 'pointer' }}>Apagar</button>
+                      )}
+                    </div>
                     {m.players.map(p => (
                       <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px dashed #333', paddingBottom: '4px' }}>
                         <span style={{ fontSize: '0.9em' }}>Assento {p.id}: <strong style={{ color: p.name ? 'white' : '#555' }}>{p.name || 'Vazio'}</strong></span>
@@ -605,7 +635,22 @@ const App = () => {
               <h2 style={{ color: '#b088f9', marginTop: 0 }}>🧠 Treinar Nova IA</h2>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
-                <label>Nome do Bot (DNA): <input type="text" value={trainBotConfig.name} onChange={e => setTrainBotConfig({...trainBotConfig, name: e.target.value})} style={{ padding: '5px', width: '150px', marginLeft: '10px' }} /></label>
+                <label>Bot: 
+                  {!trainBotIsNew ? (
+                    <select value={trainBotConfig.name} onChange={e => {
+                      if (e.target.value === '__new__') { setTrainBotIsNew(true); setTrainBotConfig({...trainBotConfig, name: ''}); }
+                      else setTrainBotConfig({...trainBotConfig, name: e.target.value});
+                    }} style={{ padding: '5px', marginLeft: '10px' }}>
+                      {availableBots.map(b => <option key={b} value={b}>{b}</option>)}
+                      <option value="__new__">+ Novo Bot...</option>
+                    </select>
+                  ) : (
+                    <span>
+                      <input type="text" placeholder="Nome do novo bot" value={trainBotConfig.name} onChange={e => setTrainBotConfig({...trainBotConfig, name: e.target.value})} style={{ padding: '5px', width: '140px', marginLeft: '10px' }} />
+                      <button onClick={() => { setTrainBotIsNew(false); setTrainBotConfig({...trainBotConfig, name: availableBots[0] || ''}); }} style={{ marginLeft: '6px', padding: '4px 8px', cursor: 'pointer', background: '#555', color: 'white', border: 'none', borderRadius: '4px' }}>↩</button>
+                    </span>
+                  )}
+                </label>
                 
                 <h4 style={{ margin: '10px 0 0 0', color: '#ffb86c' }}>Parâmetros Genéticos</h4>
                 <div style={{display: 'flex', gap: '10px'}}>
@@ -813,10 +858,8 @@ const App = () => {
                                   <button onClick={() => handleReconnect(m.matchID, p.id.toString())} style={{ background: '#4da6ff', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>Reconectar</button>
                                 ) : isDone ? (
                                   <span style={{ color: '#aaa', fontSize: '0.8em' }}>Concluído</span>
-                                ) : p.name ? (
-                                  <span style={{ color: '#ff4d4d', fontSize: '0.8em', fontWeight: 'bold' }}>Ocupado</span>
                                 ) : (
-                                  <button onClick={() => handleJoinMatch(m, p.id.toString())} style={{ background: '#ffd700', color: 'black', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>Sentar</button>
+                                  <button onClick={() => handleJoinMatch(m, p.id.toString())} style={{ background: m.setupData?.assignments?.[p.id] ? '#ffd700' : '#50fa7b', color: 'black', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>Sentar</button>
                                 )}
                               </div>
                             );
