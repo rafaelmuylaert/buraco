@@ -85,9 +85,9 @@ function appendToMeld(meld, cId) {
             }
         }
 
-        // --- Suited-2 as natural card at low end ---
-        if (cSuit === suit && cRank === 2 && loR === 3) {
-            m[1] = 2; return m;
+        // --- Suited-2 at the natural rank-2 slot (recorded as wild — makes meld dirty) ---
+        if (cSuit === suit && cRank === 2 && loR === 3 && wSuit === 0) {
+            m[3] = cSuit; m[4] = 2; m[1] = 2; return m;
         }
 
         // --- Wild card appended ---
@@ -137,6 +137,20 @@ function appendCardsToMeld(meld, cards) {
     }
     if (offSuitWilds > 1) return null;
 
+    // If no wild exists yet and a suited-2 matching the meld suit is incoming, pre-seat it at
+    // rank 2 so the loop can displace it freely to fill gaps elsewhere.
+    let hasSuitedTwoPromotion = false;
+    if (current[0] !== 0 && current[3] === 0) {
+        const idx = remaining.findIndex(c => getSuit(c) === current[0] && getRank(c) === 2);
+        if (idx !== -1) {
+            remaining.splice(idx, 1);
+            current[3] = current[0]; current[4] = 2;
+            if (current[1] === null) { current[1] = 2; current[2] = 2; }
+            else if (current[1] > 2) current[1] = 2;
+            hasSuitedTwoPromotion = true;
+        }
+    }
+
     let changed = true;
     while(changed && remaining.length > 0) {
         changed = false;
@@ -145,7 +159,14 @@ function appendCardsToMeld(meld, cards) {
             if (next) { current = next; remaining.splice(i, 1); changed = true; break; }
         }
     }
-    return remaining.length === 0 ? current : null;
+    if (remaining.length !== 0) return null;
+
+    // If the suited-2 still sits at its natural rank-2 position, it's clean — clear the wild flags.
+    if (hasSuitedTwoPromotion && current[1] === 2 && current[4] === 2) {
+        current[3] = 0; current[4] = 0;
+    }
+
+    return current;
 }
 
 function buildMeld(cardIds, rules) {
@@ -269,11 +290,14 @@ function buildMeld(cardIds, rules) {
     return null;
 }
 
+// A meld is clean if it has no wild, or its only wild is a suited-2 at the natural rank-2 position
+function isMeldClean(m) { return m[3] === 0 || (m[3] === m[0] && m[4] === 2); }
+
 export function calculateMeldPoints(meld, rules) {
     let pts = 0;
     const isSeq = meld[0] !== 0;
     const isCanasta = isSeq ? (meld[2] - meld[1] >= 6) : (meld[2] >= 7);
-    const isClean = meld[3] === 0; 
+    const isClean = isMeldClean(meld);
     
     if (isSeq) {
         for(let r = meld[1]; r <= meld[2]; r++) {
@@ -620,7 +644,7 @@ export const BuracoGame = {
         if (target.type === 'new') simMelds.push(parsedMeldObject); else simMelds[target.index] = parsedMeldObject;
 
         const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
-        const hasClean = m => m[3] === 0;
+        const hasClean = m => isMeldClean(m);
         const teamHasClean = G.teamPlayers[G.teams[ctx.currentPlayer]].some(tp => 
             (tp === (target.player||ctx.currentPlayer) ? simMelds : G.melds[tp]).some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || hasClean(m)))
         );
@@ -668,7 +692,7 @@ export const BuracoGame = {
         const newMelds = [...G.melds[ctx.currentPlayer], parsed];
         
         const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
-        const hasClean = m => m[3] === 0;
+        const hasClean = m => isMeldClean(m);
         const teamHasClean = G.teamPlayers[G.teams[ctx.currentPlayer]].some(tp => 
             (tp === ctx.currentPlayer ? newMelds : G.melds[tp]).some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || hasClean(m)))
         );
@@ -699,7 +723,7 @@ export const BuracoGame = {
         const newMeldState = [...G.melds[meldOwner]]; newMeldState[meldIndex] = parsed;
 
         const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
-        const hasClean = m => m[3] === 0;
+        const hasClean = m => isMeldClean(m);
         const teamHasClean = G.teamPlayers[G.teams[ctx.currentPlayer]].some(tp => 
             (tp === meldOwner ? newMeldState : G.melds[tp]).some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || hasClean(m)))
         );
@@ -722,7 +746,7 @@ export const BuracoGame = {
       const hand = G.hands[ctx.currentPlayer];
       
       const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
-      const hasClean = m => m[3] === 0;
+      const hasClean = m => isMeldClean(m);
       const teamHasClean = G.teamPlayers[G.teams[ctx.currentPlayer]].some(tp => G.melds[tp].some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || hasClean(m))));
 
       if (hand.length === 1 && !teamHasClean && (!G.pots.length || G.teamMortos[G.teams[ctx.currentPlayer]])) return 'INVALID_MOVE';
@@ -753,7 +777,7 @@ export const BuracoGame = {
       const p = i.toString(); const team = G.teams[p];
       if (G.hands[p] && G.hands[p].length === 0 && (G.teamMortos[team] || G.pots.length === 0)) {
         const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
-        const teamHasClean = G.teamPlayers[team].some(tp => G.melds[tp].some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || m[3]===0)));
+        const teamHasClean = G.teamPlayers[team].some(tp => G.melds[tp].some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || isMeldClean(m))));
         if (teamHasClean) {
           let finalScores = calculateFinalScores(G);
           finalScores[team].baterBonus = 100; finalScores[team].total += 100;
@@ -785,14 +809,14 @@ export const BuracoGame = {
       inputBuffer[off++] = G.teamMortos[oppTeam] ? 1.0 : 0.0;
 
       const isCanasta = m => m[0] !== 0 ? (m[2] - m[1] >= 6) : (m[2] >= 7);
-      const hasClean = teamId => (G.teamPlayers[teamId] || []).some(tp => G.melds[tp].some(m => isCanasta(m) && m[3]===0)) ? 1.0 : 0.0;
+      const hasClean = teamId => (G.teamPlayers[teamId] || []).some(tp => G.melds[tp].some(m => isCanasta(m) && isMeldClean(m))) ? 1.0 : 0.0;
 
       if (matchCtx) {
           if (matchCtx.meldsDirty) {
               for (const t of ['team0', 'team1']) {
                   const tm = (G.teamPlayers[t] || []).flatMap(tp => G.melds[tp] || []);
                   matchCtx.meldVec[t].set(nnHelpers.meldsToSemanticMatrix(tm));
-                  matchCtx.hasClean[t] = (G.teamPlayers[t] || []).some(tp => G.melds[tp].some(m => isCanasta(m) && m[3]===0)) ? 1.0 : 0.0;
+                  matchCtx.hasClean[t] = (G.teamPlayers[t] || []).some(tp => G.melds[tp].some(m => isCanasta(m) && isMeldClean(m))) ? 1.0 : 0.0;
               }
               matchCtx.meldsDirty = false;
           }
@@ -960,7 +984,7 @@ export const BuracoGame = {
                       const newHandSize = myHandCards.length - 1;
                       const newMeldState = G.melds[tp].map((m, i) => i === mIndex ? parsed : m);
                       const cleanAfter = G.teamPlayers[myTeam].some(tp2 =>
-                          (tp2 === tp ? newMeldState : G.melds[tp2]).some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || m[3] === 0))
+                          (tp2 === tp ? newMeldState : G.melds[tp2]).some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || isMeldClean(m)))
                       );
                       if (newHandSize < 2 && !cleanAfter && (!G.pots.length || G.teamMortos[myTeam])) continue;
                       possibleAppends.push({ move: 'appendToMeld', args: [tp, mIndex, [card]], actionType: [0.0, 1.0, 0.0], cards: [card] });
