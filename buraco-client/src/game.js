@@ -76,10 +76,11 @@ function appendToMeld(meld, cId) {
                 return m;
             }
             // Extend 2 steps with wild bridging the gap (wild moves from opposite end)
-            if (cRank === loR - 2 && wSuit !== 0 && wPos === hiR && loR > 2) {
+            // wPos may be at the outer end OR at the natural-2 slot
+            if (cRank === loR - 2 && wSuit !== 0 && (wPos === hiR || wPos === 2) && loR > 2) {
                 m[2] = hiR - 1; m[4] = loR - 1; m[1] = cRank; return m;
             }
-            if (cRank === hiR + 2 && wSuit !== 0 && wPos === loR && hiR < 13) {
+            if (cRank === hiR + 2 && wSuit !== 0 && (wPos === loR || wPos === 2) && hiR < 13) {
                 m[1] = loR + 1; m[4] = hiR + 1; m[2] = cRank; return m;
             }
         }
@@ -91,8 +92,10 @@ function appendToMeld(meld, cId) {
 
         // --- Wild card appended ---
         if (isWild && wSuit === 0) {
-            if (hiR < 14) { m[3] = cSuit; m[4] = hiR + 1; m[2] = hiR + 1; return m; }
-            if (loR > 1)  { m[3] = cSuit; m[4] = loR - 1; m[1] = loR - 1; return m; }
+            // Prefer rank-2 slot at low end (natural home for a 2-wild)
+            if (loR === 3)  { m[3] = cSuit; m[4] = 2; m[1] = 2; return m; }
+            if (hiR < 14)   { m[3] = cSuit; m[4] = hiR + 1; m[2] = hiR + 1; return m; }
+            if (loR > 1)    { m[3] = cSuit; m[4] = loR - 1; m[1] = loR - 1; return m; }
         }
 
     } else { // Runner
@@ -655,6 +658,9 @@ export const BuracoGame = {
     playMeld: ({ G, ctx }, cardIds) => {
       if (!G.hasDrawn) return 'INVALID_MOVE'; 
       const hand = G.hands[ctx.currentPlayer];
+      // Verify all cards are actually in hand
+      const handCopy = [...hand];
+      for (const c of cardIds) { const i = handCopy.indexOf(c); if (i === -1) return 'INVALID_MOVE'; handCopy.splice(i, 1); }
       const parsed = buildMeld(cardIds, G.rules);
       
       if (parsed) {
@@ -683,6 +689,9 @@ export const BuracoGame = {
     appendToMeld: ({ G, ctx }, meldOwner, meldIndex, cardIds) => {
       if (!G.hasDrawn || G.teams[ctx.currentPlayer] !== G.teams[meldOwner]) return 'INVALID_MOVE';
       const hand = G.hands[ctx.currentPlayer];
+      // Verify all cards are actually in hand
+      const handCopy = [...hand];
+      for (const c of cardIds) { const i = handCopy.indexOf(c); if (i === -1) return 'INVALID_MOVE'; handCopy.splice(i, 1); }
       const parsed = appendCardsToMeld(G.melds[meldOwner][meldIndex], cardIds);
       
       if (parsed) {
