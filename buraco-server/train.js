@@ -7,7 +7,7 @@ import { cpus } from 'os';
 const NUM_WORKERS = Math.max(1, cpus().length - 1); // leave 1 core for the server
 const WORKER_PATH = new URL('./worker.js', import.meta.url).pathname;
 
-const DNA_SIZE = 37251;
+const DNA_SIZE = 25203;
 const BOTS_DIR = path.join(process.cwd(), 'bots');
 if (!fs.existsSync(BOTS_DIR)) fs.mkdirSync(BOTS_DIR, { recursive: true });
 

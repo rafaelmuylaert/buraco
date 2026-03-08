@@ -26,15 +26,15 @@ function revealAllHands(G) {
 
 function prepareGenome(raw) {
     let dna = raw instanceof Float32Array ? raw : new Float32Array(raw);
-    if (dna.length !== 37251) {
-        const d = new Float32Array(37251);
-        for (let i = 0; i < 37251; i++) d[i] = dna[i % dna.length] || 0.01;
+    if (dna.length !== 25203) {
+        const d = new Float32Array(25203);
+        for (let i = 0; i < 25203; i++) d[i] = dna[i % dna.length] || 0.01;
         dna = d;
     }
     return {
-        pickup:  dna.subarray(0, 12417),
-        meld:    dna.subarray(12417, 24834),
-        discard: dna.subarray(24834, 37251)
+        pickup:  dna.subarray(0, 8401),
+        meld:    dna.subarray(8401, 16802),
+        discard: dna.subarray(16802, 25203)
     };
 }
 
@@ -47,10 +47,11 @@ function runMatch(genomes, rules, fixedDeck) {
     // Per-match persistent state: split DNA once, allocate inputBuffer once
     const matchCtx = {
         genomes: Object.fromEntries(Object.entries(genomes).map(([k, v]) => [k, prepareGenome(v)])),
-        inputBuffer: new Float32Array(774),
-        meldVec: { team0: new Float32Array(221), team1: new Float32Array(221) },
+        inputBuffer: new Float32Array(524),
+        meldVec: { team0: new Float32Array(96), team1: new Float32Array(96) },
         hasClean: { team0: 0, team1: 0 },
-        meldsDirty: true
+        meldsDirty: true,
+        rejectedSigs: {}
     };
 
     const MELD_MOVES = new Set(['playMeld', 'appendToMeld', 'pickUpDiscard']);
@@ -80,6 +81,11 @@ function runMatch(genomes, rules, fixedDeck) {
                     if (ctx._endTurn) break;
                 }
                 if (stuck) {
+                    // Record rejected sigs so next enumerate skips re-scoring them
+                    if (matchCtx.rejectedSigs) {
+                        if (!matchCtx.rejectedSigs[p]) matchCtx.rejectedSigs[p] = new Set();
+                        for (const move of moves) if (move._sig !== undefined) matchCtx.rejectedSigs[p].add(move._sig);
+                    }
                     // All proposed moves failed — force discard or end turn
                     if (G.hasDrawn && G.hands[p]?.length > 0) {
                         applyMove(G, ctx, 'discardCard', [G.hands[p][0]]);
@@ -90,6 +96,7 @@ function runMatch(genomes, rules, fixedDeck) {
                 }
             }
             if (ctx._endTurn) {
+                if (matchCtx.rejectedSigs) matchCtx.rejectedSigs[ctx.currentPlayer] = null;
                 ctx.currentPlayer = String((parseInt(ctx.currentPlayer) + 1) % numPlayers);
                 ctx.turn++;
                 G.hasDrawn = false;

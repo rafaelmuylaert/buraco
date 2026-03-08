@@ -282,42 +282,51 @@ const nnHelpers = {
   },
 
  meldsToSemanticMatrix: (melds, buf, off) => {
-    const SLOTS = 17;
-    buf.fill(0, off, off + SLOTS * 13);
+    // 12 slots (10 seq + 2 runners) x 8 features
+    // seq:    [0, suit/4, start/14, end/14, wildSuit/5, wildPos/14, 0, 0]
+    // runner: [1, rank/14, count/14, wildSuit/5, sc1/8, sc2/8, sc3/8, sc4/8]
+    buf.fill(0, off, off + 96);
     let si = 0, ri = 0;
     for (let k = 0; k < melds.length; k++) {
         const m = melds[k];
         if (m[0] !== 0) {
-            if (si >= 15) continue;
-            const base = off + si * 13; si++;
-            buf[base + m[0] - 1] = 1.0;
-            buf[base + 4] = m[1] / 14.0; buf[base + 5] = m[2] / 14.0; buf[base + 6] = (m[2] - m[1] + 1) / 14.0;
-            if (m[3] > 0) { buf[base + 7] = 1.0; if (m[3] === 5) buf[base + 12] = 1.0; else buf[base + 7 + m[3]] = 1.0; }
+            if (si >= 10) continue;
+            const base = off + si * 8; si++;
+            buf[base]     = 0;
+            buf[base + 1] = m[0] / 4.0;
+            buf[base + 2] = m[1] / 14.0;
+            buf[base + 3] = m[2] / 14.0;
+            buf[base + 4] = m[3] / 5.0;
+            buf[base + 5] = m[4] / 14.0;
         } else {
             if (ri >= 2) continue;
-            const base = off + (15 + ri) * 13; ri++;
-            buf[base + 0] = m[1] / 14.0; buf[base + 1] = m[2] / 14.0;
-            if (m[3] > 0) { buf[base + 2] = 1.0; if (m[3] === 5) buf[base + 7] = 1.0; else buf[base + 2 + m[3]] = 1.0; }
-            buf[base + 8] = (m[4] || 0) / 8.0; buf[base + 9] = (m[5] || 0) / 8.0;
-            buf[base + 10] = (m[6] || 0) / 8.0; buf[base + 11] = (m[7] || 0) / 8.0;
+            const base = off + (10 + ri) * 8; ri++;
+            buf[base]     = 1;
+            buf[base + 1] = m[1] / 14.0;
+            buf[base + 2] = m[2] / 14.0;
+            buf[base + 3] = m[3] / 5.0;
+            buf[base + 4] = (m[4] || 0) / 8.0;
+            buf[base + 5] = (m[5] || 0) / 8.0;
+            buf[base + 6] = (m[6] || 0) / 8.0;
+            buf[base + 7] = (m[7] || 0) / 8.0;
         }
     }
   },
 
   meldsToSemanticMatrixVec: (melds) => {
-    const vec = new Float32Array(17 * 13);
+    const vec = new Float32Array(96);
     nnHelpers.meldsToSemanticMatrix(melds, vec, 0);
     return vec;
   },
 
   _hidden: new Float32Array(16),
   forwardPass: (inputs, weights) => {
-      const INPUT_SIZE = 774; const HIDDEN_SIZE = 16;
+      const HIDDEN_SIZE = 16;
       const hidden = nnHelpers._hidden;
       let wIdx = 0;
       for (let h = 0; h < HIDDEN_SIZE; h++) {
           let sum = weights[wIdx++];
-          for (let i = 0; i < INPUT_SIZE; i++) sum += inputs[i] * weights[wIdx++];
+          for (let i = 0; i < 524; i++) sum += inputs[i] * weights[wIdx++];
           hidden[h] = sum > 0 ? sum : 0;
       }
       let output = weights[wIdx++];
@@ -648,7 +657,7 @@ export const BuracoGame = {
       const partnerId = numP === 4 ? ((pInt + 2) % numP).toString() : null;
       const opp2Id = numP === 4 ? ((pInt + 3) % numP).toString() : null;
 
-      const INPUT_SIZE = 774;
+      const INPUT_SIZE = 524;
       const inputBuffer = matchCtx ? matchCtx.inputBuffer : new Float32Array(INPUT_SIZE);
       let off = 0;
 
@@ -683,13 +692,13 @@ export const BuracoGame = {
       inputBuffer[off++] = opp2Id ? (G.hands[opp2Id] || []).length / 14.0 : 0;
 
       if (matchCtx) {
-          inputBuffer.set(matchCtx.meldVec[myTeam], off); off += 221;
-          inputBuffer.set(matchCtx.meldVec[oppTeam], off); off += 221;
+          inputBuffer.set(matchCtx.meldVec[myTeam], off); off += 96;
+          inputBuffer.set(matchCtx.meldVec[oppTeam], off); off += 96;
       } else {
           const myMelds = (G.teamPlayers[myTeam] || []).flatMap(tp => G.melds[tp] || []);
-          nnHelpers.meldsToSemanticMatrix(myMelds, inputBuffer, off); off += 221;
+          nnHelpers.meldsToSemanticMatrix(myMelds, inputBuffer, off); off += 96;
           const oppMelds = (G.teamPlayers[oppTeam] || []).flatMap(tp => G.melds[tp] || []);
-          nnHelpers.meldsToSemanticMatrix(oppMelds, inputBuffer, off); off += 221;
+          nnHelpers.meldsToSemanticMatrix(oppMelds, inputBuffer, off); off += 96;
       }
 
       nnHelpers.cardsToVector(G.discardPile, inputBuffer, off); off += 53;
@@ -697,7 +706,7 @@ export const BuracoGame = {
       nnHelpers.cardsToVector(G.knownCards[opp1Id] || [], inputBuffer, off); off += 53;
       nnHelpers.cardsToVector(partnerId ? (G.knownCards[partnerId] || []) : [], inputBuffer, off); off += 53;
       nnHelpers.cardsToVector(opp2Id ? (G.knownCards[opp2Id] || []) : [], inputBuffer, off); off += 53;
-      // off is now 721; remaining 53 slots (721-773) = actionType(3) + cardsVec(53) written per-action
+      // off is now 471; remaining 53 slots (471-523) = actionType(3) + cardsVec(53) written per-action
 
       let dnaPickup, dnaMeld, dnaDiscard;
       if (matchCtx) {
@@ -705,14 +714,14 @@ export const BuracoGame = {
           dnaPickup = dna.pickup; dnaMeld = dna.meld; dnaDiscard = dna.discard;
       } else {
           let DNA = customDNA || G.botGenomes?.[p] || new Float32Array(49668).fill(0.01);
-          if (DNA.length !== 37251) {
-              const d = new Float32Array(37251);
-              for (let i = 0; i < 37251; i++) d[i] = DNA[i % DNA.length] || 0.01;
+          if (DNA.length !== 25203) {
+              const d = new Float32Array(25203);
+              for (let i = 0; i < 25203; i++) d[i] = DNA[i % DNA.length] || 0.01;
               DNA = d;
           }
-          dnaPickup  = DNA.subarray ? DNA.subarray(0, 12417)  : DNA.slice(0, 12417);
-          dnaMeld    = DNA.subarray ? DNA.subarray(12417, 24834) : DNA.slice(12417, 24834);
-          dnaDiscard = DNA.subarray ? DNA.subarray(24834, 37251) : DNA.slice(24834, 37251);
+          dnaPickup  = DNA.subarray ? DNA.subarray(0, 8401)  : DNA.slice(0, 8401);
+          dnaMeld    = DNA.subarray ? DNA.subarray(8401, 16802) : DNA.slice(8401, 16802);
+          dnaDiscard = DNA.subarray ? DNA.subarray(16802, 25203) : DNA.slice(16802, 25203);
       }
 
       // actionType: [isAppend(0=new,1=append), meldClean(0=clean,1=cleanable,2=dirty), cleanAfter(0=clean,1=cleanable,2=dirty)]
@@ -885,7 +894,7 @@ export const BuracoGame = {
                       const sig = (tpInt * 100 + mIndex) * 1000000 + cards.reduce((h,c)=>h*131+c,0);
                       if (meldSigs.has(sig)) return;
                       meldSigs.add(sig);
-                      possibleMeldMoves.push({ move: 'appendToMeld', args: [tp, mIndex, [...cards]], actionType: [1, beforeClean, meldCleanness(meld)], cards: [...cards] });
+                      possibleMeldMoves.push({ move: 'appendToMeld', args: [tp, mIndex, [...cards]], actionType: [1, beforeClean, meldCleanness(meld)], cards: [...cards], _sig: sig });
                   };
 
                   emitAppend(appendedCards, currentMeld);
@@ -911,13 +920,17 @@ export const BuracoGame = {
           if (meldSigs.has(sig)) continue;
           meldSigs.add(sig);
           const afterClean = meldCleanness(parsed);
-          possibleMeldMoves.push({ move: 'playMeld', args: [combo], actionType: [0, afterClean, afterClean], cards: combo });
+          possibleMeldMoves.push({ move: 'playMeld', args: [combo], actionType: [0, afterClean, afterClean], cards: combo, _sig: sig });
       }
 
       if (possibleMeldMoves.length > 0) {
-          for (let m of possibleMeldMoves) m.score = getScore(m.actionType, m.cards, dnaMeld);
+          const rejected = matchCtx?.rejectedSigs?.[p];
+          for (let m of possibleMeldMoves) {
+              if (rejected && rejected.has(m._sig)) { m.score = -Infinity; continue; }
+              m.score = getScore(m.actionType, m.cards, dnaMeld);
+          }
           possibleMeldMoves.sort((a,b) => b.score - a.score);
-          const queue = resolveQueue(possibleMeldMoves);
+          const queue = resolveQueue(possibleMeldMoves.slice(0, 20));
           if (queue.length > 0) return queue;
       }
 
