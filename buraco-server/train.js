@@ -341,8 +341,13 @@ export const TrainerService = {
                         let benchmarkDiff = null;
                         if (originalDNA) {
                             try {
+                                // Shuffle a fresh deck and broadcast it so both swapped games use identical cards
+                                const benchDeck = rules.noJokers ? [...baseDeck] : [...baseDeck, 54, 54];
+                                shuffle(benchDeck);
+                                getPool().broadcastDeck(benchDeck);
                                 const [[benchScore]] = await runMatchBatch(
-                                    [{ dnaA: toBuffer(champion), dnaB: toBuffer(originalDNA) }], rules
+                                    [{ dnaA: toBuffer(champion), dnaB: toBuffer(originalDNA) }],
+                                    { ...rules, fixedDeck: true }
                                 );
                                 benchmarkDiff = benchScore;
                             } catch (e) {

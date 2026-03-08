@@ -120,14 +120,13 @@ for (let i = 0; i < 52; i++) _baseDeck.push(i);
 let _currentDeck = [..._baseDeck];
 
 function processJob(matches, rules) {
-    const deck = rules.noJokers ? [..._baseDeck] : [..._baseDeck, 54, 54];
-    const fixedDeck = rules.fixedDeck ? deck : _currentDeck;
-
     return matches.map(({ dnaA, dnaB }) => {
         const botA = new Float32Array(dnaA);
         const botB = new Float32Array(dnaB);
-        const g1 = runMatch({ '0': botA, '1': botB, '2': botA, '3': botB }, rules, fixedDeck);
-        const g2 = runMatch({ '0': botB, '1': botA, '2': botB, '3': botA }, rules, fixedDeck);
+        // Both swapped games always share the same deck to eliminate positional luck
+        const pairDeck = rules.fixedDeck ? _currentDeck : shuffle([..._currentDeck]);
+        const g1 = runMatch({ '0': botA, '1': botB, '2': botA, '3': botB }, rules, pairDeck);
+        const g2 = runMatch({ '0': botB, '1': botA, '2': botB, '3': botA }, rules, pairDeck);
         return [g1 + (-g2), g2 + (-g1)];
     });
 }
