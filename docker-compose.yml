@@ -2,7 +2,16 @@ version: '3.8'
 
 services:
   buraco-server:
-    # ... (build, ports, volumes remain the same)
+    build:
+      context: .
+      dockerfile: buraco-server/Dockerfile
+    container_name: buraco-server
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./buraco-server/db:/app/db
+      - ./buraco-server/bots:/app/bots
+    restart: unless-stopped
     develop:
       watch:
         - action: rebuild
@@ -22,7 +31,14 @@ services:
   # ... (buraco-client remains the same as before) ...
 
   buraco-bot:
-    # ... (build, command, depends_on remain the same)
+    build:
+      context: .
+      dockerfile: buraco-server/Dockerfile
+    container_name: buraco-bot
+    command: ["node", "bot.js"] 
+    depends_on:
+      - buraco-server
+    restart: unless-stopped
     develop:
       watch:
         - action: rebuild
