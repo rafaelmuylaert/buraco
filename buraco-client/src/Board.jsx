@@ -354,10 +354,10 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
           <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
             {/* Nós / Eles indicators */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
-              <div style={{ fontSize: '0.65em', color: G.teamMortos[myTeam] ? '#ffd700' : '#888', display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: '0.65em', color: G.teamMortos[myTeam] ? '#ffd700' : '#888', display: 'flex', gap: '4px' }}>
                 <span>Nós</span><span>{G.teamMortos[myTeam] ? '✔️' : '❌'}</span>
               </div>
-              <div style={{ fontSize: '0.65em', color: G.teamMortos[oppTeam] ? '#ffd700' : '#888', display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: '0.65em', color: G.teamMortos[oppTeam] ? '#ffd700' : '#888', display: 'flex', gap: '4px' }}>
                 <span>Eles</span><span>{G.teamMortos[oppTeam] ? '✔️' : '❌'}</span>
               </div>
             </div>
