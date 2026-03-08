@@ -137,16 +137,20 @@ function appendCardsToMeld(meld, cards) {
     }
     if (offSuitWilds > 1) return null;
 
-    // If no wild exists yet and a suited-2 matching the meld suit is incoming, pre-seat it at
-    // rank 2 so the loop can displace it freely to fill gaps elsewhere.
+    // If no wild exists yet (or the existing wild is a suited-2 at its natural rank-2 position),
+    // pre-seat it at rank 2 so the loop can displace it freely to fill gaps elsewhere.
     let hasSuitedTwoPromotion = false;
-    if (current[0] !== 0 && current[3] === 0) {
-        const idx = remaining.findIndex(c => getSuit(c) === current[0] && getRank(c) === 2);
-        if (idx !== -1) {
-            remaining.splice(idx, 1);
-            current[3] = current[0]; current[4] = 2;
-            if (current[1] === null) { current[1] = 2; current[2] = 2; }
-            else if (current[1] > 2) current[1] = 2;
+    if (current[0] !== 0 && (current[3] === 0 || (current[3] === current[0] && current[4] === 2))) {
+        const idx = current[3] === 0
+            ? remaining.findIndex(c => getSuit(c) === current[0] && getRank(c) === 2)
+            : -1; // already seated in the meld itself
+        if (idx !== -1 || current[3] !== 0) {
+            if (idx !== -1) {
+                remaining.splice(idx, 1);
+                current[3] = current[0]; current[4] = 2;
+                if (current[1] === null) { current[1] = 2; current[2] = 2; }
+                else if (current[1] > 2) current[1] = 2;
+            }
             hasSuitedTwoPromotion = true;
         }
     }
