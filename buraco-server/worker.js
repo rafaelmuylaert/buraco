@@ -26,15 +26,15 @@ function revealAllHands(G) {
 
 function prepareGenome(raw) {
     let dna = raw instanceof Float32Array ? raw : new Float32Array(raw);
-    if (dna.length !== 25203) {
-        const d = new Float32Array(25203);
-        for (let i = 0; i < 25203; i++) d[i] = dna[i % dna.length] || 0.01;
+    if (dna.length !== 25251) {
+        const d = new Float32Array(25251);
+        for (let i = 0; i < 25251; i++) d[i] = dna[i % dna.length] || 0.01;
         dna = d;
     }
     return {
-        pickup:  dna.subarray(0, 8401),
-        meld:    dna.subarray(8401, 16802),
-        discard: dna.subarray(16802, 25203)
+        pickup:  dna.subarray(0, 8417),
+        meld:    dna.subarray(8417, 16834),
+        discard: dna.subarray(16834, 25251)
     };
 }
 

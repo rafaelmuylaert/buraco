@@ -714,14 +714,14 @@ export const BuracoGame = {
           dnaPickup = dna.pickup; dnaMeld = dna.meld; dnaDiscard = dna.discard;
       } else {
           let DNA = customDNA || G.botGenomes?.[p] || new Float32Array(49668).fill(0.01);
-          if (DNA.length !== 25203) {
-              const d = new Float32Array(25203);
-              for (let i = 0; i < 25203; i++) d[i] = DNA[i % DNA.length] || 0.01;
+          if (DNA.length !== 25251) {
+              const d = new Float32Array(25251);
+              for (let i = 0; i < 25251; i++) d[i] = DNA[i % DNA.length] || 0.01;
               DNA = d;
           }
-          dnaPickup  = DNA.subarray ? DNA.subarray(0, 8401)  : DNA.slice(0, 8401);
-          dnaMeld    = DNA.subarray ? DNA.subarray(8401, 16802) : DNA.slice(8401, 16802);
-          dnaDiscard = DNA.subarray ? DNA.subarray(16802, 25203) : DNA.slice(16802, 25203);
+          dnaPickup  = DNA.subarray ? DNA.subarray(0, 8417)  : DNA.slice(0, 8417);
+          dnaMeld    = DNA.subarray ? DNA.subarray(8417, 16834) : DNA.slice(8417, 16834);
+          dnaDiscard = DNA.subarray ? DNA.subarray(16834, 25251) : DNA.slice(16834, 25251);
       }
 
       // actionType: [isAppend(0=new,1=append), meldClean(0=clean,1=cleanable,2=dirty), cleanAfter(0=clean,1=cleanable,2=dirty)]
