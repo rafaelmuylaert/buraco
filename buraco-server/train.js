@@ -171,12 +171,11 @@ export const TrainerService = {
         const SAVE_EVERY = params.saveInterval || params.matchesPerGeneration || 12;
 
         const seedDNA = TrainerService.getBotWeights(botName);
-        let originalDNA;
+        const originalDNA = generateRandomGenome(); // benchmark always against a fresh random baseline
 
         let population;
         if (seedDNA) {
             console.log(`🧠 Resuming training for '${botName}'...`);
-            originalDNA = new Float32Array(seedDNA);
             let base = seedDNA;
             if (base.length !== DNA_SIZE) {
                 let expanded = [];
@@ -190,7 +189,6 @@ export const TrainerService = {
         } else {
             console.log(`🧠 Starting fresh training for '${botName}'...`);
             population = Array(POPULATION_SIZE).fill(null).map(() => generateRandomGenome());
-            originalDNA = new Float32Array(population[0]); // benchmark against initial random genome
         }
 
         activeTrainings.set(botName, {
