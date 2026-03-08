@@ -335,10 +335,14 @@ export const TrainerService = {
 
                         let benchmarkDiff = null;
                         if (originalDNA) {
-                            const [[benchScore]] = await runMatchBatch(
-                                [{ dnaA: toBuffer(champion), dnaB: toBuffer(originalDNA) }], rules
-                            );
-                            benchmarkDiff = benchScore;
+                            try {
+                                const [[benchScore]] = await runMatchBatch(
+                                    [{ dnaA: toBuffer(champion), dnaB: toBuffer(originalDNA) }], rules
+                                );
+                                benchmarkDiff = benchScore;
+                            } catch (e) {
+                                console.error(`[${botName}] Benchmark error:`, e);
+                            }
                         }
 
                         const prev = activeTrainings.get(botName);

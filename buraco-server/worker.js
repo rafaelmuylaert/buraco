@@ -58,11 +58,17 @@ function runMatch(genomes, rules, fixedDeck) {
 
     try {
         let moveCount = 0;
-        while (!ctx.gameover && moveCount < 800) {
+        while (!ctx.gameover && moveCount < 2000) {
             const p = ctx.currentPlayer;
             const moves = BuracoGame.ai.enumerate(G, ctx, null, matchCtx);
             if (!moves || moves.length === 0) {
-                ctx._endTurn = true;
+                // Truly stuck: if drawn, force discard the first card; otherwise force draw
+                if (G.hasDrawn && G.hands[p]?.length > 0) {
+                    applyMove(G, ctx, 'discardCard', [G.hands[p][0]]);
+                    if (!ctx._endTurn) ctx._endTurn = true;
+                } else {
+                    ctx._endTurn = true;
+                }
             } else {
                 let stuck = true;
                 for (const move of moves) {
@@ -74,7 +80,15 @@ function runMatch(genomes, rules, fixedDeck) {
                     }
                     if (ctx._endTurn) break;
                 }
-                if (stuck) ctx._endTurn = true;
+                if (stuck) {
+                    // All proposed moves failed — force discard or end turn
+                    if (G.hasDrawn && G.hands[p]?.length > 0) {
+                        applyMove(G, ctx, 'discardCard', [G.hands[p][0]]);
+                        if (!ctx._endTurn) ctx._endTurn = true;
+                    } else {
+                        ctx._endTurn = true;
+                    }
+                }
             }
             if (ctx._endTurn) {
                 ctx.currentPlayer = String((parseInt(ctx.currentPlayer) + 1) % numPlayers);
