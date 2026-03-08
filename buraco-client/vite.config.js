@@ -5,10 +5,18 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: '/buraco/', // THIS IS CRITICAL FOR NGINX SUB-PATHS
-preview: {
-    allowedHosts: true, // This tells Vite to trust your Nginx proxy hostname
+  
+  // THIS is the block that 'npm run dev' uses!
+  server: {
+    allowedHosts: true, // Trusts your Nginx proxy hostname
+    port: 5173,
+    host: true
+  },
+
+  // (Optional) Kept here just in case you ever run 'npm run preview' again
+  preview: {
+    allowedHosts: true, 
     port: 5173,
     host: true
   }
-
 })
