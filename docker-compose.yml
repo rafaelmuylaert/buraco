@@ -2,16 +2,42 @@ version: '3.8'
 
 services:
   buraco-server:
-    build:
-      context: .
-      dockerfile: buraco-server/Dockerfile
-    container_name: buraco-server
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./buraco-server/db:/app/db
-      - ./buraco-server/bots:/app/bots
-    restart: unless-stopped
+    # ... (build, ports, volumes remain the same)
+    develop:
+      watch:
+        - action: rebuild
+          path: ./buraco-server/package.json 
+        - action: sync+restart
+          path: ./buraco-server
+          target: /app
+          ignore:
+            - node_modules/
+            - db/
+            - bots/
+        # NEW: Watch the shared game file!
+        - action: sync+restart
+          path: ./buraco-client/src/game.js
+          target: /app/game.js
+
+  # ... (buraco-client remains the same as before) ...
+
+  buraco-bot:
+    # ... (build, command, depends_on remain the same)
+    develop:
+      watch:
+        - action: rebuild
+          path: ./buraco-server/package.json
+        - action: sync+restart
+          path: ./buraco-server
+          target: /app
+          ignore:
+            - node_modules/
+            - db/
+            - bots/
+        # NEW: Watch the shared game file for the bot too!
+        - action: sync+restart
+          path: ./buraco-client/src/game.js
+          target: /app/game.js
 
   buraco-client:
     build: ./buraco-client
@@ -21,13 +47,14 @@ services:
     depends_on:
       - buraco-server
     restart: unless-stopped
-
-  buraco-bot:
-    build:
-      context: .
-      dockerfile: buraco-server/Dockerfile
-    container_name: buraco-bot
-    command: ["node", "bot.js"] 
-    depends_on:
-      - buraco-server
-    restart: unless-stopped
+    # Watch configuration for the frontend
+    develop:
+      watch:
+        - action: rebuild
+          path: ./buraco-client/package.json
+        # Sync code directly (fastest) - assuming your frontend has hot-reload
+        - action: sync
+          path: ./buraco-client/src     # Assuming your source code is in a 'src' folder
+          target: /app/src              # Assuming WORKDIR is /app
+          ignore:
+            - node_modules/
