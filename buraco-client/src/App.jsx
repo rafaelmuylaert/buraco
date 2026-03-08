@@ -46,17 +46,18 @@ const App = () => {
     targetPoints: 3000,
     maxRounds: 3,
     botName: '',
-    rules: { discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false, showKnownCards: false }
+    rules: { discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true }
   });
 
   const [newTourney, setNewTourney] = useState({ 
     name: '', type: 'team', format: 'points', targetPoints: 3000, maxRounds: 3, 
     players: 'João, Maria, Pedro, Ana',
     botName: '',
-    rules: { numPlayers: 4, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false, showKnownCards: false }
+    rules: { numPlayers: 4, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true }
   });
 
   const [availableBots, setAvailableBots] = useState([]);
+  const [botInfoList, setBotInfoList] = useState([]);
   const [showTrainBotPopup, setShowTrainBotPopup] = useState(false);
   const [trainBotIsNew, setTrainBotIsNew] = useState(false);
   const [trainingStatus, setTrainingStatus] = useState(null);
@@ -66,9 +67,9 @@ const App = () => {
     populationSize: 24,
     generations: 500,
     saveInterval: 10,
-    telepathy: false,
-    fixedDeck: false,
-    rules: { discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false, showKnownCards: false }
+    telepathy: true,
+    fixedDeck: true,
+    rules: { discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true }
   });
 
   const loadServerData = async () => {
@@ -98,6 +99,8 @@ const App = () => {
           const res = await fetch(`${window.location.origin}/buraco/api/bots/status`);
           const data = await res.json();
           setTrainingStatus(data.length > 0 ? { isTraining: true, sessions: data } : { isTraining: false, sessions: [] });
+          const infoRes = await fetch(`${window.location.origin}/buraco/api/bots/info`);
+          setBotInfoList(await infoRes.json());
         } catch (err) {}
       };
       fetchStatus();
@@ -579,17 +582,47 @@ const App = () => {
         ))}
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'flex-start' }}>
-          <div style={{ flex: '1 1 300px', background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
-            <h2 style={{ color: '#ffd700', marginTop: 0 }}>Gerenciar Torneios</h2>
-            {tournaments.length === 0 ? <p style={{ color: '#888' }}>Nenhum torneio.</p> : null}
-            {tournaments.map(t => (
-              <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px' }}>
-                <div>
-                  <strong>{t.name}</strong> <span style={{ fontSize: '0.8em', color: t.status === 'completed' ? '#aaa' : '#4da6ff' }}>({t.status})</span>
+          <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
+              <h2 style={{ color: '#ffd700', marginTop: 0 }}>Gerenciar Torneios</h2>
+              {tournaments.filter(t => t.status !== 'completed').length === 0 ? <p style={{ color: '#888' }}>Nenhum torneio ativo.</p> : null}
+              {tournaments.filter(t => t.status !== 'completed').map(t => (
+                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px' }}>
+                  <strong>{t.name}</strong>
+                  <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar</button>
                 </div>
-                <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar Torneio e Mesas</button>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            <div style={{ background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
+              <h2 style={{ color: '#888', marginTop: 0 }}>Torneios Finalizados</h2>
+              {tournaments.filter(t => t.status === 'completed').length === 0 ? <p style={{ color: '#888' }}>Nenhum.</p> : null}
+              {tournaments.filter(t => t.status === 'completed').map(t => (
+                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px' }}>
+                  <strong style={{ color: '#888' }}>{t.name}</strong>
+                  <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar</button>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #8a2be2' }}>
+              <h2 style={{ color: '#b088f9', marginTop: 0 }}>Gerenciar Bots</h2>
+              {botInfoList.length === 0 ? <p style={{ color: '#888' }}>Nenhum bot treinado.</p> : null}
+              {botInfoList.map(bot => (
+                <div key={bot.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px', gap: '10px' }}>
+                  <div>
+                    <div style={{ fontWeight: 'bold', color: bot.isTraining ? '#ffb86c' : 'white' }}>{bot.name} {bot.isTraining ? '⚙️' : ''}</div>
+                    <div style={{ fontSize: '0.75em', color: '#888' }}>
+                      {bot.isTraining ? `Gen ${bot.currentGen}/${bot.totalGen}` : `Salvo: ${new Date(bot.lastModified).toLocaleDateString()}`}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button onClick={() => { setTrainBotIsNew(false); setTrainBotConfig(prev => ({ ...prev, name: bot.name })); setShowTrainBotPopup(true); }} style={{ background: '#8a2be2', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>▶ Treinar</button>
+                    <button onClick={async () => { if (!confirm(`Apagar bot "${bot.name}"?`)) return; await fetch(`${window.location.origin}/buraco/api/bots/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botName: bot.name }) }); setBotInfoList(prev => prev.filter(b => b.name !== bot.name)); setAvailableBots(prev => prev.filter(b => b !== bot.name)); }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Apagar</button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div style={{ flex: '2 1 300px', background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
@@ -607,12 +640,10 @@ const App = () => {
                   <div key={m.matchID} style={{ background: '#111', border: `1px solid ${isOrphan ? '#ff4d4d' : '#333'}`, borderRadius: '8px', padding: '15px', width: '300px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                       <h4 style={{ margin: 0, color: isOrphan ? '#ff4d4d' : '#ccc' }}>{tableLabel} {isOrphan && '(Órfã)'}</h4>
-                      {isOrphan && (
-                        <button onClick={async () => {
-                          await fetch(`${API_ADDRESS}/api/admin/delete-match`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matchID: m.matchID }) });
-                          window.location.reload();
-                        }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '3px 8px', fontSize: '0.8em', fontWeight: 'bold', cursor: 'pointer' }}>Apagar</button>
-                      )}
+                      <button onClick={async () => {
+                        await fetch(`${API_ADDRESS}/api/admin/delete-match`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matchID: m.matchID }) });
+                        window.location.reload();
+                      }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '3px 8px', fontSize: '0.8em', fontWeight: 'bold', cursor: 'pointer' }}>Apagar</button>
                     </div>
                     {m.players.map(p => (
                       <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px dashed #333', paddingBottom: '4px' }}>

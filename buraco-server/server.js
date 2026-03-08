@@ -125,6 +125,31 @@ server.router.get('/api/bots/weights/:botName', (ctx) => {
     ctx.body = weights;
 });
 
+server.router.get('/api/bots/info', (ctx) => {
+    setCors(ctx);
+    const botsDir = path.join(process.cwd(), 'bots');
+    if (!fs.existsSync(botsDir)) { ctx.body = []; return; }
+    const statuses = TrainerService.getAllTrainingStatuses();
+    const files = fs.readdirSync(botsDir).filter(f => f.endsWith('.json') && !f.includes('_'));
+    ctx.body = files.map(f => {
+        const name = f.replace('.json', '');
+        const stat = fs.statSync(path.join(botsDir, f));
+        const active = statuses.find(s => s.botName === name);
+        return { name, lastModified: stat.mtimeMs, isTraining: !!active, currentGen: active?.progress?.currentGeneration || null, totalGen: active?.progress?.totalGenerations || null };
+    });
+});
+
+server.router.post('/api/bots/delete', async (ctx) => {
+    setCors(ctx);
+    try {
+        const body = await parseBody(ctx);
+        const botsDir = path.join(process.cwd(), 'bots');
+        const botFile = path.join(botsDir, `${body.botName}.json`);
+        if (fs.existsSync(botFile)) fs.unlinkSync(botFile);
+        ctx.body = { success: true };
+    } catch (e) { ctx.status = 500; ctx.body = { error: 'Failed' }; }
+});
+
 // --- STANDARD GAME API ROUTES ---
 
 server.router.get('/api/tournaments', (ctx) => {
@@ -168,14 +193,12 @@ server.router.post('/api/admin/kick', async (ctx) => {
     if (body && body.matchID && body.playerID) {
       const matchID = body.matchID;
       const playerID = body.playerID.toString();
-
+      const idx = Number(playerID);
       const data = await server.db.fetch(matchID, { metadata: true });
       if (data && data.metadata && data.metadata.players) {
-        const idx = Number(playerID);
-        if (data.metadata.players[idx] !== undefined) {
-          data.metadata.players[idx] = { id: idx };
-          await server.db.setMetadata(matchID, data.metadata);
-        }
+        if (data.metadata.players[idx] !== undefined) data.metadata.players[idx] = { id: idx };
+        if (data.metadata.players[playerID] !== undefined) data.metadata.players[playerID] = { id: idx };
+        await server.db.setMetadata(matchID, data.metadata);
       }
     }
     ctx.body = { success: true };
@@ -184,7 +207,6 @@ server.router.post('/api/admin/kick', async (ctx) => {
     ctx.body = { error: 'Failed to kick player' };
   }
 });
-
 server.router.get('/api/admin/credentials/:matchID/:playerID', async (ctx) => {
   setCors(ctx);
   try {

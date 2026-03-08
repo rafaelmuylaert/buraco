@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   buraco-server:
-    build: ./buraco-server
+    build:
+      context: .
+      dockerfile: buraco-server/Dockerfile
     container_name: buraco-server
     ports:
       - "8000:8000"
@@ -21,7 +23,9 @@ services:
     restart: unless-stopped
 
   buraco-bot:
-    build: ./buraco-server
+    build:
+      context: .
+      dockerfile: buraco-server/Dockerfile
     container_name: buraco-bot
     command: ["node", "bot.js"] 
     depends_on:
