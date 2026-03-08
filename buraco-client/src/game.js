@@ -321,16 +321,23 @@ const nnHelpers = {
 
   _hidden: new Float32Array(16),
   forwardPass: (inputs, weights) => {
-      const HIDDEN_SIZE = 16;
       const hidden = nnHelpers._hidden;
       let wIdx = 0;
-      for (let h = 0; h < HIDDEN_SIZE; h++) {
-          let sum = weights[wIdx++];
-          for (let i = 0; i < 524; i++) sum += inputs[i] * weights[wIdx++];
-          hidden[h] = sum > 0 ? sum : 0;
+      for (let h = 0; h < 16; h++) {
+          let s0 = weights[wIdx], s1 = 0, s2 = 0, s3 = 0;
+          wIdx++;
+          for (let i = 0; i < 524; i += 4) {
+              s0 += inputs[i]   * weights[wIdx];
+              s1 += inputs[i+1] * weights[wIdx+1];
+              s2 += inputs[i+2] * weights[wIdx+2];
+              s3 += inputs[i+3] * weights[wIdx+3];
+              wIdx += 4;
+          }
+          const s = s0 + s1 + s2 + s3;
+          hidden[h] = s > 0 ? s : 0;
       }
       let output = weights[wIdx++];
-      for (let h = 0; h < HIDDEN_SIZE; h++) output += hidden[h] * weights[wIdx++];
+      for (let h = 0; h < 16; h++) output += hidden[h] * weights[wIdx++];
       return output;
   }
 };
@@ -743,26 +750,23 @@ export const BuracoGame = {
 
       // 🚀 BATCH RESOLVER: Intelligently limits the batch to prevent Hand-Size Violations
       const resolveQueue = (moves) => {
-        let selected = [];
-        let usedCards = new Set();
+        const selected = [];
+        const usedCounts = new Int32Array(55); // card id → count used so far
         let projectedHandSize = myHandCards.length;
-        let projectedMelds = {}; // track meld state as we commit moves
-        
+        const projectedMelds = {};
         const mortoSafe = (matchCtx ? matchCtx.hasClean[myTeam] : hasClean(myTeam)) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
 
         for (let m of moves) {
+            // conflict check: O(n) with count array
+            const localCounts = new Int32Array(55);
             let conflict = false;
-            const tempUsed = [];
             for (let c of m.cards) {
-                const key = c * 256 + tempUsed.filter(x => x === c).length;
-                if (usedCards.has(key)) { conflict = true; break; }
-                tempUsed.push(c);
+                const id = c === 54 ? 54 : c;
+                if (usedCounts[id] + localCounts[id] >= 2) { conflict = true; break; }
+                localCounts[id]++;
             }
             if (conflict) continue;
-
             if (projectedHandSize - m.cards.length < 1 && !mortoSafe) continue;
-
-            // Re-validate appends against projected meld state
             if (m.move === 'appendToMeld') {
                 const [tp, mIndex] = m.args;
                 const key = tp * 100 + mIndex;
@@ -771,9 +775,7 @@ export const BuracoGame = {
                 if (!revalidated) continue;
                 projectedMelds[key] = revalidated;
             }
-
-            const counts = {};
-            for (let c of m.cards) { counts[c] = (counts[c] || 0); usedCards.add(c * 256 + counts[c]); counts[c]++; }
+            for (let c of m.cards) usedCounts[c === 54 ? 54 : c]++;
             selected.push(m);
             projectedHandSize -= m.cards.length;
         }
@@ -872,17 +874,15 @@ export const BuracoGame = {
               const tpInt = parseInt(tp);
               for (let i = 0; i < relevantCards.length; i++) {
                   let currentMeld = baseMeld;
-                  let remainingCards = [...relevantCards];
-                  const first = remainingCards.splice(i, 1)[0];
+                  const first = relevantCards[i];
                   let parsed = appendCardsToMeld(currentMeld, [first]);
                   if (!parsed) continue;
-                  let appendedCards = [first];
+                  const appendedCards = [first];
                   currentMeld = parsed;
 
                   const emitAppend = (cards, meld) => {
                       const newHandSize = myHandCards.length - cards.length;
                       if (newHandSize < 2 && !teamAlreadyClean && !mortoAvail) {
-                          // Only do expensive check if needed
                           const afterMeld = isCanasta(meld) && (!G.rules.cleanCanastaToWin || isMeldClean(meld));
                           if (!afterMeld) {
                               const otherClean = G.teamPlayers[myTeam].some(tp2 =>
@@ -898,12 +898,15 @@ export const BuracoGame = {
                   };
 
                   emitAppend(appendedCards, currentMeld);
-                  for (let j = 0; j < remainingCards.length; j++) {
-                      const extended = appendCardsToMeld(currentMeld, [remainingCards[j]]);
+                  for (let j = 0; j < relevantCards.length; j++) {
+                      if (j === i) continue;
+                      // skip cards already in appendedCards
+                      let alreadyUsed = false;
+                      for (let k = 1; k < appendedCards.length; k++) if (appendedCards[k] === relevantCards[j]) { alreadyUsed = true; break; }
+                      if (alreadyUsed) continue;
+                      const extended = appendCardsToMeld(currentMeld, [relevantCards[j]]);
                       if (!extended) continue;
-                      appendedCards = [...appendedCards, remainingCards[j]];
-                      remainingCards.splice(j, 1);
-                      j = -1;
+                      appendedCards.push(relevantCards[j]);
                       currentMeld = extended;
                       emitAppend(appendedCards, currentMeld);
                   }
@@ -930,7 +933,7 @@ export const BuracoGame = {
               m.score = getScore(m.actionType, m.cards, dnaMeld);
           }
           possibleMeldMoves.sort((a,b) => b.score - a.score);
-          const queue = resolveQueue(possibleMeldMoves.slice(0, 20));
+          const queue = resolveQueue(possibleMeldMoves.length > 20 ? possibleMeldMoves.slice(0, 20) : possibleMeldMoves);
           if (queue.length > 0) return queue;
       }
 
