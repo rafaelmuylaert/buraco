@@ -124,7 +124,9 @@ function buildMeld(cardIds, rules) {
 
 function appendCardsToMeld(meld, cards) {
     if (meld[0] !== 0) { // Sequence: expand → combine → rebuild
-        return buildMeld([...expandMeld(meld), ...cards], { runners: 'none' });
+        const expanded = expandMeld(meld);
+        for (let i = 0; i < cards.length; i++) expanded.push(cards[i]);
+        return buildMeld(expanded, { runners: 'none' });
     }
     // Runner: direct incremental logic
     const m = [...meld];
@@ -186,12 +188,9 @@ function getCardPoints(c) {
 }
 
 function removeCards(hand, cardIds) {
-    const remaining = [...hand];
-    for (const c of cardIds) {
-        const idx = remaining.indexOf(c);
-        if (idx !== -1) remaining.splice(idx, 1);
-    }
-    return remaining;
+    const counts = {};
+    for (let i = 0; i < cardIds.length; i++) counts[cardIds[i]] = (counts[cardIds[i]] || 0) + 1;
+    return hand.filter(c => { if (counts[c] > 0) { counts[c]--; return false; } return true; });
 }
 
 function buildDeck(rules) {
@@ -847,59 +846,55 @@ export const BuracoGame = {
       const meldSigs = new Set();
 
       // --- Appends (single then multi-card extension) ---
+      const teamAlreadyClean = (matchCtx ? matchCtx.hasClean[myTeam] : hasClean(myTeam)) > 0;
+      const mortoAvail = G.pots.length > 0 && !G.teamMortos[myTeam];
       (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((baseMeld, mIndex) => {
               const beforeClean = meldCleanness(baseMeld);
-              // Determine which hand cards are relevant (same suit for seq, same rank for runner)
               const isRunner = baseMeld[0] === 0;
               const meldRank = isRunner ? baseMeld[1] : null;
               const meldSuit = isRunner ? null : baseMeld[0];
               const relevantCards = myHandCards.filter(c => {
                   const cs = getSuit(c), cr = getRank(c);
-                  if (cs === 5 || cr === 2) return true; // wilds always relevant
+                  if (cs === 5 || cr === 2) return true;
                   return isRunner ? cr === meldRank : cs === meldSuit;
               });
 
-              // Build all prefix-appends: [c1], [c1,c2], [c1,c2,c3]...
-              // Start from each single-card append, then extend greedily
+              const tpInt = parseInt(tp);
               for (let i = 0; i < relevantCards.length; i++) {
                   let currentMeld = baseMeld;
-                  let appendedCards = [];
                   let remainingCards = [...relevantCards];
-
-                  // Try adding relevantCards[i] as first card
                   const first = remainingCards.splice(i, 1)[0];
                   let parsed = appendCardsToMeld(currentMeld, [first]);
                   if (!parsed) continue;
-
-                  // Emit each prefix: [first], [first, next], ...
-                  appendedCards = [first];
+                  let appendedCards = [first];
                   currentMeld = parsed;
 
                   const emitAppend = (cards, meld) => {
                       const newHandSize = myHandCards.length - cards.length;
-                      const newMeldState = G.melds[tp].map((m, i) => i === mIndex ? meld : m);
-                      const teamHasClean = G.teamPlayers[myTeam].some(tp2 =>
-                          (tp2 === tp ? newMeldState : G.melds[tp2]).some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || isMeldClean(m)))
-                      );
-                      if (newHandSize < 2 && !teamHasClean && (!G.pots.length || G.teamMortos[myTeam])) return;
-                      const sig = (parseInt(tp) * 100 + mIndex) * 1000000 + cards.slice().sort((a,b)=>a-b).reduce((h,c)=>h*131+c,0);
+                      if (newHandSize < 2 && !teamAlreadyClean && !mortoAvail) {
+                          // Only do expensive check if needed
+                          const afterMeld = isCanasta(meld) && (!G.rules.cleanCanastaToWin || isMeldClean(meld));
+                          if (!afterMeld) {
+                              const otherClean = G.teamPlayers[myTeam].some(tp2 =>
+                                  tp2 !== tp && G.melds[tp2].some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || isMeldClean(m)))
+                              );
+                              if (!otherClean) return;
+                          }
+                      }
+                      const sig = (tpInt * 100 + mIndex) * 1000000 + cards.reduce((h,c)=>h*131+c,0);
                       if (meldSigs.has(sig)) return;
                       meldSigs.add(sig);
-                      const afterClean = meldCleanness(meld);
-                      possibleMeldMoves.push({ move: 'appendToMeld', args: [tp, mIndex, [...cards]], actionType: [1, beforeClean, afterClean], cards: [...cards] });
+                      possibleMeldMoves.push({ move: 'appendToMeld', args: [tp, mIndex, [...cards]], actionType: [1, beforeClean, meldCleanness(meld)], cards: [...cards] });
                   };
 
                   emitAppend(appendedCards, currentMeld);
-
-                  // Extend with remaining relevant cards
                   for (let j = 0; j < remainingCards.length; j++) {
-                      const next = remainingCards[j];
-                      const extended = appendCardsToMeld(currentMeld, [next]);
+                      const extended = appendCardsToMeld(currentMeld, [remainingCards[j]]);
                       if (!extended) continue;
-                      appendedCards = [...appendedCards, next];
+                      appendedCards = [...appendedCards, remainingCards[j]];
                       remainingCards.splice(j, 1);
-                      j = -1; // restart scan with updated meld
+                      j = -1;
                       currentMeld = extended;
                       emitAppend(appendedCards, currentMeld);
                   }
@@ -922,8 +917,8 @@ export const BuracoGame = {
       if (possibleMeldMoves.length > 0) {
           for (let m of possibleMeldMoves) m.score = getScore(m.actionType, m.cards, dnaMeld);
           possibleMeldMoves.sort((a,b) => b.score - a.score);
-          const queue = resolveQueue(possibleMeldMoves.filter(m => m.score >= 0));
-          if (queue.length > 0) return queue.map(m => ({ move: m.move, args: m.args }));
+          const queue = resolveQueue(possibleMeldMoves);
+          if (queue.length > 0) return queue;
       }
 
       // ==========================================
