@@ -17,57 +17,84 @@ export function sortCards(cards) {
 
 function appendToMeld(meld, cId) {
     let m = [...meld];
-    let cSuit = getSuit(cId); let cRank = getRank(cId);
-    let isWild = cSuit === 5 || cRank === 2;
+    const cSuit = getSuit(cId), cRank = getRank(cId);
+    const isWild = cSuit === 5 || cRank === 2;
 
     if (m[0] !== 0) { // Sequence
         if (m[1] === null) {
             if (!isWild || (cSuit === m[0] && cRank === 2)) { m[1] = cRank; m[2] = cRank; return m; }
             return null;
         }
-        
-        if (cSuit === m[0] && cRank === m[4]) {
-            if (m[1] > 2) { m[4] = m[1] - 1; m[1] = m[1] - 1; if (m[4] === 2 && m[3] === m[0]) { m[3] = 0; m[4] = 0; } return m; }
-            if (m[2] < 14) { m[4] = m[2] + 1; m[2] = m[2] + 1; return m; }
-            return null;
-        }
-        
-        if (cSuit === m[0] && !isWild) { 
-            if (cRank === m[1] - 1) {
-                if (m[3] !== 0 && m[4] === m[1]) { m[4] = m[2] + 1; m[2] = m[2] + 1; } // wild was at low end, move to high end
-                m[1] = cRank; return m;
+
+        const suit = m[0], lo = m[1], hi = m[2], wSuit = m[3], wPos = m[4];
+        // Normalise: Ace stored as 1 at low end, 14 at high end
+        const loR = lo, hiR = hi; // hi may be 14 (high-Ace)
+
+        // --- Natural card fills the wild's slot ---
+        if (!isWild && cSuit === suit) {
+            const normRank = (cRank === 1 && wPos === 14) ? 14 : cRank;
+            if (wSuit !== 0 && normRank === wPos) {
+                // Wild is displaced: try to push it to the opposite end
+                const newLo = loR, newHi = hiR;
+                // Try high end first, then low end, then just clear it
+                if (newHi < 14) { m[4] = newHi + 1; m[2] = newHi + 1; m[3] = wSuit; return m; }
+                if (newLo > 1)  { m[4] = newLo - 1; m[1] = newLo - 1; m[3] = wSuit; return m; }
+                // No room — wild is simply cleared (natural card took its spot)
+                m[3] = 0; m[4] = 0; return m;
             }
-            if (cRank === m[2] + 1 && m[2] < 14) {
-                if (m[3] !== 0 && m[4] === m[2]) { m[4] = m[1] - 1; m[1] = m[1] - 1; } // wild was at high end, move to low end
-                m[2] = cRank; return m;
-            }
-            if (cRank === 1 && m[2] === 13) { m[2] = 14; return m; }
-            if (cRank === 1 && m[1] === 2) { m[1] = 1; return m; }
-            // Ace at low end: move wild to rank-2 slot (from either end)
-            if (cRank === 1 && m[1] === 3 && m[3] !== 0) {
-                if (m[4] === m[2]) m[2] = m[2] - 1; // wild was at high end, shrink range
-                m[4] = 2; m[1] = 1;
-                if (m[3] === m[0]) { m[3] = 0; m[4] = 0; }
-                return m;
-            }
-            // Card 2 below low end: move wild from high end to fill the gap
-            if (cRank === m[1] - 2 && m[3] !== 0 && m[4] === m[2] && m[1] > 2) {
-                m[2] = m[2] - 1; m[4] = m[1] - 1; m[1] = cRank; return m;
-            }
-            // Card 2 above high end: move wild from low end to fill the gap
-            if (cRank === m[2] + 2 && m[3] !== 0 && m[4] === m[1] && m[2] < 13) {
-                m[1] = m[1] + 1; m[4] = m[2] + 1; m[2] = cRank; return m;
-            }
-        }
-        
-        if (cSuit === m[0] && cRank === 2) {
-            if (m[1] === 3) { m[1] = 2; return m; }
         }
 
-        if (isWild && m[3] === 0) {
-            if (m[2] < 14) { m[3] = cSuit; m[4] = m[2] + 1; m[2] = m[2] + 1; return m; }
-            if (m[1] > 1) { m[3] = cSuit; m[4] = m[1] - 1; m[1] = m[1] - 1; return m; }
+        // --- Natural card extends the sequence ---
+        if (!isWild && cSuit === suit) {
+            // Extend low end (including Ace below 2)
+            const extendsLow = (cRank === loR - 1) ||
+                               (cRank === 1 && loR === 2) ||
+                               (cRank === 1 && loR === 3 && wSuit !== 0 && wPos === 2);
+            if (extendsLow) {
+                const newLo = (cRank === 1) ? 1 : cRank;
+                // If wild was at the low end, displace it to the high end
+                if (wSuit !== 0 && wPos === loR) {
+                    if (hiR < 14) { m[4] = hiR + 1; m[2] = hiR + 1; }
+                    else          { m[3] = 0; m[4] = 0; } // no room, clear wild
+                }
+                // If wild was filling rank-2 gap and Ace slides in below, clear it (suited-2 case)
+                if (wSuit !== 0 && wPos === 2 && wSuit === suit && cRank === 1) { m[3] = 0; m[4] = 0; }
+                m[1] = newLo;
+                return m;
+            }
+            // Extend high end (including Ace above K)
+            const extendsHigh = (cRank === hiR + 1 && hiR < 14) ||
+                                (cRank === 1 && hiR === 13);
+            if (extendsHigh) {
+                const newHi = (cRank === 1 && hiR === 13) ? 14 : cRank;
+                // If wild was at the high end, displace it to the low end
+                if (wSuit !== 0 && wPos === hiR) {
+                    if (loR > 1) { m[4] = loR - 1; m[1] = loR - 1; }
+                    else         { m[3] = 0; m[4] = 0; }
+                }
+                m[2] = newHi;
+                return m;
+            }
+            // Extend 2 steps with wild bridging the gap (wild moves from opposite end)
+            if (cRank === loR - 2 && wSuit !== 0 && wPos === hiR && loR > 2) {
+                m[2] = hiR - 1; m[4] = loR - 1; m[1] = cRank; return m;
+            }
+            if (cRank === hiR + 2 && wSuit !== 0 && wPos === loR && hiR < 13) {
+                m[1] = loR + 1; m[4] = hiR + 1; m[2] = cRank; return m;
+            }
         }
+
+        // --- Suited-2 as natural card at low end ---
+        if (cSuit === suit && cRank === 2 && loR === 3) {
+            m[1] = 2; return m;
+        }
+
+        // --- Wild card appended ---
+        if (isWild && wSuit === 0) {
+            if (hiR < 14) { m[3] = cSuit; m[4] = hiR + 1; m[2] = hiR + 1; return m; }
+            if (loR > 1)  { m[3] = cSuit; m[4] = loR - 1; m[1] = loR - 1; return m; }
+        }
+
     } else { // Runner
         if (m[1] === null) {
             if (!isWild) { m[1] = cRank; m[2] = 1; return m; }
