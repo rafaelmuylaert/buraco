@@ -137,20 +137,19 @@ function appendCardsToMeld(meld, cards) {
     }
     if (offSuitWilds > 1) return null;
 
-    // If no wild exists yet (or the existing wild is a suited-2 at its natural rank-2 position),
-    // pre-seat it at rank 2 so the loop can displace it freely to fill gaps elsewhere.
+    // If the meld starts at 3 and has no wild, promote the suited-2 to wild at rank-2 position
+    // so the loop can displace it freely to fill gaps elsewhere.
     let hasSuitedTwoPromotion = false;
-    if (current[0] !== 0 && (current[3] === 0 || (current[3] === current[0] && current[4] === 2))) {
-        const idx = current[3] === 0
+    if (current[0] !== 0 && current[1] !== null &&
+        (current[3] === 0 || (current[3] === current[0] && current[4] === 2))) {
+        const alreadySeated = current[3] !== 0; // suited-2 already in meld at rank 2
+        const incomingIdx = !alreadySeated
             ? remaining.findIndex(c => getSuit(c) === current[0] && getRank(c) === 2)
-            : -1; // already seated in the meld itself
-        if (idx !== -1 || current[3] !== 0) {
-            if (idx !== -1) {
-                remaining.splice(idx, 1);
-                current[3] = current[0]; current[4] = 2;
-                if (current[1] === null) { current[1] = 2; current[2] = 2; }
-                else if (current[1] > 2) current[1] = 2;
-            }
+            : -1;
+        if (alreadySeated || incomingIdx !== -1) {
+            if (incomingIdx !== -1) remaining.splice(incomingIdx, 1);
+            if (current[3] === 0) { current[3] = current[0]; current[4] = 2; }
+            if (current[1] === 3) current[1] = 2; // only extend lo if meld starts at 3
             hasSuitedTwoPromotion = true;
         }
     }
@@ -165,16 +164,7 @@ function appendCardsToMeld(meld, cards) {
     }
     if (remaining.length !== 0) return null;
 
-    // If the wild ended up at the high end and the meld doesn't start with an Ace, move it to the low end.
-    if (current[3] !== 0 && current[4] === current[2] && current[1] !== 1) {
-        current[1]--; current[4] = current[1]; current[2]--;
-    }
-    // If the suited-2 is now at its natural rank-2 position, clear the wild flags (clean meld).
-    if (current[3] === current[0] && current[4] === 2) {
-        current[3] = 0; current[4] = 0;
-    }
-
-    return current;
+    return normalizeMeld(current);
 }
 
 function buildMeld(cardIds, rules) {
@@ -251,13 +241,13 @@ function buildMeld(cardIds, rules) {
                     for (let i = 1; i < r.length; i++) {
                         if (r[i] - r[i-1] > 1) { wildPos = r[i-1] + 1; break; }
                     }
-                    return [firstNatSuit, min, max, getSuit(wilds[0]), wildPos];
+                    return normalizeMeld([firstNatSuit, min, max, getSuit(wilds[0]), wildPos]);
                 }
                 if (gaps === 0 && wilds.length === 1) {
                     let wildPos = max < 14 ? max + 1 : min - 1;
                     let newMin = max < 14 ? min : min - 1;
                     let newMax = max < 14 ? max + 1 : max;
-                    return [firstNatSuit, newMin, newMax, getSuit(wilds[0]), wildPos];
+                    return normalizeMeld([firstNatSuit, newMin, newMax, getSuit(wilds[0]), wildPos]);
                 }
                 return null;
             };
@@ -277,13 +267,13 @@ function buildMeld(cardIds, rules) {
                         for (let i = 1; i < r2.length; i++) {
                             if (r2[i] - r2[i-1] > 1) { wildPos = r2[i-1] + 1; break; }
                         }
-                        return [firstNatSuit, min, max, getSuit(w2[0]), wildPos];
+                        return normalizeMeld([firstNatSuit, min, max, getSuit(w2[0]), wildPos]);
                     }
                     if (gaps === 0 && w2.length === 1) {
                         let wildPos = max < 14 ? max + 1 : min - 1;
                         let newMin = max < 14 ? min : min - 1;
                         let newMax = max < 14 ? max + 1 : max;
-                        return [firstNatSuit, newMin, newMax, getSuit(w2[0]), wildPos];
+                        return normalizeMeld([firstNatSuit, newMin, newMax, getSuit(w2[0]), wildPos]);
                     }
                     return null;
                 })();
@@ -296,6 +286,15 @@ function buildMeld(cardIds, rules) {
     }
 
     return null;
+}
+
+// Normalize a sequence meld: if wild is at the high end and meld doesn't start with Ace,
+// move it to the low end; then clear flags if suited-2 is at its natural rank-2 position.
+function normalizeMeld(m) {
+    if (m[0] === 0 || m[3] === 0) return m;
+    if (m[4] === m[2] && m[1] !== 1) { m[1]--; m[4] = m[1]; m[2]--; }
+    if (m[3] === m[0] && m[4] === 2) { m[3] = 0; m[4] = 0; }
+    return m;
 }
 
 // A meld is clean if it has no wild, or its only wild is a suited-2 at the natural rank-2 position
