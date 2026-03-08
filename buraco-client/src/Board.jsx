@@ -361,8 +361,8 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
                 <span>Eles</span><span>{G.teamMortos[oppTeam] ? '✔️' : '❌'}</span>
               </div>
             </div>
-            {/* Morto deck icons stacked */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+            {/* Morto deck icons side by side */}
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '3px' }}>
               {(Array.isArray(G.pots) ? G.pots : Object.values(G.pots || {}).filter(p => p && p.length > 0)).map((_, i) => (
                 <div key={`morto-${i}`} style={{
                   border: '1px solid white', borderRadius: '4px', width: '22px', height: '32px',
