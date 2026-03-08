@@ -161,8 +161,12 @@ function appendCardsToMeld(meld, cards) {
     }
     if (remaining.length !== 0) return null;
 
-    // If the suited-2 still sits at its natural rank-2 position, it's clean — clear the wild flags.
-    if (hasSuitedTwoPromotion && current[1] === 2 && current[4] === 2) {
+    // If the wild ended up at the high end and the meld doesn't start with an Ace, move it to the low end.
+    if (current[3] !== 0 && current[4] === current[2] && current[1] !== 1) {
+        current[1]--; current[4] = current[1]; current[2]--;
+    }
+    // If the suited-2 is now at its natural rank-2 position, clear the wild flags (clean meld).
+    if (current[3] === current[0] && current[4] === 2) {
         current[3] = 0; current[4] = 0;
     }
 
