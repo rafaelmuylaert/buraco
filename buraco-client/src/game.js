@@ -27,7 +27,7 @@ function appendToMeld(meld, cId) {
         }
         
         if (cSuit === m[0] && cRank === m[4]) {
-            if (m[1] > 2) { m[4] = m[1] - 1; m[1] = m[1] - 1; return m; }
+            if (m[1] > 2) { m[4] = m[1] - 1; m[1] = m[1] - 1; if (m[4] === 2 && m[3] === m[0]) { m[3] = 0; m[4] = 0; } return m; }
             if (m[2] < 14) { m[4] = m[2] + 1; m[2] = m[2] + 1; return m; }
             return null;
         }
