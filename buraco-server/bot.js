@@ -7,7 +7,7 @@ const activeBots = {};
 const dnaCache = {};
 const activeIntervals = {};
 
-const DNA_SIZE = 49668;
+const DNA_SIZE = 37251;
 
 const getSuitChar = s => ['♠','♥','♦','♣','★'][s-1];
 const getRankChar = r => r===1?'A':r===11?'J':r===12?'Q':r===13?'K':r===14?'A':r.toString();
@@ -24,7 +24,9 @@ async function pollLobby() {
         const assignedName = match.setupData?.assignments?.[p.id];
         const targetBotName = match.setupData?.targetBotName || "UntrainedBot";
 
-        if (!p.name && assignedName && assignedName.toLowerCase().includes('bot')) {
+        const clientKey = `${match.matchID}_${p.id}`;
+        if (!p.name && assignedName && assignedName.toLowerCase().includes('bot') && !activeBots[clientKey]) {
+          activeBots[clientKey] = 'pending';
           console.log(`[BOT] Claiming Seat ${p.id} as ${assignedName} using brain '${targetBotName}'...`);
 
           if (!dnaCache[targetBotName]) {
@@ -44,15 +46,21 @@ async function pollLobby() {
             }
           }
 
-          const joinRes = await fetch(`${SERVER_URL}/games/buraco/${match.matchID}/join`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ playerID: p.id.toString(), playerName: assignedName })
-          });
-
-          const joinData = await joinRes.json();
-          if (joinData.playerCredentials) {
-            startBotClient(match.matchID, p.id.toString(), joinData.playerCredentials, assignedName, targetBotName);
+          try {
+            const joinRes = await fetch(`${SERVER_URL}/games/buraco/${match.matchID}/join`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ playerID: p.id.toString(), playerName: assignedName })
+            });
+            const joinData = await joinRes.json();
+            if (joinData.playerCredentials) {
+              startBotClient(match.matchID, p.id.toString(), joinData.playerCredentials, assignedName, targetBotName);
+            } else {
+              delete activeBots[clientKey];
+            }
+          } catch(e) {
+            console.error(`[BOT] Join failed for ${assignedName}:`, e);
+            delete activeBots[clientKey];
           }
         }
       }
@@ -62,7 +70,7 @@ async function pollLobby() {
 
 function startBotClient(matchID, playerID, credentials, botName, targetBotName) {
   const clientKey = `${matchID}_${playerID}`;
-  if (activeBots[clientKey]) return;
+  if (activeBots[clientKey] && activeBots[clientKey] !== 'pending') return;
 
   const client = Client({
     game: BuracoGame,

@@ -697,23 +697,31 @@ export const BuracoGame = {
       inputBuffer.set(nnHelpers.cardsToVector(opp2Id ? (G.knownCards[opp2Id] || []) : []), off); off += 53;
       // off is now 721; remaining 53 slots (721-773) = actionType(3) + cardsVec(53) written per-action
 
-      let dnaPickup, dnaAppend, dnaMeld, dnaDiscard;
+      let dnaPickup, dnaMeld, dnaDiscard;
       if (matchCtx) {
           const dna = matchCtx.genomes[p];
-          dnaPickup = dna.pickup; dnaAppend = dna.append; dnaMeld = dna.meld; dnaDiscard = dna.discard;
+          dnaPickup = dna.pickup; dnaMeld = dna.meld; dnaDiscard = dna.discard;
       } else {
           let DNA = customDNA || G.botGenomes?.[p] || new Float32Array(49668).fill(0.01);
-          if (DNA.length === 12417) {
-              const d = new Float32Array(49668); d.set(DNA); d.set(DNA, 12417); d.set(DNA, 24834); d.set(DNA, 37251); DNA = d;
-          } else if (DNA.length !== 49668) {
-              DNA = new Float32Array(49668).fill(0.01);
+          if (DNA.length !== 37251) {
+              const d = new Float32Array(37251);
+              for (let i = 0; i < 37251; i++) d[i] = DNA[i % DNA.length] || 0.01;
+              DNA = d;
           }
           dnaPickup  = DNA.subarray ? DNA.subarray(0, 12417)  : DNA.slice(0, 12417);
-          dnaAppend  = DNA.subarray ? DNA.subarray(12417, 24834) : DNA.slice(12417, 24834);
-          dnaMeld    = DNA.subarray ? DNA.subarray(24834, 37251) : DNA.slice(24834, 37251);
-          dnaDiscard = DNA.subarray ? DNA.subarray(37251, 49668) : DNA.slice(37251, 49668);
+          dnaMeld    = DNA.subarray ? DNA.subarray(12417, 24834) : DNA.slice(12417, 24834);
+          dnaDiscard = DNA.subarray ? DNA.subarray(24834, 37251) : DNA.slice(24834, 37251);
       }
 
+      // actionType: [isAppend(0=new,1=append), meldClean(0=clean,1=cleanable,2=dirty), cleanAfter(0=clean,1=cleanable,2=dirty)]
+      const meldCleanness = (meld) => {
+          if (!meld) return 0;
+          if (isMeldClean(meld)) return 0;
+          // cleanable: only wild is a suited-2 that could be at rank-2 position if meld extended
+          const wSuit = meld[3];
+          if (wSuit > 0 && wSuit !== 5 && wSuit === meld[0]) return 1; // suited-2 wild, potentially cleanable
+          return 2;
+      };
       const getScore = (actionTypeArray, actionCards, activeWeights) => {
           inputBuffer[INPUT_SIZE - 56] = actionTypeArray[0];
           inputBuffer[INPUT_SIZE - 55] = actionTypeArray[1];
@@ -768,47 +776,59 @@ export const BuracoGame = {
           if (G.deck.length === 0 && G.pots.length === 0) return [{ move: 'declareExhausted', args: [] }];
           
           let possiblePickups = [];
-          possiblePickups.push({ move: 'drawCard', args: [], actionType: [0,0,0], cards: [] });
+          possiblePickups.push({ move: 'drawCard', args: [], actionType: [0, 0, 0], cards: [] });
           
           if (topDiscard !== null) {
               if (G.rules.discard) {
-                  const combos = getAllValidMelds([...myHandCards, topDiscard], G.rules);
+                  const discardSuit = getSuit(topDiscard);
+                  const discardRank = getRank(topDiscard);
+                  const discardIsWild = discardSuit === 5 || discardRank === 2;
+                  const discardIsRunner = !discardIsWild && G.rules.runners && G.rules.runners.includes(discardRank);
+
+                  // Filter hand cards relevant to the discard
+                  const relevantHand = myHandCards.filter(c => {
+                      if (discardIsWild) return true; // 2 or joker: any card could form a meld
+                      const cs = getSuit(c), cr = getRank(c);
+                      const isWild = cs === 5 || cr === 2;
+                      if (isWild) return true;
+                      if (cs === discardSuit) return true; // same suit for sequences
+                      if (discardIsRunner && cr === discardRank) return true; // same rank for runners
+                      return false;
+                  });
+
+                  const combos = getAllValidMelds([...relevantHand, topDiscard], G.rules);
                   let seenSigs = new Set();
                   for (let combo of combos) {
-                      if (combo.includes(topDiscard)) {
-                          let handCardsUsed = [...combo];
-                          // BUGFIX: Safely remove exactly ONE instance of the top discard
-                          handCardsUsed.splice(handCardsUsed.indexOf(topDiscard), 1);
-                          
-                          let parsed = buildMeld(combo, G.rules);
-                          if (parsed) {
-                              let sim = [...(G.melds[p] || []), parsed];
-                              let projectedHandLength = (myHandCards.length - handCardsUsed.length) + (G.discardPile.length - 1);
-                              // Engine Rule Safety Check
-                              if (projectedHandLength < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue;
-                              
-                              let sig = combo.map(c => c === 54 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
-                              if (!seenSigs.has(sig)) {
-                                  seenSigs.add(sig);
-                                  possiblePickups.push({ move: 'pickUpDiscard', args: [handCardsUsed, { type: 'new' }], actionType: [1.0, 0.0, 0.0], cards: combo });
-                              }
-                          }
-                      }
+                      if (!combo.includes(topDiscard)) continue;
+                      let handCardsUsed = [...combo];
+                      handCardsUsed.splice(handCardsUsed.indexOf(topDiscard), 1);
+                      const parsed = buildMeld(combo, G.rules);
+                      if (!parsed) continue;
+                      const sim = [...(G.melds[p] || []), parsed];
+                      const projectedHandLength = (myHandCards.length - handCardsUsed.length) + (G.discardPile.length - 1);
+                      if (projectedHandLength < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, sim, p)) continue;
+                      const sig = combo.map(c => c === 54 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
+                      if (seenSigs.has(sig)) continue;
+                      seenSigs.add(sig);
+                      const cleanAfter = meldCleanness(parsed);
+                      possiblePickups.push({ move: 'pickUpDiscard', args: [handCardsUsed, { type: 'new' }], actionType: [0, cleanAfter, cleanAfter], cards: combo });
                   }
-                  // Pickup by appending top discard to an existing team meld
+
+                  // Pickup by appending top discard to an existing team meld, with multi-card extension
                   (G.teamPlayers[myTeam] || []).forEach(tp => {
                       (G.melds[tp] || []).forEach((meld, mIndex) => {
-                          const parsed = appendCardsToMeld(meld, [topDiscard]);
-                          if (parsed) {
-                              const projectedHandLength = myHandCards.length + (G.discardPile.length - 1);
-                              const simMelds = G.melds[tp].map((m, i) => i === mIndex ? parsed : m);
-                              if (projectedHandLength < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, simMelds, tp)) return;
-                              possiblePickups.push({ move: 'pickUpDiscard', args: [[], { type: 'append', player: tp, index: mIndex }], actionType: [1.0, 0.0, 0.0], cards: [topDiscard] });
-                          }
+                          const parsed1 = appendCardsToMeld(meld, [topDiscard]);
+                          if (!parsed1) return;
+                          const projectedHandLength = myHandCards.length + (G.discardPile.length - 1);
+                          const simMelds = G.melds[tp].map((m, i) => i === mIndex ? parsed1 : m);
+                          if (projectedHandLength < 2 && !canEmptyHandWithSimulatedMelds(G, myTeam, simMelds, tp)) return;
+                          const beforeClean = meldCleanness(meld);
+                          const afterClean1 = meldCleanness(parsed1);
+                          possiblePickups.push({ move: 'pickUpDiscard', args: [[], { type: 'append', player: tp, index: mIndex }], actionType: [1, beforeClean, afterClean1], cards: [topDiscard] });
                       });
                   });
               } else {
-                  possiblePickups.push({ move: 'pickUpDiscard', args: [], actionType: [1.0, 0.0, 0.0], cards: G.discardPile });
+                  possiblePickups.push({ move: 'pickUpDiscard', args: [], actionType: [0, 0, 0], cards: G.discardPile });
               }
           }
 
@@ -818,63 +838,93 @@ export const BuracoGame = {
       } 
       
       // ==========================================
-      // STAGE 2: APPEND
+      // STAGE 2: APPEND + MELD (unified dnaMeld)
       // ==========================================
-      let possibleAppends = [];
-      
+      let possibleMeldMoves = [];
+      const meldSigs = new Set();
 
+      // --- Appends (single then multi-card extension) ---
       (G.teamPlayers[myTeam] || []).forEach(tp => {
-          (G.melds[tp] || []).forEach((meld, mIndex) => {
-              for (let i = 0; i < myHandCards.length; i++) {
-                  let card = myHandCards[i];
-                  let parsed = appendCardsToMeld(meld, [card]);
-                  if (parsed) {
-                      const newHandSize = myHandCards.length - 1;
-                      const newMeldState = G.melds[tp].map((m, i) => i === mIndex ? parsed : m);
-                      const cleanAfter = G.teamPlayers[myTeam].some(tp2 =>
+          (G.melds[tp] || []).forEach((baseMeld, mIndex) => {
+              const beforeClean = meldCleanness(baseMeld);
+              // Determine which hand cards are relevant (same suit for seq, same rank for runner)
+              const isRunner = baseMeld[0] === 0;
+              const meldRank = isRunner ? baseMeld[1] : null;
+              const meldSuit = isRunner ? null : baseMeld[0];
+              const relevantCards = myHandCards.filter(c => {
+                  const cs = getSuit(c), cr = getRank(c);
+                  if (cs === 5 || cr === 2) return true; // wilds always relevant
+                  return isRunner ? cr === meldRank : cs === meldSuit;
+              });
+
+              // Build all prefix-appends: [c1], [c1,c2], [c1,c2,c3]...
+              // Start from each single-card append, then extend greedily
+              for (let i = 0; i < relevantCards.length; i++) {
+                  let currentMeld = baseMeld;
+                  let appendedCards = [];
+                  let remainingCards = [...relevantCards];
+
+                  // Try adding relevantCards[i] as first card
+                  const first = remainingCards.splice(i, 1)[0];
+                  let parsed = appendCardsToMeld(currentMeld, [first]);
+                  if (!parsed) continue;
+
+                  // Emit each prefix: [first], [first, next], ...
+                  appendedCards = [first];
+                  currentMeld = parsed;
+
+                  const emitAppend = (cards, meld) => {
+                      const newHandSize = myHandCards.length - cards.length;
+                      const newMeldState = G.melds[tp].map((m, i) => i === mIndex ? meld : m);
+                      const teamHasClean = G.teamPlayers[myTeam].some(tp2 =>
                           (tp2 === tp ? newMeldState : G.melds[tp2]).some(m => isCanasta(m) && (!G.rules.cleanCanastaToWin || isMeldClean(m)))
                       );
-                      if (newHandSize < 2 && !cleanAfter && (!G.pots.length || G.teamMortos[myTeam])) continue;
-                      possibleAppends.push({ move: 'appendToMeld', args: [tp, mIndex, [card]], actionType: [0.0, 1.0, 0.0], cards: [card] });
+                      if (newHandSize < 2 && !teamHasClean && (!G.pots.length || G.teamMortos[myTeam])) return;
+                      const sig = `A:${tp}-${mIndex}:` + cards.slice().sort((a,b)=>a-b).join(',');
+                      if (meldSigs.has(sig)) return;
+                      meldSigs.add(sig);
+                      const afterClean = meldCleanness(meld);
+                      possibleMeldMoves.push({ move: 'appendToMeld', args: [tp, mIndex, [...cards]], actionType: [1, beforeClean, afterClean], cards: [...cards] });
+                  };
+
+                  emitAppend(appendedCards, currentMeld);
+
+                  // Extend with remaining relevant cards
+                  for (let j = 0; j < remainingCards.length; j++) {
+                      const next = remainingCards[j];
+                      const extended = appendCardsToMeld(currentMeld, [next]);
+                      if (!extended) continue;
+                      appendedCards = [...appendedCards, next];
+                      remainingCards.splice(j, 1);
+                      j = -1; // restart scan with updated meld
+                      currentMeld = extended;
+                      emitAppend(appendedCards, currentMeld);
                   }
               }
           });
       });
 
-      if (possibleAppends.length > 0) {
-          for (let m of possibleAppends) m.score = getScore(m.actionType, m.cards, dnaAppend);
-          possibleAppends.sort((a,b) => b.score - a.score);
-          const queue = resolveQueue(possibleAppends.filter(m => m.score >= 0));
-          if (queue.length > 0) return queue.map(m => ({ move: m.move, args: m.args }));
-      }
-
-      // ==========================================
-      // STAGE 3: MELD
-      // ==========================================
-      let possibleMelds = [];
-      let meldSigs = new Set();
-      
+      // --- New melds ---
       const validMelds = getAllValidMelds(myHandCards, G.rules);
       for (let combo of validMelds) {
-          let parsed = buildMeld(combo, G.rules);
-          if (parsed) {
-              let sig = combo.map(c => c === 54 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
-              if (!meldSigs.has(sig)) {
-                  meldSigs.add(sig);
-                  possibleMelds.push({ move: 'playMeld', args: [combo], actionType: [0.0, 1.0, 0.0], cards: combo });
-              }
-          }
+          const parsed = buildMeld(combo, G.rules);
+          if (!parsed) continue;
+          const sig = 'N:' + combo.map(c => c === 54 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
+          if (meldSigs.has(sig)) continue;
+          meldSigs.add(sig);
+          const afterClean = meldCleanness(parsed);
+          possibleMeldMoves.push({ move: 'playMeld', args: [combo], actionType: [0, afterClean, afterClean], cards: combo });
       }
 
-      if (possibleMelds.length > 0) {
-          for (let m of possibleMelds) m.score = getScore(m.actionType, m.cards, dnaMeld);
-          possibleMelds.sort((a,b) => b.score - a.score);
-          const queue = resolveQueue(possibleMelds.filter(m => m.score >= 0));
+      if (possibleMeldMoves.length > 0) {
+          for (let m of possibleMeldMoves) m.score = getScore(m.actionType, m.cards, dnaMeld);
+          possibleMeldMoves.sort((a,b) => b.score - a.score);
+          const queue = resolveQueue(possibleMeldMoves.filter(m => m.score >= 0));
           if (queue.length > 0) return queue.map(m => ({ move: m.move, args: m.args }));
       }
 
       // ==========================================
-      // STAGE 4: DISCARD
+      // STAGE 3: DISCARD
       // ==========================================
       let possibleDiscards = [];
       let discardSigs = new Set();
