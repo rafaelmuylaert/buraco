@@ -264,72 +264,61 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
         </span>
       </div>
       
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'flex-start' }}>
-        {teamPlayers.map(p => (G.melds[p] || []).map((meldGroup, index) => {
-          const isSeq = meldGroup[0] !== 0;
-          const isCanasta = isSeq ? (meldGroup[2] - meldGroup[1] >= 6) : (meldGroup[2] >= 7);
-          const status = isCanasta ? (meldGroup[3] === 0 ? 'clean' : 'dirty') : null;
-          const points = calculateMeldPoints(meldGroup, G.rules);
-          const borderColor = status === 'clean' ? '#ffd700' : (status === 'dirty' ? '#c0c0c0' : 'transparent');
-          
-          const renderedCards = meldToCards(meldGroup);
-
+      <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-start' }}>
+        {/* Runners — vertical stack on the left */}
+        {(() => {
+          const runners = [];
+          teamPlayers.forEach(p => (G.melds[p] || []).forEach((meldGroup, index) => {
+            if (meldGroup[0] === 0) runners.push({ p, index, meldGroup });
+          }));
+          if (!runners.length) return null;
           return (
-            <div key={`${p}-${index}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div style={{ color: borderColor !== 'transparent' ? borderColor : '#aaa', fontSize: '0.8em', fontWeight: 'bold', marginBottom: '3px' }}>
-                {points} pts
-              </div>
-              <div onClick={() => { 
-                  if (!isMyTurn) return; 
-                  if (isMyTeam) {
-                    if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) {
-                      moves.pickUpDiscard(selectedCardValues, { type: 'append', player: p, index });
-                      setSelectedCards([]);
-                    } else if (selectedCards.length > 0) {
-                      moves.appendToMeld(p, index, selectedCardValues); 
-                      setSelectedCards([]);
-                    }
-                  }
-                }}
-                style={{ 
-                  display: 'flex', 
-                  flexDirection: !isSeq ? 'column' : 'row', 
-                  background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', 
-                  border: `2px solid ${borderColor}`, 
-                  cursor: (isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default' 
-                }}>
-                {renderedCards.map((card, i) => (
-                  <Card 
-                    key={card.id} 
-                    card={card} 
-                    customStyle={{ 
-                      marginLeft: (isSeq && i > 0) ? '-40px' : '0', 
-                      marginTop: (!isSeq && i > 0) ? '-60px' : '0',   
-                      zIndex: i 
-                    }} 
-                  />
-                ))}
-              </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0 }}>
+              {runners.map(({ p, index, meldGroup }) => {
+                const isCanasta = meldGroup[2] >= 7;
+                const status = isCanasta ? (meldGroup[3] === 0 ? 'clean' : 'dirty') : null;
+                const borderColor = status === 'clean' ? '#ffd700' : (status === 'dirty' ? '#c0c0c0' : 'transparent');
+                const points = calculateMeldPoints(meldGroup, G.rules);
+                const renderedCards = meldToCards(meldGroup);
+                return (
+                  <div key={`${p}-${index}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div style={{ color: borderColor !== 'transparent' ? borderColor : '#aaa', fontSize: '0.8em', fontWeight: 'bold', marginBottom: '3px' }}>{points} pts</div>
+                    <div onClick={() => { if (!isMyTurn || !isMyTeam) return; if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) { moves.pickUpDiscard(selectedCardValues, { type: 'append', player: p, index }); setSelectedCards([]); } else if (selectedCards.length > 0) { moves.appendToMeld(p, index, selectedCardValues); setSelectedCards([]); } }}
+                      style={{ display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', border: `2px solid ${borderColor}`, cursor: (isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default' }}>
+                      {renderedCards.map((card, i) => <Card key={card.id} card={card} customStyle={{ marginTop: i > 0 ? '-60px' : '0', zIndex: i }} />)}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           );
-        }))}
-
-        {isMyTeam && (
-          <div onClick={() => { 
-              if (!isMyTurn) return; 
-              
-              if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) {
-                moves.pickUpDiscard(selectedCardValues, { type: 'new' });
-                setSelectedCards([]);
-              } else if (selectedCards.length >= 3) { 
-                moves.playMeld(selectedCardValues); 
-                setSelectedCards([]); 
-              } 
-            }} 
-            style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && (selectedCards.length >= 3 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default', color: '#888' }}>
-            + Baixar Jogo
-          </div>
-        )}
+        })()}
+        {/* Sequences — 2-row wrap on the right */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'flex-start', flex: 1 }}>
+          {teamPlayers.map(p => (G.melds[p] || []).map((meldGroup, index) => {
+            if (meldGroup[0] === 0) return null;
+            const isCanasta = meldGroup[2] - meldGroup[1] >= 6;
+            const status = isCanasta ? (meldGroup[3] === 0 ? 'clean' : 'dirty') : null;
+            const borderColor = status === 'clean' ? '#ffd700' : (status === 'dirty' ? '#c0c0c0' : 'transparent');
+            const points = calculateMeldPoints(meldGroup, G.rules);
+            const renderedCards = meldToCards(meldGroup);
+            return (
+              <div key={`${p}-${index}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ color: borderColor !== 'transparent' ? borderColor : '#aaa', fontSize: '0.8em', fontWeight: 'bold', marginBottom: '3px' }}>{points} pts</div>
+                <div onClick={() => { if (!isMyTurn || !isMyTeam) return; if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) { moves.pickUpDiscard(selectedCardValues, { type: 'append', player: p, index }); setSelectedCards([]); } else if (selectedCards.length > 0) { moves.appendToMeld(p, index, selectedCardValues); setSelectedCards([]); } }}
+                  style={{ display: 'flex', flexDirection: 'row', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', border: `2px solid ${borderColor}`, cursor: (isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default' }}>
+                  {renderedCards.map((card, i) => <Card key={card.id} card={card} customStyle={{ marginLeft: i > 0 ? '-40px' : '0', zIndex: i }} />)}
+                </div>
+              </div>
+            );
+          }))}
+          {isMyTeam && (
+            <div onClick={() => { if (!isMyTurn) return; if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) { moves.pickUpDiscard(selectedCardValues, { type: 'new' }); setSelectedCards([]); } else if (selectedCards.length >= 3) { moves.playMeld(selectedCardValues); setSelectedCards([]); } }}
+              style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && (selectedCards.length >= 3 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default', color: '#888' }}>
+              + Baixar Jogo
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
