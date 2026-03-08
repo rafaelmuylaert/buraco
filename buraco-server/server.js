@@ -110,7 +110,7 @@ server.router.get('/api/bots/list', (ctx) => {
         return;
     }
     
-    const files = fs.readdirSync(botsDir).filter(f => f.endsWith('.json'));
+    const files = fs.readdirSync(botsDir).filter(f => f.endsWith('.json') && !f.endsWith('.meta.json'));
     ctx.body = files.map(f => f.replace('.json', ''));
 });
 
@@ -130,7 +130,7 @@ server.router.get('/api/bots/info', (ctx) => {
     const botsDir = path.join(process.cwd(), 'bots');
     if (!fs.existsSync(botsDir)) { ctx.body = []; return; }
     const statuses = TrainerService.getAllTrainingStatuses();
-    const files = fs.readdirSync(botsDir).filter(f => f.endsWith('.json') && !f.includes('_'));
+    const files = fs.readdirSync(botsDir).filter(f => f.endsWith('.json') && !f.endsWith('.meta.json') && !f.includes('_'));
     ctx.body = files.map(f => {
         const name = f.replace('.json', '');
         const stat = fs.statSync(path.join(botsDir, f));
