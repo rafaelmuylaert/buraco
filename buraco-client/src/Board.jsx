@@ -120,8 +120,14 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
     const isTournamentComplete = tournament && tournament.status === 'completed';
     const showNextButton = !isTournament || (isTournament && !isTournamentComplete);
 
-    const handleReturnLobby = () => {
-        window.location.reload(); 
+    const handleReturnLobby = async () => {
+        if (!isTournament && matchID) {
+            await fetch(`${window.location.origin}/buraco/api/admin/delete-match`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ matchID })
+            }).catch(() => {});
+        }
+        window.location.reload();
     };
 
     const handleNextMatch = () => {
@@ -246,7 +252,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
       moves.discardCard(selectedCardValues[0]);
       setSelectedCards([]);
     } else if (!G.hasDrawn && G.discardPile.length > 0) {
-      if (G.rules.discard === 'closed') {
+      if (G.rules.discard) {
         moves.pickUpDiscard(selectedCardValues, { type: 'new' });
         setSelectedCards([]);
       } else {
@@ -283,8 +289,8 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
                 return (
                   <div key={`${p}-${index}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <div style={{ color: borderColor !== 'transparent' ? borderColor : '#aaa', fontSize: '0.8em', fontWeight: 'bold', marginBottom: '3px' }}>{points} pts</div>
-                    <div onClick={() => { if (!isMyTurn || !isMyTeam) return; if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) { moves.pickUpDiscard(selectedCardValues, { type: 'append', player: p, index }); setSelectedCards([]); } else if (selectedCards.length > 0) { moves.appendToMeld(p, index, selectedCardValues); setSelectedCards([]); } }}
-                      style={{ display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', border: `2px solid ${borderColor}`, cursor: (isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default' }}>
+                    <div onClick={() => { if (!isMyTurn || !isMyTeam) return; if (!G.hasDrawn && G.rules.discard && G.discardPile.length > 0) { moves.pickUpDiscard(selectedCardValues, { type: 'append', player: p, index }); setSelectedCards([]); } else if (selectedCards.length > 0) { moves.appendToMeld(p, index, selectedCardValues); setSelectedCards([]); } }}
+                      style={{ display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', border: `2px solid ${borderColor}`, cursor: (isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && G.rules.discard))) ? 'pointer' : 'default' }}>
                       {renderedCards.map((card, i) => <Card key={card.id} card={card} customStyle={{ marginTop: i > 0 ? '-60px' : '0', zIndex: i }} />)}
                     </div>
                   </div>
@@ -305,16 +311,16 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
             return (
               <div key={`${p}-${index}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <div style={{ color: borderColor !== 'transparent' ? borderColor : '#aaa', fontSize: '0.8em', fontWeight: 'bold', marginBottom: '3px' }}>{points} pts</div>
-                <div onClick={() => { if (!isMyTurn || !isMyTeam) return; if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) { moves.pickUpDiscard(selectedCardValues, { type: 'append', player: p, index }); setSelectedCards([]); } else if (selectedCards.length > 0) { moves.appendToMeld(p, index, selectedCardValues); setSelectedCards([]); } }}
-                  style={{ display: 'flex', flexDirection: 'row', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', border: `2px solid ${borderColor}`, cursor: (isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default' }}>
+                <div onClick={() => { if (!isMyTurn || !isMyTeam) return; if (!G.hasDrawn && G.rules.discard && G.discardPile.length > 0) { moves.pickUpDiscard(selectedCardValues, { type: 'append', player: p, index }); setSelectedCards([]); } else if (selectedCards.length > 0) { moves.appendToMeld(p, index, selectedCardValues); setSelectedCards([]); } }}
+                  style={{ display: 'flex', flexDirection: 'row', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', border: `2px solid ${borderColor}`, cursor: (isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && G.rules.discard))) ? 'pointer' : 'default' }}>
                   {renderedCards.map((card, i) => <Card key={card.id} card={card} customStyle={{ marginLeft: i > 0 ? '-40px' : '0', zIndex: i }} />)}
                 </div>
               </div>
             );
           }))}
           {isMyTeam && (
-            <div onClick={() => { if (!isMyTurn) return; if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) { moves.pickUpDiscard(selectedCardValues, { type: 'new' }); setSelectedCards([]); } else if (selectedCards.length >= 3) { moves.playMeld(selectedCardValues); setSelectedCards([]); } }}
-              style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && (selectedCards.length >= 3 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default', color: '#888' }}>
+            <div onClick={() => { if (!isMyTurn) return; if (!G.hasDrawn && G.rules.discard && G.discardPile.length > 0) { moves.pickUpDiscard(selectedCardValues, { type: 'new' }); setSelectedCards([]); } else if (selectedCards.length >= 3) { moves.playMeld(selectedCardValues); setSelectedCards([]); } }}
+              style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && (selectedCards.length >= 3 || (!G.hasDrawn && G.rules.discard))) ? 'pointer' : 'default', color: '#888' }}>
               + Baixar Jogo
             </div>
           )}
@@ -330,9 +336,17 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100vh', boxSizing: 'border-box', overflow: 'hidden', padding: '15px', fontFamily: 'sans-serif', backgroundColor: '#2d6a4f', color: 'white', display: 'flex', gap: '15px' }}>
       
       {/* Column 1: Voltar + Mortos + Monte + Lixo + Jogadores + Memorizadas */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: G.rules?.openDiscardView ? '150px' : '90px', minWidth: G.rules?.openDiscardView ? '150px' : '90px', flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: G.rules?.openDiscardView ? '150px' : '90px', minWidth: G.rules?.openDiscardView ? '150px' : '90px', flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
 
-        <button onClick={() => window.location.reload()} style={{ width: '100%', background: '#4da6ff', color: 'white', border: 'none', padding: '6px 4px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.75em' }}>
+        <button onClick={async () => {
+          if (!G.rules?.isTournament && matchID) {
+            await fetch(`${window.location.origin}/buraco/api/admin/delete-match`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ matchID })
+            }).catch(() => {});
+          }
+          window.location.reload();
+        }} style={{ width: '100%', background: '#4da6ff', color: 'white', border: 'none', padding: '6px 4px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.75em' }}>
           ⬅ Salão
         </button>
 

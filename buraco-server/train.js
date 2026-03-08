@@ -337,6 +337,7 @@ export const TrainerService = {
                         const bestIdx = wins.indexOf(Math.max(...wins));
                         const champion = candidates[bestIdx].genome;
                         fs.writeFileSync(path.join(BOTS_DIR, `${botName}.json`), JSON.stringify(Array.from(champion)));
+                        fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({ rules, trainParams: { populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, telepathy: params.telepathy, fixedDeck: params.fixedDeck } }));
 
                         let benchmarkDiff = null;
                         if (originalDNA) {

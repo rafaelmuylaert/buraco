@@ -135,7 +135,9 @@ server.router.get('/api/bots/info', (ctx) => {
         const name = f.replace('.json', '');
         const stat = fs.statSync(path.join(botsDir, f));
         const active = statuses.find(s => s.botName === name);
-        return { name, lastModified: stat.mtimeMs, isTraining: !!active, currentGen: active?.progress?.currentGeneration || null, totalGen: active?.progress?.totalGenerations || null };
+        const metaPath = path.join(botsDir, `${name}.meta.json`);
+        const meta = fs.existsSync(metaPath) ? JSON.parse(fs.readFileSync(metaPath, 'utf-8')) : null;
+        return { name, lastModified: stat.mtimeMs, isTraining: !!active, currentGen: active?.progress?.currentGeneration || null, totalGen: active?.progress?.totalGenerations || null, meta };
     });
 });
 
@@ -144,8 +146,12 @@ server.router.post('/api/bots/delete', async (ctx) => {
     try {
         const body = await parseBody(ctx);
         const botsDir = path.join(process.cwd(), 'bots');
-        const botFile = path.join(botsDir, `${body.botName}.json`);
-        if (fs.existsSync(botFile)) fs.unlinkSync(botFile);
+        if (fs.existsSync(botsDir)) {
+            const prefix = `${body.botName}`;
+            fs.readdirSync(botsDir)
+              .filter(f => f === `${prefix}.json` || f === `${prefix}.meta.json` || (f.startsWith(`${prefix}_`) && f.endsWith('.json')))
+              .forEach(f => fs.unlinkSync(path.join(botsDir, f)));
+        }
         ctx.body = { success: true };
     } catch (e) { ctx.status = 500; ctx.body = { error: 'Failed' }; }
 });

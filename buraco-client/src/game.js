@@ -54,11 +54,8 @@ function buildMeld(cardIds, rules) {
     const firstNatRank = getRank(nats[0]);
 
     // --- Runner ---
-    if (rules.runners !== 'none' && nats.every(c => getRank(c) === firstNatRank)) {
-        let allowed = false;
-        if (rules.runners === 'any') allowed = true;
-        if (rules.runners === 'aces_threes' && (firstNatRank === 1 || firstNatRank === 3)) allowed = true;
-        if (rules.runners === 'aces_kings'  && (firstNatRank === 1 || firstNatRank === 13)) allowed = true;
+    if (rules.runners && rules.runners.length > 0 && nats.every(c => getRank(c) === firstNatRank)) {
+        const allowed = rules.runners.includes(firstNatRank);
         if (allowed && wilds.length <= 1) {
             const suitCounts = [0, 0, 0, 0];
             for (const c of nats) suitCounts[getSuit(c) - 1]++;
@@ -405,14 +402,10 @@ function getAllValidMelds(handCards, rules) {
         }
     }
 
-    if (rules.runners !== 'none') {
+    if (rules.runners && rules.runners.length > 0) {
         for (let r in byRankAnySuit) {
             let numR = parseInt(r);
-            let allowed = false;
-            if (rules.runners === 'any') allowed = true;
-            if (rules.runners === 'aces_threes' && (numR === 1 || numR === 3)) allowed = true;
-            if (rules.runners === 'aces_kings' && (numR === 1 || numR === 13)) allowed = true;
-
+            const allowed = rules.runners.includes(numR);
             if (allowed) {
                 let cards = byRankAnySuit[r];
                 for (let len = 3; len <= cards.length; len++) {
@@ -434,7 +427,7 @@ export const BuracoGame = {
   name: 'buraco',
   setup: ({ random, ctx }, setupData) => {
     const numPlayers = ctx.numPlayers || 4; 
-    const rules = setupData || { numPlayers, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false };
+    const rules = setupData || { numPlayers, discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false };
     const botGenomes = setupData?.botGenomes || {};
     
     let initialDeck = random.Shuffle(buildDeck(rules));
@@ -478,7 +471,7 @@ export const BuracoGame = {
       const hand = G.hands[ctx.currentPlayer];
       const topCard = G.discardPile[G.discardPile.length - 1];
 
-      if (G.rules.discard === 'closed') {
+      if (G.rules.discard) {
         let isValid = false; let parsedMeldObject = null;
 
         if (target.type === 'new') {
@@ -524,7 +517,7 @@ export const BuracoGame = {
         }
 
       } else {
-        G.lastDrawnCard = null; 
+        G.lastDrawnCard = null;
         const openPickedUp = [...G.discardPile];
         G.knownCards[ctx.currentPlayer].push(...G.discardPile); 
         G.hands[ctx.currentPlayer].push(...G.discardPile);
@@ -778,7 +771,7 @@ export const BuracoGame = {
           possiblePickups.push({ move: 'drawCard', args: [], actionType: [0,0,0], cards: [] });
           
           if (topDiscard !== null) {
-              if (G.rules.discard === 'closed') {
+              if (G.rules.discard) {
                   const combos = getAllValidMelds([...myHandCards, topDiscard], G.rules);
                   let seenSigs = new Set();
                   for (let combo of combos) {

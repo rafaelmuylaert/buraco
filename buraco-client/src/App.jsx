@@ -46,14 +46,14 @@ const App = () => {
     targetPoints: 3000,
     maxRounds: 3,
     botName: '',
-    rules: { discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true }
+    rules: { discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true }
   });
 
   const [newTourney, setNewTourney] = useState({ 
     name: '', type: 'team', format: 'points', targetPoints: 3000, maxRounds: 3, 
     players: 'João, Maria, Pedro, Ana',
     botName: '',
-    rules: { numPlayers: 4, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true }
+    rules: { numPlayers: 4, discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true }
   });
 
   const [availableBots, setAvailableBots] = useState([]);
@@ -68,8 +68,8 @@ const App = () => {
     generations: 500,
     saveInterval: 10,
     telepathy: true,
-    fixedDeck: true,
-    rules: { discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true }
+    fixedDeck: false,
+    rules: { discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true }
   });
 
   const loadServerData = async () => {
@@ -112,14 +112,12 @@ const App = () => {
   useEffect(() => {
     fetch(`${window.location.origin}/buraco/api/bots/list`)
       .then(res => res.json())
-      .then(data => {
-          setAvailableBots(data.filter(b => !/_\d+$/.test(b)));
-          if (data.length > 0) {
-              setQuickGameConfig(prev => ({ ...prev, botName: data[0] }));
-              setNewTourney(prev => ({ ...prev, botName: data[0] }));
-          }
-      })
+      .then(data => setAvailableBots(data.filter(b => !/_\d+$/.test(b))))
       .catch(err => console.error("Error fetching bots:", err));
+    fetch(`${window.location.origin}/buraco/api/bots/info`)
+      .then(res => res.json())
+      .then(data => setBotInfoList(data))
+      .catch(() => {});
   }, []);
 
   const handleStartTraining = async () => {
@@ -527,6 +525,38 @@ const App = () => {
     } catch (e) { alert("Erro ao liberar assento."); }
   };
 
+  const RUNNER_RANKS = [
+    [1,'A'],[2,'2'],[3,'3'],[4,'4'],[5,'5'],[6,'6'],[7,'7'],
+    [8,'8'],[9,'9'],[10,'10'],[11,'J'],[12,'Q'],[13,'K']
+  ];
+  const toggleRunner = (runners, rank) =>
+    runners.includes(rank) ? runners.filter(r => r !== rank) : [...runners, rank];
+
+  const bestBotFor = (rules) => {
+    if (!botInfoList.length) return '';
+    const score = (bot) => {
+      const m = bot.meta?.rules;
+      if (!m) return 0;
+      let s = 0;
+      if (m.discard === rules.discard) s += 2;
+      if (m.largeCanasta === rules.largeCanasta) s++;
+      if (m.cleanCanastaToWin === rules.cleanCanastaToWin) s++;
+      if (m.noJokers === rules.noJokers) s++;
+      const ra = m.runners || [], rb = rules.runners || [];
+      const union = new Set([...ra, ...rb]);
+      const inter = ra.filter(r => rb.includes(r));
+      s += union.size ? inter.length / union.size * 3 : 3;
+      return s;
+    };
+    return botInfoList.reduce((best, b) => score(b) >= score(best) ? b : best, botInfoList[0]).name;
+  };
+
+  useEffect(() => {
+    if (!botInfoList.length) return;
+    setQuickGameConfig(prev => ({ ...prev, botName: bestBotFor(prev.rules) }));
+    setNewTourney(prev => ({ ...prev, botName: bestBotFor(prev.rules) }));
+  }, [botInfoList]);
+
   const allValidMatchIDs = tournaments.flatMap(t => t.rounds.flatMap(r => r.assignments.map(a => a.matchID)));
 
   if (view === 'game') {
@@ -617,7 +647,7 @@ const App = () => {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '6px' }}>
-                    <button onClick={() => { setTrainBotIsNew(false); setTrainBotConfig(prev => ({ ...prev, name: bot.name })); setShowTrainBotPopup(true); }} style={{ background: '#8a2be2', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>▶ Treinar</button>
+                    <button onClick={() => { setTrainBotIsNew(false); setTrainBotConfig(prev => ({ ...prev, name: bot.name, ...(bot.meta?.trainParams || {}), rules: bot.meta?.rules || prev.rules })); setShowTrainBotPopup(true); }} style={{ background: '#8a2be2', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>▶ Treinar</button>
                     <button onClick={async () => { if (!confirm(`Apagar bot "${bot.name}"?`)) return; await fetch(`${window.location.origin}/buraco/api/bots/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botName: bot.name }) }); setBotInfoList(prev => prev.filter(b => b.name !== bot.name)); setAvailableBots(prev => prev.filter(b => b !== bot.name)); }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Apagar</button>
                   </div>
                 </div>
@@ -692,8 +722,17 @@ const App = () => {
 
                 <h4 style={{ margin: '10px 0 0 0', color: '#8be9fd' }}>Regras do Ambiente de Treino</h4>
                 <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '5px'}}>
-                    <label>Lixo: <select value={trainBotConfig.rules.discard} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, discard: e.target.value}})}><option value="open">Aberto</option><option value="closed">Fechado</option></select></label>
-                    <label>Trincas: <select value={trainBotConfig.rules.runners} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, runners: e.target.value}})}><option value="none">Nenhuma</option><option value="aces_threes">Ás/Três</option><option value="aces_kings">Ás/Reis</option><option value="any">Qualquer</option></select></label>
+                    <label style={{gridColumn:'1/-1'}}><input type="checkbox" checked={trainBotConfig.rules.discard} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, discard: e.target.checked}})} /> Usar carta para pegar descartes</label>
+                    <div style={{gridColumn:'1/-1'}}>
+                      <div style={{ fontSize: '0.8em', color: '#aaa', marginBottom: '4px' }}>Trincas:</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {RUNNER_RANKS.map(([rank, label]) => (
+                          <label key={rank} style={{ background: trainBotConfig.rules.runners.includes(rank) ? '#4da6ff' : '#444', color: 'white', padding: '2px 6px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8em' }}>
+                            <input type="checkbox" checked={trainBotConfig.rules.runners.includes(rank)} onChange={() => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, runners: toggleRunner(trainBotConfig.rules.runners, rank)}})} style={{ display: 'none' }} />{label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
                     <label><input type="checkbox" checked={trainBotConfig.rules.largeCanasta} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, largeCanasta: e.target.checked}})} /> Bônus 500/1000</label>
                     <label><input type="checkbox" checked={trainBotConfig.rules.cleanCanastaToWin} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, cleanCanastaToWin: e.target.checked}})} /> Bater Limpo</label>
                     <label><input type="checkbox" checked={trainBotConfig.rules.noJokers} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, noJokers: e.target.checked}})} /> Sem Curingas</label>
@@ -749,23 +788,28 @@ const App = () => {
             <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '15px', borderLeft: '1px solid #444', paddingLeft: '20px' }}>
               <h3 style={{ margin: '0 0 10px 0', color: '#ff4d4d' }}>Regras das Mesas</h3>
               <label>Jogadores por Mesa: <select value={newTourney.rules.numPlayers} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, numPlayers: parseInt(e.target.value)}})}><option value={2}>2 (Mano a Mano)</option><option value={4}>4 (Duplas)</option></select></label>
-              <label>Compra do Lixo: <select value={newTourney.rules.discard} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, discard: e.target.value}})}><option value="open">Aberto</option><option value="closed">Fechado</option></select></label>
-              <label>Trincas: <select value={newTourney.rules.runners} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, runners: e.target.value}})}><option value="none">Nenhuma</option><option value="aces_threes">Ás e Três</option><option value="aces_kings">Ás e Reis</option><option value="any">Qualquer</option></select></label>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px', background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px' }}>
-                <h4 style={{ margin: '0 0 10px 0', color: '#ffd700' }}>Inteligência Artificial</h4>
-                <label>Selecione a IA: 
-                  <select value={newTourney.botName || ''} onChange={e => setNewTourney({...newTourney, botName: e.target.value})} style={{ padding: '5px', marginLeft: '10px' }}>
-                    {availableBots.length === 0 && <option value="">(Nenhum Bot Treinado)</option>}
-                    {availableBots.map(bot => <option key={bot} value={bot}>{bot}</option>)}
-                  </select>
-                </label>
-                <label><input type="checkbox" checked={newTourney.rules.largeCanasta} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, largeCanasta: e.target.checked}})} /> Bônus Canastrão (500/1000)</label>
-                <label><input type="checkbox" checked={newTourney.rules.cleanCanastaToWin} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, cleanCanastaToWin: e.target.checked}})} /> Bater exige Canastra Limpa</label>
-                <label><input type="checkbox" checked={newTourney.rules.noJokers} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, noJokers: e.target.checked}})} /> Sem Curingas (Jokers)</label>
-                <label><input type="checkbox" checked={newTourney.rules.openDiscardView} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
-                <label><input type="checkbox" checked={newTourney.rules.showKnownCards} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas (Async)</label>
+              <label><input type="checkbox" checked={newTourney.rules.discard} onChange={e => { const r = {...newTourney.rules, discard: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Usar carta para pegar descartes</label>
+              <div>
+                <div style={{ fontSize: '0.85em', color: '#aaa', marginBottom: '4px' }}>Trincas permitidas:</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {RUNNER_RANKS.map(([rank, label]) => (
+                    <label key={rank} style={{ background: newTourney.rules.runners.includes(rank) ? '#4da6ff' : '#333', color: 'white', padding: '3px 7px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85em' }}>
+                      <input type="checkbox" checked={newTourney.rules.runners.includes(rank)} onChange={() => { const r = {...newTourney.rules, runners: toggleRunner(newTourney.rules.runners, rank)}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} style={{ display: 'none' }} />{label}
+                    </label>
+                  ))}
+                </div>
               </div>
+              <label>Selecione a IA:
+                <select value={newTourney.botName || ''} onChange={e => setNewTourney({...newTourney, botName: e.target.value})} style={{ padding: '5px', marginLeft: '10px' }}>
+                  {availableBots.length === 0 && <option value="">(Nenhum Bot Treinado)</option>}
+                  {availableBots.map(bot => <option key={bot} value={bot}>{bot}</option>)}
+                </select>
+              </label>
+              <label><input type="checkbox" checked={newTourney.rules.largeCanasta} onChange={e => { const r = {...newTourney.rules, largeCanasta: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Bônus Canastrão (500/1000)</label>
+              <label><input type="checkbox" checked={newTourney.rules.cleanCanastaToWin} onChange={e => { const r = {...newTourney.rules, cleanCanastaToWin: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Bater exige Canastra Limpa</label>
+              <label><input type="checkbox" checked={newTourney.rules.noJokers} onChange={e => { const r = {...newTourney.rules, noJokers: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Sem Curingas (Jokers)</label>
+              <label><input type="checkbox" checked={newTourney.rules.openDiscardView} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
+              <label><input type="checkbox" checked={newTourney.rules.showKnownCards} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas (Async)</label>
             </div>
           </div>
           <button onClick={handleCreateTournament} style={{ width: '100%', marginTop: '30px', padding: '15px', background: '#ffd700', fontSize: '1.2em', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Iniciar Torneio</button>
@@ -810,23 +854,28 @@ const App = () => {
               {quickGameConfig.format === 'rounds' && <label>Máximo de Rodadas: <input type="number" value={quickGameConfig.maxRounds} onChange={e => setQuickGameConfig({...quickGameConfig, maxRounds: parseInt(e.target.value)})} style={{ width: '80px', padding: '5px' }} /></label>}
 
               <h4 style={{ margin: '10px 0 0 0', color: '#4da6ff' }}>Regras</h4>
-              <label>Compra do Lixo: <select value={quickGameConfig.rules.discard} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, discard: e.target.value}})}><option value="open">Aberto</option><option value="closed">Fechado</option></select></label>
-              <label>Trincas: <select value={quickGameConfig.rules.runners} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, runners: e.target.value}})}><option value="none">Nenhuma</option><option value="aces_threes">Ás e Três</option><option value="aces_kings">Ás e Reis</option><option value="any">Qualquer</option></select></label>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px' }}>
-                <h4 style={{ margin: '10px 0 0 0', color: '#ffd700' }}>Inteligência Artificial</h4>
-                <label>Selecione a IA: 
-                  <select value={quickGameConfig.botName || ''} onChange={e => setQuickGameConfig({...quickGameConfig, botName: e.target.value})} style={{ padding: '5px', marginLeft: '10px' }}>
-                    {availableBots.length === 0 && <option value="">(Nenhum Bot Treinado)</option>}
-                    {availableBots.map(bot => <option key={bot} value={bot}>{bot}</option>)}
-                  </select>
-                </label>
-                <label><input type="checkbox" checked={quickGameConfig.rules.largeCanasta} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, largeCanasta: e.target.checked}})} /> Bônus Canastrão (500/1000)</label>
-                <label><input type="checkbox" checked={quickGameConfig.rules.cleanCanastaToWin} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, cleanCanastaToWin: e.target.checked}})} /> Bater exige Canastra Limpa</label>
-                <label><input type="checkbox" checked={quickGameConfig.rules.noJokers} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, noJokers: e.target.checked}})} /> Sem Curingas (Jokers)</label>
-                <label><input type="checkbox" checked={quickGameConfig.rules.openDiscardView} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
-                <label><input type="checkbox" checked={quickGameConfig.rules.showKnownCards} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas Memorizadas (Para Bot/Async)</label>
+              <label><input type="checkbox" checked={quickGameConfig.rules.discard} onChange={e => { const r = {...quickGameConfig.rules, discard: e.target.checked}; setQuickGameConfig(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Usar carta para pegar descartes</label>
+              <div>
+                <div style={{ fontSize: '0.85em', color: '#aaa', marginBottom: '4px' }}>Trincas permitidas:</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {RUNNER_RANKS.map(([rank, label]) => (
+                    <label key={rank} style={{ background: quickGameConfig.rules.runners.includes(rank) ? '#4da6ff' : '#333', color: 'white', padding: '3px 7px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85em' }}>
+                      <input type="checkbox" checked={quickGameConfig.rules.runners.includes(rank)} onChange={() => { const r = {...quickGameConfig.rules, runners: toggleRunner(quickGameConfig.rules.runners, rank)}; setQuickGameConfig(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} style={{ display: 'none' }} />{label}
+                    </label>
+                  ))}
+                </div>
               </div>
+              <label><input type="checkbox" checked={quickGameConfig.rules.largeCanasta} onChange={e => { const r = {...quickGameConfig.rules, largeCanasta: e.target.checked}; setQuickGameConfig(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Bônus Canastrão (500/1000)</label>
+              <label><input type="checkbox" checked={quickGameConfig.rules.cleanCanastaToWin} onChange={e => { const r = {...quickGameConfig.rules, cleanCanastaToWin: e.target.checked}; setQuickGameConfig(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Bater exige Canastra Limpa</label>
+              <label><input type="checkbox" checked={quickGameConfig.rules.noJokers} onChange={e => { const r = {...quickGameConfig.rules, noJokers: e.target.checked}; setQuickGameConfig(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Sem Curingas (Jokers)</label>
+              <label><input type="checkbox" checked={quickGameConfig.rules.openDiscardView} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
+              <label><input type="checkbox" checked={quickGameConfig.rules.showKnownCards} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas Memorizadas (Para Bot/Async)</label>
+              <label>Selecione a IA:
+                <select value={quickGameConfig.botName || ''} onChange={e => setQuickGameConfig({...quickGameConfig, botName: e.target.value})} style={{ padding: '5px', marginLeft: '10px' }}>
+                  {availableBots.length === 0 && <option value="">(Nenhum Bot Treinado)</option>}
+                  {availableBots.map(bot => <option key={bot} value={bot}>{bot}</option>)}
+                </select>
+              </label>
             </div>
 
             <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
