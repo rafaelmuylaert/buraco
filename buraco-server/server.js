@@ -241,6 +241,14 @@ server.router.post('/api/admin/delete-match', async (ctx) => {
 });
 
 const PORT = parseInt(process.env.SERVER_PORT || '8000');
+
+process.on('unhandledRejection', (reason) => {
+    console.error('[UNHANDLED REJECTION]', reason?.stack || reason);
+});
+process.on('uncaughtException', (err) => {
+    console.error('[UNCAUGHT EXCEPTION]', err.stack || err);
+});
+
 server.run({ port: PORT, host: '0.0.0.0' }, () => {
   console.log(`Server running on port ${PORT}...`);
 });

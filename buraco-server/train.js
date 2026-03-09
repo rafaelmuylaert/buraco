@@ -357,7 +357,6 @@ export const TrainerService = {
             console.error(`[TRAINER] Error for ${botName}:`, error);
         } finally {
             console.log(`✅ Training complete for '${botName}'!`);
-            if (_pool) { _pool.terminate(); _pool = null; }
             activeTrainings.delete(botName);
         }
     }
