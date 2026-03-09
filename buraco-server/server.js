@@ -79,11 +79,9 @@ server.router.post('/api/bots/train', async (ctx) => {
         const body = await parseBody(ctx);
         const { botName, rules, trainParams } = body;
         
-        // BUG FIX: Attached .catch() to prevent background crashes from taking down the server!
         TrainerService.startTraining(botName, rules, trainParams).catch(err => {
-            console.error(`[TRAINER ERROR] Background crash for ${botName}:`, err);
-        }); 
-        
+            console.error(`[TRAINER ERROR] Background crash for ${botName}:`, err.stack || err);
+        });
         ctx.body = { success: true, message: `Training started for ${botName}` };
     } catch (e) {
         ctx.status = 400;

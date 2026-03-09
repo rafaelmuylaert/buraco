@@ -97,6 +97,7 @@ function runMatch(genomes, rules, fixedDeck) {
         const scores = ctx.gameover ? ctx.gameover.scores : { team0: { total: -5000 }, team1: { total: -5000 } };
         return scores.team0.total - scores.team1.total;
     } catch (e) {
+        console.error('[WORKER] runMatch error:', e.stack || e);
         return 0;
     }
 }
