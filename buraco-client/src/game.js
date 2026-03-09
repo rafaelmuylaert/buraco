@@ -791,15 +791,15 @@ export const BuracoGame = {
           dnaDiscard = DNA.subarray ? DNA.subarray(16834, 25251) : DNA.slice(16834, 25251);
       }
 
-      let _gsCount = 0;
+      //let _gsCount = 0;
       const getScore = (actionTypeArray, actionCards, activeWeights) => {
-          _gsCount++;
+          //_gsCount++;
           inputBuffer[468] = actionTypeArray[0];
           inputBuffer[469] = actionTypeArray[1];
           inputBuffer[470] = actionTypeArray[2];
           nnHelpers.cardsToVector(actionCards, inputBuffer, 471);
           const result = nnHelpers.forwardPass(inputBuffer, activeWeights);
-          console.log(`[getScore #${_gsCount}] turn=${ctx.turn} player=${p} stage=${activeWeights===dnaPickup?'pickup':activeWeights===dnaMeld?'meld':'discard'} actionType=[${actionTypeArray}] cards=[${actionCards}] -> ${result.toFixed(4)}`);
+          //console.log(`[getScore #${_gsCount}] turn=${ctx.turn} player=${p} stage=${activeWeights===dnaPickup?'pickup':activeWeights===dnaMeld?'meld':'discard'} actionType=[${actionTypeArray}] cards=[${actionCards}] -> ${result.toFixed(4)}`);
           return result;
       };
 
