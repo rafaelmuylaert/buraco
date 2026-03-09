@@ -2,9 +2,11 @@ import { workerData, parentPort } from 'worker_threads';
 import { BuracoGame, nnHelpers, AI_CONFIG } from './game.js';
 import { initWasm, wasmForwardPass } from './wasm_loader.js';
 
-const wasmLoaded = await initWasm();
-if (wasmLoaded) {
-    nnHelpers.forwardPass = wasmForwardPass;
+try {
+    const wasmLoaded = await initWasm();
+    if (wasmLoaded) nnHelpers.forwardPass = wasmForwardPass;
+} catch(e) {
+    console.error('[WORKER INIT ERROR]', e.stack || e);
 }
 
 function shuffle(arr) {
@@ -121,9 +123,19 @@ function processJob(matches, rules) {
 
 if (workerData.matches.length === 0) {
     parentPort.on('message', ({ type, matches, rules, deck }) => {
-        if (type === 'shuffleDeck') { _currentDeck = deck; return; }
-        parentPort.postMessage(processJob(matches, rules));
+        try {
+            if (type === 'shuffleDeck') { _currentDeck = deck; return; }
+            parentPort.postMessage(processJob(matches, rules));
+        } catch(e) {
+            console.error('[WORKER JOB ERROR]', e.stack || e);
+            parentPort.postMessage([]);
+        }
     });
 } else {
-    parentPort.postMessage(processJob(matches, rules));
+    try {
+        parentPort.postMessage(processJob(workerData.matches, workerData.rules));
+    } catch(e) {
+        console.error('[WORKER JOB ERROR]', e.stack || e);
+        parentPort.postMessage([]);
+    }
 }
