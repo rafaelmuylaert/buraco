@@ -900,6 +900,7 @@ export const BuracoGame = {
               }
           }
 
+          if (possiblePickups.length === 1) return [{ move: 'drawCard', args: [] }];
           for (let m of possiblePickups) m.score = getScore(m.actionType, m.cards, dnaPickup);
           possiblePickups.sort((a, b) => b.score - a.score);
           return [{ move: possiblePickups[0].move, args: possiblePickups[0].args }];
@@ -1016,9 +1017,13 @@ export const BuracoGame = {
       }
 
       if (possibleDiscards.length > 0) {
-          for (let m of possibleDiscards) m.score = getScore(m.actionType, m.cards, dnaDiscard);
-          possibleDiscards.sort((a,b) => b.score - a.score);
-          return [{ move: possibleDiscards[0].move, args: possibleDiscards[0].args }];
+          // Single forwardPass: write discard actionType, zero action cards, read output as index
+          inputBuffer[468] = 0.0; inputBuffer[469] = 0.0; inputBuffer[470] = 1.0;
+          inputBuffer.fill(0, 471, 524);
+          const raw = nnHelpers.forwardPass(inputBuffer, dnaDiscard);
+          const idx = Math.min(possibleDiscards.length - 1, Math.max(0, Math.floor(Math.abs(raw) % possibleDiscards.length)));
+          console.log(`[discard] turn=${ctx.turn} player=${p} raw=${raw.toFixed(4)} idx=${idx} card=${possibleDiscards[idx].args[0]}`);
+          return [{ move: possibleDiscards[idx].move, args: possibleDiscards[idx].args }];
       }
 
       return []; 
