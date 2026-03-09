@@ -41,7 +41,7 @@ services:
     container_name: buraco-bot
     command: ["node", "bot.js"] 
     depends_on:
-      - buraco-server
+      - buraco-server2
     restart: unless-stopped
     develop:
       watch:
@@ -70,7 +70,7 @@ services:
     ports:
       - "${CLIENT_HOST_PORT:-5173}:${CLIENT_PORT:-5173}"
     depends_on:
-      - buraco-server
+      - buraco-server2
     restart: unless-stopped
     # Watch configuration for the frontend
     develop:
