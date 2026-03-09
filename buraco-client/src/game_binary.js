@@ -4,6 +4,8 @@ const getRank = c => c >= 104 ? 2 : (c % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:
 
 export const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
 export const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
+
+// Pre-mapped points for sequence slots: [Empty, Wild, A, 2, 3, 4, 5, 6, 7, 8, 9, 10, J, Q, K, High_A]
 const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15]; 
 
 export function sortCards(cards) {
@@ -44,6 +46,7 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
     let aces = [];
     let twos = [];
     
+    // 1. Slotted population and overlap check
     for (let c of cardIds) {
         let s = getSuit(c), r = getRank(c);
         if (s === 5 || r === 2) {
@@ -65,7 +68,7 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
     }
     m[0] = suit;
 
-    // Resolve 2s: natural or wild?
+    // 2. Resolve 2s: natural or wild?
     for (let c of twos) {
         let s = getSuit(c), r = getRank(c);
         if (s === suit && r === 2 && m[3] === 0) {
@@ -76,7 +79,7 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
         }
     }
 
-    // Resolve Aces: low (2) or high (15)?
+    // 3. Resolve Aces: low (2) or high (15)?
     for (let c of aces) {
         if (getSuit(c) !== suit) return null;
         if (m[14] === 1 && m[15] === 0) m[15] = 1; // Prioritize High A if K is present
@@ -98,27 +101,37 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
 
     let gaps = checkGaps(m);
 
-    // Try resolving gaps by shifting flexible cards
-    if (gaps > 1) {
+    // 4. Try resolving gaps by dynamically shifting flexible cards
+    if (gaps > 0) {
         // Shift Ace from low to high if needed
         if (m[2] === 1 && m[15] === 0) {
             m[2] = 0; m[15] = 1;
-            gaps = checkGaps(m);
-            if (gaps > 1) { m[2] = 1; m[15] = 0; gaps = checkGaps(m); } // Revert if didn't help
+            let newGaps = checkGaps(m);
+            if (newGaps < gaps) gaps = newGaps;
+            else { m[2] = 1; m[15] = 0; } // Revert if didn't help
         }
+        
         // Demote natural 2 to wild role if needed
-        if (gaps > 1 && m[3] === 1 && m[1] === 0) {
+        if (gaps > 0 && m[3] === 1 && m[1] === 0) {
             m[3] = 0; m[1] = suit;
-            gaps = checkGaps(m);
+            let newGaps = checkGaps(m);
+            if (newGaps <= 1) gaps = newGaps;
+            else { m[3] = 1; m[1] = 0; } // Revert if gap was too large anyway
         }
-        if (gaps > 1) return null; // Gap too large to bridge!
     }
 
-    // Promote wild 2 back to natural 2 if gap is filled
+    // 5. Promote wild 2 back to natural 2 if a gap was naturally filled by new cards
     if (gaps === 0 && m[1] === suit && m[3] === 0) {
         m[3] = 1; m[1] = 0; 
+        if (checkGaps(m) > 0) {
+            m[3] = 0; m[1] = suit; // Revert if promotion created a gap
+        }
     }
 
+    // 6. Strict gap and length validation
+    if (gaps > 1) return null; // Multiple gaps cannot be bridged
+    if (gaps === 1 && m[1] === 0) return null; // A gap exists without a wild card to fill it
+    
     let len = 0;
     for(let r=2; r<=15; r++) len += m[r];
     if (len + (m[1] !== 0 ? 1 : 0) > 14) return null; // Cannot exceed 14 card strict sequence length
@@ -197,14 +210,14 @@ export function calculateMeldPoints(meld, rules) {
         for(let r = 2; r <= 15; r++) {
             pts += meld[r] * SEQ_POINTS[r];
         }
-        if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20);
+        if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20); // Add wild points
     } else {
         const rank = meld[2];
         const nats = meld[3] + meld[4] + meld[5] + meld[6];
         const rankPt = (rank === 1) ? 15 : (rank >= 8 ? 10 : (rank === 2 ? 20 : 5));
         pts += nats * rankPt;
         
-        if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20);
+        if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20); // Add wild points
     }
 
     if (isCanasta) {
@@ -655,7 +668,7 @@ export const BuracoGame = {
           let possiblePickups = [];
           possiblePickups.push({ move: 'drawCard', args: [], actionType: 0, cards: [], mIdx: null });
           if (topDiscard !== null) {
-              if (G.rules.discard) {
+              if (G.rules.discard === 'closed') {
                   const combos = getAllValidMelds([...myHandCards, topDiscard], G.rules);
                   let seenSigs = new Set();
                   for (let combo of combos) {
