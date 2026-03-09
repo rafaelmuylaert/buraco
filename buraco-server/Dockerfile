@@ -9,5 +9,7 @@ COPY buraco-server/ .
 COPY buraco-client/src/game.js ./game.js
 
 # Expose the API and WebSockets port
-EXPOSE 8000
+ARG SERVER_PORT=8000
+ENV SERVER_PORT=${SERVER_PORT}
+EXPOSE ${SERVER_PORT}
 CMD ["node", "server.js"]

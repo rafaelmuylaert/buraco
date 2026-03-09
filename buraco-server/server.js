@@ -242,6 +242,7 @@ server.router.post('/api/admin/delete-match', async (ctx) => {
   }
 });
 
-server.run({ port: 8000, host: '0.0.0.0' }, () => {
-  console.log(`Server running on port 8000...`);
+const PORT = parseInt(process.env.SERVER_PORT || '8000');
+server.run({ port: PORT, host: '0.0.0.0' }, () => {
+  console.log(`Server running on port ${PORT}...`);
 });

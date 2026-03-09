@@ -5,9 +5,13 @@ services:
     build:
       context: .
       dockerfile: buraco-server/Dockerfile
+      args:
+        SERVER_PORT: ${SERVER_PORT:-8000}
     container_name: buraco-server
+    environment:
+      - SERVER_PORT=${SERVER_PORT:-8000}
     ports:
-      - "8000:8000"
+      - "${SERVER_PORT:-8000}:${SERVER_PORT:-8000}"
     volumes:
       - ./buraco-server/db:/app/db
       - ./buraco-server/bots:/app/bots
@@ -56,10 +60,15 @@ services:
           target: /app/game.js
 
   buraco-client:
-    build: ./buraco-client
+    build:
+      context: ./buraco-client
+      args:
+        CLIENT_PORT: ${CLIENT_PORT:-5173}
     container_name: buraco-client
+    environment:
+      - CLIENT_PORT=${CLIENT_PORT:-5173}
     ports:
-      - "4173:5173"
+      - "${CLIENT_HOST_PORT:-5173}:${CLIENT_PORT:-5173}"
     depends_on:
       - buraco-server
     restart: unless-stopped
