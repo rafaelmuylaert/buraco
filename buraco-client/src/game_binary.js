@@ -3,8 +3,8 @@ const getSuit = c => c >= 104 ? 5 : Math.floor((c % 52) / 13) + 1; // 1:♠, 2:�
 const getRank = c => c >= 104 ? 2 : (c % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:K
 
 export const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
-export const pointValues = { '3': 5, '4': 5, '5': 5, '6': 5, '7': 5, '8': 10, '9': 10, '10': 10, 'J': 10, 'Q': 10, 'K': 10, 'A': 15, '2': 20, 'JOKER': 50 };
 export const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
+const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15]; 
 
 export function sortCards(cards) {
   const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
@@ -34,135 +34,143 @@ export function getMeldLength(m) {
     return m[3] + m[4] + m[5] + m[6] + (m[1] !== 0 ? 1 : 0);
 }
 
-function expandMeld(m) {
-    let cards = [];
-    if (m[0] !== 0) {
-        let suit = m[0]; let wildSuit = m[1];
-        let min = 16, max = 0;
-        for (let r = 2; r <= 15; r++) {
-            if (m[r] === 1) { if (r < min) min = r; if (r > max) max = r; }
+// 🚀 Core Direct Slots Expansion & Validation logic 
+function cardsToSeqSlots(cardIds, existingMeld = null) {
+    let m = existingMeld ? [...existingMeld] : new Array(16).fill(0);
+    let suit = m[0];
+    let wildSuit = m[1];
+    
+    let wilds = [];
+    let aces = [];
+    let twos = [];
+    
+    for (let c of cardIds) {
+        let s = getSuit(c), r = getRank(c);
+        if (s === 5 || r === 2) {
+            twos.push(c); // Put all wilds/twos here initially to resolve later
+        } else if (r === 1) {
+            aces.push(c);
+        } else {
+            if (suit === 0) suit = s;
+            else if (s !== suit) return null;
+            if (m[r + 1] === 1) return null; // Overlap detected!
+            m[r + 1] = 1;
         }
-        let wildPlaced = false;
-        for (let r = min; r <= max; r++) {
-            if (m[r] === 1) {
-                let rank = r === 15 ? 1 : r - 1;
-                cards.push((suit - 1) * 13 + (rank - 1));
-            } else {
-                cards.push(wildSuit === 5 ? 54 : (wildSuit - 1) * 13 + 1);
-                wildPlaced = true;
-            }
-        }
-        if (wildSuit !== 0 && !wildPlaced) {
-            cards.push(wildSuit === 5 ? 54 : (wildSuit - 1) * 13 + 1);
-        }
-    } else {
-        let wildSuit = m[1]; let rank = m[2];
-        for (let s = 1; s <= 4; s++) {
-            for (let i = 0; i < m[s + 2]; i++) {
-                cards.push((s - 1) * 13 + (rank - 1));
-            }
-        }
-        if (wildSuit !== 0) cards.push(wildSuit === 5 ? 54 : (wildSuit - 1) * 13 + 1);
     }
-    return cards;
+    
+    if (suit === 0) {
+        if (aces.length > 0) suit = getSuit(aces[0]);
+        else if (twos.length > 0) suit = getSuit(twos[0]);
+        else return null; // Can't be pure wilds
+    }
+    m[0] = suit;
+
+    // Resolve 2s: natural or wild?
+    for (let c of twos) {
+        let s = getSuit(c), r = getRank(c);
+        if (s === suit && r === 2 && m[3] === 0) {
+            m[3] = 1; // Used as natural 2 for now
+        } else {
+            if (wildSuit !== 0) return null; // Max 1 wild allowed
+            wildSuit = s;
+        }
+    }
+
+    // Resolve Aces: low (2) or high (15)?
+    for (let c of aces) {
+        if (getSuit(c) !== suit) return null;
+        if (m[14] === 1 && m[15] === 0) m[15] = 1; // Prioritize High A if K is present
+        else if (m[2] === 0) m[2] = 1;
+        else if (m[15] === 0) m[15] = 1;
+        else return null; // Too many aces!
+    }
+
+    m[1] = wildSuit;
+
+    const checkGaps = (arr) => {
+        let min = 16, max = 0;
+        for(let r=2; r<=15; r++) if(arr[r]) { if(r<min) min=r; if(r>max) max=r; }
+        if (min > max) return 0;
+        let gaps = 0;
+        for(let r=min; r<=max; r++) if(!arr[r]) gaps++;
+        return gaps;
+    };
+
+    let gaps = checkGaps(m);
+
+    // Try resolving gaps by shifting flexible cards
+    if (gaps > 1) {
+        // Shift Ace from low to high if needed
+        if (m[2] === 1 && m[15] === 0) {
+            m[2] = 0; m[15] = 1;
+            gaps = checkGaps(m);
+            if (gaps > 1) { m[2] = 1; m[15] = 0; gaps = checkGaps(m); } // Revert if didn't help
+        }
+        // Demote natural 2 to wild role if needed
+        if (gaps > 1 && m[3] === 1 && m[1] === 0) {
+            m[3] = 0; m[1] = suit;
+            gaps = checkGaps(m);
+        }
+        if (gaps > 1) return null; // Gap too large to bridge!
+    }
+
+    // Promote wild 2 back to natural 2 if gap is filled
+    if (gaps === 0 && m[1] === suit && m[3] === 0) {
+        m[3] = 1; m[1] = 0; 
+    }
+
+    let len = 0;
+    for(let r=2; r<=15; r++) len += m[r];
+    if (len + (m[1] !== 0 ? 1 : 0) > 14) return null; // Cannot exceed 14 card strict sequence length
+
+    return m;
+}
+
+function cardsToRunnerSlots(cardIds, existingMeld = null) {
+    let m = existingMeld ? [...existingMeld] : [0, 0, 0, 0, 0, 0, 0];
+    let wildSuit = m[1];
+    let rank = m[2];
+    
+    for (let c of cardIds) {
+        let s = getSuit(c), r = getRank(c);
+        if (s === 5 || r === 2) {
+            if (wildSuit !== 0) return null; 
+            wildSuit = s;
+        } else {
+            if (rank === 0) rank = r;
+            else if (r !== rank) return null; // Rank mismatch
+            m[s + 2]++;
+        }
+    }
+    
+    if (rank === 0) return null; // Must have at least one natural
+    
+    m[1] = wildSuit;
+    m[2] = rank;
+    return m;
 }
 
 function buildMeld(cardIds, rules) {
     if (cardIds.length < 3) return null;
-
-    let nats = []; let wilds = [];
-    for (let i = 0; i < cardIds.length; i++) {
-        let c = cardIds[i]; let s = getSuit(c); let r = getRank(c);
-        if (s === 5 || r === 2) wilds.push(c);
-        else nats.push(c);
-    }
-    if (nats.length === 0) return null;
-
-    let firstNatRank = getRank(nats[0]); let firstNatSuit = getSuit(nats[0]);
-    let isSameRank = true; let isSameSuit = true;
-
-    for (let i = 1; i < nats.length; i++) {
-        if (getRank(nats[i]) !== firstNatRank) isSameRank = false;
-        if (getSuit(nats[i]) !== firstNatSuit) isSameSuit = false;
-    }
-
-    if (isSameRank && rules.runners !== 'none') {
-        let r = firstNatRank; let allowed = false;
-        if (rules.runners === 'any') allowed = true;
-        if (rules.runners === 'aces_threes' && (r === 1 || r === 3)) allowed = true;
-        if (rules.runners === 'aces_kings' && (r === 1 || r === 13)) allowed = true;
-        
-        if (allowed && wilds.length <= 1) {
-            let counts = [0,0,0,0];
-            for (let c of nats) counts[getSuit(c)-1]++;
-            return [0, wilds.length ? getSuit(wilds[0]) : 0, r, counts[0], counts[1], counts[2], counts[3]];
-        }
-    }
-
-    if (isSameSuit) {
-        let trueWilds = []; let natTwos = 0;
-        for (let i = 0; i < wilds.length; i++) {
-            let ws = getSuit(wilds[i]);
-            if (ws === firstNatSuit && getRank(wilds[i]) === 2 && natTwos === 0) natTwos++;
-            else trueWilds.push(wilds[i]);
-        }
-
-        if (trueWilds.length <= 1) {
-            let ranks = nats.map(c => getRank(c));
-            if (natTwos > 0) ranks.push(2);
-            let hasAce = ranks.includes(1);
-            ranks = ranks.filter(r => r !== 1).sort((a,b) => a-b);
-            
-            if (ranks.length === 0) ranks = [1];
-            else if (hasAce) {
-                if (ranks[0] <= 3) ranks.unshift(1);
-                else if (ranks[ranks.length-1] >= 12) ranks.push(14);
-                else ranks.unshift(1);
-            }
-            
-            if (new Set(ranks).size !== ranks.length) return null;
-
-            let min = ranks[0]; let max = ranks[ranks.length-1]; let gaps = 0;
-            for (let i = 1; i < ranks.length; i++) gaps += (ranks[i] - ranks[i-1] - 1);
-            
-            if (gaps === 0 && trueWilds.length === 0) {
-                let m = new Array(16).fill(0); m[0] = firstNatSuit; m[1] = 0;
-                for (let r of ranks) m[r === 14 ? 15 : r + 1] = 1;
-                return m;
-            }
-            
-            if (gaps <= 1 && trueWilds.length === 1) {
-                let m = new Array(16).fill(0); m[0] = firstNatSuit; m[1] = getSuit(trueWilds[0]);
-                for (let r of ranks) m[r === 14 ? 15 : r + 1] = 1;
-                return m;
-            }
+    let seq = cardsToSeqSlots(cardIds);
+    if (seq) return seq;
+    
+    if (rules.runners !== 'none') {
+        let run = cardsToRunnerSlots(cardIds);
+        if (run) {
+            let r = run[2];
+            let allowed = rules.runners === 'any' || 
+                          (rules.runners === 'aces_threes' && (r === 1 || r === 3)) ||
+                          (rules.runners === 'aces_kings' && (r === 1 || r === 13));
+            if (allowed) return run;
         }
     }
     return null;
 }
 
 function appendCardsToMeld(meld, cards) {
-    if (meld[0] !== 0) { 
-        // 🚀 Sequence Expansion: Breaks sequence to raw cards, adds new ones, and rebuilds 
-        // completely bypassing gap-logic edge-case bugs!
-        const expanded = expandMeld(meld);
-        for (let i = 0; i < cards.length; i++) expanded.push(cards[i]);
-        return buildMeld(expanded, { runners: 'none' });
-    }
-    // Runner logic
-    const m = [...meld];
-    for (const c of cards) {
-        const s = getSuit(c), r = getRank(c);
-        const isWild = s === 5 || r === 2;
-        if (!isWild) {
-            if (r !== m[2]) return null;
-            m[2 + s]++; 
-        } else {
-            if (m[1] !== 0) return null;
-            m[1] = s;
-        }
-    }
-    return m;
+    if (meld[0] !== 0) return cardsToSeqSlots(cards, meld);
+    return cardsToRunnerSlots(cards, meld);
 }
 
 function appendToMeld(meld, cId) {
@@ -178,6 +186,8 @@ function meldCleanness(m) {
 
 export function calculateMeldPoints(meld, rules) {
     let pts = 0;
+    if (!meld || meld.length === 0) return 0;
+
     const isSeq = meld[0] !== 0;
     const isClean = isMeldClean(meld);
     const length = getMeldLength(meld);
@@ -185,33 +195,23 @@ export function calculateMeldPoints(meld, rules) {
     
     if (isSeq) {
         for(let r = 2; r <= 15; r++) {
-            if (meld[r] === 1) {
-                let rank = r === 15 ? 1 : r - 1;
-                pts += (rank === 1) ? 15 : (rank >= 8 ? 10 : (rank === 2 ? 20 : 5));
-            }
+            pts += meld[r] * SEQ_POINTS[r];
         }
         if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20);
-        
-        if (isCanasta) {
-            pts += isClean ? 200 : 100;
-            if (rules.largeCanasta && isClean) {
-                if (length === 13) pts += 500;
-                if (length >= 14) pts += 1000;
-            }
-        }
     } else {
         const rank = meld[2];
         const nats = meld[3] + meld[4] + meld[5] + meld[6];
-        pts += nats * ((rank === 1) ? 15 : (rank >= 8 ? 10 : 5));
+        const rankPt = (rank === 1) ? 15 : (rank >= 8 ? 10 : (rank === 2 ? 20 : 5));
+        pts += nats * rankPt;
         
         if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20);
-        
-        if (isCanasta) {
-            pts += (isClean ? 200 : 100);
-            if (rules.largeCanasta && isClean) {
-                if (length === 13) pts += 500;
-                if (length >= 14) pts += 1000;
-            }
+    }
+
+    if (isCanasta) {
+        pts += isClean ? 200 : 100;
+        if (rules?.largeCanasta && isClean) {
+            if (length === 13) pts += 500;
+            if (length >= 14) pts += 1000;
         }
     }
     return pts;
@@ -273,13 +273,13 @@ export const nnHelpers = {
   packMeldBits: (buf, startBitIdx, m) => {
       if (!m || m.length === 0 || m[0] === undefined) return;
       if (m[0] !== 0) { // Sequence
-          nnHelpers.setBit(buf, startBitIdx); // bit 0 = 1 for Seq
-          for(let i=0; i<3; i++) if (m[0] & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 1 + i); // Suit
-          for(let i=0; i<3; i++) if (m[1] & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 4 + i); // WildSuit
-          for(let r=2; r<=15; r++) if (m[r] === 1) nnHelpers.setBit(buf, startBitIdx + 5 + r); // Ranks
+          nnHelpers.setBit(buf, startBitIdx); 
+          for(let i=0; i<3; i++) if (m[0] & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 1 + i); 
+          for(let i=0; i<3; i++) if (m[1] & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 4 + i); 
+          for(let r=2; r<=15; r++) if (m[r] === 1) nnHelpers.setBit(buf, startBitIdx + 5 + r); 
       } else { // Runner
-          for(let i=0; i<3; i++) if (m[1] & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 1 + i); // WildSuit
-          for(let i=0; i<4; i++) if (m[2] & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 4 + i); // Rank
+          for(let i=0; i<3; i++) if (m[1] & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 1 + i); 
+          for(let i=0; i<4; i++) if (m[2] & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 4 + i); 
           for (let s=0; s<4; s++) {
               let c = m[3 + s]; 
               for (let i=0; i<3; i++) if (c & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 8 + (s*3) + i); 
@@ -290,7 +290,6 @@ export const nnHelpers = {
   meldsToSemanticMatrix: (melds, buf, intOffset) => {
       buf.fill(0, intOffset, intOffset + 11); 
       for (let i = 0; i < 15; i++) {
-          // 22 bits per meld gives us plenty of room to map either representation
           if (i < melds.length) nnHelpers.packMeldBits(buf, (intOffset * 32) + (i * 22), melds[i]);
       }
   },
@@ -656,7 +655,7 @@ export const BuracoGame = {
           let possiblePickups = [];
           possiblePickups.push({ move: 'drawCard', args: [], actionType: 0, cards: [], mIdx: null });
           if (topDiscard !== null) {
-              if (G.rules.discard === 'closed') {
+              if (G.rules.discard) {
                   const combos = getAllValidMelds([...myHandCards, topDiscard], G.rules);
                   let seenSigs = new Set();
                   for (let combo of combos) {
