@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 // Inlined dependencies from game.js to resolve preview environment import errors
 const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
 const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
+const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15]; // Pre-mapped points for slots 2-15
 
 function sortCards(cards) {
   const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
@@ -30,6 +31,8 @@ function getMeldLength(m) {
 
 function calculateMeldPoints(meld, rules) {
     let pts = 0;
+    if (!meld || meld.length === 0) return 0;
+
     const isSeq = meld[0] !== 0;
     const isClean = isMeldClean(meld);
     const length = getMeldLength(meld);
@@ -37,34 +40,23 @@ function calculateMeldPoints(meld, rules) {
     
     if (isSeq) {
         for(let r = 2; r <= 15; r++) {
-            if (meld[r] === 1) {
-                // Rank logic: 2=A, 3=2, 4=3 ... 14=K, 15=High_A
-                let rank = r === 15 ? 1 : r - 1;
-                pts += (rank === 1) ? 15 : (rank >= 8 ? 10 : (rank === 2 ? 20 : 5));
-            }
+            pts += meld[r] * SEQ_POINTS[r];
         }
         if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20); // wildSuit at m[1]
-        
-        if (isCanasta) {
-            pts += isClean ? 200 : 100;
-            if (rules?.largeCanasta && isClean) {
-                if (length === 13) pts += 500;
-                if (length >= 14) pts += 1000;
-            }
-        }
     } else {
         const rank = meld[2];
         const nats = meld[3] + meld[4] + meld[5] + meld[6];
-        pts += nats * ((rank === 1) ? 15 : (rank >= 8 ? 10 : 5));
+        const rankPt = (rank === 1) ? 15 : (rank >= 8 ? 10 : (rank === 2 ? 20 : 5));
+        pts += nats * rankPt;
         
         if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20); // wildSuit at m[1]
-        
-        if (isCanasta) {
-            pts += (isClean ? 200 : 100);
-            if (rules?.largeCanasta && isClean) {
-                if (length === 13) pts += 500;
-                if (length >= 14) pts += 1000;
-            }
+    }
+
+    if (isCanasta) {
+        pts += isClean ? 200 : 100;
+        if (rules?.largeCanasta && isClean) {
+            if (length === 13) pts += 500;
+            if (length >= 14) pts += 1000;
         }
     }
     return pts;
