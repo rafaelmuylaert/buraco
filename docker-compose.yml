@@ -60,6 +60,7 @@ services:
         CLIENT_PORT: ${CLIENT_PORT:-5173}
     environment:
       - CLIENT_PORT=${CLIENT_PORT:-5173}
+      - SERVER_PORT=${SERVER_PORT:-8000}
     ports:
       - "${CLIENT_HOST_PORT:-5173}:${CLIENT_PORT:-5173}"
     depends_on:
