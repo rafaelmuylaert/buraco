@@ -1,13 +1,12 @@
 version: '3.8'
 
 services:
-  buraco-server2:
+  buraco-server:
     build:
       context: .
       dockerfile: buraco-server/Dockerfile
       args:
         SERVER_PORT: ${SERVER_PORT:-8000}
-    container_name: buraco-server
     environment:
       - SERVER_PORT=${SERVER_PORT:-8000}
     ports:
@@ -15,33 +14,6 @@ services:
     volumes:
       - ./buraco-server/db:/app/db
       - ./buraco-server/bots:/app/bots
-    restart: unless-stopped
-    develop:
-      watch:
-        - action: rebuild
-          path: ./buraco-server/package.json 
-        - action: sync+restart
-          path: ./buraco-server
-          target: /app
-          ignore:
-            - node_modules/
-            - db/
-            - bots/
-        # NEW: Watch the shared game file!
-        - action: sync+restart
-          path: ./buraco-client/src/game.js
-          target: /app/game.js
-
-  # ... (buraco-client remains the same as before) ...
-
-  buraco-bot2:
-    build:
-      context: .
-      dockerfile: buraco-server/Dockerfile
-    container_name: buraco-bot
-    command: ["node", "bot.js"] 
-    depends_on:
-      - buraco-server2
     restart: unless-stopped
     develop:
       watch:
@@ -54,32 +26,51 @@ services:
             - node_modules/
             - db/
             - bots/
-        # NEW: Watch the shared game file for the bot too!
         - action: sync+restart
           path: ./buraco-client/src/game.js
           target: /app/game.js
 
-  buraco-client2:
+  buraco-bot:
+    build:
+      context: .
+      dockerfile: buraco-server/Dockerfile
+    command: ["node", "bot.js"]
+    depends_on:
+      - buraco-server
+    restart: unless-stopped
+    develop:
+      watch:
+        - action: rebuild
+          path: ./buraco-server/package.json
+        - action: sync+restart
+          path: ./buraco-server
+          target: /app
+          ignore:
+            - node_modules/
+            - db/
+            - bots/
+        - action: sync+restart
+          path: ./buraco-client/src/game.js
+          target: /app/game.js
+
+  buraco-client:
     build:
       context: ./buraco-client
       args:
         CLIENT_PORT: ${CLIENT_PORT:-5173}
-    container_name: buraco-client
     environment:
       - CLIENT_PORT=${CLIENT_PORT:-5173}
     ports:
       - "${CLIENT_HOST_PORT:-5173}:${CLIENT_PORT:-5173}"
     depends_on:
-      - buraco-server2
+      - buraco-server
     restart: unless-stopped
-    # Watch configuration for the frontend
     develop:
       watch:
         - action: rebuild
           path: ./buraco-client/package.json
-        # Sync code directly (fastest) - assuming your frontend has hot-reload
         - action: sync
-          path: ./buraco-client/src     # Assuming your source code is in a 'src' folder
-          target: /app/src              # Assuming WORKDIR is /app
+          path: ./buraco-client/src
+          target: /app/src
           ignore:
             - node_modules/
