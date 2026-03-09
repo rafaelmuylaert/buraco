@@ -1,15 +1,11 @@
 import { workerData, parentPort } from 'worker_threads';
-import { BuracoGame, nnHelpers } from './game.js';
+import { BuracoGame, nnHelpers, AI_CONFIG } from './game.js';
 import { initWasm, wasmForwardPass } from './wasm_loader.js';
 
-// 🚀 AWAIT THE C++ WASM ENGINE INITIALIZATION PER-WORKER
 const wasmLoaded = await initWasm();
 if (wasmLoaded) {
     nnHelpers.forwardPass = wasmForwardPass;
 }
-
-const DNA_SIZE = 16400; // Exact size required by Bit-Planes
-const STAGE_SIZE = DNA_SIZE / 4; 
 
 function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
@@ -33,11 +29,12 @@ function revealAllHands(G) {
     for (const p of Object.keys(G.hands)) G.knownCards[p] = [...G.hands[p]];
 }
 
+// 🚀 Use centralized architecture variables!
 function prepareGenome(raw) {
     let dna = raw instanceof Uint32Array ? raw : new Uint32Array(raw);
-    if (dna.length !== DNA_SIZE) {
-        const d = new Uint32Array(DNA_SIZE);
-        for (let i = 0; i < DNA_SIZE; i++) d[i] = dna[i % dna.length] || 0;
+    if (dna.length !== AI_CONFIG.TOTAL_DNA_SIZE) {
+        const d = new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE);
+        for (let i = 0; i < AI_CONFIG.TOTAL_DNA_SIZE; i++) d[i] = dna[i % dna.length] || 0;
         dna = d;
     }
     return dna;
@@ -77,7 +74,6 @@ function runMatch(genomes, rules, fixedDeck) {
                     if (ctx._endTurn) break;
                 }
                 
-                // Panic Mode Failsafe
                 if (stuck || prevState === JSON.stringify(G)) {
                     if (G.hasDrawn && G.hands[p]?.length > 0) {
                         applyMove(G, ctx, 'discardCard', [G.hands[p][0]]);
