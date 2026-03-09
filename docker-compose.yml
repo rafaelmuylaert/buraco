@@ -59,7 +59,7 @@ services:
     build: ./buraco-client
     container_name: buraco-client
     ports:
-      - "5173:5173"
+      - "4173:5173"
     depends_on:
       - buraco-server
     restart: unless-stopped
