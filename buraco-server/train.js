@@ -60,6 +60,8 @@ class WorkerPool {
         this.workers = Array.from({ length: size }, () => {
             const w = new Worker(path, { workerData: { matches: [], rules: {} } });
             w.idle = true;
+            w.on('error', (err) => console.error('[WORKER ERROR]', err.stack || err));
+            w.on('exit', (code) => { if (code !== 0) console.error(`[WORKER EXIT] code ${code}`); });
             w.on('message', (results) => {
                 const { resolve, size: batchSize, offset, allResults, remaining, onDone } = w.currentJob;
                 results.forEach((r, i) => allResults[offset + i] = r);
