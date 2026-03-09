@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  buraco-server:
+  buraco-server2:
     build:
       context: .
       dockerfile: buraco-server/Dockerfile
@@ -34,7 +34,7 @@ services:
 
   # ... (buraco-client remains the same as before) ...
 
-  buraco-bot:
+  buraco-bot2:
     build:
       context: .
       dockerfile: buraco-server/Dockerfile
@@ -59,7 +59,7 @@ services:
           path: ./buraco-client/src/game.js
           target: /app/game.js
 
-  buraco-client:
+  buraco-client2:
     build:
       context: ./buraco-client
       args:
