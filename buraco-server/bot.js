@@ -1,13 +1,11 @@
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
-import { BuracoGame } from './game.js';
+import { BuracoGame, AI_CONFIG } from './game.js';
 
 const SERVER_URL = 'http://buraco-server:8000';
 const activeBots = {};
 const dnaCache = {};
 const activeIntervals = {};
-
-const DNA_SIZE = 25203;
 
 const getSuitChar = s => ['♠','♥','♦','♣','★'][s-1];
 const getRankChar = r => r===1?'A':r===11?'J':r===12?'Q':r===13?'K':r===14?'A':r.toString();
@@ -29,19 +27,19 @@ async function pollLobby() {
           activeBots[clientKey] = 'pending';
           console.log(`[BOT] Claiming Seat ${p.id} as ${assignedName} using brain '${targetBotName}'...`);
 
-          if (!dnaCache[targetBotName]) {
+           if (!dnaCache[targetBotName]) {
             try {
               const dnaRes = await fetch(`${SERVER_URL}/api/bots/weights/${targetBotName}`);
               if (dnaRes.ok) {
-                let loadedDNA = await dnaRes.json();
-                if (loadedDNA.length > DNA_SIZE) {
-                  loadedDNA = loadedDNA.slice(0, DNA_SIZE);
-                } else if (loadedDNA.length !== DNA_SIZE) {
-                  let expanded = [];
-                  while (expanded.length < DNA_SIZE) expanded.push(...loadedDNA);
-                  loadedDNA = expanded.slice(0, DNA_SIZE);
-                }
-                dnaCache[targetBotName] = loadedDNA;
+                  let loadedDNA = await dnaRes.json();
+                  
+                  // 🚀 Centralized seamless dimension upgrade!
+                  if (loadedDNA.length !== AI_CONFIG.TOTAL_DNA_SIZE) {
+                      let expanded = [];
+                      while(expanded.length < AI_CONFIG.TOTAL_DNA_SIZE) expanded.push(...loadedDNA);
+                      loadedDNA = expanded.slice(0, AI_CONFIG.TOTAL_DNA_SIZE);
+                  }
+                  dnaCache[targetBotName] = loadedDNA;
               }
             } catch(e) {
               console.error(`[BOT] Could not fetch DNA for ${targetBotName}`);
