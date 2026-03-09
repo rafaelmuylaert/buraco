@@ -1022,7 +1022,7 @@ export const BuracoGame = {
           inputBuffer.fill(0, 471, 524);
           const raw = nnHelpers.forwardPass(inputBuffer, dnaDiscard);
           const idx = Math.min(possibleDiscards.length - 1, Math.max(0, Math.floor(Math.abs(raw) % possibleDiscards.length)));
-          console.log(`[discard] turn=${ctx.turn} player=${p} raw=${raw.toFixed(4)} idx=${idx} card=${possibleDiscards[idx].args[0]}`);
+          //console.log(`[discard] turn=${ctx.turn} player=${p} raw=${raw.toFixed(4)} idx=${idx} card=${possibleDiscards[idx].args[0]}`);
           return [{ move: possibleDiscards[idx].move, args: possibleDiscards[idx].args }];
       }
 
