@@ -5,8 +5,18 @@ const getRank = c => c >= 104 ? 2 : (c % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:
 export const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
 export const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
 
-// Pre-mapped points for sequence slots: [Empty, Wild, A, 2, 3, 4, 5, 6, 7, 8, 9, 10, J, Q, K, High_A]
 const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15]; 
+
+// 🚀 CENTRALIZED AI ARCHITECTURE CONFIGURATION
+export const AI_CONFIG = {
+    INPUT_INTS: 37,      // 37 * 32 = 1184 bits available for state features
+    HIDDEN_NODES: 128,   // Logical XNOR gates in the hidden layer
+    OUTPUT_NODES: 1,     // Final score output
+    STAGES: 4            // Pickup, Append, Meld, Discard
+};
+// Dynamically calculate memory requirements
+AI_CONFIG.DNA_INTS_PER_STAGE = (AI_CONFIG.INPUT_INTS * AI_CONFIG.HIDDEN_NODES) + Math.ceil(AI_CONFIG.HIDDEN_NODES / 32) * AI_CONFIG.OUTPUT_NODES;
+AI_CONFIG.TOTAL_DNA_SIZE = AI_CONFIG.DNA_INTS_PER_STAGE * AI_CONFIG.STAGES;
 
 export function sortCards(cards) {
   const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
@@ -16,10 +26,6 @@ export function sortCards(cards) {
   });
 }
 
-// 🧠 UNIFIED ARRAY STRUCTURE:
-// Sequence: [suit, wildSuit, A, 2, 3, 4, 5, 6, 7, 8, 9, 10, J, Q, K, High_A]
-// Runner:   [0, wildSuit, rank, spades_cnt, hearts_cnt, diamonds_cnt, clubs_cnt]
-
 export function isMeldClean(m) {
     if (!m || m.length === 0) return false;
     return m[1] === 0; 
@@ -27,16 +33,14 @@ export function isMeldClean(m) {
 
 export function getMeldLength(m) {
     if (!m || m.length === 0) return 0;
-    if (m[0] !== 0) { // Sequence
+    if (m[0] !== 0) { 
         let c = 0;
         for (let r = 2; r <= 15; r++) c += m[r];
         return c + (m[1] !== 0 ? 1 : 0);
     }
-    // Runner
     return m[3] + m[4] + m[5] + m[6] + (m[1] !== 0 ? 1 : 0);
 }
 
-// 🚀 Core Direct Slots Expansion & Validation logic 
 function cardsToSeqSlots(cardIds, existingMeld = null) {
     let m = existingMeld ? [...existingMeld] : new Array(16).fill(0);
     let suit = m[0];
@@ -46,7 +50,6 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
     let aces = [];
     let twos = [];
     
-    // 1. Slotted population and overlap check
     for (let c of cardIds) {
         let s = getSuit(c), r = getRank(c);
         if (s === 5 || r === 2) {
@@ -56,7 +59,7 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
         } else {
             if (suit === 0) suit = s;
             else if (s !== suit) return null;
-            if (m[r + 1] === 1) return null; // Overlap detected!
+            if (m[r + 1] === 1) return null; 
             m[r + 1] = 1;
         }
     }
@@ -68,24 +71,22 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
     }
     m[0] = suit;
 
-    // 2. Resolve 2s: natural or wild?
     for (let c of twos) {
         let s = getSuit(c), r = getRank(c);
         if (s === suit && r === 2 && m[3] === 0) {
-            m[3] = 1; // Used as natural 2 for now
+            m[3] = 1; 
         } else {
-            if (wildSuit !== 0) return null; // Max 1 wild allowed
+            if (wildSuit !== 0) return null; 
             wildSuit = s;
         }
     }
 
-    // 3. Resolve Aces: low (2) or high (15)?
     for (let c of aces) {
         if (getSuit(c) !== suit) return null;
-        if (m[14] === 1 && m[15] === 0) m[15] = 1; // Prioritize High A if K is present
+        if (m[14] === 1 && m[15] === 0) m[15] = 1; 
         else if (m[2] === 0) m[2] = 1;
         else if (m[15] === 0) m[15] = 1;
-        else return null; // Too many aces!
+        else return null; 
     }
 
     m[1] = wildSuit;
@@ -101,7 +102,6 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
 
     let gaps = checkGaps(m);
 
-    // 4. Try resolving gaps by dynamically shifting flexible cards
     if (gaps > 0) {
         if (m[2] === 1 && m[15] === 0) {
             m[2] = 0; m[15] = 1;
@@ -110,7 +110,6 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
             else { m[2] = 1; m[15] = 0; } 
         }
         
-        // Demote natural 2 to wild role if needed
         if (gaps > 0 && m[3] === 1 && m[1] === 0) {
             m[3] = 0; m[1] = suit;
             let newGaps = checkGaps(m);
@@ -119,21 +118,19 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
         }
     }
 
-    // 5. Promote wild 2 back to natural 2 if a gap was naturally filled by new cards
     if (gaps === 0 && m[1] === suit && m[3] === 0) {
         m[3] = 1; m[1] = 0; 
         if (checkGaps(m) > 0) {
-            m[3] = 0; m[1] = suit; // Revert if promotion created a gap
+            m[3] = 0; m[1] = suit; 
         }
     }
 
-    // 6. Strict gap and length validation
     if (gaps > 1) return null; 
     if (gaps === 1 && m[1] === 0) return null; 
     
     let len = 0;
     for(let r=2; r<=15; r++) len += m[r];
-    if (len + (m[1] !== 0 ? 1 : 0) > 14) return null; // Strict 14 card maximum
+    if (len + (m[1] !== 0 ? 1 : 0) > 14) return null; 
 
     return m;
 }
@@ -266,9 +263,6 @@ function calculateFinalScores(G) {
   return scores;
 }
 
-// ============================================================================
-// 🚀 PURE BINARY NEURAL NETWORK BRIDGE
-// ============================================================================
 export const nnHelpers = {
   setBit: (arr, bitIdx) => { arr[bitIdx >> 5] |= (1 << (bitIdx & 31)); },
   
@@ -307,9 +301,8 @@ export const nnHelpers = {
   },
 
   forwardPass: (inputsArray, weightsArray) => {
-      const INPUT_INTS = 37; 
-      const HIDDEN_NODES = 128;
-      let w_idx = 0; let hidden_activations = new Uint32Array(4); 
+      let w_idx = 0; 
+      let hidden_activations = new Uint32Array(Math.ceil(AI_CONFIG.HIDDEN_NODES / 32)); 
       
       const popcount32 = (n) => {
           n = n >>> 0;
@@ -318,17 +311,17 @@ export const nnHelpers = {
           return (((n + (n >>> 4)) & 0x0F0F0F0F) * 0x01010101) >>> 24;
       };
 
-      for (let h = 0; h < HIDDEN_NODES; h++) {
+      for (let h = 0; h < AI_CONFIG.HIDDEN_NODES; h++) {
           let match_count = 0;
-          for (let i = 0; i < INPUT_INTS; i++) {
+          for (let i = 0; i < AI_CONFIG.INPUT_INTS; i++) {
               let xnor = ~(inputsArray[i] ^ weightsArray[w_idx++]);
               match_count += popcount32(xnor);
           }
-          if (match_count > 592) hidden_activations[h >> 5] |= (1 << (h & 31));
+          if (match_count > (AI_CONFIG.INPUT_INTS * 16)) hidden_activations[h >> 5] |= (1 << (h & 31));
       }
       
       let final_score = 0;
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < hidden_activations.length; i++) {
           let xnor = ~(hidden_activations[i] ^ weightsArray[w_idx++]);
           final_score += popcount32(xnor);
       }
@@ -336,7 +329,6 @@ export const nnHelpers = {
   }
 };
 
-// 🚀 Called inside `moves` to cache bit-chunks permanently to G
 export function syncGameBNN(G) {
     if (!G.bnn) {
         G.bnn = { melds: {}, cards: {} };
@@ -355,7 +347,6 @@ export function syncGameBNN(G) {
     }
 }
 
-// 🚀 Highly Modular Generator: Relies entirely on `buildMeld` gap resolution
 function getAllValidMelds(handCards, rules) {
     let validCombos = [];
     let seenSigs = new Set();
@@ -376,7 +367,7 @@ function getAllValidMelds(handCards, rules) {
     
     for (let c of handCards) {
         let cs = getSuit(c), cr = getRank(c);
-        if (cs === 5 || cr === 2) wilds.unshift(c); // Unshift prioritizes last drawn topDiscard
+        if (cs === 5 || cr === 2) wilds.unshift(c); 
         else {
             natsBySuit[cs].push(c);
             if (!natsByRank[cr]) natsByRank[cr] = [];
@@ -384,24 +375,19 @@ function getAllValidMelds(handCards, rules) {
         }
     }
 
-    // --- SEQUENCES ---
     for (let s = 1; s <= 4; s++) {
         let nats = natsBySuit[s].sort((a,b) => getRank(a) - getRank(b));
         
-        // Sliding window combinations
         for (let i = 0; i < nats.length; i++) {
             let combo = [nats[i]];
             for (let j = i + 1; j < nats.length; j++) {
                 combo.push(nats[j]);
-                // Send raw combinations to buildMeld. It will flawlessly handle checking 
-                // if gaps exist and whether the provided wilds bridge them properly!
                 if (combo.length >= 3) tryCombo(combo);
                 if (wilds.length > 0 && combo.length >= 2) tryCombo([...combo, wilds[0]]);
             }
         }
     }
 
-    // --- RUNNERS (Trincas) ---
     if (rules.runners !== 'none') {
         for (let r in natsByRank) {
             let combo = natsByRank[r];
@@ -538,10 +524,9 @@ export const BuracoGame = {
       const partnerId = numP === 4 ? ((pInt + 2) % numP).toString() : null;
       const opp2Id = numP === 4 ? ((pInt + 3) % numP).toString() : null;
 
-      // 🧠 BNN Memory Input Layout: 37 ints total
-      const inputBuffer = new Uint32Array(37);
+      // 🧠 Initialize dynamic buffer using centralized AI_CONFIG
+      const inputBuffer = new Uint32Array(AI_CONFIG.INPUT_INTS);
       
-      // 1. Meta Flags (Int 0)
       let meta = 0;
       if (G.deck.length > 0) meta |= (1 << 0);
       if (G.pots.length > 0) meta |= (1 << 1);
@@ -560,7 +545,6 @@ export const BuracoGame = {
       meta |= (hs(opp2Id) << 19);
       inputBuffer[0] = meta;
 
-      // 2. Chunks Copying (Instant operation vs regenerating manually!)
       inputBuffer.set(G.bnn.melds[myTeam], 1);
       inputBuffer.set(G.bnn.melds[oppTeam], 12);
       inputBuffer.set(G.bnn.cards.discard, 23);
@@ -569,17 +553,17 @@ export const BuracoGame = {
       inputBuffer.set(G.bnn.cards[`k${partnerId}`] || [0,0], 29);
       inputBuffer.set(G.bnn.cards[`k${opp2Id}`] || [0,0], 31);
 
-      // DNA Size updated to 18960 based on 37 INPUT_INTS -> 4 stages
-      let DNA = customDNA || G.botGenomes?.[p] || new Uint32Array(18960).fill(0); 
-      if (DNA.length !== 18960) DNA = new Uint32Array(18960).fill(0);
+      let DNA = customDNA || G.botGenomes?.[p] || new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE).fill(0); 
+      if (DNA.length !== AI_CONFIG.TOTAL_DNA_SIZE) DNA = new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE).fill(0);
 
-      const dnaPickup = DNA.subarray(0, 4740);
-      const dnaAppend = DNA.subarray(4740, 9480);
-      const dnaMeld = DNA.subarray(9480, 14220);
-      const dnaDiscard = DNA.subarray(14220, 18960);
+      const st = AI_CONFIG.DNA_INTS_PER_STAGE;
+      const dnaPickup = DNA.subarray(0, st);
+      const dnaAppend = DNA.subarray(st, st * 2);
+      const dnaMeld = DNA.subarray(st * 2, st * 3);
+      const dnaDiscard = DNA.subarray(st * 3, AI_CONFIG.TOTAL_DNA_SIZE);
 
       const getScore = (actionType, actionCards, actionMeldIdx, activeWeights) => {
-          let input = new Uint32Array(inputBuffer); // Deep clone for evaluation
+          let input = new Uint32Array(inputBuffer); 
           input[33] = actionType; 
           let actCards = nnHelpers.packCards(actionCards);
           input[34] = actCards[0]; input[35] = actCards[1];
@@ -668,16 +652,13 @@ export const BuracoGame = {
           if (queue.length > 0) return queue.map(m => ({ move: m.move, args: m.args }));
       }
 
-      // ==========================================
-      // 🚀 STAGE 4: DISCARD (ABSOLUTE ACTION MASKING)
-      // ==========================================
       const isMortoSafe = hasCleanTeam(myTeam) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
       if (myHandCards.length > 1 || isMortoSafe) {
           let input = new Uint32Array(inputBuffer);
           input[33] = 4; // Action 4 = Discard
 
           const rawOutput = nnHelpers.forwardPass(input, dnaDiscard);
-          const targetClass = rawOutput % 55; // Constrain to classes 0-54
+          const targetClass = rawOutput % 55;
 
           let selectedDiscard = null;
           for (let card of myHandCards) {
@@ -690,7 +671,6 @@ export const BuracoGame = {
           if (selectedDiscard !== null) {
               return [{ move: 'discardCard', args: [selectedDiscard] }];
           } else {
-              // ❌ NETWORK OUT-OF-BOUNDS PUNISHMENT ❌
               let worstCard = myHandCards[0];
               let hVal = -1;
               for (let card of myHandCards) {
