@@ -2,25 +2,21 @@ import fs from 'fs';
 import path from 'path';
 import { Worker } from 'worker_threads';
 import { cpus } from 'os';
+import { AI_CONFIG } from './game.js';
 
-const NUM_WORKERS = Math.max(1, cpus().length - 1); // leave 1 core for the server
-const WORKER_PATH = new URL('./worker.js', import.meta.url).pathname;
+const NUM_WORKERS = Math.max(1, cpus().length - 1); 
+const WORKER_PATH = new URL('./worker_binary.js', import.meta.url).pathname; 
 
-// 🚀 BNN DNA SIZE: Adjust this based on your final Bit-Plane packing
-// Example: 4 stages * ((30 input ints * 128 hidden nodes) + (128 / 32 * 1 output)) = 15376
-const DNA_SIZE = 15376; 
 const BOTS_DIR = path.join(process.cwd(), 'bots');
 if (!fs.existsSync(BOTS_DIR)) fs.mkdirSync(BOTS_DIR, { recursive: true });
 
 const activeTrainings = new Map();
 
-// 🚀 BNN MUTATION: Flips individual logical bit-gates
 function mutate(genome, mutationRate = 0.005) {
     const mutated = new Uint32Array(genome);
-    for (let i = 0; i < DNA_SIZE; i++) {
+    for (let i = 0; i < AI_CONFIG.TOTAL_DNA_SIZE; i++) {
         for (let bit = 0; bit < 32; bit++) {
             if (Math.random() < mutationRate) {
-                // XOR (^) flips the specific bit without touching the rest
                 mutated[i] ^= (1 << bit); 
             }
         }
@@ -28,20 +24,17 @@ function mutate(genome, mutationRate = 0.005) {
     return mutated;
 }
 
-// 🚀 BNN BREEDING: Swaps entire 32-gate blocks between parents
 function breed(parentA, parentB) {
-    const child = new Uint32Array(DNA_SIZE);
-    for (let i = 0; i < DNA_SIZE; i++) {
+    const child = new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE);
+    for (let i = 0; i < AI_CONFIG.TOTAL_DNA_SIZE; i++) {
         child[i] = Math.random() > 0.5 ? parentA[i] : parentB[i];
     }
-    // Default to a slightly more conservative mutation rate for BNNs
     return mutate(child, 0.005);
 }
 
-// 🚀 BNN INITIALIZATION: Generate random 32-bit unsigned integers
 const generateRandomGenome = () => {
-    const g = new Uint32Array(DNA_SIZE);
-    for (let i = 0; i < DNA_SIZE; i++) {
+    const g = new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE);
+    for (let i = 0; i < AI_CONFIG.TOTAL_DNA_SIZE; i++) {
         g[i] = Math.floor(Math.random() * 4294967296) >>> 0;
     }
     return g;
@@ -55,14 +48,12 @@ function shuffle(arr) {
     return arr;
 }
 
-// Transfer genome to a transferable ArrayBuffer for zero-copy worker dispatch
 function toBuffer(genome) {
-    const buf = new SharedArrayBuffer(DNA_SIZE * 4); // 4 bytes per Uint32
+    const buf = new SharedArrayBuffer(AI_CONFIG.TOTAL_DNA_SIZE * 4);
     new Uint32Array(buf).set(genome);
     return buf;
 }
 
-// Persistent worker pool — workers stay alive for the duration of training
 class WorkerPool {
     constructor(size, path) {
         this.queue = [];
@@ -124,14 +115,12 @@ function runMatchBatch(matchPairs, rules) {
     return getPool().run(matchPairs, rules);
 }
 
-// Single-elimination playoff tournament, all rounds dispatched in parallel batches
 async function runPlayoffTournament(population, rules) {
     let remaining = population.map((genome, i) => ({ genome, id: i, buf: toBuffer(genome) }));
     shuffle(remaining);
     while (remaining.length & (remaining.length - 1)) remaining.push(null);
 
     while (remaining.length > 4) {
-        // Build all match pairs for this round
         const pairs = [];
         const pairIndices = [];
         for (let i = 0; i < remaining.length; i += 2) {
@@ -141,12 +130,11 @@ async function runPlayoffTournament(population, rules) {
             pairIndices.push({ a, b, bye: false });
         }
 
-        // Run all non-bye matches in parallel across workers
         const scores = pairs.length > 0 ? await runMatchBatch(pairs, rules) : [];
         let scoreIdx = 0;
         remaining = pairIndices.map(({ a, b, bye }) => {
             if (bye) return a || b;
-            const [sA] = scores[scoreIdx++]; // use scoreA to determine winner
+            const [sA] = scores[scoreIdx++]; 
             return sA >= 0 ? a : b;
         });
     }
@@ -161,7 +149,7 @@ export const TrainerService = {
         if (!fs.existsSync(filePath)) return null;
         const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
         const arr = Array.isArray(raw) ? raw : Object.values(raw);
-        return arr.length > DNA_SIZE ? arr.slice(0, DNA_SIZE) : arr;
+        return arr.length > AI_CONFIG.TOTAL_DNA_SIZE ? arr.slice(0, AI_CONFIG.TOTAL_DNA_SIZE) : arr;
     },
 
     getTrainingStatus: (botName) => {
@@ -184,20 +172,20 @@ export const TrainerService = {
         const SAVE_EVERY = params.saveInterval || params.matchesPerGeneration || 12;
 
         const seedDNA = TrainerService.getBotWeights(botName);
-        const originalDNA = generateRandomGenome(); // benchmark always against a fresh random baseline
+        const originalDNA = generateRandomGenome(); 
 
         let population;
         if (seedDNA) {
             console.log(`🧠 Resuming training for '${botName}'...`);
             let base = seedDNA;
-            if (base.length !== DNA_SIZE) {
+            if (base.length !== AI_CONFIG.TOTAL_DNA_SIZE) {
                 let expanded = [];
-                while (expanded.length < DNA_SIZE) expanded.push(...base);
-                base = expanded.slice(0, DNA_SIZE);
+                while (expanded.length < AI_CONFIG.TOTAL_DNA_SIZE) expanded.push(...base);
+                base = expanded.slice(0, AI_CONFIG.TOTAL_DNA_SIZE);
             }
             const baseU32 = new Uint32Array(base);
             population = Array(POPULATION_SIZE).fill(null).map((_, i) =>
-                i === 0 ? baseU32 : mutate(baseU32, 0.01) // Slightly higher initial mutation for seed variation
+                i === 0 ? baseU32 : mutate(baseU32, 0.01) 
             );
         } else {
             console.log(`🧠 Starting fresh training for '${botName}'...`);
@@ -212,7 +200,6 @@ export const TrainerService = {
 
         const NUM_ISLANDS = Math.max(2, cpus().length - 1);
 
-        // Deck built once; shuffled each generation unless fixedDeck
         const baseDeck = [];
         for (let i = 0; i < 52; i++) baseDeck.push(i);
         for (let i = 0; i < 52; i++) baseDeck.push(i);
@@ -221,10 +208,8 @@ export const TrainerService = {
         const islandPops = Array.from({ length: NUM_ISLANDS }, () =>
             population.slice(0, POPULATION_SIZE).map(g => new Uint32Array(g))
         );
-        // Shared champions: each island deposits its best here; others read on next gen
         const islandElites = new Array(NUM_ISLANDS).fill(null);
 
-        // Run one generation for a single island, returns { rankedFinalists, bestDiff, avgDiff }
         const runIslandGeneration = async (pop) => {
             const finalists = await runPlayoffTournament(pop, rules);
             const statPairs = [], statMeta = [];
@@ -248,9 +233,8 @@ export const TrainerService = {
                 .sort((a, b) => b.score - a.score)
                 .map(x => x.genome);
                 
-            // BNN Selection & Breeding
             const clones = rankedFinalists.slice(0, 2).map(f => new Uint32Array(f));
-            const mutations = rankedFinalists.map(f => mutate(f, 0.005)); // Lower baseline mutation rate
+            const mutations = rankedFinalists.map(f => mutate(f, 0.005)); 
             const crossbreeds = [];
             while (crossbreeds.length < pop.length - clones.length - mutations.length) {
                 const pick = () => rankedFinalists[Math.floor(Math.random() * Math.random() * rankedFinalists.length)];
@@ -264,7 +248,6 @@ export const TrainerService = {
             };
         };
 
-        // Shuffle deck once before training starts; workers receive it
         if (!rules.fixedDeck) shuffle(baseDeck);
         getPool().broadcastDeck(baseDeck);
 
@@ -274,7 +257,6 @@ export const TrainerService = {
         const runIsland = async (islandIdx) => {
             try {
                 for (let gen = 1; gen <= GENERATIONS; gen++) {
-                    // Shuffle deck each generation (all islands share the same shuffle signal)
                     if (!rules.fixedDeck && islandIdx === 0) {
                         shuffle(baseDeck);
                         getPool().broadcastDeck(baseDeck);
@@ -283,18 +265,15 @@ export const TrainerService = {
                     const result = await runIslandGeneration(islandPops[islandIdx]);
                     islandPops[islandIdx] = result.nextPop;
 
-                    // Inject any available elites from other islands
                     for (let src = 0; src < NUM_ISLANDS; src++) {
                         if (src === islandIdx || !islandElites[src]) continue;
                         const replaceIdx = 2 + Math.floor(Math.random() * (islandPops[islandIdx].length - 2));
                         islandPops[islandIdx][replaceIdx] = new Uint32Array(islandElites[src]);
                     }
 
-                    // Broadcast champion + update stats every SAVE_EVERY gens
                     if (gen % SAVE_EVERY === 0 || gen === GENERATIONS) {
                         islandElites[islandIdx] = result.rankedFinalists[0];
 
-                        // Each island saves to its own file — no race condition
                         fs.writeFileSync(
                             path.join(BOTS_DIR, `${botName}_${islandIdx}.json`),
                             JSON.stringify(Array.from(result.rankedFinalists[0]))
@@ -322,12 +301,10 @@ export const TrainerService = {
 
         try {
             await Promise.all([
-                // Island evolution loops
                 ...Array.from({ length: NUM_ISLANDS }, (_, k) => runIsland(k)),
-                // Championship loop: runs independently, crowns best island bot
                 (async () => {
                     while (completedIslands < NUM_ISLANDS) {
-                        await new Promise(r => setTimeout(r, SAVE_EVERY * 800)); // rough cadence
+                        await new Promise(r => setTimeout(r, SAVE_EVERY * 800)); 
                         const candidates = [];
                         for (let k = 0; k < NUM_ISLANDS; k++) {
                             const fp = path.join(BOTS_DIR, `${botName}_${k}.json`);
@@ -337,7 +314,6 @@ export const TrainerService = {
                         }
                         if (candidates.length < 2) continue;
 
-                        // Round-robin among available island champions
                         const wins = new Array(candidates.length).fill(0);
                         const pairs = [];
                         for (let i = 0; i < candidates.length; i++)
@@ -357,7 +333,6 @@ export const TrainerService = {
                         let benchmarkDiff = null;
                         if (originalDNA) {
                             try {
-                                // Shuffle a fresh deck and broadcast it so both swapped games use identical cards
                                 const benchDeck = rules.noJokers ? [...baseDeck] : [...baseDeck, 54, 54];
                                 shuffle(benchDeck);
                                 getPool().broadcastDeck(benchDeck);
@@ -366,9 +341,7 @@ export const TrainerService = {
                                     { ...rules, fixedDeck: true }
                                 );
                                 benchmarkDiff = benchScore;
-                            } catch (e) {
-                                console.error(`[${botName}] Benchmark error:`, e);
-                            }
+                            } catch (e) {}
                         }
 
                         const prev = activeTrainings.get(botName);
