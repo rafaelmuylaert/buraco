@@ -1,5 +1,74 @@
 import React, { useState, useEffect } from 'react';
-import { sortCards, isMeldClean, getMeldLength, calculateMeldPoints } from './game.js';
+
+// Inlined dependencies from game.js to resolve preview environment import errors
+const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
+const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
+
+function sortCards(cards) {
+  const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
+  return [...cards].sort((a, b) => {
+    if (suitValues[a.suit] !== suitValues[b.suit]) return suitValues[a.suit] - suitValues[b.suit];
+    return sortVals[a.rank] - sortVals[b.rank];
+  });
+}
+
+function isMeldClean(m) {
+    if (!m || m.length === 0) return false;
+    return m[1] === 0; // Unified: wildSuit is always at index 1!
+}
+
+function getMeldLength(m) {
+    if (!m || m.length === 0) return 0;
+    if (m[0] !== 0) { // Sequence
+        let c = 0;
+        for (let r = 2; r <= 15; r++) c += m[r];
+        return c + (m[1] !== 0 ? 1 : 0); // Add 1 if there's a wild
+    }
+    // Runner: [0, wildSuit, rank, spades, hearts, diamonds, clubs]
+    return m[3] + m[4] + m[5] + m[6] + (m[1] !== 0 ? 1 : 0);
+}
+
+function calculateMeldPoints(meld, rules) {
+    let pts = 0;
+    const isSeq = meld[0] !== 0;
+    const isClean = isMeldClean(meld);
+    const length = getMeldLength(meld);
+    const isCanasta = length >= 7;
+    
+    if (isSeq) {
+        for(let r = 2; r <= 15; r++) {
+            if (meld[r] === 1) {
+                // Rank logic: 2=A, 3=2, 4=3 ... 14=K, 15=High_A
+                let rank = r === 15 ? 1 : r - 1;
+                pts += (rank === 1) ? 15 : (rank >= 8 ? 10 : (rank === 2 ? 20 : 5));
+            }
+        }
+        if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20); // wildSuit at m[1]
+        
+        if (isCanasta) {
+            pts += isClean ? 200 : 100;
+            if (rules?.largeCanasta && isClean) {
+                if (length === 13) pts += 500;
+                if (length >= 14) pts += 1000;
+            }
+        }
+    } else {
+        const rank = meld[2];
+        const nats = meld[3] + meld[4] + meld[5] + meld[6];
+        pts += nats * ((rank === 1) ? 15 : (rank >= 8 ? 10 : 5));
+        
+        if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20); // wildSuit at m[1]
+        
+        if (isCanasta) {
+            pts += (isClean ? 200 : 100);
+            if (rules?.largeCanasta && isClean) {
+                if (length === 13) pts += 500;
+                if (length >= 14) pts += 1000;
+            }
+        }
+    }
+    return pts;
+}
 
 const getSuitChar = s => ['♠', '♥', '♦', '♣', '★'][s - 1];
 const getRankChar = r => r === 1 ? 'A' : r === 11 ? 'J' : r === 12 ? 'Q' : r === 13 ? 'K' : r === 14 ? 'A' : r.toString();
@@ -10,37 +79,44 @@ function intToCardObj(c) {
     return { rank: s === 5 ? 'JOKER' : getRankChar(r), suit: getSuitChar(s), id: c };
 }
 
-// 🧠 NEW: Expand structured arrays into pure React Render Objects on the fly
+// 🧠 NEW STRUCTURE:
+// Sequence: [suit, wildSuit, A, 2, 3, 4, 5, 6, 7, 8, 9, 10, J, Q, K, High_A]
+// Runner:   [0, wildSuit, rank, spades_cnt, hearts_cnt, diamonds_cnt, clubs_cnt]
 function meldToCards(m) {
     let cards = [];
-    if (m[0] !== 0) { // Sequence: [suit, n1...n14, wildSuit]
+    if (m[0] !== 0) { // Sequence
         let suit = m[0];
-        let min = 15, max = 0;
-        for (let r = 1; r <= 14; r++) {
+        let wildSuit = m[1];
+        let min = 16, max = 0;
+        for (let r = 2; r <= 15; r++) {
             if (m[r] === 1) { if (r < min) min = r; if (r > max) max = r; }
         }
         let wildPlaced = false;
         for (let r = min; r <= max; r++) {
             if (m[r] === 1) {
-                let rank = r > 13 ? 1 : r;
+                let rank = r === 15 ? 1 : r - 1;
                 cards.push({ rank: getRankChar(rank), suit: getSuitChar(suit), id: `n-${r}` });
             } else {
-                cards.push({ rank: m[15] === 5 ? 'JOKER' : '2', suit: m[15] === 5 ? '★' : getSuitChar(m[15]), id: `w-${r}` });
+                cards.push({ rank: wildSuit === 5 ? 'JOKER' : '2', suit: wildSuit === 5 ? '★' : getSuitChar(wildSuit), id: `w-${r}` });
                 wildPlaced = true;
             }
         }
-        if (m[15] !== 0 && !wildPlaced) {
-            if (max < 14) cards.push({ rank: m[15] === 5 ? 'JOKER' : '2', suit: m[15] === 5 ? '★' : getSuitChar(m[15]), id: `w-edge` });
-            else cards.unshift({ rank: m[15] === 5 ? 'JOKER' : '2', suit: m[15] === 5 ? '★' : getSuitChar(m[15]), id: `w-edge` });
+        if (wildSuit !== 0 && !wildPlaced) {
+            // Unused wild logic (usually happens while building before final validation)
+            if (max < 14) cards.push({ rank: wildSuit === 5 ? 'JOKER' : '2', suit: wildSuit === 5 ? '★' : getSuitChar(wildSuit), id: `w-edge` });
+            else cards.unshift({ rank: wildSuit === 5 ? 'JOKER' : '2', suit: wildSuit === 5 ? '★' : getSuitChar(wildSuit), id: `w-edge` });
         }
-    } else { // Runner: [0, rank, sc1, sc2, sc3, sc4, wildSuit]
+    } else { // Runner
+        let wildSuit = m[1];
+        let rank = m[2];
         for (let s = 1; s <= 4; s++) {
-            for (let i = 0; i < m[s + 1]; i++) {
-                cards.push({ rank: getRankChar(m[1]), suit: getSuitChar(s), id: `r-${s}-${i}` }); 
+            // Suit counts start at index 3
+            for (let i = 0; i < m[s + 2]; i++) {
+                cards.push({ rank: getRankChar(rank), suit: getSuitChar(s), id: `r-${s}-${i}` }); 
             }
         }
-        if (m[6] !== 0) {
-            cards.push({ rank: m[6] === 5 ? 'JOKER' : '2', suit: m[6] === 5 ? '★' : getSuitChar(m[6]), id: `w-run` });
+        if (wildSuit !== 0) {
+            cards.push({ rank: wildSuit === 5 ? 'JOKER' : '2', suit: wildSuit === 5 ? '★' : getSuitChar(wildSuit), id: `w-run` });
         }
     }
     return cards;
