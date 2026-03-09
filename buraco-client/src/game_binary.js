@@ -14,113 +14,57 @@ export function sortCards(cards) {
   });
 }
 
-// 🧠 NEW: Array based logic -> Sequence: [suit, A, 2, 3, 4, 5, 6, 7, 8, 9, 10, J, Q, K, High_A, wildSuit]
-// 🧠 NEW: Array based logic -> Runner:   [0, rank, spades_cnt, hearts_cnt, diamonds_cnt, clubs_cnt, wildSuit]
+// 🧠 UNIFIED ARRAY STRUCTURE:
+// Sequence: [suit, wildSuit, A, 2, 3, 4, 5, 6, 7, 8, 9, 10, J, Q, K, High_A]
+// Runner:   [0, wildSuit, rank, spades_cnt, hearts_cnt, diamonds_cnt, clubs_cnt]
 
 export function isMeldClean(m) {
     if (!m || m.length === 0) return false;
-    if (m[0] !== 0) return m[15] === 0; // Sequence
-    return m[6] === 0; // Runner
+    return m[1] === 0; // Unified: wildSuit is always at index 1
 }
 
 export function getMeldLength(m) {
     if (!m || m.length === 0) return 0;
     if (m[0] !== 0) { // Sequence
         let c = 0;
-        for (let r = 1; r <= 14; r++) c += m[r];
-        return c + (m[15] !== 0 ? 1 : 0);
+        for (let r = 2; r <= 15; r++) c += m[r];
+        return c + (m[1] !== 0 ? 1 : 0);
     }
     // Runner
-    return m[2] + m[3] + m[4] + m[5] + (m[6] !== 0 ? 1 : 0);
+    return m[3] + m[4] + m[5] + m[6] + (m[1] !== 0 ? 1 : 0);
 }
 
-function appendToMeld(meld, cId) {
-    let m = [...meld]; let cSuit = getSuit(cId); let cRank = getRank(cId);
-    let isWild = cSuit === 5 || cRank === 2;
-
-    if (m[0] !== 0) { // SEQUENCE
-        let min = 15, max = 0;
-        for (let r = 1; r <= 14; r++) {
+function expandMeld(m) {
+    let cards = [];
+    if (m[0] !== 0) {
+        let suit = m[0]; let wildSuit = m[1];
+        let min = 16, max = 0;
+        for (let r = 2; r <= 15; r++) {
             if (m[r] === 1) { if (r < min) min = r; if (r > max) max = r; }
         }
-
-        if (!isWild && cSuit === m[0]) {
-            if (m[cRank] === 1) {
-                // Handling the High Ace edge case
-                if (cRank === 1 && m[1] === 1 && m[14] === 0 && max >= 12) {
-                    m[14] = 1; return m;
-                }
-                return null; // Duplicate
-            }
-            
-            let temp = [...m];
-            if (cRank === 1) {
-                let ok = false;
-                if (min <= 3) { temp[1] = 1; ok = true; }
-                else if (max >= 12) { temp[14] = 1; ok = true; }
-                if (!ok) return null;
+        let wildPlaced = false;
+        for (let r = min; r <= max; r++) {
+            if (m[r] === 1) {
+                let rank = r === 15 ? 1 : r - 1;
+                cards.push((suit - 1) * 13 + (rank - 1));
             } else {
-                temp[cRank] = 1;
-            }
-            
-            let newMin = 15, newMax = 0;
-            for (let r = 1; r <= 14; r++) {
-                if (temp[r] === 1) { if (r < newMin) newMin = r; if (r > newMax) newMax = r; }
-            }
-            let gaps = 0;
-            for (let r = newMin; r <= newMax; r++) if (temp[r] === 0) gaps++;
-            
-            if (gaps === 0) return temp;
-            if (gaps === 1 && temp[15] !== 0) return temp; // Wild fills the gap!
-            return null;
-        } else if (isWild) {
-            if (m[15] !== 0) {
-                // We already have a wild. See if we can "lock" a suited 2 into the natural 2 spot.
-                if (cSuit === m[0] && cRank === 2 && m[2] === 0) {
-                    let temp = [...m]; temp[2] = 1;
-                    let newMin = 15, newMax = 0;
-                    for (let r = 1; r <= 14; r++) { if (temp[r] === 1) { if (r < newMin) newMin = r; if (r > newMax) newMax = r; } }
-                    let gaps = 0;
-                    for (let r = newMin; r <= newMax; r++) if (temp[r] === 0) gaps++;
-                    if (gaps <= 1) return temp;
-                }
-                if (m[15] === m[0] && m[2] === 0) {
-                    let temp = [...m]; temp[2] = 1; temp[15] = cSuit;
-                    let newMin = 15, newMax = 0;
-                    for (let r = 1; r <= 14; r++) { if (temp[r] === 1) { if (r < newMin) newMin = r; if (r > newMax) newMax = r; } }
-                    let gaps = 0;
-                    for (let r = newMin; r <= newMax; r++) if (temp[r] === 0) gaps++;
-                    if (gaps <= 1) return temp;
-                }
-                return null;
-            } else {
-                m[15] = cSuit;
-                return m;
+                cards.push(wildSuit === 5 ? 54 : (wildSuit - 1) * 13 + 1);
+                wildPlaced = true;
             }
         }
-    } else { // RUNNER
-        if (!isWild && cRank === m[1]) {
-            m[1 + cSuit]++; return m;
+        if (wildSuit !== 0 && !wildPlaced) {
+            cards.push(wildSuit === 5 ? 54 : (wildSuit - 1) * 13 + 1);
         }
-        if (isWild && m[6] === 0) {
-            m[6] = cSuit; return m;
+    } else {
+        let wildSuit = m[1]; let rank = m[2];
+        for (let s = 1; s <= 4; s++) {
+            for (let i = 0; i < m[s + 2]; i++) {
+                cards.push((s - 1) * 13 + (rank - 1));
+            }
         }
+        if (wildSuit !== 0) cards.push(wildSuit === 5 ? 54 : (wildSuit - 1) * 13 + 1);
     }
-    return null;
-}
-
-function appendCardsToMeld(meld, cards) {
-    let current = [...meld]; 
-    let remaining = [...cards];
-    let changed = true;
-    while(changed && remaining.length > 0) {
-        changed = false;
-        for(let i=0; i<remaining.length; i++) {
-            const next = appendToMeld(current, remaining[i]);
-            if (next) { current = next; remaining.splice(i, 1); changed = true; break; }
-        }
-    }
-    return remaining.length === 0 ? current : null;
+    return cards;
 }
 
 function buildMeld(cardIds, rules) {
@@ -134,8 +78,7 @@ function buildMeld(cardIds, rules) {
     }
     if (nats.length === 0) return null;
 
-    let firstNatRank = getRank(nats[0]);
-    let firstNatSuit = getSuit(nats[0]);
+    let firstNatRank = getRank(nats[0]); let firstNatSuit = getSuit(nats[0]);
     let isSameRank = true; let isSameSuit = true;
 
     for (let i = 1; i < nats.length; i++) {
@@ -143,7 +86,7 @@ function buildMeld(cardIds, rules) {
         if (getSuit(nats[i]) !== firstNatSuit) isSameSuit = false;
     }
 
-    if (isSameRank) {
+    if (isSameRank && rules.runners !== 'none') {
         let r = firstNatRank; let allowed = false;
         if (rules.runners === 'any') allowed = true;
         if (rules.runners === 'aces_threes' && (r === 1 || r === 3)) allowed = true;
@@ -152,7 +95,7 @@ function buildMeld(cardIds, rules) {
         if (allowed && wilds.length <= 1) {
             let counts = [0,0,0,0];
             for (let c of nats) counts[getSuit(c)-1]++;
-            return [0, r, counts[0], counts[1], counts[2], counts[3], wilds.length ? getSuit(wilds[0]) : 0];
+            return [0, wilds.length ? getSuit(wilds[0]) : 0, r, counts[0], counts[1], counts[2], counts[3]];
         }
     }
 
@@ -183,15 +126,14 @@ function buildMeld(cardIds, rules) {
             for (let i = 1; i < ranks.length; i++) gaps += (ranks[i] - ranks[i-1] - 1);
             
             if (gaps === 0 && trueWilds.length === 0) {
-                let m = new Array(16).fill(0); m[0] = firstNatSuit;
-                for (let r of ranks) m[r] = 1;
+                let m = new Array(16).fill(0); m[0] = firstNatSuit; m[1] = 0;
+                for (let r of ranks) m[r === 14 ? 15 : r + 1] = 1;
                 return m;
             }
             
             if (gaps <= 1 && trueWilds.length === 1) {
-                let m = new Array(16).fill(0); m[0] = firstNatSuit;
-                for (let r of ranks) m[r] = 1;
-                m[15] = getSuit(trueWilds[0]);
+                let m = new Array(16).fill(0); m[0] = firstNatSuit; m[1] = getSuit(trueWilds[0]);
+                for (let r of ranks) m[r === 14 ? 15 : r + 1] = 1;
                 return m;
             }
         }
@@ -199,11 +141,38 @@ function buildMeld(cardIds, rules) {
     return null;
 }
 
+function appendCardsToMeld(meld, cards) {
+    if (meld[0] !== 0) { 
+        // 🚀 Sequence Expansion: Breaks sequence to raw cards, adds new ones, and rebuilds 
+        // completely bypassing gap-logic edge-case bugs!
+        const expanded = expandMeld(meld);
+        for (let i = 0; i < cards.length; i++) expanded.push(cards[i]);
+        return buildMeld(expanded, { runners: 'none' });
+    }
+    // Runner logic
+    const m = [...meld];
+    for (const c of cards) {
+        const s = getSuit(c), r = getRank(c);
+        const isWild = s === 5 || r === 2;
+        if (!isWild) {
+            if (r !== m[2]) return null;
+            m[2 + s]++; 
+        } else {
+            if (m[1] !== 0) return null;
+            m[1] = s;
+        }
+    }
+    return m;
+}
+
+function appendToMeld(meld, cId) {
+    return appendCardsToMeld(meld, [cId]);
+}
+
 function meldCleanness(m) {
     if (!m || m.length === 0) return 0;
     if (isMeldClean(m)) return 0;
-    const wSuit = m[0] !== 0 ? m[15] : m[6];
-    if (wSuit > 0 && wSuit !== 5 && wSuit === m[0]) return 1; 
+    if (m[1] > 0 && m[1] !== 5 && m[1] === m[0]) return 1; 
     return 2; 
 }
 
@@ -215,13 +184,13 @@ export function calculateMeldPoints(meld, rules) {
     const isCanasta = length >= 7;
     
     if (isSeq) {
-        for(let r = 1; r <= 14; r++) {
+        for(let r = 2; r <= 15; r++) {
             if (meld[r] === 1) {
-                let rank = r > 13 ? 1 : r;
+                let rank = r === 15 ? 1 : r - 1;
                 pts += (rank === 1) ? 15 : (rank >= 8 ? 10 : (rank === 2 ? 20 : 5));
             }
         }
-        if (meld[15] !== 0) pts += (meld[15] === 5 ? 50 : 20);
+        if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20);
         
         if (isCanasta) {
             pts += isClean ? 200 : 100;
@@ -231,11 +200,11 @@ export function calculateMeldPoints(meld, rules) {
             }
         }
     } else {
-        const rank = meld[1];
-        const nats = meld[2] + meld[3] + meld[4] + meld[5];
+        const rank = meld[2];
+        const nats = meld[3] + meld[4] + meld[5] + meld[6];
         pts += nats * ((rank === 1) ? 15 : (rank >= 8 ? 10 : 5));
         
-        if (meld[6] !== 0) pts += (meld[6] === 5 ? 50 : 20);
+        if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20);
         
         if (isCanasta) {
             pts += (isClean ? 200 : 100);
@@ -288,6 +257,9 @@ function calculateFinalScores(G) {
   return scores;
 }
 
+// ============================================================================
+// 🚀 PURE BINARY NEURAL NETWORK BRIDGE
+// ============================================================================
 export const nnHelpers = {
   setBit: (buf, bitIndex) => { buf[bitIndex >> 5] |= (1 << (bitIndex & 31)); },
   
@@ -298,27 +270,27 @@ export const nnHelpers = {
       }
   },
 
-  // 🧠 22-bit precise array alignment for the BNN memory buffer
   packMeldBits: (buf, startBitIdx, m) => {
       if (!m || m.length === 0 || m[0] === undefined) return;
       if (m[0] !== 0) { // Sequence
-          nnHelpers.setBit(buf, startBitIdx); 
+          nnHelpers.setBit(buf, startBitIdx); // bit 0 = 1 for Seq
           for(let i=0; i<3; i++) if (m[0] & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 1 + i); // Suit
-          for(let r=1; r<=14; r++) if (m[r] === 1) nnHelpers.setBit(buf, startBitIdx + 4 + (r - 1)); // Ranks
-          for(let i=0; i<3; i++) if (m[15] & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 18 + i); // WildSuit
+          for(let i=0; i<3; i++) if (m[1] & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 4 + i); // WildSuit
+          for(let r=2; r<=15; r++) if (m[r] === 1) nnHelpers.setBit(buf, startBitIdx + 5 + r); // Ranks
       } else { // Runner
-          for(let i=0; i<4; i++) if (m[1] & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 1 + i); // Rank
+          for(let i=0; i<3; i++) if (m[1] & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 1 + i); // WildSuit
+          for(let i=0; i<4; i++) if (m[2] & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 4 + i); // Rank
           for (let s=0; s<4; s++) {
-              let c = m[2 + s]; 
-              for (let i=0; i<2; i++) if (c & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 5 + (s*2) + i); // 8 bits counts
+              let c = m[3 + s]; 
+              for (let i=0; i<3; i++) if (c & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 8 + (s*3) + i); 
           }
-          for(let i=0; i<3; i++) if (m[6] & (1<<i)) nnHelpers.setBit(buf, startBitIdx + 13 + i); // WildSuit
       }
   },
 
   meldsToSemanticMatrix: (melds, buf, intOffset) => {
       buf.fill(0, intOffset, intOffset + 11); 
       for (let i = 0; i < 15; i++) {
+          // 22 bits per meld gives us plenty of room to map either representation
           if (i < melds.length) nnHelpers.packMeldBits(buf, (intOffset * 32) + (i * 22), melds[i]);
       }
   },
@@ -488,7 +460,10 @@ export const BuracoGame = {
     playMeld: ({ G, ctx }, cardIds) => {
       if (!G.hasDrawn) return 'INVALID_MOVE'; 
       const hand = G.hands[ctx.currentPlayer];
+      const handCopy = [...hand];
+      for (const c of cardIds) { const i = handCopy.indexOf(c); if (i === -1) return 'INVALID_MOVE'; handCopy.splice(i, 1); }
       const parsed = buildMeld(cardIds, G.rules);
+      
       if (parsed) {
         const newHand = removeCards(hand, cardIds); const newMelds = [...G.melds[ctx.currentPlayer], parsed];
         const teamHasClean = G.teamPlayers[G.teams[ctx.currentPlayer]].some(tp => (tp === ctx.currentPlayer ? newMelds : G.melds[tp]).some(m => getMeldLength(m) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m))));
@@ -500,7 +475,11 @@ export const BuracoGame = {
     },
     appendToMeld: ({ G, ctx }, meldOwner, meldIndex, cardIds) => {
       if (!G.hasDrawn || G.teams[ctx.currentPlayer] !== G.teams[meldOwner]) return 'INVALID_MOVE';
-      const hand = G.hands[ctx.currentPlayer]; const parsed = appendCardsToMeld(G.melds[meldOwner][meldIndex], cardIds);
+      const hand = G.hands[ctx.currentPlayer];
+      const handCopy = [...hand];
+      for (const c of cardIds) { const i = handCopy.indexOf(c); if (i === -1) return 'INVALID_MOVE'; handCopy.splice(i, 1); }
+      const parsed = appendCardsToMeld(G.melds[meldOwner][meldIndex], cardIds);
+      
       if (parsed) {
         const newHand = removeCards(hand, cardIds); const newMeldState = [...G.melds[meldOwner]]; newMeldState[meldIndex] = parsed;
         const teamHasClean = G.teamPlayers[G.teams[ctx.currentPlayer]].some(tp => (tp === meldOwner ? newMeldState : G.melds[tp]).some(m => getMeldLength(m) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m))));
@@ -577,7 +556,7 @@ export const BuracoGame = {
                               s.add(54); 
                               for (let suit2 = 1; suit2 <= 4; suit2++) s.add((suit2 - 1) * 13 + 1); 
                           } else { 
-                              const rank = meld[1];
+                              const rank = meld[2];
                               for (let suit2 = 1; suit2 <= 4; suit2++) s.add((suit2 - 1) * 13 + (rank - 1));
                               s.add(54);
                               for (let suit2 = 1; suit2 <= 4; suit2++) s.add((suit2 - 1) * 13 + 1);
@@ -639,7 +618,7 @@ export const BuracoGame = {
           }
       }
 
-      let DNA = customDNA || G.botGenomes?.[p] || new Uint32Array(16896).fill(0); // 4 * (33 * 128)
+      let DNA = customDNA || G.botGenomes?.[p] || new Uint32Array(16896).fill(0); 
       if (DNA.length !== 16896) DNA = new Uint32Array(16896).fill(0);
 
       const dnaPickup = DNA.subarray(0, 4224);
@@ -742,7 +721,7 @@ export const BuracoGame = {
       }
 
       // ==========================================
-      // 🚀 STAGE 4: DISCARD (ABSOLUTE ACTION MAP)
+      // 🚀 STAGE 4: DISCARD (ABSOLUTE ACTION MASKING)
       // ==========================================
       const isMortoSafe = (matchCtx ? matchCtx.hasClean[myTeam] : hasCleanTeam(myTeam)) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
       if (myHandCards.length > 1 || isMortoSafe) {
