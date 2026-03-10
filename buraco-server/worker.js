@@ -55,40 +55,27 @@ function runMatch(genomes, rules, fixedDeck) {
         let moveCount = 0;
         while (!ctx.gameover && moveCount < 2000) {
             const p = ctx.currentPlayer;
-            const prevState = JSON.stringify(G);
             
             const moves = BuracoGame.ai.enumerate(G, ctx);
             
             if (!moves || moves.length === 0) {
-                if (G.hasDrawn && G.hands[p]?.length > 0) {
-                    applyMove(G, ctx, 'discardCard', [G.hands[p][0]]);
-                }
+                if (G.hasDrawn && G.hands[p]?.length > 0) applyMove(G, ctx, 'discardCard', [G.hands[p][0]]);
                 ctx._endTurn = true;
             } else {
                 let stuck = true;
                 for (const move of moves) {
                     const ok = applyMove(G, ctx, move.move, move.args || []);
-                    if (ok) {
-                        stuck = false;
-                        if (rules.telepathy) revealAllHands(G);
-                    }
+                    if (ok) { stuck = false; if (rules.telepathy) revealAllHands(G); }
                     if (ctx._endTurn) break;
                 }
-                
-                if (stuck || prevState === JSON.stringify(G)) {
-                    if (G.hasDrawn && G.hands[p]?.length > 0) {
-                        applyMove(G, ctx, 'discardCard', [G.hands[p][0]]);
-                    }
+                if (stuck) {
+                    if (G.hasDrawn && G.hands[p]?.length > 0) applyMove(G, ctx, 'discardCard', [G.hands[p][0]]);
                     ctx._endTurn = true;
                 }
             }
             if (ctx._endTurn) {
-                const pInt = parseInt(ctx.currentPlayer);
-                ctx.currentPlayer = String((pInt + 1) % numPlayers);
-                ctx.turn++;
-                G.hasDrawn = false;
-                G.lastDrawnCard = null;
-                ctx._endTurn = false;
+                ctx.currentPlayer = String((parseInt(ctx.currentPlayer) + 1) % numPlayers);
+                ctx.turn++; G.hasDrawn = false; G.lastDrawnCard = null; ctx._endTurn = false;
             }
             ctx.gameover = BuracoGame.endIf({ G, ctx });
             moveCount++;
