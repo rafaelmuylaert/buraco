@@ -1,18 +1,18 @@
 // Cards: 0-51 = normal (two copies each), 54 = Joker (two copies). Card 53 unused.
-const getSuit = c => c >= 104 ? 5 : Math.floor((c % 52) / 13) + 1; // 1:♠, 2:♥, 3:♦, 4:♣, 5:★
-const getRank = c => c >= 104 ? 2 : (c % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:K
+export const getSuit = c => c >= 104 ? 5 : Math.floor((c % 52) / 13) + 1; // 1:♠, 2:♥, 3:♦, 4:♣, 5:★
+export const getRank = c => c >= 104 ? 2 : (c % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:K
 
 export const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
 export const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
 
-const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15]; 
+export const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15]; 
 
 // 🚀 CENTRALIZED AI ARCHITECTURE CONFIGURATION
 export const AI_CONFIG = {
     INPUT_INTS: 37,      // 37 * 32 = 1184 bits available for state features
     HIDDEN_NODES: 128,   // Logical XNOR gates in the hidden layer
     OUTPUT_NODES: 1,     // Final score output
-    STAGES: 4            // Pickup, Append, Meld, Discard
+    STAGES: 3            // Pickup, Meld (appends + new), Discard
 };
 // Dynamically calculate memory requirements
 AI_CONFIG.DNA_INTS_PER_STAGE = (AI_CONFIG.INPUT_INTS * AI_CONFIG.HIDDEN_NODES) + Math.ceil(AI_CONFIG.HIDDEN_NODES / 32) * AI_CONFIG.OUTPUT_NODES;
@@ -159,7 +159,7 @@ function cardsToRunnerSlots(cardIds, existingMeld = null) {
     return m;
 }
 
-function buildMeld(cardIds, rules) {
+export function buildMeld(cardIds, rules) {
     if (cardIds.length < 3) return null;
     let seq = cardsToSeqSlots(cardIds);
     if (seq) return seq;
@@ -177,12 +177,12 @@ function buildMeld(cardIds, rules) {
     return null;
 }
 
-function appendCardsToMeld(meld, cards) {
+export function appendCardsToMeld(meld, cards) {
     if (meld[0] !== 0) return cardsToSeqSlots(cards, meld);
     return cardsToRunnerSlots(cards, meld);
 }
 
-function appendToMeld(meld, cId) {
+export function appendToMeld(meld, cId) {
     return appendCardsToMeld(meld, [cId]);
 }
 
@@ -223,7 +223,7 @@ export function calculateMeldPoints(meld, rules) {
     return pts;
 }
 
-function getCardPoints(c) {
+export function getCardPoints(c) {
     const s = getSuit(c); const r = getRank(c);
     if (s === 5) return 50; if (r === 2) return 20; if (r === 1) return 15;
     if (r >= 8 && r <= 13) return 10; return 5;
@@ -235,7 +235,7 @@ function removeCards(hand, cardIds) {
     return hand.filter(c => { if (counts[c] > 0) { counts[c]--; return false; } return true; });
 }
 
-function buildDeck(rules) {
+export function buildDeck(rules) {
     let deck = [];
     for (let i = 0; i < 52; i++) deck.push(i);
     for (let i = 0; i < 52; i++) deck.push(i);
@@ -347,7 +347,7 @@ export function syncGameBNN(G) {
     }
 }
 
-function getAllValidMelds(handCards, rules) {
+export function getAllValidMelds(handCards, rules) {
     let validCombos = [];
     let seenSigs = new Set();
     
@@ -558,9 +558,8 @@ export const BuracoGame = {
 
       const st = AI_CONFIG.DNA_INTS_PER_STAGE;
       const dnaPickup = DNA.subarray(0, st);
-      const dnaAppend = DNA.subarray(st, st * 2);
-      const dnaMeld = DNA.subarray(st * 2, st * 3);
-      const dnaDiscard = DNA.subarray(st * 3, AI_CONFIG.TOTAL_DNA_SIZE);
+      const dnaMeld = DNA.subarray(st, st * 2);
+      const dnaDiscard = DNA.subarray(st * 2, AI_CONFIG.TOTAL_DNA_SIZE);
 
       const getScore = (actionType, actionCards, actionMeldIdx, activeWeights) => {
           let input = new Uint32Array(inputBuffer); 
@@ -613,42 +612,27 @@ export const BuracoGame = {
           return [{ move: possiblePickups[0].move, args: possiblePickups[0].args }];
       } 
       
-      let possibleAppends = []; let appendSigs = new Set();
+      // Batch all meld candidates (appends + new melds) — score together, resolve conflicts
+      let allMeldCandidates = []; let meldSigs = new Set();
       (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIndex) => {
-              for (let i = 0; i < myHandCards.length; i++) {
-                  let card = myHandCards[i];
+              for (let card of myHandCards) {
                   if (appendToMeld(meld, card)) {
                       let cls = card >= 104 ? 52 : card % 52;
                       let sig = `append-${tp}-${mIndex}-${cls}`;
-                      if (!appendSigs.has(sig)) {
-                          appendSigs.add(sig);
-                          possibleAppends.push({ move: 'appendToMeld', args: [tp, mIndex, [card]], actionType: 2, cards: [card], mIdx: mIndex });
-                      }
+                      if (!meldSigs.has(sig)) { meldSigs.add(sig); allMeldCandidates.push({ move: 'appendToMeld', args: [tp, mIndex, [card]], actionType: 2, cards: [card], mIdx: mIndex }); }
                   }
               }
           });
       });
-      if (possibleAppends.length > 0) {
-          for (let m of possibleAppends) m.score = getScore(m.actionType, m.cards, m.mIdx, dnaAppend);
-          possibleAppends = possibleAppends.sort((a,b) => b.score - a.score);
-          let queue = resolveQueue(possibleAppends);
-          if (queue.length > 0) return queue.map(m => ({ move: m.move, args: m.args }));
-      }
-
-      let possibleMelds = []; let meldSigs = new Set();
-      const validMelds = getAllValidMelds(myHandCards, G.rules);
-      for (let combo of validMelds) {
+      for (let combo of getAllValidMelds(myHandCards, G.rules)) {
           let sig = combo.map(c => c >= 104 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
-          if (!meldSigs.has(sig)) {
-              meldSigs.add(sig);
-              possibleMelds.push({ move: 'playMeld', args: [combo], actionType: 3, cards: combo, mIdx: null });
-          }
+          if (!meldSigs.has(sig)) { meldSigs.add(sig); allMeldCandidates.push({ move: 'playMeld', args: [combo], actionType: 3, cards: combo, mIdx: null }); }
       }
-      if (possibleMelds.length > 0) {
-          for (let m of possibleMelds) m.score = getScore(m.actionType, m.cards, m.mIdx, dnaMeld);
-          possibleMelds = possibleMelds.sort((a,b) => b.score - a.score);
-          let queue = resolveQueue(possibleMelds);
+      if (allMeldCandidates.length > 0) {
+          for (let m of allMeldCandidates) m.score = getScore(m.actionType, m.cards, m.mIdx, dnaMeld);
+          allMeldCandidates.sort((a,b) => b.score - a.score);
+          let queue = resolveQueue(allMeldCandidates);
           if (queue.length > 0) return queue.map(m => ({ move: m.move, args: m.args }));
       }
 
