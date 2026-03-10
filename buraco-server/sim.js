@@ -119,9 +119,37 @@ function teamHasClean(melds0, melds1, rules) {
     return melds0.some(check) || melds1.some(check);
 }
 
-// Build input buffer directly from sim state (no syncGameBNN)
-function buildInputBuffer(S, pIdx, buf) {
-    const myTeam = pIdx % 2; // 0=team0(p0,p2), 1=team1(p1,p3)
+// Inline card packing into buf — no allocations
+function packCardsInto(buf, offset, cards) {
+    buf[offset] = 0; buf[offset+1] = 0;
+    for (let i = 0; i < cards.length; i++) {
+        const cls = cards[i] === 54 ? 54 : cards[i] % 52;
+        buf[offset + (cls >> 5)] |= (1 << (cls & 31));
+    }
+}
+
+function packMeldsInto(buf, offset, melds) {
+    for (let i = offset; i < offset + 11; i++) buf[i] = 0;
+    const setBit = (bi) => { buf[offset + (bi >> 5)] |= (1 << (bi & 31)); };
+    for (let mi = 0; mi < melds.length && mi < 15; mi++) {
+        const m = melds[mi], base = mi * 22;
+        if (!m) continue;
+        if (m[0] !== 0) {
+            setBit(base);
+            for (let i = 0; i < 3; i++) if (m[0] & (1<<i)) setBit(base+1+i);
+            for (let i = 0; i < 3; i++) if (m[1] & (1<<i)) setBit(base+4+i);
+            for (let r = 2; r <= 15; r++) if (m[r]) setBit(base+5+r);
+        } else {
+            for (let i = 0; i < 3; i++) if (m[1] & (1<<i)) setBit(base+1+i);
+            for (let i = 0; i < 4; i++) if (m[2] & (1<<i)) setBit(base+4+i);
+            for (let s = 0; s < 4; s++) { const c = m[3+s]; for (let i = 0; i < 3; i++) if (c & (1<<i)) setBit(base+8+s*3+i); }
+        }
+    }
+}
+
+// Build base state into buf[0..32] — call once per turn, reuse for all action scores
+function buildBaseBuffer(S, pIdx, buf) {
+    const myTeam = pIdx % 2;
     const oppTeam = 1 - myTeam;
     const numP = S.numP;
     const opp1 = (pIdx + 1) % numP;
@@ -130,7 +158,6 @@ function buildInputBuffer(S, pIdx, buf) {
 
     buf.fill(0);
 
-    // [0] meta bits
     let meta = 0;
     if (S.deck.length > 0) meta |= 1;
     if (S.pots.length > 0) meta |= 2;
@@ -145,34 +172,35 @@ function buildInputBuffer(S, pIdx, buf) {
     if (opp2 >= 0) meta |= (Math.min(15, S.hands[opp2].length) << 19);
     buf[0] = meta;
 
-    // [1-11] myTeam melds, [12-22] oppTeam melds
     const myMelds = numP === 4 ? [...(S.melds[myTeam*2]||[]), ...(S.melds[myTeam*2+2]||[])] : (S.melds[myTeam]||[]);
     const oppMelds = numP === 4 ? [...(S.melds[oppTeam*2]||[]), ...(S.melds[oppTeam*2+2]||[])] : (S.melds[oppTeam]||[]);
-    const packed0 = nnHelpers.packTeamMelds(myMelds);
-    const packed1 = nnHelpers.packTeamMelds(oppMelds);
-    for (let i = 0; i < 11; i++) { buf[1+i] = packed0[i]; buf[12+i] = packed1[i]; }
+    packMeldsInto(buf, 1, myMelds);
+    packMeldsInto(buf, 12, oppMelds);
 
-    // [23-24] discard pile
-    const dp = nnHelpers.packCards(S.discard);
-    buf[23] = dp[0]; buf[24] = dp[1];
-
-    // [25-26] my hand, [27-28] opp1 hand size hint, [29-30] partner, [31-32] opp2
-    const hp = nnHelpers.packCards(S.hands[pIdx]);
-    buf[25] = hp[0]; buf[26] = hp[1];
-    // opponents: pack just count as bits (no known cards in training)
+    packCardsInto(buf, 23, S.discard);
+    packCardsInto(buf, 25, S.hands[pIdx]);
     buf[27] = S.hands[opp1].length & 0xFFFF;
     if (partner >= 0) buf[29] = S.hands[partner].length & 0xFFFF;
     if (opp2 >= 0) buf[31] = S.hands[opp2].length & 0xFFFF;
 }
 
-function simScore(S, dna, pIdx, actionType, cards, meldIdx, buf) {
-    buildInputBuffer(S, pIdx, buf);
+// Score an action — base state already in buf[0..32], only writes [33..36]
+function simScore(dna, actionType, c0, c1, meldIdx, buf) {
     buf[33] = actionType;
-    const packed = nnHelpers.packCards(cards);
-    buf[34] = packed[0]; buf[35] = packed[1];
-    if (meldIdx >= 0) buf[36] = meldIdx;
+    buf[34] = c0; buf[35] = c1;
+    buf[36] = meldIdx >= 0 ? meldIdx : 0;
     const st = AI_CONFIG.DNA_INTS_PER_STAGE;
     return nnHelpers.forwardPass(buf, dna.subarray(actionType * st, (actionType + 1) * st));
+}
+
+// Pack a card list into two ints inline (no alloc)
+function packCards2(cards) {
+    let a = 0, b = 0;
+    for (let i = 0; i < cards.length; i++) {
+        const cls = cards[i] === 54 ? 54 : cards[i] % 52;
+        if (cls < 32) a |= (1 << cls); else b |= (1 << (cls - 32));
+    }
+    return [a, b];
 }
 
 function calcFinalScore(S, rules) {
@@ -221,19 +249,21 @@ export function simMatch(dnas, rules, deck) {
             // Check exhaustion
             if (S.deck.length === 0 && S.pots.length === 0) break;
 
+            buildBaseBuffer(S, p, buf);
+
             // Score pickup options
             let bestScore = -1, pickDiscard = false, pickDiscardCards = null, pickDiscardMeld = null;
 
             // drawCard score
-            const drawScore = simScore(S, dna, p, 0, [], -1, buf);
-            bestScore = drawScore;
+            bestScore = simScore(dna, 0, 0, 0, -1, buf);
 
             // pickUpDiscard
             if (S.discard.length > 0) {
                 const top = S.discard[S.discard.length - 1];
                 const combos = getValidMeldsWithCard(hand, top, rules);
                 for (const [combo, handUsed] of combos) {
-                    const sc = simScore(S, dna, p, 1, combo, -1, buf);
+                    const [c0, c1] = packCards2(combo);
+                    const sc = simScore(dna, 1, c0, c1, -1, buf);
                     if (sc > bestScore) { bestScore = sc; pickDiscard = true; pickDiscardCards = handUsed; pickDiscardMeld = combo; }
                 }
             }
@@ -267,6 +297,7 @@ export function simMatch(dnas, rules, deck) {
         }
 
         // Post-draw: try appends
+        buildBaseBuffer(S, p, buf);
         let acted = false;
         const myMeldOwners = numP === 4 ? [p, (p+2)%4] : [p];
         let appendMoves = [];
@@ -275,7 +306,9 @@ export function simMatch(dnas, rules, deck) {
                 for (let ci = 0; ci < hand.length; ci++) {
                     const card = hand[ci];
                     if (appendToMeld(S.melds[owner][mi], card)) {
-                        const sc = simScore(S, dna, p, 2, [card], mi, buf);
+                        const cls = card === 54 ? 54 : card % 52;
+                        const c0 = cls < 32 ? (1 << cls) : 0, c1 = cls >= 32 ? (1 << (cls-32)) : 0;
+                        const sc = simScore(dna, 2, c0, c1, mi, buf);
                         appendMoves.push({sc, owner, mi, card});
                     }
                 }
@@ -297,7 +330,7 @@ export function simMatch(dnas, rules, deck) {
         // Try new melds
         const validMelds = getAllValidMelds(hand, rules);
         if (validMelds.length > 0) {
-            let meldMoves = validMelds.map(combo => ({ sc: simScore(S, dna, p, 3, combo, -1, buf), combo }));
+            let meldMoves = validMelds.map(combo => { const [c0,c1] = packCards2(combo); return { sc: simScore(dna, 3, c0, c1, -1, buf), combo }; });
             meldMoves.sort((a,b) => b.sc - a.sc);
             const usedCards = new Set();
             for (const mv of meldMoves) {
@@ -317,7 +350,6 @@ export function simMatch(dnas, rules, deck) {
 
         // Discard
         if (hand.length > 0) {
-            buildInputBuffer(S, p, buf);
             buf[33] = 4;
             const raw = nnHelpers.forwardPass(buf, dna.subarray(3 * AI_CONFIG.DNA_INTS_PER_STAGE));
             const targetCls = raw % 55;
