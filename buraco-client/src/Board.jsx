@@ -182,7 +182,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
   }, [ctx?.currentPlayer]);
 
   React.useEffect(() => {
-    if (!G?.hasDrawn) { setNewlyDrawnUids([]); return; }
+    if (!G?.hasDrawn) { setNewlyDrawnUids([]); prevHandRef.current = rawHandObj.map(c => c.uid); return; }
     if (!G?.lastDrawnCard) return;
     const prev = prevHandRef.current || [];
     const drawn = rawHandObj.filter(c => !prev.includes(c.uid)).map(c => c.uid);

@@ -29,7 +29,7 @@ function breed(parentA, parentB) {
     for (let i = 0; i < SIM_DNA_SIZE; i++) {
         child[i] = Math.random() > 0.5 ? parentA[i] : parentB[i];
     }
-    return mutate(child, 0.005);
+    return mutate(child, 0.1);
 }
 
 const generateRandomGenome = () => {
