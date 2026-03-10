@@ -62,10 +62,8 @@ function runMatch(genomes, rules, fixedDeck) {
             if (!moves || moves.length === 0) {
                 if (G.hasDrawn && G.hands[p]?.length > 0) {
                     applyMove(G, ctx, 'discardCard', [G.hands[p][0]]);
-                    if (!ctx._endTurn) ctx._endTurn = true;
-                } else {
-                    ctx._endTurn = true;
                 }
+                ctx._endTurn = true;
             } else {
                 let stuck = true;
                 for (const move of moves) {
@@ -80,10 +78,8 @@ function runMatch(genomes, rules, fixedDeck) {
                 if (stuck || prevState === JSON.stringify(G)) {
                     if (G.hasDrawn && G.hands[p]?.length > 0) {
                         applyMove(G, ctx, 'discardCard', [G.hands[p][0]]);
-                        if (!ctx._endTurn) ctx._endTurn = true;
-                    } else {
-                        ctx._endTurn = true;
                     }
+                    ctx._endTurn = true;
                 }
             }
             if (ctx._endTurn) {
