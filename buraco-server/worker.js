@@ -1,5 +1,6 @@
 import { workerData, parentPort } from 'worker_threads';
-import { BuracoGame, nnHelpers, AI_CONFIG } from './game.js';
+import { AI_CONFIG, nnHelpers } from './game.js';
+import { simMatch } from './sim.js';
 import { initWasm, wasmForwardPass } from './wasm_loader.js';
 
 try {
@@ -17,22 +18,6 @@ function shuffle(arr) {
     return arr;
 }
 
-function initState(rules, numPlayers, fixedDeck) {
-    const fakeRandom = { Shuffle: (arr) => fixedDeck ? [...fixedDeck] : shuffle(arr) };
-    return BuracoGame.setup({ random: fakeRandom, ctx: { numPlayers } }, { ...rules, numPlayers });
-}
-
-
-function applyMove(G, ctx, moveName, args) {
-    const result = BuracoGame.moves[moveName]({ G, ctx, events: { endTurn: () => { ctx._endTurn = true; } } }, ...args);
-    return result !== 'INVALID_MOVE';
-}
-
-function revealAllHands(G) {
-    for (const p of Object.keys(G.hands)) G.knownCards[p] = [...G.hands[p]];
-}
-
-// 🚀 Use centralized architecture variables!
 function prepareGenome(raw) {
     let dna = raw instanceof Uint32Array ? raw : new Uint32Array(raw);
     if (dna.length !== AI_CONFIG.TOTAL_DNA_SIZE) {
@@ -43,53 +28,6 @@ function prepareGenome(raw) {
     return dna;
 }
 
-function runMatch(genomes, rules, fixedDeck) {
-    const numPlayers = rules.numPlayers || 4;
-    const G = initState(rules, numPlayers, fixedDeck);
-    if (rules.telepathy) revealAllHands(G);
-    const ctx = { currentPlayer: '0', numPlayers, turn: 1, gameover: undefined, _endTurn: false };
-
-    G.botGenomes = Object.fromEntries(Object.entries(genomes).map(([k, v]) => [k, prepareGenome(v)]));
-
-    try {
-        let moveCount = 0;
-        while (!ctx.gameover && moveCount < 2000) {
-            const p = ctx.currentPlayer;
-            
-            const moves = BuracoGame.ai.enumerate(G, ctx);
-            
-            if (!moves || moves.length === 0) {
-                if (G.hasDrawn && G.hands[p]?.length > 0) applyMove(G, ctx, 'discardCard', [G.hands[p][0]]);
-                ctx._endTurn = true;
-            } else {
-                let stuck = true;
-                for (const move of moves) {
-                    const ok = applyMove(G, ctx, move.move, move.args || []);
-                    if (ok) { stuck = false; if (rules.telepathy) revealAllHands(G); }
-                    if (ctx._endTurn) break;
-                }
-                if (stuck) {
-                    if (G.hasDrawn && G.hands[p]?.length > 0) applyMove(G, ctx, 'discardCard', [G.hands[p][0]]);
-                    ctx._endTurn = true;
-                }
-            }
-            if (ctx._endTurn) {
-                ctx.currentPlayer = String((parseInt(ctx.currentPlayer) + 1) % numPlayers);
-                ctx.turn++; G.hasDrawn = false; G.lastDrawnCard = null; ctx._endTurn = false;
-            }
-            ctx.gameover = BuracoGame.endIf({ G, ctx });
-            moveCount++;
-        }
-        const scores = ctx.gameover ? ctx.gameover.scores : { team0: { total: -5000 }, team1: { total: -5000 } };
-        return scores.team0.total - scores.team1.total;
-    } catch (e) {
-        console.error('[WORKER] runMatch error:', e.stack || e);
-        return 0;
-    }
-}
-
-const { matches, rules } = workerData;
-
 const _baseDeck = [];
 for (let i = 0; i < 52; i++) _baseDeck.push(i);
 for (let i = 0; i < 52; i++) _baseDeck.push(i);
@@ -98,9 +36,10 @@ let _currentDeck = [..._baseDeck];
 
 function processJob(matches, rules) {
     return matches.map(({ dnaA, dnaB }) => {
-        const pairDeck = rules.fixedDeck ? _currentDeck : shuffle([..._currentDeck]);
-        const g1 = runMatch({ '0': dnaA, '1': dnaB, '2': dnaA, '3': dnaB }, rules, pairDeck);
-        const g2 = runMatch({ '0': dnaB, '1': dnaA, '2': dnaB, '3': dnaA }, rules, pairDeck);
+        const dA = prepareGenome(dnaA), dB = prepareGenome(dnaB);
+        const deck = rules.fixedDeck ? _currentDeck : shuffle([..._currentDeck]);
+        const g1 = simMatch([dA, dB, dA, dB], rules, deck);
+        const g2 = simMatch([dB, dA, dB, dA], rules, deck);
         return [g1 + (-g2), g2 + (-g1)];
     });
 }
