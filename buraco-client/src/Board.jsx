@@ -155,6 +155,8 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
   const [newlyDrawnUids, setNewlyDrawnUids] = useState([]);
   const isMyTurn = ctx.currentPlayer === playerID;
 
+  const prevHandRef = React.useRef(null);
+
   useEffect(() => {
     if (ctx && G && ctx.phase === 'waitingRoom' && G.players && !G.players.includes(playerID)) {
       moves.joinTable(playerID);
@@ -170,6 +172,23 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
       }).then(() => window.dispatchEvent(new Event('history_updated')));
     }
   }, [ctx?.gameover, matchID]);
+
+  const rawHandObj = Object.values(G?.hands?.[playerID] || []).map((c, i) => ({ ...intToCardObj(c), uid: `h-${i}-${c}`, cardInt: c }));
+
+  React.useEffect(() => {
+    prevHandRef.current = rawHandObj.map(c => c.uid);
+    setNewlyDrawnUids([]);
+    setSelectedCards([]);
+  }, [ctx?.currentPlayer]);
+
+  React.useEffect(() => {
+    if (!G?.hasDrawn) { setNewlyDrawnUids([]); return; }
+    if (!G?.lastDrawnCard) return;
+    const prev = prevHandRef.current || [];
+    const drawn = rawHandObj.filter(c => !prev.includes(c.uid)).map(c => c.uid);
+    if (drawn.length > 0) setNewlyDrawnUids(drawn);
+    prevHandRef.current = rawHandObj.map(c => c.uid);
+  }, [G?.lastDrawnCard, G?.hasDrawn]);
 
   if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregando Mesa...</div>;
 
@@ -253,23 +272,6 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
     );
   }
 
-  const prevHandRef = React.useRef(null);
-  const rawHandObj = Object.values(G.hands[playerID] || []).map((c, i) => ({ ...intToCardObj(c), uid: `h-${i}-${c}`, cardInt: c }));
-
-  React.useEffect(() => {
-    prevHandRef.current = rawHandObj.map(c => c.uid);
-    setNewlyDrawnUids([]);
-    setSelectedCards([]);
-  }, [ctx.currentPlayer]);
-
-  React.useEffect(() => {
-    if (!G.hasDrawn) { setNewlyDrawnUids([]); return; }
-    if (!G.lastDrawnCard) return;
-    const prev = prevHandRef.current || [];
-    const drawn = rawHandObj.filter(c => !prev.includes(c.uid)).map(c => c.uid);
-    if (drawn.length > 0) setNewlyDrawnUids(drawn);
-    prevHandRef.current = rawHandObj.map(c => c.uid);
-  }, [G.lastDrawnCard, G.hasDrawn]);
   const sortedHandObj = sortCards(rawHandObj);
   const topDiscard = G.discardPile.length > 0 ? intToCardObj(G.discardPile[G.discardPile.length - 1]) : null;
   

@@ -581,7 +581,7 @@ export const BuracoGame = {
           let best = runPickupNet(stateBuf, 0, dnaPickup);
           let bestMove = { move: 'drawCard', args: [] };
 
-          if (G.discardPile.length > 0 && G.rules.discard === 'closed') {
+          if (G.discardPile.length > 0 && (G.rules.discard === 'closed' || G.rules.discard === true)) {
               const top = G.discardPile[G.discardPile.length - 1];
               const seen = new Set();
               for (const combo of getAllValidMelds([...myHandCards, top], G.rules)) {
