@@ -169,6 +169,15 @@ export const TrainerService = {
     startTraining: async (botName, rules = {}, params = {}) => {
         if (activeTrainings.has(botName)) throw new Error(`Training already in progress for: ${botName}`);
 
+        // Normalize boolean rules from UI to string format expected by game.js
+        const normalizedRules = {
+            ...rules,
+            numPlayers: rules.numPlayers || 4,
+            discard: rules.discard === true || rules.discard === 'closed' ? 'closed' : 'open',
+            runners: Array.isArray(rules.runners) ? (rules.runners.length ? 'aces_kings' : 'none') : (rules.runners || 'aces_kings'),
+        };
+        rules = normalizedRules;
+
         const POPULATION_SIZE = Math.max(8, params.populationSize || 24);
         const GENERATIONS = params.generations || 500;
         const SAVE_EVERY = params.saveInterval || params.matchesPerGeneration || 12;

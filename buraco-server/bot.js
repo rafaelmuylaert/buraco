@@ -2,7 +2,7 @@ import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import { BuracoGame, AI_CONFIG } from './game.js';
 
-const SERVER_URL = 'http://buraco-server:8000';
+const SERVER_URL = `http://buraco-server:${process.env.SERVER_PORT || '8000'}`;
 const activeBots = {};
 const dnaCache = {};
 const activeIntervals = {};
