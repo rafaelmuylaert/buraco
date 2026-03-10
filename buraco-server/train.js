@@ -173,7 +173,6 @@ export const TrainerService = {
         const normalizedRules = {
             ...rules,
             numPlayers: rules.numPlayers || 4,
-            discard: rules.discard === true || rules.discard === 'closed' ? 'closed' : 'open',
         };
         rules = normalizedRules;
 

@@ -282,7 +282,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
       moves.discardCard(selectedCardInts[0]);
       setSelectedCards([]);
     } else if (!G.hasDrawn && G.discardPile.length > 0) {
-      if (G.rules.discard === 'closed') {
+      if (G.rules.discard === 'closed' || G.rules.discard === true) {
         moves.pickUpDiscard(selectedCardInts, { type: 'new' });
         setSelectedCards([]);
       } else {
@@ -320,7 +320,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
               <div onClick={() => { 
                   if (!isMyTurn) return; 
                   if (isMyTeam) {
-                    if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) {
+                    if (!G.hasDrawn && (G.rules.discard === 'closed' || G.rules.discard === true) && G.discardPile.length > 0) {
                       moves.pickUpDiscard(selectedCardInts, { type: 'append', player: p, index });
                       setSelectedCards([]);
                     } else if (G.hasDrawn && selectedCards.length > 0) {
@@ -355,7 +355,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
         {isMyTeam && (
           <div onClick={() => { 
               if (!isMyTurn) return; 
-              if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) {
+              if (!G.hasDrawn && (G.rules.discard === 'closed' || G.rules.discard === true) && G.discardPile.length > 0) {
                 moves.pickUpDiscard(selectedCardInts, { type: 'new' });
                 setSelectedCards([]);
               } else if (G.hasDrawn && selectedCards.length >= 3) { 

@@ -475,7 +475,7 @@ export const BuracoGame = {
     pickUpDiscard: ({ G, ctx }, selectedHandIds = [], target = { type: 'new' }) => {
       if (G.hasDrawn || G.discardPile.length === 0) return 'INVALID_MOVE';
       const hand = G.hands[ctx.currentPlayer]; const topCard = G.discardPile[G.discardPile.length - 1];
-      if (G.rules.discard === 'closed') {
+      if (G.rules.discard === 'closed' || G.rules.discard === true) {
         let isValid = false; let parsedMeldObject = null;
         if (target.type === 'new') { parsedMeldObject = buildMeld([...selectedHandIds, topCard], G.rules); if (parsedMeldObject) isValid = true; } 
         else if (target.type === 'append') { parsedMeldObject = appendCardsToMeld(G.melds[target.player][target.index], [...selectedHandIds, topCard]); if (parsedMeldObject) isValid = true; }
@@ -595,7 +595,7 @@ export const BuracoGame = {
                   const sc = runPickupNet(stateBuf, encodeCandidate(0, resultMeld, wildSuit), dnaPickup);
                   if (sc > best) { best = sc; bestMove = { move: 'pickUpDiscard', args: [handUsed, { type: 'new' }] }; }
               }
-          } else if (G.discardPile.length > 0 && G.rules.discard !== 'closed') {
+          } else if (G.discardPile.length > 0 && G.rules.discard !== 'closed' && G.rules.discard !== true) {
               bestMove = { move: 'pickUpDiscard', args: [] };
           }
           return [bestMove];
