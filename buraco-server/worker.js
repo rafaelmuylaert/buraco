@@ -22,6 +22,7 @@ function initState(rules, numPlayers, fixedDeck) {
     return BuracoGame.setup({ random: fakeRandom, ctx: { numPlayers } }, { ...rules, numPlayers });
 }
 
+
 function applyMove(G, ctx, moveName, args) {
     const result = BuracoGame.moves[moveName]({ G, ctx, events: { endTurn: () => { ctx._endTurn = true; } } }, ...args);
     return result !== 'INVALID_MOVE';
