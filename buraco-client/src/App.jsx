@@ -574,10 +574,10 @@ const App = () => {
 
   if (view === 'admin') {
     return (
-      <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #ff4d4d', paddingBottom: '20px' }}>
-          <h1 style={{ color: '#ff4d4d', margin: 0 }}>🛠️ Painel de Administração</h1>
-          <button onClick={() => { setTrainBotIsNew(availableBots.length === 0); setTrainBotConfig(prev => ({ ...prev, name: availableBots[0] || 'BotPrometheus' })); setShowTrainBotPopup(true); }} style={{ padding: '15px 30px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer', marginTop: '20px', boxShadow: '0 0 15px rgba(138, 43, 226, 0.5)' }}>
+      <div style={{ padding: '20px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #ff4d4d', paddingBottom: '20px' }}>
+          <h1 style={{ color: '#ff4d4d', margin: 0, flex: '1 1 100%' }}>🛠️ Painel de Administração</h1>
+          <button onClick={() => { setTrainBotIsNew(availableBots.length === 0); setTrainBotConfig(prev => ({ ...prev, name: availableBots[0] || 'BotPrometheus' })); setShowTrainBotPopup(true); }} style={{ padding: '12px 20px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 15px rgba(138, 43, 226, 0.5)' }}>
             🧠 Laboratório de IA (Treinar Bot)
           </button>
           <button onClick={() => setView('lounge')} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Sair do Modo Admin</button>
@@ -757,9 +757,9 @@ const App = () => {
 
   if (view === 'tournaments') {
     return (
-      <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
-          <h1 style={{ color: '#ffd700', margin: 0 }}>🏆 Criador de Torneios</h1>
+      <div style={{ padding: '20px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
+          <h1 style={{ color: '#ffd700', margin: 0, flex: '1 1 auto' }}>🏆 Criador de Torneios</h1>
           <button onClick={() => setView('lounge')} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Voltar ao Salão</button>
         </div>
 
@@ -823,16 +823,14 @@ const App = () => {
   const savedSessions = getSavedSessions();
 
   return (
-    <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
-        <h1 style={{ color: '#ffd700', margin: 0 }}>
+    <div style={{ padding: '20px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
+        <h1 style={{ color: '#ffd700', margin: 0, flex: '1 1 auto' }}>
           <span onClick={() => setView('admin')} style={{ cursor: 'pointer', opacity: 0.2, marginRight: '15px' }} title="Modo Admin">⚙️</span>
           ♠♥ Salão Principal ♦♣
         </h1>
-        <div style={{ display: 'flex', gap: '15px' }}>
-          <button onClick={() => setShowQuickGamePopup(true)} style={{ padding: '15px 20px', background: '#e63946', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>⚡ Jogo Rápido</button>
-          <button onClick={() => setView('tournaments')} style={{ padding: '15px 30px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.2em', fontWeight: 'bold', cursor: 'pointer' }}>+ Novo Torneio</button>
-        </div>
+        <button onClick={() => setShowQuickGamePopup(true)} style={{ padding: '12px 16px', background: '#e63946', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>⚡ Jogo Rápido</button>
+        <button onClick={() => setView('tournaments')} style={{ padding: '12px 20px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer' }}>+ Novo Torneio</button>
       </div>
       
       {showQuickGamePopup && (
@@ -902,7 +900,7 @@ const App = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px', minWidth: 0 }}>
                 <div style={{ flex: '1 1 300px', background: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '10px' }}>
                   <h3 style={{ color: '#4da6ff', margin: '0 0 15px 0' }}>Classificação</h3>
                   <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
@@ -922,7 +920,7 @@ const App = () => {
                   {matches.filter(m => currentRoundMatches.includes(m.matchID)).map(m => {
                     const isDone = history.some(h => h.matchID === m.matchID);
                     return (
-                      <div key={m.matchID} style={{ background: 'rgba(0,0,0,0.3)', border: `1px solid ${isDone ? '#444' : '#40916c'}`, borderRadius: '10px', padding: '15px', width: '300px', opacity: isDone ? 0.6 : 1 }}>
+                      <div key={m.matchID} style={{ background: 'rgba(0,0,0,0.3)', border: `1px solid ${isDone ? '#444' : '#40916c'}`, borderRadius: '10px', padding: '15px', flex: '1 1 220px', minWidth: 0, opacity: isDone ? 0.6 : 1 }}>
                         <h4 style={{ margin: '0 0 10px 0', color: isDone ? '#aaa' : '#4da6ff' }}>{isDone ? 'Mesa Encerrada' : 'Mesa Ativa'}</h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           {m.players.map(p => {
