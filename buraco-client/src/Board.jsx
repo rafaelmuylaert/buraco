@@ -323,7 +323,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
                     if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) {
                       moves.pickUpDiscard(selectedCardInts, { type: 'append', player: p, index });
                       setSelectedCards([]);
-                    } else if (selectedCards.length > 0) {
+                    } else if (G.hasDrawn && selectedCards.length > 0) {
                       moves.appendToMeld(p, index, selectedCardInts); 
                       setSelectedCards([]);
                     }
@@ -358,12 +358,12 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
               if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) {
                 moves.pickUpDiscard(selectedCardInts, { type: 'new' });
                 setSelectedCards([]);
-              } else if (selectedCards.length >= 3) { 
+              } else if (G.hasDrawn && selectedCards.length >= 3) { 
                 moves.playMeld(selectedCardInts); 
                 setSelectedCards([]); 
               } 
             }} 
-            style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && (selectedCards.length >= 3 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default', color: '#888' }}>
+            style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && ((!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0 && selectedCards.length >= 2) || (G.hasDrawn && selectedCards.length >= 3))) ? 'pointer' : 'default', color: '#888' }}>
             + Baixar Jogo
           </div>
         )}

@@ -156,33 +156,33 @@ function cardsToRunnerSlots(cardIds, existingMeld = null) {
             wildSuit = s;
         } else {
             if (rank === 0) rank = r;
-            else if (r !== rank) return null; 
+            else if (r !== rank) return null;
+            if (m[s + 2] >= 2) return null;
             m[s + 2]++;
         }
     }
     
-    if (rank === 0) return null; 
+    if (rank === 0) return null;
+    const natCount = m[3] + m[4] + m[5] + m[6];
+    if (natCount < 2) return null;
     
     m[1] = wildSuit;
     m[2] = rank;
     return m;
 }
 
+export function isRunnerAllowed(rules, rank) {
+    const r = rules.runners;
+    if (!Array.isArray(r) || r.length === 0) return false;
+    return r.includes(rank);
+}
+
 export function buildMeld(cardIds, rules) {
     if (cardIds.length < 3) return null;
     let seq = cardsToSeqSlots(cardIds);
     if (seq) return seq;
-    
-    if (rules.runners !== 'none') {
-        let run = cardsToRunnerSlots(cardIds);
-        if (run) {
-            let r = run[2];
-            let allowed = rules.runners === 'any' || 
-                          (rules.runners === 'aces_threes' && (r === 1 || r === 3)) ||
-                          (rules.runners === 'aces_kings' && (r === 1 || r === 13));
-            if (allowed) return run;
-        }
-    }
+    let run = cardsToRunnerSlots(cardIds);
+    if (run && isRunnerAllowed(rules, run[2])) return run;
     return null;
 }
 
@@ -437,7 +437,8 @@ export function getAllValidMelds(handCards, rules) {
         }
     }
 
-    if (rules.runners !== 'none') {
+    const anyRunnersAllowed = Object.keys(natsByRank).some(r => isRunnerAllowed(rules, parseInt(r)));
+    if (anyRunnersAllowed) {
         for (let r in natsByRank) {
             let combo = natsByRank[r];
             if (combo.length >= 3) tryCombo(combo);
@@ -451,7 +452,7 @@ export const BuracoGame = {
   name: 'buraco',
   setup: ({ random, ctx }, setupData) => {
     const numPlayers = ctx.numPlayers || 4; 
-    const rules = setupData || { numPlayers, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false };
+    const rules = setupData || { numPlayers, discard: 'closed', runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false };
     const botGenomes = setupData?.botGenomes || {};
     let initialDeck = random.Shuffle(buildDeck(rules));
     const pots = [initialDeck.splice(0, 11), initialDeck.splice(0, 11)];
