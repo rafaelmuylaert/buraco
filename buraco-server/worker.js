@@ -101,7 +101,7 @@ function runMatch(genomes, rules, fixedDeck) {
         return scores.team0.total - scores.team1.total;
     } catch (e) {
         console.error('[WORKER] runMatch error:', e.stack || e);
-        return 0;
+        return e.message || 'unknown error';
     }
 }
 
