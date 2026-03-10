@@ -34,8 +34,9 @@ export async function initWasm() {
 }
 
 export function wasmForwardPass(packedInputs, dnaWeights) {
-    inputsView.set(packedInputs);
-    weightsView.set(dnaWeights);
+    // Recreate views in case memory grew
+    new Uint32Array(memory.buffer, inputsPtr, AI_CONFIG.INPUT_INTS).set(packedInputs);
+    new Uint32Array(memory.buffer, weightsPtr, AI_CONFIG.DNA_INTS_PER_STAGE).set(dnaWeights);
     return wasmInstance.exports.forwardPass(
         inputsPtr, weightsPtr,
         AI_CONFIG.INPUT_INTS, AI_CONFIG.HIDDEN_NODES, AI_CONFIG.OUTPUT_NODES

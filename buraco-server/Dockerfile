@@ -11,6 +11,7 @@ COPY buraco-client/src/game.js ./game.js
 
 RUN clang --target=wasm32 -O3 -nostdlib \
     -Wl,--no-entry -Wl,--export-all -Wl,--allow-undefined \
+    -Wl,--import-memory \
     -o nn_engine.wasm nn_engine.cpp && \
     echo "✅ WASM compiled"
 
