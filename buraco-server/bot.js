@@ -1,6 +1,6 @@
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
-import { BuracoGame, AI_CONFIG } from './game.js';
+import { BuracoGame, NN_DNA_SIZE } from './game.js';
 
 const SERVER_URL = `http://buraco-server:${process.env.SERVER_PORT || '8000'}`;
 const activeBots = {};
@@ -32,14 +32,12 @@ async function pollLobby() {
               const dnaRes = await fetch(`${SERVER_URL}/api/bots/weights/${targetBotName}`);
               if (dnaRes.ok) {
                   let loadedDNA = await dnaRes.json();
-                  
-                  // 🚀 Centralized seamless dimension upgrade!
                   if (loadedDNA.length !== AI_CONFIG.TOTAL_DNA_SIZE) {
                       let expanded = [];
                       while(expanded.length < AI_CONFIG.TOTAL_DNA_SIZE) expanded.push(...loadedDNA);
                       loadedDNA = expanded.slice(0, AI_CONFIG.TOTAL_DNA_SIZE);
                   }
-                  dnaCache[targetBotName] = loadedDNA;
+                  dnaCache[targetBotName] = new Uint32Array(loadedDNA);
               }
             } catch(e) {
               console.error(`[BOT] Could not fetch DNA for ${targetBotName}`);
