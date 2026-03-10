@@ -86,16 +86,15 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
   let lastDispatchedAt = 0;
   let lastStateId = null;
 
+  let stopped = false;
   client.subscribe(state => {
-    if (!state) return;
+    if (!state || stopped) return;
     if (state.ctx.gameover) {
+      stopped = true;
       console.log(`[BOT] Match ended. Shutting down ${botName}.`);
-      client.stop();
+      if (activeIntervals[clientKey]) { clearInterval(activeIntervals[clientKey]); delete activeIntervals[clientKey]; }
       delete activeBots[clientKey];
-      if (activeIntervals[clientKey]) {
-        clearInterval(activeIntervals[clientKey]);
-        delete activeIntervals[clientKey];
-      }
+      try { client.stop(); } catch(e) {}
     }
   });
 

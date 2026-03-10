@@ -152,6 +152,7 @@ const CardBack = ({ label, count, onClick }) => (
 
 export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = null, tournamentStandings = null }) {
   const [selectedCards, setSelectedCards] = useState([]);
+  const [newlyDrawnUids, setNewlyDrawnUids] = useState([]);
   const isMyTurn = ctx.currentPlayer === playerID;
 
   useEffect(() => {
@@ -252,7 +253,22 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
     );
   }
 
+  const prevHandRef = React.useRef(null);
   const rawHandObj = Object.values(G.hands[playerID] || []).map((c, i) => ({ ...intToCardObj(c), uid: `h-${i}-${c}`, cardInt: c }));
+
+  React.useEffect(() => {
+    prevHandRef.current = null;
+    setNewlyDrawnUids([]);
+    setSelectedCards([]);
+  }, [ctx.currentPlayer]);
+
+  React.useEffect(() => {
+    if (!G.hasDrawn || !G.lastDrawnCard) { prevHandRef.current = rawHandObj.map(c => c.uid); setNewlyDrawnUids([]); return; }
+    const prev = prevHandRef.current || [];
+    const drawn = rawHandObj.filter(c => !prev.includes(c.uid)).map(c => c.uid);
+    if (drawn.length > 0) setNewlyDrawnUids(drawn);
+    prevHandRef.current = rawHandObj.map(c => c.uid);
+  }, [G.lastDrawnCard, G.hasDrawn]);
   const sortedHandObj = sortCards(rawHandObj);
   const topDiscard = G.discardPile.length > 0 ? intToCardObj(G.discardPile[G.discardPile.length - 1]) : null;
   
@@ -281,6 +297,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
     if (selectedCards.length === 1 && G.hasDrawn) {
       moves.discardCard(selectedCardInts[0]);
       setSelectedCards([]);
+      setNewlyDrawnUids([]);
     } else if (!G.hasDrawn && G.discardPile.length > 0) {
       if (G.rules.discard === 'closed' || G.rules.discard === true) {
         moves.pickUpDiscard(selectedCardInts, { type: 'new' });
@@ -423,7 +440,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
         <div style={{ flexShrink: 0 }}>
           <h2 style={{ fontSize: '1.2em', margin: '0 0 10px 0' }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-            {sortedHandObj.map(card => <Card key={card.uid} card={card} isSelected={selectedCards.includes(card.uid)} isNewlyDrawn={Array.isArray(G.lastDrawnCard) ? false : card.cardInt === G.lastDrawnCard} onClick={() => toggleCardSelection(card.uid)} />)}
+            {sortedHandObj.map(card => <Card key={card.uid} card={card} isSelected={selectedCards.includes(card.uid)} isNewlyDrawn={newlyDrawnUids.includes(card.uid)} onClick={() => toggleCardSelection(card.uid)} />)}
           </div>
         </div>
       </div>
