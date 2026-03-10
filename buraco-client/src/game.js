@@ -10,7 +10,7 @@ export const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 
 // 🚀 CENTRALIZED AI ARCHITECTURE CONFIGURATION
 export const AI_CONFIG = {
     INPUT_INTS: 37,      // 37 * 32 = 1184 bits available for state features
-    HIDDEN_NODES: 128,   // Logical XNOR gates in the hidden layer
+    HIDDEN_NODES: 64,   // Logical XNOR gates in the hidden layer
     OUTPUT_NODES: 1,     // Final score output
     STAGES: 3            // Pickup, Meld (appends + new), Discard
 };
