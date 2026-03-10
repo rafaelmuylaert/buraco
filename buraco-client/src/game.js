@@ -369,7 +369,7 @@ export function buildStateBufferFromG(G, p, buf) {
     const partner = numP === 4 ? ((pInt + 2) % numP).toString() : null;
     const opp2 = numP === 4 ? ((pInt + 3) % numP).toString() : null;
 
-    const teamClean = t => (G.teamPlayers[t] || []).some(tp => G.melds[tp].some(m => getMeldLength(m) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m))));
+    const teamClean = t => (G.teamPlayers[t] || []).some(tp => (G.melds[tp] || []).some(m => getMeldLength(m) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m))));
 
     let meta = 0;
     if (G.deck.length > 0) meta |= 1;

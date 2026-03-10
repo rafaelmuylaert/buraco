@@ -100,6 +100,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
   });
 
   const processQueue = () => {
+    try {
     const currentState = client.getState();
     if (!currentState || currentState.ctx.gameover) return;
 
@@ -190,6 +191,9 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         lastDispatchedAt = Date.now();
       }
     }
+  };
+
+    } catch(e) { console.error(`[BOT] ${botName} processQueue crash:`, e); }
   };
 
   activeIntervals[clientKey] = setInterval(processQueue, 1000);
