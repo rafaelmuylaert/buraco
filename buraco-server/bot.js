@@ -149,9 +149,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
 
     if (aiQueue.length === 0) {
       const myDNA = dnaCache[targetBotName];
-      if (!currentState.G.botGenomes) currentState.G.botGenomes = {};
-      currentState.G.botGenomes[playerID] = myDNA;
-      const moves = BuracoGame.ai.enumerate(currentState.G, currentState.ctx);
+      const moves = BuracoGame.ai.enumerate(currentState.G, currentState.ctx, myDNA);
       aiQueue = moves || [];
       console.log(`[BOT] ${botName} enumerated ${aiQueue.length} moves | hasDrawn=${currentState.G.hasDrawn} hand=${currentState.G.hands[playerID]?.length}`);
     }
