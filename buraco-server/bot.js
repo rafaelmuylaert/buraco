@@ -191,8 +191,6 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         lastDispatchedAt = Date.now();
       }
     }
-  };
-
     } catch(e) { console.error(`[BOT] ${botName} processQueue crash:`, e); }
   };
 
