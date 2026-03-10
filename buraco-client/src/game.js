@@ -327,7 +327,10 @@ export function packMelds15Into(buf, offset, melds) {
 }
 
 const _nnHidden = new Uint32Array(Math.ceil(NN_HIDDEN / 32));
+let _forwardPassImpl = null;
+export function setForwardPassImpl(fn) { _forwardPassImpl = fn; }
 export function forwardPass(inputs, inputInts, weights) {
+    if (_forwardPassImpl) return _forwardPassImpl(inputs, weights);
     const hWords = Math.ceil(NN_HIDDEN / 32);
     _nnHidden.fill(0);
     let wIdx = 0;

@@ -1,5 +1,9 @@
 import { workerData, parentPort } from 'worker_threads';
 import { simMatch, SIM_DNA_SIZE } from './sim.js';
+import { initWasm, wasmForwardPass } from './wasm_loader.js';
+import { setForwardPassImpl } from './game.js';
+
+initWasm().then(ok => { if (ok) setForwardPassImpl(wasmForwardPass); });
 
 function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
