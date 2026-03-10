@@ -33,6 +33,8 @@ services:
       context: .
       dockerfile: buraco-server/Dockerfile
     command: ["node", "bot.js"]
+    environment:
+      - SERVER_PORT=${SERVER_PORT:-8000}
     depends_on:
       - buraco-server
     restart: unless-stopped
