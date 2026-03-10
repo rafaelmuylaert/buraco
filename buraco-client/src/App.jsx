@@ -542,7 +542,7 @@ const App = () => {
       if (m.largeCanasta === rules.largeCanasta) s++;
       if (m.cleanCanastaToWin === rules.cleanCanastaToWin) s++;
       if (m.noJokers === rules.noJokers) s++;
-      const ra = m.runners || [], rb = rules.runners || [];
+      const ra = Array.isArray(m.runners) ? m.runners : [], rb = Array.isArray(rules.runners) ? rules.runners : [];
       const union = new Set([...ra, ...rb]);
       const inter = ra.filter(r => rb.includes(r));
       s += union.size ? inter.length / union.size * 3 : 3;
