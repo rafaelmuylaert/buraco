@@ -1,9 +1,98 @@
-// Lightweight training simulator — no boardgame.io, no syncGameBNN, no knownCards
-import { AI_CONFIG, nnHelpers } from './game.js';
+// Lightweight training simulator — new batch NN architecture
+// Meld net: takes all candidates at once, returns bitmask of which to play
+// Discard net: returns hand position index
+// Both nets are self-contained — independent of game.js AI_CONFIG
 
 const getSuit = c => c >= 104 ? 5 : Math.floor((c % 52) / 13) + 1;
 const getRank = c => c >= 104 ? 2 : (c % 13) + 1;
 const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15];
+
+// --- New NN architecture constants ---
+// State buffer: 41 ints
+//   [0]      meta (deck/pots/mortos/clean/hand sizes)
+//   [1-10]   myTeam melds  (15 melds × 20 bits = 300 bits = 10 ints)
+//   [11-20]  oppTeam melds (10 ints)
+//   [21-24]  discard pile  (108 bits = 4 ints, cards 0-107)
+//   [25-28]  my hand       (4 ints)
+//   [29-32]  opp1 hand     (4 ints)
+//   [33-36]  partner hand  (4 ints)
+//   [37-40]  opp2 hand     (4 ints)
+// Meld net appends 16 candidate slots (1 int each) → 57 ints total input
+// Discard net uses state buffer only → 41 ints input
+// Pickup net uses state buffer only → 41 ints input
+
+const SIM_STATE_INTS = 41;
+const SIM_MELD_CANDIDATES = 16;
+const SIM_MELD_INPUT_INTS = SIM_STATE_INTS + SIM_MELD_CANDIDATES; // 57
+const SIM_HIDDEN = 128;
+// DNA per net: INPUT × HIDDEN + ceil(HIDDEN/32) × 1 output word
+const SIM_MELD_DNA  = SIM_MELD_INPUT_INTS * SIM_HIDDEN + Math.ceil(SIM_HIDDEN / 32);
+const SIM_STATE_DNA = SIM_STATE_INTS      * SIM_HIDDEN + Math.ceil(SIM_HIDDEN / 32);
+// 3 nets: pickup, meld, discard
+export const SIM_DNA_SIZE = SIM_STATE_DNA + SIM_MELD_DNA + SIM_STATE_DNA;
+
+// Encode one meld (20-bit seq or runner) into a single uint32 candidate slot
+// Seq:    [0] type=0, [1-2] suit(2b), [3-7] wildSuit(5b), [8-20] rank bits A-K
+// Runner: [0] type=1, [1-2] suit(2b), [3-7] wildSuit(5b), [8-13] rank(6b),
+//         [14-15] sc1, [16-17] sc2, [18-19] sc3, [20-21] sc4
+function encodeMeld20(m) {
+    if (!m) return 0;
+    if (m[0] !== 0) {
+        // sequence: suit in [1-2], wildSuit in [3-7], rank bits [8-20] for ranks 2-14
+        let v = 0; // type bit 0 = seq
+        v |= ((m[0] & 3) << 1);
+        v |= ((m[1] & 31) << 3);
+        for (let r = 2; r <= 14; r++) if (m[r]) v |= (1 << (7 + r));
+        return v >>> 0;
+    } else {
+        // runner: type bit 0 = 1
+        let v = 1;
+        v |= ((m[1] & 31) << 3); // wildSuit
+        v |= ((m[2] & 63) << 8); // rank
+        v |= ((Math.min(3, m[3]) & 3) << 14);
+        v |= ((Math.min(3, m[4]) & 3) << 16);
+        v |= ((Math.min(3, m[5]) & 3) << 18);
+        v |= ((Math.min(3, m[6]) & 3) << 20);
+        return v >>> 0;
+    }
+}
+
+// Encode a candidate play into a uint32 slot
+// [0-4]  meld index (0=new, 1-15=existing table meld slot)
+// [5-6]  suit of resulting meld
+// [7-19] rank bits of resulting meld (ranks 2-14)
+// [20-24] wildSuit of resulting meld
+// [25-27] suit of wild card used from hand (0=none)
+function encodeCandidate(meldIdx, resultMeld, handWildSuit) {
+    let v = (meldIdx & 31);
+    if (resultMeld && resultMeld[0] !== 0) {
+        v |= ((resultMeld[0] & 3) << 5);
+        for (let r = 2; r <= 14; r++) if (resultMeld[r]) v |= (1 << (5 + r));
+        v |= ((resultMeld[1] & 31) << 20);
+    } else if (resultMeld) {
+        v |= ((resultMeld[2] & 63) << 7); // rank in rank bits for runner
+        v |= ((resultMeld[1] & 31) << 20);
+    }
+    v |= ((handWildSuit & 7) << 25);
+    return v >>> 0;
+}
+
+// Binary XNOR forward pass — same logic as game.js but self-contained
+const _simHidden = new Uint32Array(Math.ceil(SIM_HIDDEN / 32));
+function simForwardPass(inputs, inputInts, weights) {
+    const hWords = Math.ceil(SIM_HIDDEN / 32);
+    _simHidden.fill(0);
+    let wIdx = 0;
+    const pc = n => { n=n>>>0; n=n-((n>>>1)&0x55555555); n=(n&0x33333333)+((n>>>2)&0x33333333); return(((n+(n>>>4))&0x0F0F0F0F)*0x01010101)>>>24; };
+    for (let h = 0; h < SIM_HIDDEN; h++) {
+        let cnt = 0;
+        for (let i = 0; i < inputInts; i++) cnt += pc(~(inputs[i] ^ weights[wIdx++]));
+        if (cnt > inputInts * 16) _simHidden[h >> 5] |= (1 << (h & 31));
+    }
+    let score = 0;
+    for (let i = 0; i < hWords; i++) score += pc(~(_simHidden[i] ^ weights[wIdx++]));
+    return score;
+}
 
 function getCardPoints(c) {
     const s = getSuit(c), r = getRank(c);
@@ -40,7 +129,7 @@ function calcMeldPts(m, rules) {
 
 function cardsToSeq(cards, existing) {
     let m = existing ? existing.slice() : new Array(16).fill(0);
-    let suit = m[0], wildSuit = m[1], wilds = [], aces = [], twos = [];
+    let suit = m[0], wildSuit = m[1], twos = [], aces = [];
     for (const c of cards) {
         const s = getSuit(c), r = getRank(c);
         if (s === 5 || r === 2) twos.push(c);
@@ -119,45 +208,38 @@ function teamHasClean(melds0, melds1, rules) {
     return melds0.some(check) || melds1.some(check);
 }
 
-// Inline card packing into buf — no allocations
-function packCardsInto(buf, offset, cards) {
-    buf[offset] = 0; buf[offset+1] = 0;
+// Pack 108-card bitset into 4 ints (cards 0-107)
+function packCards108Into(buf, offset, cards) {
+    buf[offset]=0; buf[offset+1]=0; buf[offset+2]=0; buf[offset+3]=0;
     for (let i = 0; i < cards.length; i++) {
-        const cls = cards[i] === 54 ? 54 : cards[i] % 52;
-        buf[offset + (cls >> 5)] |= (1 << (cls & 31));
+        const c = cards[i] === 54 ? 104 : cards[i]; // joker → slot 104
+        buf[offset + (c >> 5)] |= (1 << (c & 31));
     }
 }
 
-function packMeldsInto(buf, offset, melds) {
-    for (let i = offset; i < offset + 11; i++) buf[i] = 0;
-    const setBit = (bi) => { buf[offset + (bi >> 5)] |= (1 << (bi & 31)); };
+// Pack 15 melds into 10 ints (15 × 20 bits)
+function packMelds15Into(buf, offset, melds) {
+    for (let i = offset; i < offset + 10; i++) buf[i] = 0;
     for (let mi = 0; mi < melds.length && mi < 15; mi++) {
-        const m = melds[mi], base = mi * 22;
-        if (!m) continue;
-        if (m[0] !== 0) {
-            setBit(base);
-            for (let i = 0; i < 3; i++) if (m[0] & (1<<i)) setBit(base+1+i);
-            for (let i = 0; i < 3; i++) if (m[1] & (1<<i)) setBit(base+4+i);
-            for (let r = 2; r <= 15; r++) if (m[r]) setBit(base+5+r);
-        } else {
-            for (let i = 0; i < 3; i++) if (m[1] & (1<<i)) setBit(base+1+i);
-            for (let i = 0; i < 4; i++) if (m[2] & (1<<i)) setBit(base+4+i);
-            for (let s = 0; s < 4; s++) { const c = m[3+s]; for (let i = 0; i < 3; i++) if (c & (1<<i)) setBit(base+8+s*3+i); }
-        }
+        const enc = encodeMeld20(melds[mi]);
+        const bitOff = mi * 20;
+        const wordOff = bitOff >> 5;
+        const bitShift = bitOff & 31;
+        buf[offset + wordOff] |= (enc << bitShift) >>> 0;
+        if (bitShift > 12) buf[offset + wordOff + 1] |= (enc >>> (32 - bitShift)) >>> 0;
     }
 }
 
-// Build base state into buf[0..32] — call once per turn, reuse for all action scores
-function buildBaseBuffer(S, pIdx, buf) {
-    const myTeam = pIdx % 2;
-    const oppTeam = 1 - myTeam;
+// Build state buffer (41 ints) — reused across all net calls this turn
+function buildStateBuffer(S, pIdx, buf, cache) {
+    const myTeam = pIdx % 2, oppTeam = 1 - myTeam;
     const numP = S.numP;
     const opp1 = (pIdx + 1) % numP;
     const partner = numP === 4 ? (pIdx + 2) % numP : -1;
     const opp2 = numP === 4 ? (pIdx + 3) % numP : -1;
+    const playerChanged = cache.lastP !== pIdx;
 
-    buf.fill(0);
-
+    // [0] meta
     let meta = 0;
     if (S.deck.length > 0) meta |= 1;
     if (S.pots.length > 0) meta |= 2;
@@ -172,35 +254,48 @@ function buildBaseBuffer(S, pIdx, buf) {
     if (opp2 >= 0) meta |= (Math.min(15, S.hands[opp2].length) << 19);
     buf[0] = meta;
 
-    const myMelds = numP === 4 ? [...(S.melds[myTeam*2]||[]), ...(S.melds[myTeam*2+2]||[])] : (S.melds[myTeam]||[]);
-    const oppMelds = numP === 4 ? [...(S.melds[oppTeam*2]||[]), ...(S.melds[oppTeam*2+2]||[])] : (S.melds[oppTeam]||[]);
-    packMeldsInto(buf, 1, myMelds);
-    packMeldsInto(buf, 12, oppMelds);
-
-    packCardsInto(buf, 23, S.discard);
-    packCardsInto(buf, 25, S.hands[pIdx]);
-    buf[27] = S.hands[opp1].length & 0xFFFF;
-    if (partner >= 0) buf[29] = S.hands[partner].length & 0xFFFF;
-    if (opp2 >= 0) buf[31] = S.hands[opp2].length & 0xFFFF;
-}
-
-// Score an action — base state already in buf[0..32], only writes [33..36]
-function simScore(dna, actionType, c0, c1, meldIdx, buf) {
-    buf[33] = actionType;
-    buf[34] = c0; buf[35] = c1;
-    buf[36] = meldIdx >= 0 ? meldIdx : 0;
-    const st = AI_CONFIG.DNA_INTS_PER_STAGE;
-    return nnHelpers.forwardPass(buf, dna.subarray(actionType * st, (actionType + 1) * st));
-}
-
-// Pack a card list into two ints inline (no alloc)
-function packCards2(cards) {
-    let a = 0, b = 0;
-    for (let i = 0; i < cards.length; i++) {
-        const cls = cards[i] === 54 ? 54 : cards[i] % 52;
-        if (cls < 32) a |= (1 << cls); else b |= (1 << (cls - 32));
+    if (cache.meldsDirty || playerChanged) {
+        const myMelds = numP === 4 ? [...(S.melds[myTeam*2]||[]), ...(S.melds[myTeam*2+2]||[])] : (S.melds[myTeam]||[]);
+        const oppMelds = numP === 4 ? [...(S.melds[oppTeam*2]||[]), ...(S.melds[oppTeam*2+2]||[])] : (S.melds[oppTeam]||[]);
+        packMelds15Into(buf, 1, myMelds);
+        packMelds15Into(buf, 11, oppMelds);
     }
-    return [a, b];
+    if (cache.discardDirty || playerChanged) packCards108Into(buf, 21, S.discard);
+    if (cache.handDirty[pIdx] || playerChanged) packCards108Into(buf, 25, S.hands[pIdx]);
+    if (playerChanged) {
+        packCards108Into(buf, 29, S.hands[opp1]);
+        if (partner >= 0) packCards108Into(buf, 33, S.hands[partner]); else buf[33]=buf[34]=buf[35]=buf[36]=0;
+        if (opp2 >= 0) packCards108Into(buf, 37, S.hands[opp2]); else buf[37]=buf[38]=buf[39]=buf[40]=0;
+    }
+
+    cache.meldsDirty = false;
+    cache.discardDirty = false;
+    cache.handDirty[pIdx] = 0;
+    cache.lastP = pIdx;
+}
+
+// Meld net: state(41) + 16 candidate slots → 16-bit bitmask output
+// Returns bitmask of which candidates to play
+const _meldBuf = new Uint32Array(SIM_MELD_INPUT_INTS);
+function runMeldNet(stateBuf, candidates, numCandidates, dna) {
+    for (let i = 0; i < SIM_STATE_INTS; i++) _meldBuf[i] = stateBuf[i];
+    for (let i = 0; i < SIM_MELD_CANDIDATES; i++)
+        _meldBuf[SIM_STATE_INTS + i] = i < numCandidates ? candidates[i] : 0;
+    const raw = simForwardPass(_meldBuf, SIM_MELD_INPUT_INTS, dna);
+    return raw & 0xFFFF;
+}
+
+// Pickup net: state(41) + 1 slot (encoded top discard meld) → score
+const _pickupBuf = new Uint32Array(SIM_STATE_INTS + 1);
+function runPickupNet(stateBuf, discardMeldEnc, dna) {
+    for (let i = 0; i < SIM_STATE_INTS; i++) _pickupBuf[i] = stateBuf[i];
+    _pickupBuf[SIM_STATE_INTS] = discardMeldEnc;
+    return simForwardPass(_pickupBuf, SIM_STATE_INTS + 1, dna);
+}
+
+// Discard net: state(41) → 8-bit hand index
+function runDiscardNet(stateBuf, dna) {
+    return simForwardPass(stateBuf, SIM_STATE_INTS, dna) & 0xFF;
 }
 
 function calcFinalScore(S, rules) {
@@ -218,26 +313,26 @@ function calcFinalScore(S, rules) {
 
 export function simMatch(dnas, rules, deck) {
     const numP = rules.numP || rules.numPlayers || 4;
-    // S: flat arrays for speed
     const S = {
-        numP,
-        rules,
-        deck: deck.slice(),
-        discard: [],
-        pots: [],
+        numP, rules,
+        deck: deck.slice(), discard: [], pots: [],
         hands: Array.from({length: numP}, () => []),
         melds: Array.from({length: numP}, () => []),
-        mortos: [false, false],
-        mortoUsed: [false, false],
+        mortos: [false, false], mortoUsed: [false, false],
         hasDrawn: false,
     };
 
-    // Deal
     S.pots.push(S.deck.splice(0, 11), S.deck.splice(0, 11));
     for (let i = 0; i < numP; i++) S.hands[i] = S.deck.splice(0, 11);
     S.discard.push(S.deck.pop());
 
-    const buf = new Uint32Array(AI_CONFIG.INPUT_INTS);
+    const stateBuf = new Uint32Array(SIM_STATE_INTS);
+    const cache = { meldsDirty: true, discardDirty: true, handDirty: new Uint8Array(numP).fill(1), lastP: -1 };
+    const candidateBuf = new Uint32Array(SIM_MELD_CANDIDATES);
+
+    // DNA layout: [0, SIM_STATE_DNA) = pickup, [SIM_STATE_DNA, SIM_STATE_DNA+SIM_MELD_DNA) = meld, rest = discard
+    const dnaPickupEnd = SIM_STATE_DNA;
+    const dnaMeldEnd = SIM_STATE_DNA + SIM_MELD_DNA;
 
     let p = 0, moveCount = 0;
     while (moveCount < 2000) {
@@ -246,30 +341,26 @@ export function simMatch(dnas, rules, deck) {
         const hand = S.hands[p];
 
         if (!S.hasDrawn) {
-            // Check exhaustion
             if (S.deck.length === 0 && S.pots.length === 0) break;
+            buildStateBuffer(S, p, stateBuf, cache);
 
-            buildBaseBuffer(S, p, buf);
+            // Pickup decision: score draw (enc=0) vs each discard pickup option
+            let bestScore = runPickupNet(stateBuf, 0, dna.subarray(0, dnaPickupEnd));
+            let pickDiscard = false, pickDiscardCards = null;
 
-            // Score pickup options
-            let bestScore = -1, pickDiscard = false, pickDiscardCards = null, pickDiscardMeld = null;
-
-            // drawCard score
-            bestScore = simScore(dna, 0, 0, 0, -1, buf);
-
-            // pickUpDiscard
             if (S.discard.length > 0) {
                 const top = S.discard[S.discard.length - 1];
-                const combos = getValidMeldsWithCard(hand, top, rules);
-                for (const [combo, handUsed] of combos) {
-                    const [c0, c1] = packCards2(combo);
-                    const sc = simScore(dna, 1, c0, c1, -1, buf);
-                    if (sc > bestScore) { bestScore = sc; pickDiscard = true; pickDiscardCards = handUsed; pickDiscardMeld = combo; }
+                for (const [combo, handUsed] of getValidMeldsWithCard(hand, top, rules)) {
+                    const resultMeld = buildMeld(combo, rules);
+                    if (!resultMeld) continue;
+                    const wildSuit = combo.reduce((ws, c) => { const s=getSuit(c),r=getRank(c); return (s===5||r===2)?s:ws; }, 0);
+                    const enc = encodeCandidate(0, resultMeld, wildSuit);
+                    const sc = runPickupNet(stateBuf, enc, dna.subarray(0, dnaPickupEnd));
+                    if (sc > bestScore) { bestScore = sc; pickDiscard = true; pickDiscardCards = handUsed; }
                 }
             }
 
-            if (pickDiscard && pickDiscardMeld) {
-                // Pick up discard pile
+            if (pickDiscard && pickDiscardCards !== null) {
                 const top = S.discard.pop();
                 const meld = buildMeld([...pickDiscardCards, top], rules);
                 if (meld) {
@@ -278,96 +369,96 @@ export function simMatch(dnas, rules, deck) {
                     hand.push(...S.discard);
                     S.discard = [];
                     S.hasDrawn = true;
+                    cache.meldsDirty = true; cache.discardDirty = true; cache.handDirty[p] = 1;
                     if (S.mortos[myTeam]) S.mortoUsed[myTeam] = true;
-                    if (hand.length === 0 && S.pots.length > 0 && !S.mortos[myTeam]) {
-                        S.hands[p] = S.pots.shift(); S.mortos[myTeam] = true;
-                    }
-                } else {
-                    S.discard.push(top); // meld failed, fall through to draw
-                }
+                    if (hand.length === 0 && S.pots.length > 0 && !S.mortos[myTeam]) { S.hands[p] = S.pots.shift(); S.mortos[myTeam] = true; }
+                } else { S.discard.push(top); }
             }
             if (!S.hasDrawn) {
-                // draw from deck
-                if (S.deck.length === 0 && S.pots.length > 0) { S.deck = S.pots.shift(); }
-                if (S.deck.length > 0) { hand.push(S.deck.pop()); S.hasDrawn = true; }
-                else break; // exhausted
+                if (S.deck.length === 0 && S.pots.length > 0) S.deck = S.pots.shift();
+                if (S.deck.length > 0) { hand.push(S.deck.pop()); S.hasDrawn = true; cache.handDirty[p] = 1; }
+                else break;
             }
             moveCount++;
             continue;
         }
 
-        // Post-draw: try appends
-        buildBaseBuffer(S, p, buf);
-        let acted = false;
+        // Post-draw: build all candidates, run meld net once, get bitmask
+        buildStateBuffer(S, p, stateBuf, cache);
+        const myTeamClean = teamHasClean(S.melds[myTeam*2]||[], numP===4?(S.melds[myTeam*2+2]||[]):[], rules);
+        const mortoSafe = myTeamClean || (!S.mortos[myTeam] && S.pots.length > 0);
         const myMeldOwners = numP === 4 ? [p, (p+2)%4] : [p];
-        let appendMoves = [];
+
+        // Collect up to 16 candidates; store metadata for execution
+        const candMeta = []; // {type:'append'|'meld', owner, mi, card, combo}
+        let numCand = 0;
+
+        // Build team meld index map for encodeCandidate meldIdx (1-based slot in team melds)
+        const teamMelds = [];
+        for (const owner of myMeldOwners) for (const m of S.melds[owner]) teamMelds.push(m);
+
         for (const owner of myMeldOwners) {
-            for (let mi = 0; mi < S.melds[owner].length; mi++) {
-                for (let ci = 0; ci < hand.length; ci++) {
+            for (let mi = 0; mi < S.melds[owner].length && numCand < SIM_MELD_CANDIDATES; mi++) {
+                for (let ci = 0; ci < hand.length && numCand < SIM_MELD_CANDIDATES; ci++) {
                     const card = hand[ci];
-                    if (appendToMeld(S.melds[owner][mi], card)) {
-                        const cls = card === 54 ? 54 : card % 52;
-                        const c0 = cls < 32 ? (1 << cls) : 0, c1 = cls >= 32 ? (1 << (cls-32)) : 0;
-                        const sc = simScore(dna, 2, c0, c1, mi, buf);
-                        appendMoves.push({sc, owner, mi, card});
+                    const newMeld = appendToMeld(S.melds[owner][mi], card);
+                    if (!newMeld) continue;
+                    const tmi = teamMelds.indexOf(S.melds[owner][mi]) + 1; // 1-based
+                    const wildSuit = (getSuit(card) === 5 || getRank(card) === 2) ? getSuit(card) : 0;
+                    candidateBuf[numCand] = encodeCandidate(tmi, newMeld, wildSuit);
+                    candMeta.push({ type: 'append', owner, mi, card, combo: null });
+                    numCand++;
+                }
+            }
+        }
+        for (const combo of getAllValidMelds(hand, rules)) {
+            if (numCand >= SIM_MELD_CANDIDATES) break;
+            const resultMeld = buildMeld(combo, rules);
+            if (!resultMeld) continue;
+            const wildSuit = combo.reduce((ws, c) => { const s=getSuit(c),r=getRank(c); return (s===5||r===2)?s:ws; }, 0);
+            candidateBuf[numCand] = encodeCandidate(0, resultMeld, wildSuit);
+            candMeta.push({ type: 'meld', owner: p, mi: -1, card: -1, combo });
+            numCand++;
+        }
+
+        if (numCand > 0) {
+            const bitmask = runMeldNet(stateBuf, candidateBuf, numCand, dna.subarray(dnaPickupEnd, dnaMeldEnd));
+            const usedCards = new Set();
+            for (let i = 0; i < numCand; i++) {
+                if (!(bitmask & (1 << i))) continue;
+                const mv = candMeta[i];
+                const cards = mv.type === 'append' ? [mv.card] : mv.combo;
+                if (cards.some(c => usedCards.has(c))) continue;
+                if (hand.length - usedCards.size - cards.length < 2 && !mortoSafe) continue;
+                if (mv.type === 'append') {
+                    const newMeld = appendToMeld(S.melds[mv.owner][mv.mi], mv.card);
+                    if (newMeld) { S.melds[mv.owner][mv.mi] = newMeld; removeCard(hand, mv.card); usedCards.add(mv.card); cache.meldsDirty = true; cache.handDirty[p] = 1; }
+                } else {
+                    const meld = buildMeld(mv.combo, rules);
+                    if (meld) {
+                        for (const c of mv.combo) { removeCard(hand, c); usedCards.add(c); }
+                        S.melds[p].push(meld); cache.meldsDirty = true; cache.handDirty[p] = 1;
+                        if (S.mortos[myTeam]) S.mortoUsed[myTeam] = true;
+                        if (hand.length === 0 && S.pots.length > 0 && !S.mortos[myTeam]) { S.hands[p] = S.pots.shift(); S.mortos[myTeam] = true; }
                     }
                 }
             }
         }
-        if (appendMoves.length > 0) {
-            appendMoves.sort((a,b) => b.sc - a.sc);
-            const usedCards = new Set();
-            for (const mv of appendMoves) {
-                if (usedCards.has(mv.card)) continue;
-                const safeLen = hand.length - [...usedCards].length - 1;
-                const myTeamClean = teamHasClean(S.melds[myTeam*2]||[], numP===4?(S.melds[myTeam*2+2]||[]):[], rules);
-                if (safeLen < 2 && !myTeamClean && (!S.pots.length || S.mortos[myTeam])) continue;
-                const newMeld = appendToMeld(S.melds[mv.owner][mv.mi], mv.card);
-                if (newMeld) { S.melds[mv.owner][mv.mi] = newMeld; removeCard(hand, mv.card); usedCards.add(mv.card); acted = true; }
-            }
-        }
 
-        // Try new melds
-        const validMelds = getAllValidMelds(hand, rules);
-        if (validMelds.length > 0) {
-            let meldMoves = validMelds.map(combo => { const [c0,c1] = packCards2(combo); return { sc: simScore(dna, 3, c0, c1, -1, buf), combo }; });
-            meldMoves.sort((a,b) => b.sc - a.sc);
-            const usedCards = new Set();
-            for (const mv of meldMoves) {
-                if (mv.combo.some(c => usedCards.has(c))) continue;
-                const safeLen = hand.length - [...usedCards].length - mv.combo.length;
-                const myTeamClean2 = teamHasClean(S.melds[myTeam*2]||[], numP===4?(S.melds[myTeam*2+2]||[]):[], rules);
-                if (safeLen < 2 && !myTeamClean2 && (!S.pots.length || S.mortos[myTeam])) continue;
-                const meld = buildMeld(mv.combo, rules);
-                if (meld) {
-                    for (const c of mv.combo) { removeCard(hand, c); usedCards.add(c); }
-                    S.melds[p].push(meld); acted = true;
-                    if (S.mortos[myTeam]) S.mortoUsed[myTeam] = true;
-                    if (hand.length === 0 && S.pots.length > 0 && !S.mortos[myTeam]) { S.hands[p] = S.pots.shift(); S.mortos[myTeam] = true; }
-                }
-            }
-        }
-
-        // Discard
+        // Discard: one forward pass → 8-bit hand index
         if (hand.length > 0) {
-            buf[33] = 4;
-            const raw = nnHelpers.forwardPass(buf, dna.subarray(3 * AI_CONFIG.DNA_INTS_PER_STAGE));
-            const targetCls = raw % 55;
-            let discard = null;
-            for (const c of hand) { if ((c >= 104 ? 54 : c % 52) === targetCls) { discard = c; break; } }
-            if (discard === null) { let hv = -1; for (const c of hand) { const v = getCardPoints(c); if (v > hv) { hv = v; discard = c; } } }
-            if (discard !== null) {
-                removeCard(hand, discard);
-                S.discard.push(discard);
-                if (S.mortos[myTeam]) S.mortoUsed[myTeam] = true;
-                if (hand.length === 0 && S.pots.length > 0 && !S.mortos[myTeam]) { S.hands[p] = S.pots.shift(); S.mortos[myTeam] = true; }
-            }
+            buildStateBuffer(S, p, stateBuf, cache); // refresh after meld changes
+            const idx = runDiscardNet(stateBuf, dna.subarray(dnaMeldEnd)) % hand.length;
+            const discard = hand[idx];
+            removeCard(hand, discard);
+            S.discard.push(discard);
+            cache.discardDirty = true; cache.handDirty[p] = 1;
+            if (S.mortos[myTeam]) S.mortoUsed[myTeam] = true;
+            if (hand.length === 0 && S.pots.length > 0 && !S.mortos[myTeam]) { S.hands[p] = S.pots.shift(); S.mortos[myTeam] = true; }
         }
 
-        // Check win
         if (hand.length === 0 && (S.mortos[myTeam] || S.pots.length === 0)) {
-            const myTeamClean = teamHasClean(S.melds[myTeam*2]||[], numP===4?(S.melds[myTeam*2+2]||[]):[], rules);
-            if (myTeamClean) {
+            if (teamHasClean(S.melds[myTeam*2]||[], numP===4?(S.melds[myTeam*2+2]||[]):[], rules)) {
                 const sc = calcFinalScore(S, rules);
                 sc[myTeam] += 100;
                 return sc[0] - sc[1];
@@ -385,15 +476,13 @@ export function simMatch(dnas, rules, deck) {
 
 function getValidMeldsWithCard(hand, topCard, rules) {
     const result = [];
-    const all = getAllValidMelds([...hand, topCard], rules);
-    for (const combo of all) {
+    for (const combo of getAllValidMelds([...hand, topCard], rules)) {
         if (!combo.includes(topCard)) continue;
         const handUsed = combo.filter(c => c !== topCard);
-        // verify hand has these cards
         const counts = {};
         for (const c of hand) counts[c] = (counts[c]||0) + 1;
         let ok = true;
-        for (const c of handUsed) { if (!counts[c]) { ok = false; break; } counts[c]--; }
+        for (const c of handUsed) { if (!counts[c]) { ok=false; break; } counts[c]--; }
         if (ok) result.push([combo, handUsed]);
     }
     return result;

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { Worker } from 'worker_threads';
 import { cpus } from 'os';
-import { AI_CONFIG } from './game.js';
+import { SIM_DNA_SIZE } from './sim.js';
 
 const NUM_WORKERS = Math.max(1, cpus().length - 1); 
 const WORKER_PATH = new URL('./worker.js', import.meta.url).pathname;
@@ -14,7 +14,7 @@ const activeTrainings = new Map();
 
 function mutate(genome, mutationRate = 0.005) {
     const mutated = new Uint32Array(genome);
-    for (let i = 0; i < AI_CONFIG.TOTAL_DNA_SIZE; i++) {
+    for (let i = 0; i < SIM_DNA_SIZE; i++) {
         for (let bit = 0; bit < 32; bit++) {
             if (Math.random() < mutationRate) {
                 mutated[i] ^= (1 << bit); 
@@ -25,16 +25,16 @@ function mutate(genome, mutationRate = 0.005) {
 }
 
 function breed(parentA, parentB) {
-    const child = new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE);
-    for (let i = 0; i < AI_CONFIG.TOTAL_DNA_SIZE; i++) {
+    const child = new Uint32Array(SIM_DNA_SIZE);
+    for (let i = 0; i < SIM_DNA_SIZE; i++) {
         child[i] = Math.random() > 0.5 ? parentA[i] : parentB[i];
     }
     return mutate(child, 0.005);
 }
 
 const generateRandomGenome = () => {
-    const g = new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE);
-    for (let i = 0; i < AI_CONFIG.TOTAL_DNA_SIZE; i++) {
+    const g = new Uint32Array(SIM_DNA_SIZE);
+    for (let i = 0; i < SIM_DNA_SIZE; i++) {
         g[i] = Math.floor(Math.random() * 4294967296) >>> 0;
     }
     return g;
@@ -49,7 +49,7 @@ function shuffle(arr) {
 }
 
 function toBuffer(genome) {
-    const buf = new SharedArrayBuffer(AI_CONFIG.TOTAL_DNA_SIZE * 4);
+    const buf = new SharedArrayBuffer(SIM_DNA_SIZE * 4);
     new Uint32Array(buf).set(genome);
     return buf;
 }
@@ -151,7 +151,7 @@ export const TrainerService = {
         if (!fs.existsSync(filePath)) return null;
         const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
         const arr = Array.isArray(raw) ? raw : Object.values(raw);
-        return arr.length > AI_CONFIG.TOTAL_DNA_SIZE ? arr.slice(0, AI_CONFIG.TOTAL_DNA_SIZE) : arr;
+        return arr.length > SIM_DNA_SIZE ? arr.slice(0, SIM_DNA_SIZE) : arr;
     },
 
     getTrainingStatus: (botName) => {
@@ -189,10 +189,10 @@ export const TrainerService = {
         if (seedDNA) {
             console.log(`🧠 Resuming training for '${botName}'...`);
             let base = seedDNA;
-            if (base.length !== AI_CONFIG.TOTAL_DNA_SIZE) {
+            if (base.length !== SIM_DNA_SIZE) {
                 let expanded = [];
-                while (expanded.length < AI_CONFIG.TOTAL_DNA_SIZE) expanded.push(...base);
-                base = expanded.slice(0, AI_CONFIG.TOTAL_DNA_SIZE);
+                while (expanded.length < SIM_DNA_SIZE) expanded.push(...base);
+                base = expanded.slice(0, SIM_DNA_SIZE);
             }
             const baseU32 = new Uint32Array(base);
             population = Array(POPULATION_SIZE).fill(null).map((_, i) =>

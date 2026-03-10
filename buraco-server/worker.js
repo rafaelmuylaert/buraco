@@ -1,14 +1,5 @@
 import { workerData, parentPort } from 'worker_threads';
-import { AI_CONFIG, nnHelpers } from './game.js';
-import { simMatch } from './sim.js';
-import { initWasm, wasmForwardPass } from './wasm_loader.js';
-
-try {
-    const wasmLoaded = await initWasm();
-    if (wasmLoaded) nnHelpers.forwardPass = wasmForwardPass;
-} catch(e) {
-    console.error('[WORKER INIT ERROR]', e.stack || e);
-}
+import { simMatch, SIM_DNA_SIZE } from './sim.js';
 
 function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
@@ -20,9 +11,9 @@ function shuffle(arr) {
 
 function prepareGenome(raw) {
     let dna = raw instanceof Uint32Array ? raw : new Uint32Array(raw);
-    if (dna.length !== AI_CONFIG.TOTAL_DNA_SIZE) {
-        const d = new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE);
-        for (let i = 0; i < AI_CONFIG.TOTAL_DNA_SIZE; i++) d[i] = dna[i % dna.length] || 0;
+    if (dna.length !== SIM_DNA_SIZE) {
+        const d = new Uint32Array(SIM_DNA_SIZE);
+        for (let i = 0; i < SIM_DNA_SIZE; i++) d[i] = dna[i % dna.length] || 0;
         dna = d;
     }
     return dna;
