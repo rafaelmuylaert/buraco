@@ -1,5 +1,5 @@
 // Training simulator — uses game.js pure logic directly so trained bots stay in sync
-import { AI_CONFIG, getSuit, getRank, buildMeld, appendToMeld, getMeldLength, isMeldClean, calculateMeldPoints, getCardPoints, getAllValidMelds } from '../buraco-client/src/game.js';
+import { AI_CONFIG, getSuit, getRank, buildMeld, appendToMeld, getMeldLength, isMeldClean, calculateMeldPoints, getCardPoints, getAllValidMelds } from './game.js';
 
 // --- NN architecture constants ---
 // State buffer: 41 ints
