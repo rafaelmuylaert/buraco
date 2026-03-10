@@ -32,10 +32,10 @@ async function pollLobby() {
               const dnaRes = await fetch(`${SERVER_URL}/api/bots/weights/${targetBotName}`);
               if (dnaRes.ok) {
                   let loadedDNA = await dnaRes.json();
-                  if (loadedDNA.length !== AI_CONFIG.TOTAL_DNA_SIZE) {
+                  if (loadedDNA.length !== NN_DNA_SIZE) {
                       let expanded = [];
-                      while(expanded.length < AI_CONFIG.TOTAL_DNA_SIZE) expanded.push(...loadedDNA);
-                      loadedDNA = expanded.slice(0, AI_CONFIG.TOTAL_DNA_SIZE);
+                      while(expanded.length < NN_DNA_SIZE) expanded.push(...loadedDNA);
+                      loadedDNA = expanded.slice(0, NN_DNA_SIZE);
                   }
                   dnaCache[targetBotName] = new Uint32Array(loadedDNA);
               }
