@@ -248,9 +248,10 @@ function runMatch(genomes, rules, fixedDeck) {
             moveCount++;
         }
 
-        const scores = gameover ? gameover.scores : { team0: { total: -5000 }, team1: { total: -5000 } };
+        const scores = gameover ? gameover.scores : (() => { console.warn('[runMatch] hit 2000 move limit'); return { team0: { total: -5000 }, team1: { total: -5000 } }; })();
         return scores.team0.total - scores.team1.total;
     } catch (e) {
+        console.error('[runMatch] exception:', e?.message || e);
         return 0;
     }
 }
