@@ -263,7 +263,9 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
 
   const rawHandObj = Object.values(G.hands[playerID] || []).map((c, i) => ({ ...intToCardObj(c), uid: `${c}_${i}` }));
   const sortedHandObj = sortCards(rawHandObj);
-  const newlyDrawnUid = (() => { const found = sortedHandObj.find(c => c.id === G.lastDrawnCard); return found?.uid ?? null; })();
+  const newlyDrawnUid = ctx.currentPlayer === playerID
+    ? (sortedHandObj.find(c => c.id === G.lastDrawnCard)?.uid ?? null)
+    : null;
   const topDiscard = G.discardPile.length > 0 ? intToCardObj(G.discardPile[G.discardPile.length - 1]) : null;
   
   const myTeam = G.teams[playerID];
@@ -273,7 +275,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
 
   const chunkedDiscard = [];
   if (G.discardPile && G.discardPile.length > 0) {
-    for (let i = 0; i < G.discardPile.length; i += 5) chunkedDiscard.push(G.discardPile.slice(i, i + 5).map(intToCardObj));
+    for (let i = 0; i < G.discardPile.length; i += 7) chunkedDiscard.push(G.discardPile.slice(i, i + 7).map(intToCardObj));
   }
 
   const calcTeamTablePoints = (teamPlayers) => {
@@ -282,6 +284,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
     return total;
   };
 
+  const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
   const toggleCardSelection = (cardId) => setSelectedCards(prev => prev.includes(cardId) ? prev.filter(id => id !== cardId) : [...prev, cardId]);
 
   const selectedCardIds = () => selectedCards.map(uid => sortedHandObj.find(c => c.uid === uid)?.id).filter(Boolean);
@@ -293,7 +296,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
       moves.discardCard(selectedCardIds()[0]);
       setSelectedCards([]);
     } else if (!G.hasDrawn && G.discardPile.length > 0) {
-      if (G.rules.discard === 'closed') {
+      if (isClosedDiscard) {
         moves.pickUpDiscard(selectedCardIds(), { type: 'new' });
         setSelectedCards([]);
       } else {
@@ -320,13 +323,13 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
           <div style={{ color: borderColor !== 'transparent' ? borderColor : '#aaa', fontSize: '0.8em', fontWeight: 'bold', marginBottom: '3px' }}>{points} pts</div>
           <div onClick={() => {
               if (!isMyTurn || !isMyTeam) return;
-              if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) {
+              if (!G.hasDrawn && isClosedDiscard && G.discardPile.length > 0) {
                 moves.pickUpDiscard(selectedCardIds(), { type: 'append', player: p, index }); setSelectedCards([]);
               } else if (selectedCards.length > 0) {
                 moves.appendToMeld(p, index, selectedCardIds()); setSelectedCards([]);
               }
             }}
-            style={{ display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: `2px solid ${borderColor}`, cursor: (isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default' }}>
+            style={{ display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: `2px solid ${borderColor}`, cursor: (isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default' }}>
             {renderedCards.map((card, i) => (
               <Card key={card.id} card={card} customStyle={{
                 marginLeft: (!isRunner && i > 0) ? `-${CARD_W - 14}px` : '0',
@@ -357,13 +360,13 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
             {isMyTeam && (
               <div onClick={() => {
                   if (!isMyTurn) return;
-                  if (!G.hasDrawn && G.rules.discard === 'closed' && G.discardPile.length > 0) {
+                  if (!G.hasDrawn && isClosedDiscard && G.discardPile.length > 0) {
                     moves.pickUpDiscard(selectedCardIds(), { type: 'new' }); setSelectedCards([]);
                   } else if (selectedCards.length >= 3) {
                     moves.playMeld(selectedCardIds()); setSelectedCards([]);
                   }
                 }}
-                style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && (selectedCards.length >= 3 || (!G.hasDrawn && G.rules.discard === 'closed'))) ? 'pointer' : 'default', color: '#888' }}>
+                style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && (selectedCards.length >= 3 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default', color: '#888' }}>
                 + Baixar Jogo
               </div>
             )}
@@ -410,8 +413,8 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
             {G.discardPile.length > 0 ? (
               G.rules?.openDiscardView ? (
                 chunkedDiscard.map((row, rIdx) => (
-                  <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-44px' : '0' }}>
-                    {row.map((c, i) => <Card key={c.id} card={c} customStyle={{ marginLeft: i > 0 ? '-40px' : '0' }} />)}
+                  <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-38px' : '0' }}>
+                    {row.map((c, i) => <Card key={c.id} card={c} customStyle={{ marginLeft: i > 0 ? '-37px' : '0' }} />)}
                   </div>
                 ))
               ) : (
