@@ -562,7 +562,6 @@ export const BuracoGame = {
       const resolveQueue = (moves) => {
           let selected = [], usedCards = new Set(), projectedSize = myHandCards.length;
           for (const m of moves) {
-              if (m.score <= 0) continue;
               if (m.cards.some(c => usedCards.has(c))) continue;
               if (projectedSize - m.cards.length < 2 && !mortoSafe) continue;
               m.cards.forEach(c => usedCards.add(c));
