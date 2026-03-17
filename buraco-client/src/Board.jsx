@@ -13,45 +13,50 @@ function sortCards(cards) {
   });
 }
 
+// [0]=isRunner, [1..4]=suit one-hot, [5..9]=wild suit one-hot, [10..23]=seq ranks / runner rank+counts
 function isMeldClean(m) {
     if (!m || m.length === 0) return false;
-    return m[1] === 0; // Unified: wildSuit is always at index 1!
+    return !m[5] && !m[6] && !m[7] && !m[8] && !m[9];
+}
+function getMeldWildSuit(m) {
+    for (let i = 5; i <= 9; i++) if (m[i]) return i - 4;
+    return 0;
+}
+function getMeldRank(m) { // runner only
+    for (let i = 10; i <= 22; i++) if (m[i]) return i - 9;
+    return 0;
 }
 
 function getMeldLength(m) {
     if (!m || m.length === 0) return 0;
-    if (m[0] !== 0) { // Sequence
+    const hasWild = m[5] || m[6] || m[7] || m[8] || m[9];
+    if (m[0] === 0) { // Sequence
         let c = 0;
-        for (let r = 2; r <= 15; r++) c += m[r];
-        return c + (m[1] !== 0 ? 1 : 0); // Add 1 if there's a wild
+        for (let r = 10; r <= 23; r++) c += m[r];
+        return c + (hasWild ? 1 : 0);
     }
-    // Runner: [0, wildSuit, rank, spades, hearts, diamonds, clubs]
-    return m[3] + m[4] + m[5] + m[6] + (m[1] !== 0 ? 1 : 0);
+    // Runner: counts at [23..30]
+    return m[23]+m[24]+m[25]+m[26]+m[27]+m[28]+m[29]+m[30] + (hasWild ? 1 : 0);
 }
 
 function calculateMeldPoints(meld, rules) {
     let pts = 0;
     if (!meld || meld.length === 0) return 0;
-
-    const isSeq = meld[0] !== 0;
+    const isSeq = meld[0] === 0;
     const isClean = isMeldClean(meld);
     const length = getMeldLength(meld);
     const isCanasta = length >= 7;
-    
+    const wildSuit = getMeldWildSuit(meld);
     if (isSeq) {
-        for(let r = 2; r <= 15; r++) {
-            pts += meld[r] * SEQ_POINTS[r];
-        }
-        if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20); // wildSuit at m[1]
+        for (let i = 10; i <= 23; i++) if (meld[i]) pts += SEQ_POINTS[i - 8];
+        if (wildSuit) pts += (wildSuit === 5 ? 50 : 20);
     } else {
-        const rank = meld[2];
-        const nats = meld[3] + meld[4] + meld[5] + meld[6];
+        const rank = getMeldRank(meld);
+        const nats = meld[23]+meld[24]+meld[25]+meld[26]+meld[27]+meld[28]+meld[29]+meld[30];
         const rankPt = (rank === 1) ? 15 : (rank >= 8 ? 10 : (rank === 2 ? 20 : 5));
         pts += nats * rankPt;
-        
-        if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20); // wildSuit at m[1]
+        if (wildSuit) pts += (wildSuit === 5 ? 50 : 20);
     }
-
     if (isCanasta) {
         pts += isClean ? 200 : 100;
         if (rules?.largeCanasta && isClean) {
@@ -71,48 +76,46 @@ function intToCardObj(c) {
     return { rank: s === 5 ? 'JOKER' : getRankChar(r), suit: getSuitChar(s), id: c };
 }
 
-// 🧠 NEW STRUCTURE:
-// Sequence: [suit, wildSuit, A, 2, 3, 4, 5, 6, 7, 8, 9, 10, J, Q, K, High_A]
-// Runner:   [0, wildSuit, rank, spades_cnt, hearts_cnt, diamonds_cnt, clubs_cnt]
 function meldToCards(m) {
     let cards = [];
-    if (m[0] !== 0) { // Sequence
-        let suit = m[0];
-        let wildSuit = m[1];
-        let min = 16, max = 0;
-        for (let r = 2; r <= 15; r++) {
-            if (m[r] === 1) { if (r < min) min = r; if (r > max) max = r; }
-        }
+    const wildSuit = getMeldWildSuit(m);
+    const wildCard = wildSuit ? { rank: wildSuit === 5 ? 'JOKER' : '2', suit: wildSuit === 5 ? '★' : getSuitChar(wildSuit) } : null;
+    if (m[0] === 0) { // Sequence: rank bits at [10..23]
+        let suit = 0;
+        for (let i = 1; i <= 4; i++) if (m[i]) { suit = i; break; }
+        let min = 24, max = 9;
+        for (let r = 10; r <= 23; r++) if (m[r]) { if (r < min) min = r; if (r > max) max = r; }
         let wildPlaced = false;
         for (let r = min; r <= max; r++) {
-            if (m[r] === 1) {
-                let rank = r === 15 ? 1 : r - 1;
-                cards.push({ rank: getRankChar(rank), suit: getSuitChar(suit), id: `n-${r}` });
-            } else {
-                cards.push({ rank: wildSuit === 5 ? 'JOKER' : '2', suit: wildSuit === 5 ? '★' : getSuitChar(wildSuit), id: `w-${r}` });
+            if (m[r]) {
+                const rank = r === 23 ? 1 : r - 9; // [23]=A_high→rank1, [10]=A_low→rank1, [11]=2→rank2
+                cards.push({ rank: getRankChar(r === 10 ? 1 : r - 9), suit: getSuitChar(suit), id: `n-${r}` });
+            } else if (wildCard) {
+                cards.push({ ...wildCard, id: `w-${r}` });
                 wildPlaced = true;
             }
         }
-        if (wildSuit !== 0 && !wildPlaced) {
-            // Unused wild logic (usually happens while building before final validation)
-            if (max < 14) cards.push({ rank: wildSuit === 5 ? 'JOKER' : '2', suit: wildSuit === 5 ? '★' : getSuitChar(wildSuit), id: `w-edge` });
-            else cards.unshift({ rank: wildSuit === 5 ? 'JOKER' : '2', suit: wildSuit === 5 ? '★' : getSuitChar(wildSuit), id: `w-edge` });
+        if (wildCard && !wildPlaced) {
+            if (max < 22) cards.push({ ...wildCard, id: 'w-edge' });
+            else cards.unshift({ ...wildCard, id: 'w-edge' });
         }
-    } else { // Runner
-        let wildSuit = m[1];
-        let rank = m[2];
+    } else { // Runner: rank one-hot at [10..22], counts at [23..30]
+        const rank = getMeldRank(m);
+        // Issue 3: iterate suits in order, use correct base offset
+        // ♠=s1→[23,24], ♥=s2→[25,26], ♦=s3→[27,28], ♣=s4→[29,30]
         for (let s = 1; s <= 4; s++) {
-            // Suit counts start at index 3
-            for (let i = 0; i < m[s + 2]; i++) {
-                cards.push({ rank: getRankChar(rank), suit: getSuitChar(s), id: `r-${s}-${i}` }); 
-            }
+            const base = 21 + s * 2;
+            const count = m[base] + m[base + 1];
+            for (let i = 0; i < count; i++)
+                cards.push({ rank: getRankChar(rank), suit: getSuitChar(s), id: `r-${s}-${i}` });
         }
-        if (wildSuit !== 0) {
-            cards.push({ rank: wildSuit === 5 ? 'JOKER' : '2', suit: wildSuit === 5 ? '★' : getSuitChar(wildSuit), id: `w-run` });
-        }
+        if (wildCard) cards.push({ ...wildCard, id: 'w-run' });
     }
     return cards;
 }
+
+// Issue 5: smaller, more square hand cards
+const CARD_W = 46, CARD_H = 58;
 
 const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle }) => {
   const isRed = card.suit === '♥' || card.suit === '♦';
@@ -120,28 +123,28 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle }) => {
     <div onClick={onClick} style={{
       position: 'relative',
       border: isSelected ? '3px solid #ffd700' : (isNewlyDrawn ? '3px solid #ffcc00' : '1px solid #333'), 
-      transform: isSelected ? 'translateY(-10px)' : 'none', 
+      transform: isSelected ? 'translateY(-8px)' : 'none', 
       transition: 'all 0.2s', 
       cursor: onClick ? 'pointer' : 'default',
-      borderRadius: '8px', width: '60px', height: '90px', minWidth: '60px',
+      borderRadius: '6px', width: `${CARD_W}px`, height: `${CARD_H}px`, minWidth: `${CARD_W}px`,
       display: 'inline-flex', flexDirection: 'column', 
       justifyContent: 'center', alignItems: 'center', margin: '2px',
       backgroundColor: 'white', color: isRed ? 'red' : 'black', 
-      boxShadow: isNewlyDrawn && !isSelected ? '0 0 15px rgba(255, 204, 0, 0.8)' : '2px 2px 5px rgba(0,0,0,0.4)',
+      boxShadow: isNewlyDrawn && !isSelected ? '0 0 12px rgba(255, 204, 0, 0.8)' : '2px 2px 4px rgba(0,0,0,0.4)',
       ...customStyle
     }}>
-      <div style={{ position: 'absolute', top: '4px', left: '4px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1' }}>
-        <span style={{ fontSize: '0.9em', fontWeight: 'bold' }}>{card.rank}</span>
-        <span style={{ fontSize: '0.9em' }}>{card.suit}</span>
+      <div style={{ position: 'absolute', top: '3px', left: '3px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1' }}>
+        <span style={{ fontSize: '0.75em', fontWeight: 'bold' }}>{card.rank}</span>
+        <span style={{ fontSize: '0.75em' }}>{card.suit}</span>
       </div>
-      <div style={{ fontSize: '2em', opacity: 0.3 }}>{card.suit}</div>
+      <div style={{ fontSize: '1.4em', opacity: 0.25 }}>{card.suit}</div>
     </div>
   );
 };
 
 const CardBack = ({ label, count, onClick }) => (
   <div onClick={onClick} style={{
-    border: '2px solid white', borderRadius: '8px', width: '60px', height: '90px', margin: '2px',
+    border: '2px solid white', borderRadius: '8px', width: '60px', height: '80px', margin: '2px',
     backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px)',
     boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'white', cursor: onClick ? 'pointer' : 'default', textAlign: 'center'
   }}>
@@ -318,6 +321,8 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
     const points = calculateMeldPoints(meldGroup, G.rules);
     const renderedCards = meldToCards(meldGroup);
     const canInteract = isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && (G.rules.discard === 'closed' || G.rules.discard === true)));
+    // Issue 3/4: runner cards overlap vertically; use fixed card dims for overlap calc
+    const runnerOverlap = `-${CARD_H - 18}px`;
     return (
       <div key={`${p}-${index}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div style={{ color: borderColor !== 'transparent' ? borderColor : '#aaa', fontSize: '0.8em', fontWeight: 'bold', marginBottom: '3px' }}>{points} pts</div>
@@ -329,8 +334,8 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
               moves.appendToMeld(p, index, selectedCardInts); setSelectedCards([]);
             }
           }}
-          style={{ display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', border: `2px solid ${borderColor}`, cursor: canInteract ? 'pointer' : 'default' }}>
-          {renderedCards.map((card, i) => <Card key={card.id} card={card} customStyle={{ marginLeft: (!isRunner && i > 0) ? '-40px' : '0', marginTop: (isRunner && i > 0) ? '-60px' : '0', zIndex: i }} />)}
+          style={{ display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: `2px solid ${borderColor}`, cursor: canInteract ? 'pointer' : 'default' }}>
+          {renderedCards.map((card, i) => <Card key={card.id} card={card} customStyle={{ marginLeft: (!isRunner && i > 0) ? `-${CARD_W - 12}px` : '0', marginTop: (isRunner && i > 0) ? runnerOverlap : '0', zIndex: i }} />)}
         </div>
       </div>
     );
@@ -338,21 +343,22 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
 
   const renderTeamTable = (teamPlayers, title, isMyTeam) => {
     const allMelds = teamPlayers.flatMap(p => (G.melds[p] || []).map((m, i) => ({ p, index: i, meldGroup: m })));
-    const runners = allMelds.filter(x => x.meldGroup[0] === 0);
-    const sequences = allMelds.filter(x => x.meldGroup[0] !== 0);
+    const runners = allMelds.filter(x => x.meldGroup[0] === 1);
+    const sequences = allMelds.filter(x => x.meldGroup[0] === 0);
     return (
     <div style={{ background: isMyTeam ? 'rgba(77, 166, 255, 0.1)' : 'rgba(255, 77, 77, 0.1)', padding: '15px', borderRadius: '10px', minHeight: '120px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <h3 style={{ margin: 0, color: isMyTeam ? '#4da6ff' : '#ff4d4d' }}>{title}</h3>
         <span style={{ background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: '20px', fontWeight: 'bold', color: '#ffd700' }}>Pontos da Mesa: {calcTeamTablePoints(teamPlayers)}</span>
       </div>
-      <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-start' }}>
+      {/* Issue 4: runners float left, sequences wrap and fill space beside AND below runners */}
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
         {runners.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', flexDirection: 'row', gap: '8px', flexShrink: 0 }}>
             {runners.map(({ p, index, meldGroup }) => renderMeldCard(meldGroup, p, index, isMyTeam, true))}
           </div>
         )}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'flex-start', flex: 1 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignContent: 'flex-start', flex: 1, minWidth: 0 }}>
           {sequences.map(({ p, index, meldGroup }) => renderMeldCard(meldGroup, p, index, isMyTeam, false))}
           {isMyTeam && (
             <div onClick={() => {
@@ -444,14 +450,15 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
 
         <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', boxSizing: 'border-box' }}>
           <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Jogadores</h4>
+          {/* Issue 2: constrain player rows so they never overflow the panel */}
           {Object.keys(G.hands).filter(p => G.hands[p]).map(p => {
             const isTurn = ctx.currentPlayer === p;
             const isMe = p === playerID;
             const name = G.rules?.assignments?.[p] || `P${p}`;
             return (
-              <div key={p} style={{ fontSize: '0.65em', display: 'flex', justifyContent: 'space-between', color: isTurn ? '#ffd700' : (isMe ? '#4da6ff' : '#888'), fontWeight: (isTurn || isMe) ? 'bold' : 'normal', background: isMe ? 'rgba(77, 166, 255, 0.2)' : 'transparent', border: isMe ? '1px solid #4da6ff' : '1px solid transparent', padding: '2px 4px', borderRadius: '4px', marginBottom: '2px' }}>
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '60px' }}>{isTurn ? '👉 ' : ''}{name}</span>
-                <span>{G.hands[p].length} 🃏</span>
+              <div key={p} style={{ fontSize: '0.65em', display: 'flex', justifyContent: 'space-between', color: isTurn ? '#ffd700' : (isMe ? '#4da6ff' : '#888'), fontWeight: (isTurn || isMe) ? 'bold' : 'normal', background: isMe ? 'rgba(77, 166, 255, 0.2)' : 'transparent', border: isMe ? '1px solid #4da6ff' : '1px solid transparent', padding: '2px 4px', borderRadius: '4px', marginBottom: '2px', overflow: 'hidden', minWidth: 0 }}>
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>{isTurn ? '👉 ' : ''}{name}</span>
+                <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.hands[p].length} 🃏</span>
               </div>
             );
           })}

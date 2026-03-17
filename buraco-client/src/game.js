@@ -9,7 +9,7 @@ export const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 
 
 // 🚀 CENTRALIZED AI ARCHITECTURE CONFIGURATION
 export const AI_CONFIG = {
-    INPUT_INTS: 41,      // state buffer size (matches sim.js layout)
+    INPUT_INTS: 51,      // state buffer size (matches sim.js layout)
     HIDDEN_NODES: 64,
     OUTPUT_NODES: 1,
     STAGES: 3            // Pickup, Meld (appends + new), Discard
@@ -18,9 +18,9 @@ AI_CONFIG.DNA_INTS_PER_STAGE = (AI_CONFIG.INPUT_INTS * AI_CONFIG.HIDDEN_NODES) +
 AI_CONFIG.TOTAL_DNA_SIZE = AI_CONFIG.DNA_INTS_PER_STAGE * AI_CONFIG.STAGES;
 
 // NN constants (shared with sim.js)
-export const NN_STATE_INTS = 41;
+export const NN_STATE_INTS = 51;
 export const NN_MELD_CANDIDATES = 16;
-export const NN_MELD_INPUT_INTS = NN_STATE_INTS + NN_MELD_CANDIDATES; // 57
+export const NN_MELD_INPUT_INTS = NN_STATE_INTS + NN_MELD_CANDIDATES; // 67
 const NN_HIDDEN = AI_CONFIG.HIDDEN_NODES;
 export const NN_MELD_DNA  = NN_MELD_INPUT_INTS * NN_HIDDEN + Math.ceil(NN_HIDDEN / 32);
 export const NN_STATE_DNA = NN_STATE_INTS      * NN_HIDDEN + Math.ceil(NN_HIDDEN / 32);
@@ -35,139 +35,171 @@ export function sortCards(cards) {
   });
 }
 
+// Meld array layout (32 elements, all binary 0/1):
+// [0]      : isRunner (0=sequence, 1=runner)
+// [1..4]   : suit one-hot ♠♥♦♣ (0000 for runners)
+// [5..9]   : wild suit one-hot ♠♥♦♣★ (all zero = no wild)
+// [10..23] : seq rank bits A_low,2..K,A_high (14 bits); runner rank one-hot A..K at [10..22]
+// [23..24] : runner ♠ count — hot bits: (1,0)=1 card, (1,1)=2 cards — seq always 0
+// [25..26] : runner ♥ count — hot bits: (1,0)=1 card, (1,1)=2 cards
+// [27..28] : runner ♦ count — hot bits: (1,0)=1 card, (1,1)=2 cards
+// [29..30] : runner ♣ count — hot bits: (1,0)=1 card, (1,1)=2 cards
+// [31]     : reserved (0)
+
 export function isMeldClean(m) {
     if (!m || m.length === 0) return false;
-    return m[1] === 0; 
+    return m[5] === 0 && m[6] === 0 && m[7] === 0 && m[8] === 0 && m[9] === 0;
 }
 
 export function getMeldLength(m) {
     if (!m || m.length === 0) return 0;
-    if (m[0] !== 0) { 
+    const hasWild = m[5] || m[6] || m[7] || m[8] || m[9];
+    if (m[0] === 0) {
         let c = 0;
-        for (let r = 2; r <= 15; r++) c += m[r];
-        return c + (m[1] !== 0 ? 1 : 0);
+        for (let r = 10; r <= 23; r++) c += m[r];
+        return c + (hasWild ? 1 : 0);
     }
-    return m[3] + m[4] + m[5] + m[6] + (m[1] !== 0 ? 1 : 0);
+    return m[23] + m[24] + m[25] + m[26] + m[27] + m[28] + m[29] + m[30] + (hasWild ? 1 : 0);
+}
+
+// suit index → one-hot bit position in [1..4]
+const SUIT_BIT = [0, 1, 2, 3, 4]; // getSuit returns 1-4, use SUIT_BIT[s]
+// wild suit index → one-hot bit position in [5..9]: 1=♠,2=♥,3=♦,4=♣,5=★
+const WILD_BIT = [0, 5, 6, 7, 8, 9];
+
+function getMeldSuit(m) {
+    for (let i = 1; i <= 4; i++) if (m[i]) return i;
+    return 0;
+}
+function getMeldWildSuit(m) {
+    for (let i = 5; i <= 9; i++) if (m[i]) return i - 4; // returns 1-5
+    return 0;
+}
+function getMeldRank(m) { // runner only
+    for (let i = 10; i <= 22; i++) if (m[i]) return i - 9; // returns 1-13
+    return 0;
 }
 
 function cardsToSeqSlots(cardIds, existingMeld = null) {
-    let m = existingMeld ? [...existingMeld] : new Array(16).fill(0);
-    let suit = m[0];
-    let wildSuit = m[1];
-    
-    let wilds = [];
-    let aces = [];
-    let twos = [];
-    
+    let m = existingMeld ? new Uint8Array(existingMeld) : new Uint8Array(32);
+    let suit = getMeldSuit(m);
+    let wildSuit = getMeldWildSuit(m);
+
+    let wilds = [], aces = [], twos = [];
+
     for (let c of cardIds) {
         let s = getSuit(c), r = getRank(c);
         if (s === 5 || r === 2) {
-            twos.push(c); 
+            twos.push(c);
         } else if (r === 1) {
             aces.push(c);
         } else {
             if (suit === 0) suit = s;
             else if (s !== suit) return null;
-            if (m[r + 1] === 1) return null; 
-            m[r + 1] = 1;
+            if (m[r + 9] === 1) return null; // r+9: rank 2→[11], rank 13→[22]
+            m[r + 9] = 1;
         }
     }
-    
+
     if (suit === 0) {
         if (aces.length > 0) suit = getSuit(aces[0]);
         else if (twos.length > 0) suit = getSuit(twos[0]);
-        else return null; 
+        else return null;
     }
-    m[0] = suit;
+    m[1] = m[2] = m[3] = m[4] = 0;
+    m[SUIT_BIT[suit]] = 1;
 
     for (let c of twos) {
         let s = getSuit(c), r = getRank(c);
-        if (s === suit && r === 2 && m[3] === 0) {
-            m[3] = 1; 
+        if (s === suit && r === 2 && m[11] === 0) {
+            m[11] = 1; // rank 2 as natural → [11]
         } else {
-            if (wildSuit !== 0) return null; 
+            if (wildSuit !== 0) return null;
             wildSuit = s;
         }
     }
 
     for (let c of aces) {
         if (getSuit(c) !== suit) return null;
-        if (m[14] === 1 && m[15] === 0) m[15] = 1; 
-        else if (m[2] === 0) m[2] = 1;
-        else if (m[15] === 0) m[15] = 1;
-        else return null; 
+        if (m[22] === 1 && m[23] === 0) m[23] = 1; // A_high → [23]
+        else if (m[10] === 0) m[10] = 1;            // A_low  → [10]
+        else if (m[23] === 0) m[23] = 1;
+        else return null;
     }
 
-    m[1] = wildSuit;
+    m[5] = m[6] = m[7] = m[8] = m[9] = 0;
+    if (wildSuit !== 0) m[WILD_BIT[wildSuit]] = 1;
 
     const checkGaps = (arr) => {
-        let min = 16, max = 0;
-        for(let r=2; r<=15; r++) if(arr[r]) { if(r<min) min=r; if(r>max) max=r; }
+        let min = 24, max = 9;
+        for (let r = 10; r <= 23; r++) if (arr[r]) { if (r < min) min = r; if (r > max) max = r; }
         if (min > max) return 0;
         let gaps = 0;
-        for(let r=min; r<=max; r++) if(!arr[r]) gaps++;
+        for (let r = min; r <= max; r++) if (!arr[r]) gaps++;
         return gaps;
     };
 
     let gaps = checkGaps(m);
 
     if (gaps > 0) {
-        if (m[2] === 1 && m[15] === 0) {
-            m[2] = 0; m[15] = 1;
-            let newGaps = checkGaps(m);
-            if (newGaps < gaps) gaps = newGaps;
-            else { m[2] = 1; m[15] = 0; } 
+        if (m[10] === 1 && m[23] === 0) {
+            m[10] = 0; m[23] = 1;
+            let ng = checkGaps(m);
+            if (ng < gaps) gaps = ng; else { m[10] = 1; m[23] = 0; }
         }
-        
-        if (gaps > 0 && m[3] === 1 && m[1] === 0) {
-            m[3] = 0; m[1] = suit;
-            let newGaps = checkGaps(m);
-            if (newGaps <= 1) gaps = newGaps;
-            else { m[3] = 1; m[1] = 0; } 
+        if (gaps > 0 && m[11] === 1 && wildSuit === 0) {
+            m[11] = 0; wildSuit = suit;
+            m[5] = m[6] = m[7] = m[8] = m[9] = 0; m[WILD_BIT[wildSuit]] = 1;
+            let ng = checkGaps(m);
+            if (ng <= 1) gaps = ng; else { m[11] = 1; wildSuit = 0; m[5]=m[6]=m[7]=m[8]=m[9]=0; }
         }
     }
 
-    if (gaps === 0 && m[1] === suit && m[3] === 0) {
-        m[3] = 1; m[1] = 0; 
-        if (checkGaps(m) > 0) {
-            m[3] = 0; m[1] = suit; 
-        }
+    if (gaps === 0 && wildSuit === suit && m[11] === 0) {
+        m[11] = 1; wildSuit = 0; m[5]=m[6]=m[7]=m[8]=m[9]=0;
+        if (checkGaps(m) > 0) { m[11] = 0; wildSuit = suit; m[WILD_BIT[wildSuit]] = 1; }
     }
 
-    if (gaps > 1) return null; 
-    if (gaps === 1 && m[1] === 0) return null; 
-    
+    if (gaps > 1) return null;
+    if (gaps === 1 && wildSuit === 0) return null;
+
     let len = 0;
-    for(let r=2; r<=15; r++) len += m[r];
-    if (len + (m[1] !== 0 ? 1 : 0) > 14) return null; 
+    for (let r = 10; r <= 23; r++) len += m[r];
+    if (len + (wildSuit !== 0 ? 1 : 0) > 14) return null;
 
     return m;
 }
 
 function cardsToRunnerSlots(cardIds, existingMeld = null) {
-    let m = existingMeld ? [...existingMeld] : [0, 0, 0, 0, 0, 0, 0];
-    let wildSuit = m[1];
-    let rank = m[2];
-    
+    let m = existingMeld ? new Uint8Array(existingMeld) : new Uint8Array(32);
+    m[0] = 1;
+    let wildSuit = getMeldWildSuit(m);
+    let rank = getMeldRank(m);
+
     for (let c of cardIds) {
         let s = getSuit(c), r = getRank(c);
         if (s === 5 || r === 2) {
-            if (wildSuit !== 0) return null; 
+            if (wildSuit !== 0) return null;
             wildSuit = s;
         } else {
             if (rank === 0) rank = r;
             else if (r !== rank) return null;
-            if (m[s + 2] >= 2) return null;
-            m[s + 2]++;
+            // counts at [23..30]: ♠=[23..24], ♥=[25..26], ♦=[27..28], ♣=[29..30]
+            const base = 21 + s * 2; // s=1→23, s=2→25, s=3→27, s=4→29
+            if (m[base] + m[base + 1] >= 2) return null;
+            if (m[base] === 0) m[base] = 1; else m[base + 1] = 1;
         }
     }
-    
+
     if (rank === 0) return null;
-    const natCount = m[3] + m[4] + m[5] + m[6];
+    const natCount = m[23]+m[24]+m[25]+m[26]+m[27]+m[28]+m[29]+m[30];
     if (natCount < 2) return null;
-    
-    m[1] = wildSuit;
-    m[2] = rank;
+
+    m[5] = m[6] = m[7] = m[8] = m[9] = 0;
+    if (wildSuit !== 0) m[WILD_BIT[wildSuit]] = 1;
+    for (let i = 10; i <= 22; i++) m[i] = 0;
+    m[rank + 9] = 1; // rank 1→[10], rank 13→[22]
+
     return m;
 }
 
@@ -182,13 +214,13 @@ export function buildMeld(cardIds, rules) {
     let seq = cardsToSeqSlots(cardIds);
     if (seq) return seq;
     let run = cardsToRunnerSlots(cardIds);
-    if (run && isRunnerAllowed(rules, run[2])) return run;
+    if (run && isRunnerAllowed(rules, getMeldRank(run))) return run;
     return null;
 }
 
 export function appendCardsToMeld(meld, cards) {
-    if (meld[0] !== 0) return cardsToSeqSlots(cards, meld);
-    return cardsToRunnerSlots(cards, meld);
+    if (meld[0] === 1) return cardsToRunnerSlots(cards, meld);
+    return cardsToSeqSlots(cards, meld);
 }
 
 export function appendToMeld(meld, cId) {
@@ -198,28 +230,33 @@ export function appendToMeld(meld, cId) {
 function meldCleanness(m) {
     if (!m || m.length === 0) return 0;
     if (isMeldClean(m)) return 0;
-    if (m[1] > 0 && m[1] !== 5 && m[1] === m[0]) return 1; 
-    return 2; 
+    const suit = getMeldSuit(m);
+    const wildSuit = getMeldWildSuit(m);
+    if (wildSuit > 0 && wildSuit !== 5 && wildSuit === suit) return 1;
+    return 2;
 }
 
 export function calculateMeldPoints(meld, rules) {
     let pts = 0;
     if (!meld || meld.length === 0) return 0;
 
-    const isSeq = meld[0] !== 0;
+    const isSeq = meld[0] === 0;
     const isClean = isMeldClean(meld);
     const length = getMeldLength(meld);
     const isCanasta = length >= 7;
-    
+    const wildSuit = getMeldWildSuit(meld);
+
     if (isSeq) {
-        for(let r = 2; r <= 15; r++) pts += meld[r] * SEQ_POINTS[r];
-        if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20);
+        // rank bits at [10..23]: [10]=A_low,[11]=2,...,[22]=K,[23]=A_high
+        // SEQ_POINTS indexed by old r (2..15), new index = r+9 → r = index-9
+        for (let i = 10; i <= 23; i++) if (meld[i]) pts += SEQ_POINTS[i - 8];
+        if (wildSuit !== 0) pts += (wildSuit === 5 ? 50 : 20);
     } else {
-        const rank = meld[2];
-        const nats = meld[3] + meld[4] + meld[5] + meld[6];
+        const rank = getMeldRank(meld);
+        const nats = meld[23]+meld[24]+meld[25]+meld[26]+meld[27]+meld[28]+meld[29]+meld[30];
         const rankPt = (rank === 1) ? 15 : (rank >= 8 ? 10 : (rank === 2 ? 20 : 5));
         pts += nats * rankPt;
-        if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20);
+        if (wildSuit !== 0) pts += (wildSuit === 5 ? 50 : 20);
     }
 
     if (isCanasta) {
@@ -272,39 +309,226 @@ function calculateFinalScores(G) {
   return scores;
 }
 
-// --- Shared NN infrastructure (used by both live bot and sim.js training) ---
+// ─── Shared pure-state move executors ───────────────────────────────────────
+// These operate on a plain numeric-indexed state object:
+// { hands[p], melds[p], discard[], deck[], pots[], mortos[t], mortoUsed[t],
+//   hasDrawn, rules, numP, teams(optional) }
+// boardgame.io G is compatible because G.hands['0'] === G.hands[0].
 
-export function encodeMeld20(m) {
-    if (!m) return 0;
-    if (m[0] !== 0) {
-        let v = 0;
-        v |= ((m[0] & 3) << 1);
-        v |= ((m[1] & 31) << 3);
-        for (let r = 2; r <= 14; r++) if (m[r]) v |= (1 << (7 + r));
-        return v >>> 0;
-    } else {
-        let v = 1;
-        v |= ((m[1] & 31) << 3);
-        v |= ((m[2] & 63) << 8);
-        v |= ((Math.min(3, m[3]) & 3) << 14);
-        v |= ((Math.min(3, m[4]) & 3) << 16);
-        v |= ((Math.min(3, m[5]) & 3) << 18);
-        v |= ((Math.min(3, m[6]) & 3) << 20);
-        return v >>> 0;
+export function simStateFromG(G) {
+    // Thin adapter so shared functions can read G as a sim-style state
+    const numP = G.rules.numPlayers || 4;
+    return {
+        numP,
+        rules: G.rules,
+        deck: G.deck,
+        discard: G.discardPile,
+        pots: G.pots,
+        hands: G.hands,       // string-keyed, but [0]==['0'] in JS
+        melds: G.melds,
+        mortos: G.teamMortos ? [G.teamMortos.team0, G.teamMortos.team1] : [false, false],
+        mortoUsed: G.mortoUsed ? [G.mortoUsed.team0, G.mortoUsed.team1] : [false, false],
+        hasDrawn: G.hasDrawn,
+        _isG: true            // flag so write-back knows to update G fields
+    };
+}
+
+export function teamOf(pIdx, numP) { return pIdx % 2; }
+
+export function simTeamHasClean(melds, pIdx, numP, rules) {
+    const t = teamOf(pIdx, numP);
+    const players = numP === 4 ? [t, t + 2] : [t];
+    return players.some(p => (melds[p] || []).some(m => getMeldLength(m) >= 7 && (!rules.cleanCanastaToWin || isMeldClean(m))));
+}
+
+export function simMortoSafe(S, pIdx) {
+    const t = teamOf(pIdx, S.numP);
+    return simTeamHasClean(S.melds, pIdx, S.numP, S.rules) || (!S.mortos[t] && S.pots.length > 0);
+}
+
+function simRemoveCard(hand, card) {
+    const i = hand.indexOf(card);
+    if (i === -1) return false;
+    hand.splice(i, 1);
+    return true;
+}
+
+function simRemoveCards(hand, cards) {
+    const counts = {};
+    for (const c of cards) counts[c] = (counts[c] || 0) + 1;
+    return hand.filter(c => { if (counts[c] > 0) { counts[c]--; return false; } return true; });
+}
+
+function simCheckMorto(S, pIdx) {
+    const t = teamOf(pIdx, S.numP);
+    const hand = S.hands[pIdx];
+    if (hand.length === 0 && S.pots.length > 0 && !S.mortos[t]) {
+        S.hands[pIdx] = S.pots.shift();
+        S.mortos[t] = true;
     }
 }
 
-export function encodeCandidate(meldIdx, resultMeld, handWildSuit) {
-    let v = (meldIdx & 31);
-    if (resultMeld && resultMeld[0] !== 0) {
-        v |= ((resultMeld[0] & 3) << 5);
-        for (let r = 2; r <= 14; r++) if (resultMeld[r]) v |= (1 << (5 + r));
-        v |= ((resultMeld[1] & 31) << 20);
-    } else if (resultMeld) {
-        v |= ((resultMeld[2] & 63) << 7);
-        v |= ((resultMeld[1] & 31) << 20);
+export function execDraw(S, pIdx) {
+    if (S.hasDrawn) return false;
+    if (S.deck.length === 0 && S.pots.length > 0) S.deck = S.pots.shift();
+    if (S.deck.length === 0) return false;
+    const card = S.deck.pop();
+    S.hands[pIdx].push(card);
+    S.hasDrawn = true;
+    S.lastDrawnCard = card;
+    return true;
+}
+
+export function execPickupDiscard(S, pIdx, selectedHandCards, target) {
+    // target: { type: 'new' } | { type: 'append', owner: pIdx, mi: meldIndex }
+    if (S.hasDrawn || S.discard.length === 0) return false;
+    const hand = S.hands[pIdx];
+    const topCard = S.discard[S.discard.length - 1];
+    const t = teamOf(pIdx, S.numP);
+
+    if (S.rules.discard === 'closed' || S.rules.discard === true) {
+        let parsedMeld = null;
+        if (target.type === 'new') {
+            parsedMeld = buildMeld([...selectedHandCards, topCard], S.rules);
+        } else {
+            parsedMeld = appendCardsToMeld(S.melds[target.owner][target.mi], [...selectedHandCards, topCard]);
+        }
+        if (!parsedMeld) return false;
+
+        const newHand = simRemoveCards(hand, selectedHandCards);
+        if (target.type === 'new') S.melds[pIdx].push(parsedMeld);
+        else S.melds[target.owner][target.mi] = parsedMeld;
+
+        S.discard.pop();
+        const rest = [...S.discard];
+        newHand.push(...rest);
+        S.hands[pIdx] = newHand;
+        S.discard = [];
+        S.hasDrawn = true;
+        S.lastDrawnCard = rest;
+        if (S.mortos[t]) S.mortoUsed[t] = true;
+        simCheckMorto(S, pIdx);
+    } else {
+        S.hands[pIdx].push(...S.discard);
+        S.discard = [];
+        S.hasDrawn = true;
+        S.lastDrawnCard = [...S.hands[pIdx].slice(-S.discard.length)];
     }
-    v |= ((handWildSuit & 7) << 25);
+    return true;
+}
+
+export function execPlayMeld(S, pIdx, cardIds) {
+    if (!S.hasDrawn) return false;
+    const hand = S.hands[pIdx];
+    const parsed = buildMeld(cardIds, S.rules);
+    if (!parsed) return false;
+    const newHand = simRemoveCards(hand, cardIds);
+    if (newHand.length < 2 && !simMortoSafe(S, pIdx)) return false;
+    S.hands[pIdx] = newHand;
+    S.melds[pIdx].push(parsed);
+    const t = teamOf(pIdx, S.numP);
+    if (S.mortos[t]) S.mortoUsed[t] = true;
+    simCheckMorto(S, pIdx);
+    return true;
+}
+
+export function execAppendToMeld(S, pIdx, meldOwner, meldIndex, cardIds) {
+    if (!S.hasDrawn) return false;
+    const hand = S.hands[pIdx];
+    const parsed = appendCardsToMeld(S.melds[meldOwner][meldIndex], cardIds);
+    if (!parsed) return false;
+    const newHand = simRemoveCards(hand, cardIds);
+    if (newHand.length < 2 && !simMortoSafe(S, pIdx)) return false;
+    S.hands[pIdx] = newHand;
+    S.melds[meldOwner][meldIndex] = parsed;
+    const t = teamOf(pIdx, S.numP);
+    if (S.mortos[t]) S.mortoUsed[t] = true;
+    simCheckMorto(S, pIdx);
+    return true;
+}
+
+export function execDiscard(S, pIdx, cardId) {
+    if (!S.hasDrawn) return false;
+    const hand = S.hands[pIdx];
+    if (!simRemoveCard(hand, cardId)) return false;
+    S.discard.push(cardId);
+    S.hasDrawn = false;
+    S.lastDrawnCard = null;
+    const t = teamOf(pIdx, S.numP);
+    if (S.mortos[t]) S.mortoUsed[t] = true;
+    simCheckMorto(S, pIdx);
+    return true;
+}
+
+export function calcSimFinalScores(S) {
+    let s = [0, 0];
+    for (let t = 0; t < 2; t++) {
+        const players = S.numP === 4 ? [t, t + 2] : [t];
+        for (const p of players) {
+            for (const m of (S.melds[p] || [])) s[t] += calculateMeldPoints(m, S.rules);
+            for (const c of (S.hands[p] || [])) s[t] -= getCardPoints(c);
+        }
+        if (!S.mortos[t]) s[t] -= 100;
+    }
+    return s;
+}
+
+export function buildStateBuffer(S, pIdx, buf, cache) {
+    const myTeam = teamOf(pIdx, S.numP), oppTeam = 1 - myTeam;
+    const numP = S.numP;
+    const opp1 = (pIdx + 1) % numP;
+    const partner = numP === 4 ? (pIdx + 2) % numP : -1;
+    const opp2 = numP === 4 ? (pIdx + 3) % numP : -1;
+    const playerChanged = cache.lastP !== pIdx;
+
+    let meta = 0;
+    if (S.deck.length > 0) meta |= 1;
+    if (S.pots.length > 0) meta |= 2;
+    if (S.pots.length > 1) meta |= 4;
+    if (S.mortos[myTeam]) meta |= 8;
+    if (S.mortos[oppTeam]) meta |= 16;
+    if (simTeamHasClean(S.melds, pIdx, numP, S.rules)) meta |= 32;
+    if (simTeamHasClean(S.melds, opp1, numP, S.rules)) meta |= 64;
+    meta |= (Math.min(15, (S.hands[pIdx] || []).length) << 7);
+    meta |= (Math.min(15, (S.hands[opp1] || []).length) << 11);
+    if (partner >= 0) meta |= (Math.min(15, (S.hands[partner] || []).length) << 15);
+    if (opp2 >= 0) meta |= (Math.min(15, (S.hands[opp2] || []).length) << 19);
+    buf[0] = meta;
+
+    if (!cache || cache.meldsDirty || playerChanged) {
+        const myMelds = numP === 4 ? [...(S.melds[myTeam*2]||[]), ...(S.melds[myTeam*2+2]||[])] : (S.melds[myTeam]||[]);
+        const oppMelds = numP === 4 ? [...(S.melds[oppTeam*2]||[]), ...(S.melds[oppTeam*2+2]||[])] : (S.melds[oppTeam]||[]);
+        packMelds15Into(buf, 1, myMelds);
+        packMelds15Into(buf, 16, oppMelds);
+    }
+    if (!cache || cache.discardDirty || playerChanged) packCards108Into(buf, 31, S.discard);
+    if (!cache || cache.handDirty?.[pIdx] || playerChanged) packCards108Into(buf, 35, S.hands[pIdx] || []);
+    if (playerChanged || !cache) {
+        packCards108Into(buf, 39, S.hands[opp1] || []);
+        if (partner >= 0) packCards108Into(buf, 43, S.hands[partner] || []); else buf[43]=buf[44]=buf[45]=buf[46]=0;
+        if (opp2 >= 0) packCards108Into(buf, 47, S.hands[opp2] || []); else buf[47]=buf[48]=buf[49]=buf[50]=0;
+    }
+    if (cache) {
+        cache.meldsDirty = false; cache.discardDirty = false;
+        if (cache.handDirty) cache.handDirty[pIdx] = 0;
+        cache.lastP = pIdx;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function encodeMeld32(m) {
+    if (!m) return 0;
+    let v = 0;
+    for (let i = 0; i < 31; i++) if (m[i]) v |= (1 << i);
+    return v >>> 0;
+}
+
+export function encodeCandidate(meldIdx, resultMeld) {
+    // bits [0..4]: meldIdx, bits [5..35] would overflow 32-bit
+    // instead: pack meldIdx in high 5 bits, meld in low 27 bits (drop bit 31 reserved)
+    let v = encodeMeld32(resultMeld) & 0x07FFFFFF; // 27 bits of meld
+    v |= ((meldIdx & 31) << 27);
     return v >>> 0;
 }
 
@@ -317,13 +541,9 @@ export function packCards108Into(buf, offset, cards) {
 }
 
 export function packMelds15Into(buf, offset, melds) {
-    for (let i = offset; i < offset + 10; i++) buf[i] = 0;
-    for (let mi = 0; mi < melds.length && mi < 15; mi++) {
-        const enc = encodeMeld20(melds[mi]);
-        const bitOff = mi * 20, wordOff = bitOff >> 5, bitShift = bitOff & 31;
-        buf[offset + wordOff] |= (enc << bitShift) >>> 0;
-        if (bitShift > 12) buf[offset + wordOff + 1] |= (enc >>> (32 - bitShift)) >>> 0;
-    }
+    for (let i = offset; i < offset + 15; i++) buf[i] = 0;
+    for (let mi = 0; mi < melds.length && mi < 15; mi++)
+        buf[offset + mi] = encodeMeld32(melds[mi]);
 }
 
 const _nnHidden = new Uint32Array(Math.ceil(NN_HIDDEN / 32));
@@ -364,39 +584,18 @@ export function runDiscardNet(stateBuf, dna) {
     return forwardPass(stateBuf, NN_STATE_INTS, dna) & 0xFF;
 }
 
-// Build state buffer from boardgame.io G object (string-keyed)
+// Build state buffer from boardgame.io G object — adapts string-keyed G to sim-style state
 export function buildStateBufferFromG(G, p, buf) {
-    const myTeam = G.teams[p], oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
-    const numP = G.rules.numPlayers || 4, pInt = parseInt(p);
-    const opp1 = ((pInt + 1) % numP).toString();
-    const partner = numP === 4 ? ((pInt + 2) % numP).toString() : null;
-    const opp2 = numP === 4 ? ((pInt + 3) % numP).toString() : null;
-
-    const teamClean = t => (G.teamPlayers[t] || []).some(tp => (G.melds[tp] || []).some(m => getMeldLength(m) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m))));
-
-    let meta = 0;
-    if (G.deck.length > 0) meta |= 1;
-    if (G.pots.length > 0) meta |= 2;
-    if (G.pots.length > 1) meta |= 4;
-    if (G.teamMortos[myTeam]) meta |= 8;
-    if (G.teamMortos[oppTeam]) meta |= 16;
-    if (teamClean(myTeam)) meta |= 32;
-    if (teamClean(oppTeam)) meta |= 64;
-    meta |= (Math.min(15, (G.hands[p] || []).length) << 7);
-    meta |= (Math.min(15, (G.hands[opp1] || []).length) << 11);
-    if (partner) meta |= (Math.min(15, (G.hands[partner] || []).length) << 15);
-    if (opp2) meta |= (Math.min(15, (G.hands[opp2] || []).length) << 19);
-    buf[0] = meta;
-
-    const myMelds = (G.teamPlayers[myTeam] || []).flatMap(tp => G.melds[tp] || []);
-    const oppMelds = (G.teamPlayers[oppTeam] || []).flatMap(tp => G.melds[tp] || []);
-    packMelds15Into(buf, 1, myMelds);
-    packMelds15Into(buf, 11, oppMelds);
-    packCards108Into(buf, 21, G.discardPile);
-    packCards108Into(buf, 25, G.hands[p] || []);
-    packCards108Into(buf, 29, G.hands[opp1] || []);
-    if (partner) packCards108Into(buf, 33, G.hands[partner] || []); else buf[33]=buf[34]=buf[35]=buf[36]=0;
-    if (opp2) packCards108Into(buf, 37, G.hands[opp2] || []); else buf[37]=buf[38]=buf[39]=buf[40]=0;
+    const numP = G.rules.numPlayers || 4;
+    const pIdx = parseInt(p);
+    const S = {
+        numP, rules: G.rules,
+        deck: G.deck, discard: G.discardPile, pots: G.pots,
+        hands: G.hands, melds: G.melds,
+        mortos: [G.teamMortos.team0, G.teamMortos.team1],
+        mortoUsed: [G.mortoUsed.team0, G.mortoUsed.team1],
+    };
+    buildStateBuffer(S, pIdx, buf, null);
 }
 
 export function getAllValidMelds(handCards, rules) {
@@ -472,75 +671,100 @@ export const BuracoGame = {
   moves: {
     drawCard: ({ G, ctx }) => {
       if (G.hasDrawn) return 'INVALID_MOVE';
-      if (G.deck.length === 0 && G.pots.length > 0) G.deck = G.pots.shift(); 
-      if (G.deck.length > 0) { const card = G.deck.pop(); G.lastDrawnCard = card; G.hands[ctx.currentPlayer].push(card); G.hasDrawn = true; }
+      const pIdx = parseInt(ctx.currentPlayer);
+      if (G.deck.length === 0 && G.pots.length > 0) G.deck = G.pots.shift();
+      if (G.deck.length === 0) return 'INVALID_MOVE';
+      const card = G.deck.pop();
+      G.hands[ctx.currentPlayer].push(card);
+      G.hasDrawn = true;
+      G.lastDrawnCard = card;
     },
     pickUpDiscard: ({ G, ctx }, selectedHandIds = [], target = { type: 'new' }) => {
       if (G.hasDrawn || G.discardPile.length === 0) return 'INVALID_MOVE';
-      const hand = G.hands[ctx.currentPlayer]; const topCard = G.discardPile[G.discardPile.length - 1];
+      const pIdx = parseInt(ctx.currentPlayer);
+      const hand = G.hands[ctx.currentPlayer];
+      const topCard = G.discardPile[G.discardPile.length - 1];
+      const myTeam = G.teams[ctx.currentPlayer];
+      const t = pIdx % 2;
       if (G.rules.discard === 'closed' || G.rules.discard === true) {
-        let isValid = false; let parsedMeldObject = null;
-        if (target.type === 'new') { parsedMeldObject = buildMeld([...selectedHandIds, topCard], G.rules); if (parsedMeldObject) isValid = true; } 
-        else if (target.type === 'append') { parsedMeldObject = appendCardsToMeld(G.melds[target.player][target.index], [...selectedHandIds, topCard]); if (parsedMeldObject) isValid = true; }
-        if (!isValid) return 'INVALID_MOVE'; 
+        let parsedMeld = null;
+        if (target.type === 'new') { parsedMeld = buildMeld([...selectedHandIds, topCard], G.rules); }
+        else { parsedMeld = appendCardsToMeld(G.melds[target.player][target.index], [...selectedHandIds, topCard]); }
+        if (!parsedMeld) return 'INVALID_MOVE';
         const newHand = removeCards(hand, selectedHandIds);
-        let simMelds = [...G.melds[target.player || ctx.currentPlayer]];
-        if (target.type === 'new') simMelds.push(parsedMeldObject); else simMelds[target.index] = parsedMeldObject;
-        const teamHasClean = G.teamPlayers[G.teams[ctx.currentPlayer]].some(tp => (tp === (target.player||ctx.currentPlayer) ? simMelds : G.melds[tp]).some(m => getMeldLength(m) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m))));
-        if (newHand.length + G.discardPile.length - 1 < 2 && !teamHasClean && (!G.pots.length || G.teamMortos[G.teams[ctx.currentPlayer]])) return 'INVALID_MOVE';
+        const teamHasClean = G.teamPlayers[myTeam].some(tp => {
+          const m = tp === (target.player || ctx.currentPlayer) ?
+            (target.type === 'new' ? [...G.melds[tp], parsedMeld] : G.melds[tp].map((x,i) => i === target.index ? parsedMeld : x))
+            : G.melds[tp];
+          return m.some(x => getMeldLength(x) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(x)));
+        });
+        if (newHand.length + G.discardPile.length - 1 < 2 && !teamHasClean && (!G.pots.length || G.teamMortos[myTeam])) return 'INVALID_MOVE';
+        if (target.type === 'new') G.melds[ctx.currentPlayer].push(parsedMeld);
+        else G.melds[target.player][target.index] = parsedMeld;
+        G.discardPile.pop();
+        const rest = [...G.discardPile];
+        G.knownCards[ctx.currentPlayer].push(...rest);
+        newHand.push(...rest);
         G.hands[ctx.currentPlayer] = newHand;
-        if (target.type === 'new') G.melds[ctx.currentPlayer].push(parsedMeldObject); else G.melds[target.player][target.index] = parsedMeldObject;
-        G.discardPile.pop(); const pickedUp = [...G.discardPile]; G.knownCards[ctx.currentPlayer].push(...G.discardPile); G.hands[ctx.currentPlayer].push(...G.discardPile); G.discardPile = []; G.hasDrawn = true; G.lastDrawnCard = pickedUp;
-        if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
-        if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[G.teams[ctx.currentPlayer]]) { G.hands[ctx.currentPlayer] = G.pots.shift(); G.teamMortos[G.teams[ctx.currentPlayer]] = true; }
+        G.discardPile = [];
+        G.hasDrawn = true;
+        G.lastDrawnCard = rest;
+        if (G.teamMortos[myTeam]) G.mortoUsed[myTeam] = true;
+        if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[myTeam]) { G.hands[ctx.currentPlayer] = G.pots.shift(); G.teamMortos[myTeam] = true; }
       } else {
-        G.lastDrawnCard = null; const openPickedUp = [...G.discardPile]; G.knownCards[ctx.currentPlayer].push(...G.discardPile); G.hands[ctx.currentPlayer].push(...G.discardPile); G.discardPile = []; G.hasDrawn = true; G.lastDrawnCard = openPickedUp;
+        const all = [...G.discardPile];
+        G.knownCards[ctx.currentPlayer].push(...all);
+        G.hands[ctx.currentPlayer].push(...all);
+        G.discardPile = [];
+        G.hasDrawn = true;
+        G.lastDrawnCard = all;
       }
     },
     playMeld: ({ G, ctx }, cardIds) => {
-      if (!G.hasDrawn) return 'INVALID_MOVE'; 
+      if (!G.hasDrawn) return 'INVALID_MOVE';
       const hand = G.hands[ctx.currentPlayer];
-      const handCopy = [...hand];
-      for (const c of cardIds) { const i = handCopy.indexOf(c); if (i === -1) return 'INVALID_MOVE'; handCopy.splice(i, 1); }
       const parsed = buildMeld(cardIds, G.rules);
-      
-      if (parsed) {
-        const newHand = removeCards(hand, cardIds); const newMelds = [...G.melds[ctx.currentPlayer], parsed];
-        const teamHasClean = G.teamPlayers[G.teams[ctx.currentPlayer]].some(tp => (tp === ctx.currentPlayer ? newMelds : G.melds[tp]).some(m => getMeldLength(m) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m))));
-        if (newHand.length < 2 && !teamHasClean && (!G.pots.length || G.teamMortos[G.teams[ctx.currentPlayer]])) return 'INVALID_MOVE';
-        G.hands[ctx.currentPlayer] = newHand; G.melds[ctx.currentPlayer] = newMelds; G.knownCards[ctx.currentPlayer] = removeCards(G.knownCards[ctx.currentPlayer], cardIds); 
-        if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
-        if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[G.teams[ctx.currentPlayer]]) { G.hands[ctx.currentPlayer] = G.pots.shift(); G.teamMortos[G.teams[ctx.currentPlayer]] = true; }
-      } else return 'INVALID_MOVE';
+      if (!parsed) return 'INVALID_MOVE';
+      const newHand = removeCards(hand, cardIds);
+      const myTeam = G.teams[ctx.currentPlayer];
+      const newMelds = [...G.melds[ctx.currentPlayer], parsed];
+      const teamHasClean = G.teamPlayers[myTeam].some(tp => (tp === ctx.currentPlayer ? newMelds : G.melds[tp]).some(m => getMeldLength(m) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m))));
+      if (newHand.length < 2 && !teamHasClean && (!G.pots.length || G.teamMortos[myTeam])) return 'INVALID_MOVE';
+      G.hands[ctx.currentPlayer] = newHand;
+      G.melds[ctx.currentPlayer] = newMelds;
+      G.knownCards[ctx.currentPlayer] = removeCards(G.knownCards[ctx.currentPlayer], cardIds);
+      if (G.teamMortos[myTeam]) G.mortoUsed[myTeam] = true;
+      if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[myTeam]) { G.hands[ctx.currentPlayer] = G.pots.shift(); G.teamMortos[myTeam] = true; }
     },
     appendToMeld: ({ G, ctx }, meldOwner, meldIndex, cardIds) => {
       if (!G.hasDrawn || G.teams[ctx.currentPlayer] !== G.teams[meldOwner]) return 'INVALID_MOVE';
       const hand = G.hands[ctx.currentPlayer];
-      const handCopy = [...hand];
-      for (const c of cardIds) { const i = handCopy.indexOf(c); if (i === -1) return 'INVALID_MOVE'; handCopy.splice(i, 1); }
       const parsed = appendCardsToMeld(G.melds[meldOwner][meldIndex], cardIds);
-      
-      if (parsed) {
-        const newHand = removeCards(hand, cardIds); const newMeldState = [...G.melds[meldOwner]]; newMeldState[meldIndex] = parsed;
-        const teamHasClean = G.teamPlayers[G.teams[ctx.currentPlayer]].some(tp => (tp === meldOwner ? newMeldState : G.melds[tp]).some(m => getMeldLength(m) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m))));
-        if (newHand.length < 2 && !teamHasClean && (!G.pots.length || G.teamMortos[G.teams[ctx.currentPlayer]])) return 'INVALID_MOVE';
-        G.hands[ctx.currentPlayer] = newHand; G.melds[meldOwner] = newMeldState; G.knownCards[ctx.currentPlayer] = removeCards(G.knownCards[ctx.currentPlayer], cardIds); 
-        if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
-        if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[G.teams[ctx.currentPlayer]]) { G.hands[ctx.currentPlayer] = G.pots.shift(); G.teamMortos[G.teams[ctx.currentPlayer]] = true; }
-      } else return 'INVALID_MOVE';
+      if (!parsed) return 'INVALID_MOVE';
+      const newHand = removeCards(hand, cardIds);
+      const myTeam = G.teams[ctx.currentPlayer];
+      const newMeldState = [...G.melds[meldOwner]]; newMeldState[meldIndex] = parsed;
+      const teamHasClean = G.teamPlayers[myTeam].some(tp => (tp === meldOwner ? newMeldState : G.melds[tp]).some(m => getMeldLength(m) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m))));
+      if (newHand.length < 2 && !teamHasClean && (!G.pots.length || G.teamMortos[myTeam])) return 'INVALID_MOVE';
+      G.hands[ctx.currentPlayer] = newHand;
+      G.melds[meldOwner] = newMeldState;
+      G.knownCards[ctx.currentPlayer] = removeCards(G.knownCards[ctx.currentPlayer], cardIds);
+      if (G.teamMortos[myTeam]) G.mortoUsed[myTeam] = true;
+      if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[myTeam]) { G.hands[ctx.currentPlayer] = G.pots.shift(); G.teamMortos[myTeam] = true; }
     },
     discardCard: ({ G, ctx, events }, cardId) => {
-      if (!G.hasDrawn) return 'INVALID_MOVE'; 
+      if (!G.hasDrawn) return 'INVALID_MOVE';
       const hand = G.hands[ctx.currentPlayer];
-      const teamHasClean = G.teamPlayers[G.teams[ctx.currentPlayer]].some(tp => G.melds[tp].some(m => getMeldLength(m) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m))));
-      if (hand.length === 1 && !teamHasClean && (!G.pots.length || G.teamMortos[G.teams[ctx.currentPlayer]])) return 'INVALID_MOVE';
+      const myTeam = G.teams[ctx.currentPlayer];
+      const teamHasClean = G.teamPlayers[myTeam].some(tp => G.melds[tp].some(m => getMeldLength(m) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m))));
+      if (hand.length === 1 && !teamHasClean && (!G.pots.length || G.teamMortos[myTeam])) return 'INVALID_MOVE';
       const cardIndex = hand.indexOf(cardId);
-      if (cardIndex !== -1) {
-        G.discardPile.push(hand.splice(cardIndex, 1)[0]); G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => c !== cardId); 
-        if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
-        if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[G.teams[ctx.currentPlayer]]) { G.hands[ctx.currentPlayer] = G.pots.shift(); G.teamMortos[G.teams[ctx.currentPlayer]] = true; }
-        G.hasDrawn = false; G.lastDrawnCard = null; events.endTurn();
-      } else return 'INVALID_MOVE';
+      if (cardIndex === -1) return 'INVALID_MOVE';
+      G.discardPile.push(hand.splice(cardIndex, 1)[0]);
+      G.knownCards[ctx.currentPlayer] = G.knownCards[ctx.currentPlayer].filter(c => c !== cardId);
+      if (G.teamMortos[myTeam]) G.mortoUsed[myTeam] = true;
+      if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[myTeam]) { G.hands[ctx.currentPlayer] = G.pots.shift(); G.teamMortos[myTeam] = true; }
+      G.hasDrawn = false; G.lastDrawnCard = null; events.endTurn();
     },
     declareExhausted: ({ G }) => { G.isExhausted = true; }
   },
@@ -594,8 +818,7 @@ export const BuracoGame = {
                   if (seen.has(sig)) continue; seen.add(sig);
                   const resultMeld = buildMeld(combo, G.rules);
                   if (!resultMeld) continue;
-                  const wildSuit = combo.reduce((ws, c) => { const s=getSuit(c),r=getRank(c); return (s===5||r===2)?s:ws; }, 0);
-                  const sc = runPickupNet(stateBuf, encodeCandidate(0, resultMeld, wildSuit), dnaPickup);
+                  const sc = runPickupNet(stateBuf, encodeCandidate(0, resultMeld), dnaPickup);
                   if (sc > best) { best = sc; bestMove = { move: 'pickUpDiscard', args: [handUsed, { type: 'new' }] }; }
               }
           } else if (G.discardPile.length > 0 && G.rules.discard !== 'closed' && G.rules.discard !== true) {
@@ -617,8 +840,7 @@ export const BuracoGame = {
                   const newMeld = appendToMeld(meld, card);
                   if (!newMeld) continue;
                   const tmi = teamMelds.indexOf(meld) + 1;
-                  const wildSuit = (getSuit(card) === 5 || getRank(card) === 2) ? getSuit(card) : 0;
-                  candidateBuf[numCand] = encodeCandidate(tmi, newMeld, wildSuit);
+                  candidateBuf[numCand] = encodeCandidate(tmi, newMeld);
                   candMeta.push({ move: 'appendToMeld', args: [tp, mi, [card]], cards: [card] });
                   numCand++;
               }
@@ -628,8 +850,7 @@ export const BuracoGame = {
           if (numCand >= NN_MELD_CANDIDATES) break;
           const resultMeld = buildMeld(combo, G.rules);
           if (!resultMeld) continue;
-          const wildSuit = combo.reduce((ws, c) => { const s=getSuit(c),r=getRank(c); return (s===5||r===2)?s:ws; }, 0);
-          candidateBuf[numCand] = encodeCandidate(0, resultMeld, wildSuit);
+          candidateBuf[numCand] = encodeCandidate(0, resultMeld);
           candMeta.push({ move: 'playMeld', args: [combo], cards: combo });
           numCand++;
       }

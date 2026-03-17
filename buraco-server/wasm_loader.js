@@ -5,7 +5,7 @@ import { AI_CONFIG, NN_MELD_INPUT_INTS } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const MAX_INPUT_INTS = NN_MELD_INPUT_INTS; // 57 — largest input size across all nets
+const MAX_INPUT_INTS = NN_MELD_INPUT_INTS; // 67 — largest input size across all nets
 
 let wasmInstance = null;
 let memory = null;

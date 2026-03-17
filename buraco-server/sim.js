@@ -1,105 +1,25 @@
-// Training simulator — all NN infrastructure imported from game.js
+// Training simulator — all logic imported from game.js
 import {
-    AI_CONFIG, getSuit, getRank,
-    buildMeld, appendToMeld, getMeldLength, isMeldClean, calculateMeldPoints, getCardPoints, getAllValidMelds,
-    encodeMeld20, encodeCandidate, packCards108Into, packMelds15Into, forwardPass,
+    getSuit, getRank,
+    buildMeld, appendToMeld, getAllValidMelds, encodeCandidate,
     runMeldNet, runPickupNet, runDiscardNet,
-    NN_STATE_INTS, NN_MELD_CANDIDATES, NN_MELD_INPUT_INTS, NN_STATE_DNA, NN_MELD_DNA
+    NN_STATE_INTS, NN_MELD_CANDIDATES, NN_STATE_DNA, NN_MELD_DNA,
+    buildStateBuffer, simTeamHasClean, simMortoSafe,
+    execDraw, execPickupDiscard, execPlayMeld, execAppendToMeld, execDiscard,
+    calcSimFinalScores
 } from './game.js';
 
 export const SIM_DNA_SIZE = NN_STATE_DNA + NN_MELD_DNA + NN_STATE_DNA;
-
-function teamHasClean(melds0, melds1, rules) {
-    const check = m => getMeldLength(m) >= 7 && (!rules.cleanCanastaToWin || isMeldClean(m));
-    return melds0.some(check) || melds1.some(check);
-}
-
-function removeCard(hand, card) {
-    const i = hand.indexOf(card);
-    if (i === -1) return false;
-    hand.splice(i, 1);
-    return true;
-}
-
-// Build state buffer from sim's integer-indexed state object
-function buildStateBuffer(S, pIdx, buf, cache) {
-    const myTeam = pIdx % 2, oppTeam = 1 - myTeam;
-    const numP = S.numP;
-    const opp1 = (pIdx + 1) % numP;
-    const partner = numP === 4 ? (pIdx + 2) % numP : -1;
-    const opp2 = numP === 4 ? (pIdx + 3) % numP : -1;
-    const playerChanged = cache.lastP !== pIdx;
-
-    let meta = 0;
-    if (S.deck.length > 0) meta |= 1;
-    if (S.pots.length > 0) meta |= 2;
-    if (S.pots.length > 1) meta |= 4;
-    if (S.mortos[myTeam]) meta |= 8;
-    if (S.mortos[oppTeam]) meta |= 16;
-    if (teamHasClean(S.melds[myTeam*2]||[], numP===4?(S.melds[myTeam*2+2]||[]):[], S.rules)) meta |= 32;
-    if (teamHasClean(S.melds[oppTeam*2]||[], numP===4?(S.melds[oppTeam*2+2]||[]):[], S.rules)) meta |= 64;
-    meta |= (Math.min(15, S.hands[pIdx].length) << 7);
-    meta |= (Math.min(15, S.hands[opp1].length) << 11);
-    if (partner >= 0) meta |= (Math.min(15, S.hands[partner].length) << 15);
-    if (opp2 >= 0) meta |= (Math.min(15, S.hands[opp2].length) << 19);
-    buf[0] = meta;
-
-    if (cache.meldsDirty || playerChanged) {
-        const myMelds = numP === 4 ? [...(S.melds[myTeam*2]||[]), ...(S.melds[myTeam*2+2]||[])] : (S.melds[myTeam]||[]);
-        const oppMelds = numP === 4 ? [...(S.melds[oppTeam*2]||[]), ...(S.melds[oppTeam*2+2]||[])] : (S.melds[oppTeam]||[]);
-        packMelds15Into(buf, 1, myMelds);
-        packMelds15Into(buf, 11, oppMelds);
-    }
-    if (cache.discardDirty || playerChanged) packCards108Into(buf, 21, S.discard);
-    if (cache.handDirty[pIdx] || playerChanged) packCards108Into(buf, 25, S.hands[pIdx]);
-    if (playerChanged) {
-        packCards108Into(buf, 29, S.hands[opp1]);
-        if (partner >= 0) packCards108Into(buf, 33, S.hands[partner]); else buf[33]=buf[34]=buf[35]=buf[36]=0;
-        if (opp2 >= 0) packCards108Into(buf, 37, S.hands[opp2]); else buf[37]=buf[38]=buf[39]=buf[40]=0;
-    }
-
-    cache.meldsDirty = false;
-    cache.discardDirty = false;
-    cache.handDirty[pIdx] = 0;
-    cache.lastP = pIdx;
-}
-
-function getValidMeldsWithCard(hand, topCard, rules) {
-    const result = [];
-    for (const combo of getAllValidMelds([...hand, topCard], rules)) {
-        if (!combo.includes(topCard)) continue;
-        const handUsed = combo.filter(c => c !== topCard);
-        const counts = {};
-        for (const c of hand) counts[c] = (counts[c]||0) + 1;
-        let ok = true;
-        for (const c of handUsed) { if (!counts[c]) { ok=false; break; } counts[c]--; }
-        if (ok) result.push([combo, handUsed]);
-    }
-    return result;
-}
-
-function calcFinalScore(S, rules) {
-    let s = [0, 0];
-    for (let t = 0; t < 2; t++) {
-        const players = S.numP === 4 ? [t, t + 2] : [t];
-        for (const p of players) {
-            for (const m of S.melds[p]) s[t] += calculateMeldPoints(m, rules);
-            for (const c of S.hands[p]) s[t] -= getCardPoints(c);
-        }
-        if (!S.mortos[t]) s[t] -= 100;
-    }
-    return s;
-}
 
 export function simMatch(dnas, rules, deck) {
     const numP = rules.numP || rules.numPlayers || 4;
     const S = {
         numP, rules,
         deck: deck.slice(), discard: [], pots: [],
-        hands: Array.from({length: numP}, () => []),
-        melds: Array.from({length: numP}, () => []),
+        hands: Array.from({ length: numP }, () => []),
+        melds: Array.from({ length: numP }, () => []),
         mortos: [false, false], mortoUsed: [false, false],
-        hasDrawn: false,
+        hasDrawn: false, lastDrawnCard: null,
     };
 
     S.pots.push(S.deck.splice(0, 11), S.deck.splice(0, 11));
@@ -109,9 +29,6 @@ export function simMatch(dnas, rules, deck) {
     const stateBuf = new Uint32Array(NN_STATE_INTS);
     const cache = { meldsDirty: true, discardDirty: true, handDirty: new Uint8Array(numP).fill(1), lastP: -1 };
     const candidateBuf = new Uint32Array(NN_MELD_CANDIDATES);
-
-    const dnaPickupEnd = NN_STATE_DNA;
-    const dnaMeldEnd = NN_STATE_DNA + NN_MELD_DNA;
 
     let p = 0, moveCount = 0;
     while (moveCount < 2000) {
@@ -123,52 +40,42 @@ export function simMatch(dnas, rules, deck) {
             if (S.deck.length === 0 && S.pots.length === 0) break;
             buildStateBuffer(S, p, stateBuf, cache);
 
-            let bestScore = runPickupNet(stateBuf, 0, dna.subarray(0, dnaPickupEnd));
-            let pickDiscard = false, pickDiscardCards = null;
+            let bestScore = runPickupNet(stateBuf, 0, dna.subarray(0, NN_STATE_DNA));
+            let pickDiscardCards = null;
 
-            if (S.discard.length > 0) {
+            if (S.discard.length > 0 && (rules.discard === 'closed' || rules.discard === true)) {
                 const top = S.discard[S.discard.length - 1];
-                for (const [combo, handUsed] of getValidMeldsWithCard(hand, top, rules)) {
+                for (const combo of getAllValidMelds([...hand, top], rules)) {
+                    if (!combo.includes(top)) continue;
+                    const handUsed = combo.filter(c => c !== top);
                     const resultMeld = buildMeld(combo, rules);
                     if (!resultMeld) continue;
-                    const wildSuit = combo.reduce((ws, c) => { const s=getSuit(c),r=getRank(c); return (s===5||r===2)?s:ws; }, 0);
-                    const sc = runPickupNet(stateBuf, encodeCandidate(0, resultMeld, wildSuit), dna.subarray(0, dnaPickupEnd));
-                    if (sc > bestScore) { bestScore = sc; pickDiscard = true; pickDiscardCards = handUsed; }
+                    const sc = runPickupNet(stateBuf, encodeCandidate(0, resultMeld), dna.subarray(0, NN_STATE_DNA));
+                    if (sc > bestScore) { bestScore = sc; pickDiscardCards = handUsed; }
                 }
             }
 
-            if (pickDiscard && pickDiscardCards !== null) {
-                const top = S.discard.pop();
-                const meld = buildMeld([...pickDiscardCards, top], rules);
-                if (meld) {
-                    for (const c of pickDiscardCards) removeCard(hand, c);
-                    S.melds[p].push(meld);
-                    hand.push(...S.discard);
-                    S.discard = [];
-                    S.hasDrawn = true;
-                    cache.meldsDirty = true; cache.discardDirty = true; cache.handDirty[p] = 1;
-                    if (S.mortos[myTeam]) S.mortoUsed[myTeam] = true;
-                    if (hand.length === 0 && S.pots.length > 0 && !S.mortos[myTeam]) { S.hands[p] = S.pots.shift(); S.mortos[myTeam] = true; }
-                } else { S.discard.push(top); }
-            }
-            if (!S.hasDrawn) {
-                if (S.deck.length === 0 && S.pots.length > 0) S.deck = S.pots.shift();
-                if (S.deck.length > 0) { hand.push(S.deck.pop()); S.hasDrawn = true; cache.handDirty[p] = 1; }
-                else break;
+            if (pickDiscardCards !== null) {
+                execPickupDiscard(S, p, pickDiscardCards, { type: 'new' });
+                cache.meldsDirty = true; cache.discardDirty = true; cache.handDirty[p] = 1;
+            } else if (rules.discard !== 'closed' && rules.discard !== true && S.discard.length > 0) {
+                execPickupDiscard(S, p, [], { type: 'new' });
+                cache.discardDirty = true; cache.handDirty[p] = 1;
+            } else {
+                execDraw(S, p);
+                cache.handDirty[p] = 1;
             }
             moveCount++;
             continue;
         }
 
         buildStateBuffer(S, p, stateBuf, cache);
-        const myTeamClean = teamHasClean(S.melds[myTeam*2]||[], numP===4?(S.melds[myTeam*2+2]||[]):[], rules);
-        const mortoSafe = myTeamClean || (!S.mortos[myTeam] && S.pots.length > 0);
-        const myMeldOwners = numP === 4 ? [p, (p+2)%4] : [p];
+        const mortoSafe = simMortoSafe(S, p);
+        const myMeldOwners = numP === 4 ? [p, (p + 2) % 4] : [p];
+        const teamMelds = myMeldOwners.flatMap(o => S.melds[o]);
 
         const candMeta = [];
         let numCand = 0;
-        const teamMelds = [];
-        for (const owner of myMeldOwners) for (const m of S.melds[owner]) teamMelds.push(m);
 
         for (const owner of myMeldOwners) {
             for (let mi = 0; mi < S.melds[owner].length && numCand < NN_MELD_CANDIDATES; mi++) {
@@ -177,9 +84,8 @@ export function simMatch(dnas, rules, deck) {
                     const newMeld = appendToMeld(S.melds[owner][mi], card);
                     if (!newMeld) continue;
                     const tmi = teamMelds.indexOf(S.melds[owner][mi]) + 1;
-                    const wildSuit = (getSuit(card) === 5 || getRank(card) === 2) ? getSuit(card) : 0;
-                    candidateBuf[numCand] = encodeCandidate(tmi, newMeld, wildSuit);
-                    candMeta.push({ type: 'append', owner, mi, card });
+                    candidateBuf[numCand] = encodeCandidate(tmi, newMeld);
+                    candMeta.push({ type: 'append', owner, mi, cards: [card] });
                     numCand++;
                 }
             }
@@ -188,50 +94,36 @@ export function simMatch(dnas, rules, deck) {
             if (numCand >= NN_MELD_CANDIDATES) break;
             const resultMeld = buildMeld(combo, rules);
             if (!resultMeld) continue;
-            const wildSuit = combo.reduce((ws, c) => { const s=getSuit(c),r=getRank(c); return (s===5||r===2)?s:ws; }, 0);
-            candidateBuf[numCand] = encodeCandidate(0, resultMeld, wildSuit);
-            candMeta.push({ type: 'meld', owner: p, mi: -1, card: -1, combo });
+            candidateBuf[numCand] = encodeCandidate(0, resultMeld);
+            candMeta.push({ type: 'meld', owner: p, mi: -1, cards: combo });
             numCand++;
         }
 
         if (numCand > 0) {
-            const bitmask = runMeldNet(stateBuf, candidateBuf, numCand, dna.subarray(dnaPickupEnd, dnaMeldEnd));
+            const bitmask = runMeldNet(stateBuf, candidateBuf, numCand, dna.subarray(NN_STATE_DNA, NN_STATE_DNA + NN_MELD_DNA));
             const usedCards = new Set();
             for (let i = 0; i < numCand; i++) {
                 if (!(bitmask & (1 << i))) continue;
                 const mv = candMeta[i];
-                const cards = mv.type === 'append' ? [mv.card] : mv.combo;
-                if (cards.some(c => usedCards.has(c))) continue;
-                if (hand.length - usedCards.size - cards.length < 2 && !mortoSafe) continue;
-                if (mv.type === 'append') {
-                    const newMeld = appendToMeld(S.melds[mv.owner][mv.mi], mv.card);
-                    if (newMeld) { S.melds[mv.owner][mv.mi] = newMeld; removeCard(hand, mv.card); usedCards.add(mv.card); cache.meldsDirty = true; cache.handDirty[p] = 1; }
-                } else {
-                    const meld = buildMeld(mv.combo, rules);
-                    if (meld) {
-                        for (const c of mv.combo) { removeCard(hand, c); usedCards.add(c); }
-                        S.melds[p].push(meld); cache.meldsDirty = true; cache.handDirty[p] = 1;
-                        if (S.mortos[myTeam]) S.mortoUsed[myTeam] = true;
-                        if (hand.length === 0 && S.pots.length > 0 && !S.mortos[myTeam]) { S.hands[p] = S.pots.shift(); S.mortos[myTeam] = true; }
-                    }
-                }
+                if (mv.cards.some(c => usedCards.has(c))) continue;
+                if (hand.length - usedCards.size - mv.cards.length < 2 && !mortoSafe) continue;
+                let ok;
+                if (mv.type === 'append') ok = execAppendToMeld(S, p, mv.owner, mv.mi, mv.cards);
+                else ok = execPlayMeld(S, p, mv.cards);
+                if (ok) { mv.cards.forEach(c => usedCards.add(c)); cache.meldsDirty = true; cache.handDirty[p] = 1; }
             }
         }
 
         if (hand.length > 0) {
             buildStateBuffer(S, p, stateBuf, cache);
-            const idx = runDiscardNet(stateBuf, dna.subarray(dnaMeldEnd)) % hand.length;
-            const discard = hand[idx];
-            removeCard(hand, discard);
-            S.discard.push(discard);
+            const idx = runDiscardNet(stateBuf, dna.subarray(NN_STATE_DNA + NN_MELD_DNA)) % hand.length;
+            execDiscard(S, p, hand[idx]);
             cache.discardDirty = true; cache.handDirty[p] = 1;
-            if (S.mortos[myTeam]) S.mortoUsed[myTeam] = true;
-            if (hand.length === 0 && S.pots.length > 0 && !S.mortos[myTeam]) { S.hands[p] = S.pots.shift(); S.mortos[myTeam] = true; }
         }
 
         if (hand.length === 0 && (S.mortos[myTeam] || S.pots.length === 0)) {
-            if (teamHasClean(S.melds[myTeam*2]||[], numP===4?(S.melds[myTeam*2+2]||[]):[], rules)) {
-                const sc = calcFinalScore(S, rules);
+            if (simTeamHasClean(S.melds, p, numP, rules)) {
+                const sc = calcSimFinalScores(S);
                 sc[myTeam] += 100;
                 return sc[0] - sc[1];
             }
@@ -242,6 +134,6 @@ export function simMatch(dnas, rules, deck) {
         moveCount++;
     }
 
-    const sc = calcFinalScore(S, rules);
+    const sc = calcSimFinalScores(S);
     return sc[0] - sc[1];
 }
