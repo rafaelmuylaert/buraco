@@ -52,10 +52,12 @@ function runMatch(genomes, rules, fixedDeck) {
         let moveCount = 0;
         while (!ctx.gameover && moveCount < 2000) {
             const p = ctx.currentPlayer;
-            const prevState = JSON.stringify(G);
-            
+            const handSizeBefore = G.hands[p]?.length ?? 0;
+            const meldCountBefore = G.melds[p]?.length ?? 0;
+            const hasDrawnBefore = G.hasDrawn;
+
             const moves = BuracoGame.ai.enumerate(G, ctx);
-            
+
             if (!moves || moves.length === 0) {
                 if (G.hasDrawn && G.hands[p]?.length > 0) {
                     applyMove(G, ctx, 'discardCard', [G.hands[p][0]]);
@@ -73,8 +75,12 @@ function runMatch(genomes, rules, fixedDeck) {
                     }
                     if (ctx._endTurn) break;
                 }
-                
-                if (stuck || prevState === JSON.stringify(G)) {
+
+                const stateChanged = G.hasDrawn !== hasDrawnBefore
+                    || (G.hands[p]?.length ?? 0) !== handSizeBefore
+                    || (G.melds[p]?.length ?? 0) !== meldCountBefore;
+
+                if (stuck || !stateChanged) {
                     if (G.hasDrawn && G.hands[p]?.length > 0) {
                         applyMove(G, ctx, 'discardCard', [G.hands[p][0]]);
                         if (!ctx._endTurn) ctx._endTurn = true;

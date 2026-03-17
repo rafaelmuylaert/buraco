@@ -61,7 +61,8 @@ class WorkerPool {
             const w = new Worker(path, { workerData: { matches: [], rules: {} } });
             w.idle = true;
             w.on('message', (results) => {
-                const { resolve, size: batchSize, offset, allResults, remaining, onDone } = w.currentJob;
+                if (!w.currentJob) return; // shuffleDeck ack or stray message
+                const { offset, allResults, remaining, onDone } = w.currentJob;
                 results.forEach((r, i) => allResults[offset + i] = r);
                 remaining.count--;
                 w.idle = true;
