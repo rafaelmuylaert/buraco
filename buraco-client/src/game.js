@@ -644,17 +644,17 @@ export const BuracoGame = {
       }
 
       // ── DISCARD ───────────────────────────────────────────────────────────
-      if (myHandCards.length > 1 || mortoSafe) {
+      if (myHandCards.length > 0) {
           const scores = nnHelpers.evaluateDiscard(meta, myTeamMelds, oppTeamMelds, discardBits, myHandBits, opp1Bits, opp2Bits, opp3Bits, dnaDiscard);
           let bestCard = null, bestScore = -1;
+          // Prefer cards that don't violate the 1-card rule, fall back to any card
           for (const card of myHandCards) {
+              if (myHandCards.length === 1 && !mortoSafe) continue;
               const cls = card >= 104 ? 52 : card % 52;
               if (scores[cls] > bestScore) { bestScore = scores[cls]; bestCard = card; }
           }
-          if (bestCard !== null) return [{ move: 'discardCard', args: [bestCard] }];
-          let worst = myHandCards[0], wVal = -1;
-          for (const card of myHandCards) { const v = getCardPoints(card); if (v > wVal) { wVal = v; worst = card; } }
-          return [{ move: 'discardCard', args: [worst] }];
+          if (bestCard === null) bestCard = myHandCards[0]; // force discard if stuck
+          return [{ move: 'discardCard', args: [bestCard] }];
       }
 
       return [];

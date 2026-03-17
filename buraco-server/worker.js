@@ -112,11 +112,11 @@ function moveAppendToMeld(S, p, meldOwner, meldIndex, cardIds) {
     return result !== 'INVALID_MOVE';
 }
 
-function moveDiscardCard(S, p, cardId) {
+function moveDiscardCard(S, p, cardId, force = false) {
     if (!S.hasDrawn) return false;
     const hand = S.hands[p];
     const team = S.teams[p];
-    if (hand.length === 1 && !mortoSafe(S, team)) return false;
+    if (!force && hand.length === 1 && !mortoSafe(S, team)) return false;
     const idx = hand.indexOf(cardId);
     if (idx === -1) return false;
     S.discardPile.push(hand.splice(idx, 1)[0]);
@@ -197,9 +197,9 @@ function runMatch(genomes, rules, fixedDeck) {
             const moves = BuracoGame.ai.enumerate(S, ctx);
 
             if (!moves || moves.length === 0) {
-                // Fallback
+                // Fallback (force=true to bypass morto-safe guard)
                 if (S.hasDrawn && S.hands[p]?.length > 0) {
-                    moveDiscardCard(S, p, S.hands[p][0]);
+                    moveDiscardCard(S, p, S.hands[p][0], true);
                 } else if (!S.hasDrawn) {
                     moveDrawCard(S, p);
                 }
@@ -220,7 +220,8 @@ function runMatch(genomes, rules, fixedDeck) {
                     } else if (move.move === 'appendToMeld') {
                         ok = moveAppendToMeld(S, p, move.args[0], move.args[1], move.args[2]);
                     } else if (move.move === 'discardCard') {
-                        ok = moveDiscardCard(S, p, move.args[0]);
+                        // force=true: enumerate already validated the discard choice
+                        ok = moveDiscardCard(S, p, move.args[0], true);
                         if (ok) { endedTurn = true; break; }
                     } else if (move.move === 'declareExhausted') {
                         S.isExhausted = true; endedTurn = true; break;
@@ -230,9 +231,9 @@ function runMatch(genomes, rules, fixedDeck) {
                 }
 
                 if (!endedTurn) {
-                    // No discard happened — force one
+                    // No discard happened — force one (bypass morto-safe guard)
                     if (S.hasDrawn && S.hands[p]?.length > 0) {
-                        moveDiscardCard(S, p, S.hands[p][0]);
+                        moveDiscardCard(S, p, S.hands[p][0], true);
                     }
                     ctx.currentPlayer = String((parseInt(p) + 1) % numPlayers);
                     S.hasDrawn = false;
