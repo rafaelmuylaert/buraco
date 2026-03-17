@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 // Inlined dependencies from game.js to resolve preview environment import errors
-const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
+const suitValues = { '♠': 1, '♥': 2, '♣': 3, '♦': 4, '★': 5 };
 const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
 const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15]; // Pre-mapped points for slots 2-15
 

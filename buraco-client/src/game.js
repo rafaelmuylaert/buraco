@@ -1,10 +1,6 @@
 // Cards: 0-51 = normal (two copies each), 54 = Joker (two copies). Card 53 unused.
 export const getSuit = c => c >= 104 ? 5 : Math.floor((c % 52) / 13) + 1; // 1:♠, 2:♥, 3:♦, 4:♣, 5:★
 export const getRank = c => c >= 104 ? 2 : (c % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:K
-
-export const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
-export const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
-
 export const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15]; 
 
 // 🚀 CENTRALIZED AI ARCHITECTURE CONFIGURATION
@@ -27,13 +23,6 @@ export const NN_STATE_DNA = NN_STATE_INTS      * NN_HIDDEN + Math.ceil(NN_HIDDEN
 // DNA layout: [0, NN_STATE_DNA) = pickup, [NN_STATE_DNA, +NN_MELD_DNA) = meld, rest = discard
 export const NN_DNA_SIZE = NN_STATE_DNA + NN_MELD_DNA + NN_STATE_DNA;
 
-export function sortCards(cards) {
-  const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
-  return [...cards].sort((a, b) => {
-    if (suitValues[a.suit] !== suitValues[b.suit]) return suitValues[a.suit] - suitValues[b.suit];
-    return sortVals[a.rank] - sortVals[b.rank];
-  });
-}
 
 // Meld array layout (32 elements, all binary 0/1):
 // [0]      : isRunner (0=sequence, 1=runner)
