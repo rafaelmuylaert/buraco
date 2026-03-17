@@ -263,6 +263,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
 
   const rawHandObj = Object.values(G.hands[playerID] || []).map((c, i) => ({ ...intToCardObj(c), uid: `${c}_${i}` }));
   const sortedHandObj = sortCards(rawHandObj);
+  const newlyDrawnUid = (() => { const found = sortedHandObj.find(c => c.id === G.lastDrawnCard); return found?.uid ?? null; })();
   const topDiscard = G.discardPile.length > 0 ? intToCardObj(G.discardPile[G.discardPile.length - 1]) : null;
   
   const myTeam = G.teams[playerID];
@@ -342,7 +343,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
       <div style={{ background: isMyTeam ? 'rgba(77, 166, 255, 0.1)' : 'rgba(255, 77, 77, 0.1)', padding: '15px', borderRadius: '10px', minHeight: '120px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <h3 style={{ margin: 0, color: isMyTeam ? '#4da6ff' : '#ff4d4d' }}>{title}</h3>
-          <span style={{ background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: '20px', fontWeight: 'bold', color: '#ffd700' }}>Pontos da Mesa: {calcTeamTablePoints(teamPlayers)}</span>
+          <span style={{ background: 'rgba(0,0,0,0.5)', padding: '5px 10px', borderRadius: '20px', fontWeight: 'bold', color: '#ffd700', flexShrink: 0, whiteSpace: 'nowrap', fontSize: '0.85em' }}>⭐ {calcTeamTablePoints(teamPlayers)} pts</span>
         </div>
         {/* Runners float left; sequences wrap and fill space beside AND below (issue 4) */}
         <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
@@ -409,7 +410,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
             {G.discardPile.length > 0 ? (
               G.rules?.openDiscardView ? (
                 chunkedDiscard.map((row, rIdx) => (
-                  <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-65px' : '0' }}>
+                  <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-44px' : '0' }}>
                     {row.map((c, i) => <Card key={c.id} card={c} customStyle={{ marginLeft: i > 0 ? '-40px' : '0' }} />)}
                   </div>
                 ))
@@ -504,7 +505,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
         <div style={{ flexShrink: 0 }}>
           <h2 style={{ fontSize: '1.2em', margin: '0 0 10px 0' }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-            {sortedHandObj.map(card => <Card key={card.uid} card={card} isSelected={selectedCards.includes(card.uid)} isNewlyDrawn={card.id === G.lastDrawnCard} onClick={() => toggleCardSelection(card.uid)} />)}
+            {sortedHandObj.map(card => <Card key={card.uid} card={card} isSelected={selectedCards.includes(card.uid)} isNewlyDrawn={card.uid === newlyDrawnUid} onClick={() => toggleCardSelection(card.uid)} />)}
           </div>
         </div>
       </div>

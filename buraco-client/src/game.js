@@ -83,10 +83,12 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
 
     for (let c of aces) {
         if (getSuit(c) !== suit) return null;
-        if (m[14] === 1 && m[15] === 0) m[15] = 1; 
+        // Try high-A first (slot 15) if K is present, otherwise try low-A (slot 2)
+        const kPresent = m[14] === 1;
+        if (kPresent && m[15] === 0) m[15] = 1;
         else if (m[2] === 0) m[2] = 1;
         else if (m[15] === 0) m[15] = 1;
-        else return null; 
+        else return null;
     }
 
     m[1] = wildSuit;
@@ -103,18 +105,25 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
     let gaps = checkGaps(m);
 
     if (gaps > 0) {
+        // Try moving low-A to high-A position
         if (m[2] === 1 && m[15] === 0) {
             m[2] = 0; m[15] = 1;
             let newGaps = checkGaps(m);
             if (newGaps < gaps) gaps = newGaps;
-            else { m[2] = 1; m[15] = 0; } 
+            else { m[2] = 1; m[15] = 0; }
         }
-        
+        // Try moving high-A to low-A position
+        if (gaps > 0 && m[15] === 1 && m[2] === 0) {
+            m[15] = 0; m[2] = 1;
+            let newGaps = checkGaps(m);
+            if (newGaps < gaps) gaps = newGaps;
+            else { m[15] = 1; m[2] = 0; }
+        }
         if (gaps > 0 && m[3] === 1 && m[1] === 0) {
             m[3] = 0; m[1] = suit;
             let newGaps = checkGaps(m);
             if (newGaps <= 1) gaps = newGaps;
-            else { m[3] = 1; m[1] = 0; } 
+            else { m[3] = 1; m[1] = 0; }
         }
     }
 
@@ -159,21 +168,23 @@ function cardsToRunnerSlots(cardIds, existingMeld = null) {
     return m;
 }
 
+function isRunnerAllowed(rules, rank) {
+    const r = rules.runners;
+    if (!r || r === 'none' || (Array.isArray(r) && r.length === 0)) return false;
+    if (r === 'any' || (Array.isArray(r) && r.includes(0))) return true;
+    if (Array.isArray(r)) return r.includes(rank);
+    if (r === 'aces_threes') return rank === 1 || rank === 3;
+    if (r === 'aces_kings') return rank === 1 || rank === 13;
+    return false;
+}
+
 function buildMeld(cardIds, rules) {
     if (cardIds.length < 3) return null;
     let seq = cardsToSeqSlots(cardIds);
     if (seq) return seq;
     
-    if (rules.runners !== 'none') {
-        let run = cardsToRunnerSlots(cardIds);
-        if (run) {
-            let r = run[2];
-            let allowed = rules.runners === 'any' || 
-                          (rules.runners === 'aces_threes' && (r === 1 || r === 3)) ||
-                          (rules.runners === 'aces_kings' && (r === 1 || r === 13));
-            if (allowed) return run;
-        }
-    }
+    let run = cardsToRunnerSlots(cardIds);
+    if (run && isRunnerAllowed(rules, run[2])) return run;
     return null;
 }
 
@@ -388,7 +399,7 @@ function getAllValidMelds(handCards, rules) {
         }
     }
 
-    if (rules.runners !== 'none') {
+    if (rules.runners !== 'none' && !(Array.isArray(rules.runners) && rules.runners.length === 0)) {
         for (let r in natsByRank) {
             let combo = natsByRank[r];
             if (combo.length >= 3) tryCombo(combo);
@@ -427,7 +438,7 @@ export const BuracoGame = {
     pickUpDiscard: ({ G, ctx }, selectedHandIds = [], target = { type: 'new' }) => {
       if (G.hasDrawn || G.discardPile.length === 0) return 'INVALID_MOVE';
       const hand = G.hands[ctx.currentPlayer]; const topCard = G.discardPile[G.discardPile.length - 1];
-      if (G.rules.discard === 'closed') {
+      if (G.rules.discard === 'closed' || G.rules.discard === true) {
         let isValid = false; let parsedMeldObject = null;
         if (target.type === 'new') { parsedMeldObject = buildMeld([...selectedHandIds, topCard], G.rules); if (parsedMeldObject) isValid = true; } 
         else if (target.type === 'append') { parsedMeldObject = appendCardsToMeld(G.melds[target.player][target.index], [...selectedHandIds, topCard]); if (parsedMeldObject) isValid = true; }
