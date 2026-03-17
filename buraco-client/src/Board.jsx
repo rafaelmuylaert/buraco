@@ -275,7 +275,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
 
   const chunkedDiscard = [];
   if (G.discardPile && G.discardPile.length > 0) {
-    for (let i = 0; i < G.discardPile.length; i += 7) chunkedDiscard.push(G.discardPile.slice(i, i + 7).map(intToCardObj));
+    for (let i = 0; i < G.discardPile.length; i += 9) chunkedDiscard.push(G.discardPile.slice(i, i + 9).map(intToCardObj));
   }
 
   const calcTeamTablePoints = (teamPlayers) => {
@@ -287,7 +287,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
   const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
   const toggleCardSelection = (cardId) => setSelectedCards(prev => prev.includes(cardId) ? prev.filter(id => id !== cardId) : [...prev, cardId]);
 
-  const selectedCardIds = () => selectedCards.map(uid => sortedHandObj.find(c => c.uid === uid)?.id).filter(Boolean);
+  const selectedCardIds = () => selectedCards.map(uid => sortedHandObj.find(c => c.uid === uid)?.id).filter(id => id !== undefined && id !== null);
 
   const handleDiscardPileClick = () => {
     if (!isMyTurn) return; 
@@ -413,7 +413,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
             {G.discardPile.length > 0 ? (
               G.rules?.openDiscardView ? (
                 chunkedDiscard.map((row, rIdx) => (
-                  <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-38px' : '0' }}>
+                  <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-36px' : '0' }}>
                     {row.map((c, i) => <Card key={c.id} card={c} customStyle={{ marginLeft: i > 0 ? '-37px' : '0' }} />)}
                   </div>
                 ))
