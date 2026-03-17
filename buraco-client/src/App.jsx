@@ -6,14 +6,25 @@ import { io } from 'socket.io-client';
 import { BuracoGame } from './game.js';
 import { BuracoBoard } from './Board.jsx';
 
-const IS_PROXIED = !['8000','5173'].includes(window.location.port);
-const API_ADDRESS = IS_PROXIED
-  ? `${window.location.origin}/buraco`
-  : `${window.location.protocol}//${window.location.hostname}:8000`;
-const lobbyClient = new LobbyClient({ server: API_ADDRESS });
+const { port, hostname, protocol, origin } = window.location;
+const IS_DIRECT = ['8000','5173'].includes(port);
+const IS_SUBDOMAIN = !IS_DIRECT && hostname.startsWith('buraco.');
+const BASE_DOMAIN = IS_SUBDOMAIN ? hostname.replace('buraco.', '') : null;
 
-const SOCKET_SERVER = IS_PROXIED ? window.location.origin : `${window.location.protocol}//${window.location.hostname}:8000`;
-const SOCKET_PATH = IS_PROXIED ? '/buraco/socket.io' : '/socket.io';
+const API_ADDRESS = IS_DIRECT
+  ? `${protocol}//${hostname}:8000`
+  : IS_SUBDOMAIN
+    ? `${protocol}//buracoapi.${BASE_DOMAIN}`
+    : `${origin}/buraco`;
+
+const SOCKET_SERVER = IS_DIRECT
+  ? `${protocol}//${hostname}:8000`
+  : IS_SUBDOMAIN
+    ? `${protocol}//buracoapi.${BASE_DOMAIN}`
+    : origin;
+const SOCKET_PATH = (IS_DIRECT || IS_SUBDOMAIN) ? '/socket.io' : '/buraco/socket.io';
+
+const lobbyClient = new LobbyClient({ server: API_ADDRESS });
 
 const BuracoClient = Client({ 
   game: BuracoGame, 
@@ -102,10 +113,10 @@ const App = () => {
     if (view === 'admin') {
       const fetchStatus = async () => {
         try {
-          const res = await fetch(`${window.location.origin}/buraco/api/bots/status`);
+          const res = await fetch(`${API_ADDRESS}/api/bots/status`);
           const data = await res.json();
           setTrainingStatus(data.length > 0 ? { isTraining: true, sessions: data } : { isTraining: false, sessions: [] });
-          const infoRes = await fetch(`${window.location.origin}/buraco/api/bots/info`);
+          const infoRes = await fetch(`${API_ADDRESS}/api/bots/info`);
           setBotInfoList(await infoRes.json());
         } catch (err) {}
       };
@@ -116,11 +127,11 @@ const App = () => {
   }, [view]);
 
   useEffect(() => {
-    fetch(`${window.location.origin}/buraco/api/bots/list`)
+    fetch(`${API_ADDRESS}/api/bots/list`)
       .then(res => res.json())
       .then(data => setAvailableBots(data.filter(b => !/_\d+$/.test(b))))
       .catch(err => console.error("Error fetching bots:", err));
-    fetch(`${window.location.origin}/buraco/api/bots/info`)
+    fetch(`${API_ADDRESS}/api/bots/info`)
       .then(res => res.json())
       .then(data => setBotInfoList(data))
       .catch(() => {});
@@ -129,7 +140,7 @@ const App = () => {
   const handleStartTraining = async () => {
     if (!trainBotConfig.name.trim()) return alert("Digite um nome para o bot!");
     try {
-      const res = await fetch(`${window.location.origin}/buraco/api/bots/train`, {
+      const res = await fetch(`${API_ADDRESS}/api/bots/train`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -654,7 +665,7 @@ const App = () => {
                   </div>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button onClick={() => { setTrainBotIsNew(false); setTrainBotConfig(prev => ({ ...prev, name: bot.name, ...(bot.meta?.trainParams || {}), rules: bot.meta?.rules || prev.rules })); setShowTrainBotPopup(true); }} style={{ background: '#8a2be2', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>▶ Treinar</button>
-                    <button onClick={async () => { if (!confirm(`Apagar bot "${bot.name}"?`)) return; await fetch(`${window.location.origin}/buraco/api/bots/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botName: bot.name }) }); setBotInfoList(prev => prev.filter(b => b.name !== bot.name)); setAvailableBots(prev => prev.filter(b => b !== bot.name)); }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Apagar</button>
+                    <button onClick={async () => { if (!confirm(`Apagar bot "${bot.name}"?`)) return; await fetch(`${API_ADDRESS}/api/bots/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botName: bot.name }) }); setBotInfoList(prev => prev.filter(b => b.name !== bot.name)); setAvailableBots(prev => prev.filter(b => b !== bot.name)); }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Apagar</button>
                   </div>
                 </div>
               ))}
