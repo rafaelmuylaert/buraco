@@ -6,7 +6,7 @@ import { io } from 'socket.io-client';
 import { BuracoGame } from './game.js';
 import { BuracoBoard } from './Board.jsx';
 
-const IS_PROXIED = window.location.pathname.startsWith('/buraco');
+const IS_PROXIED = !['8000','5173'].includes(window.location.port);
 const API_ADDRESS = IS_PROXIED
   ? `${window.location.origin}/buraco`
   : `${window.location.protocol}//${window.location.hostname}:8000`;

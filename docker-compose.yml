@@ -15,7 +15,7 @@ services:
     develop:
       watch:
         - action: rebuild
-          path: ./buraco-server/package.json 
+          path: ./buraco-server/package.json
         - action: sync+restart
           path: ./buraco-server
           target: /app
@@ -23,7 +23,6 @@ services:
             - node_modules/
             - db/
             - bots/
-        # NEW: Watch the shared game file!
         - action: sync+restart
           path: ./buraco-client/src/game.js
           target: /app/game.js
@@ -32,7 +31,7 @@ services:
     build: ./buraco-client
     container_name: buraco-client
     ports:
-      - "4173:5173"
+      - "5173:5173"
     depends_on:
       - buraco-server
     restart: unless-stopped
@@ -51,7 +50,7 @@ services:
       context: .
       dockerfile: buraco-server/Dockerfile
     container_name: buraco-bot
-    command: ["node", "bot.js"] 
+    command: ["node", "bot.js"]
     depends_on:
       - buraco-server
     restart: unless-stopped
@@ -66,8 +65,6 @@ services:
             - node_modules/
             - db/
             - bots/
-        # NEW: Watch the shared game file for the bot too!
         - action: sync+restart
           path: ./buraco-client/src/game.js
           target: /app/game.js
-
