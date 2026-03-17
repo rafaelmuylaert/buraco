@@ -370,7 +370,12 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100vh', boxSizing: 'border-box', overflow: 'hidden', padding: '15px', fontFamily: 'sans-serif', backgroundColor: '#2d6a4f', color: 'white', display: 'flex', gap: '15px' }}>
       
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: G.rules?.openDiscardView ? '150px' : '90px', minWidth: G.rules?.openDiscardView ? '150px' : '90px', flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: G.rules?.openDiscardView ? '150px' : '130px', minWidth: G.rules?.openDiscardView ? '150px' : '130px', flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
+        
+        <button onClick={() => window.location.reload()} style={{ width: '100%', background: '#4da6ff', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.8em', boxSizing: 'border-box' }}>
+          ⬅ Salão
+        </button>
+
         <div style={{ textAlign: 'center' }}>
           <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Monte</h4>
           {deckEmpty ? (
@@ -408,6 +413,76 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
             )}
           </div>
         </div>
+
+        <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '8px', boxSizing: 'border-box' }}>
+          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Mortos</h4>
+          {[myTeam, oppTeam].map((team, ti) => {
+            const label = ti === 0 ? 'Nós' : 'Eles';
+            const hasMorto = G.teamMortos[team];
+            const availablePots = Array.isArray(G.pots) ? G.pots : Object.values(G.pots || {}).filter(p => p && p.length > 0);
+            return (
+              <div key={team} style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                <span style={{ fontSize: '0.7em', color: hasMorto ? '#ffd700' : '#888', fontWeight: 'bold', minWidth: '28px' }}>{label}: {hasMorto ? '✔️' : '❌'}</span>
+                {ti === 0 && availablePots.map((_, i) => (
+                  <div key={i} style={{
+                    border: '1px solid white', borderRadius: '3px', width: '18px', height: '28px',
+                    backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 4px)',
+                    boxShadow: '1px 1px 2px rgba(0,0,0,0.5)', flexShrink: 0
+                  }} />
+                ))}
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '8px', boxSizing: 'border-box' }}>
+          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Jogadores</h4>
+          {Object.keys(G.hands).filter(p => G.hands[p]).map(p => {
+            const isTurn = ctx.currentPlayer === p;
+            const isMe = p === playerID;
+            const name = G.rules?.assignments?.[p] || `P${p}`;
+            return (
+              <div key={p} style={{ 
+                fontSize: '0.70em', display: 'flex', justifyContent: 'space-between', 
+                color: isTurn ? '#ffd700' : (isMe ? '#4da6ff' : '#888'), 
+                fontWeight: (isTurn || isMe) ? 'bold' : 'normal', 
+                marginBottom: '4px',
+                background: isMe ? 'rgba(77, 166, 255, 0.2)' : 'transparent',
+                border: isMe ? '1px solid #4da6ff' : '1px solid transparent',
+                padding: '4px', borderRadius: '4px',
+                overflow: 'hidden', minWidth: 0
+              }}>
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>{isTurn ? '👉 ' : ''}{name}</span>
+                <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.hands[p].length} 🃏</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {G.rules?.showKnownCards && Object.keys(G.knownCards).some(p => G.knownCards[p].length > 0) && (
+          <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '8px', boxSizing: 'border-box' }}>
+            <h4 style={{ margin: '0 0 10px 0', fontSize: '0.8em', color: '#ccc' }}>Memorizadas</h4>
+            {Object.keys(G.knownCards).map(p => {
+              if (G.knownCards[p].length === 0) return null;
+              const name = G.rules?.assignments?.[p] || `P${p}`;
+              return (
+                <div key={p} style={{ marginBottom: '8px' }}>
+                  <div style={{ fontSize: '0.7em', color: '#888', marginBottom: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}:</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
+                    {G.knownCards[p].map((cId, i) => {
+                      const c = intToCardObj(cId);
+                      return (
+                        <div key={i} style={{ background: 'white', color: (c.suit==='♥'||c.suit==='♦')?'red':'black', padding: '1px 3px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold' }}>
+                          {c.rank}{c.suit}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '25px', overflowY: 'auto', overflowX: 'hidden', paddingRight: '10px', paddingBottom: '20px' }}>
