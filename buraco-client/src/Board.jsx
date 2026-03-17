@@ -416,25 +416,28 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
 
         <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '8px', boxSizing: 'border-box' }}>
           <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Mortos</h4>
-          {[myTeam, oppTeam].map((team, ti) => {
-            const label = ti === 0 ? 'Nós' : 'Eles';
-            const hasMorto = G.teamMortos[team];
-            const availablePots = Array.isArray(G.pots) ? G.pots : Object.values(G.pots || {}).filter(p => p && p.length > 0);
-            return (
-              <div key={team} style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
-                <span style={{ fontSize: '0.7em', color: hasMorto ? '#ffd700' : '#888', fontWeight: 'bold', minWidth: '28px' }}>{label}: {hasMorto ? '✔️' : '❌'}</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  {availablePots.map((_, i) => (
-                    <div key={i} style={{
-                      border: '1px solid white', borderRadius: '2px', width: '12px', height: '18px',
-                      backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 4px)',
-                      boxShadow: '1px 1px 2px rgba(0,0,0,0.5)', flexShrink: 0
-                    }} />
-                  ))}
+          {(() => {
+            const allPots = Array.isArray(G.pots) ? G.pots : Object.values(G.pots || {}).filter(p => p && p.length > 0);
+            const potCount = Math.ceil(allPots.length / 2);
+            return [myTeam, oppTeam].map((team, ti) => {
+              const label = ti === 0 ? 'Nós' : 'Eles';
+              const hasMorto = G.teamMortos[team];
+              return (
+                <div key={team} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '0.7em', color: hasMorto ? '#ffd700' : '#888', fontWeight: 'bold' }}>{label}: {hasMorto ? '✔️' : '❌'}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
+                    {Array.from({ length: potCount }).map((_, i) => (
+                      <div key={i} style={{
+                        border: '1px solid white', borderRadius: '2px', width: '10px', height: '14px',
+                        backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 4px)',
+                        boxShadow: '1px 1px 2px rgba(0,0,0,0.5)'
+                      }} />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            });
+          })()}
         </div>
 
         <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '8px', boxSizing: 'border-box' }}>

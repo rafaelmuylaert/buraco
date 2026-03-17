@@ -581,8 +581,8 @@ const App = () => {
   if (view === 'admin') {
     return (
       <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #ff4d4d', paddingBottom: '20px' }}>
-          <h1 style={{ color: '#ff4d4d', margin: 0 }}>🛠️ Painel de Administração</h1>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #ff4d4d', paddingBottom: '20px' }}>
+          <h1 style={{ color: '#ff4d4d', margin: 0, flex: '1 1 100%' }}>🛠️ Painel de Administração</h1>
           <button onClick={() => { setTrainBotIsNew(availableBots.length === 0); setTrainBotConfig(prev => ({ ...prev, name: availableBots[0] || 'BotPrometheus' })); setShowTrainBotPopup(true); }} style={{ padding: '15px 30px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer', marginTop: '20px', boxShadow: '0 0 15px rgba(138, 43, 226, 0.5)' }}>
             🧠 Laboratório de IA (Treinar Bot)
           </button>
@@ -830,7 +830,7 @@ const App = () => {
 
   return (
     <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
         <h1 style={{ color: '#ffd700', margin: 0, flex: '1 1 100%' }}>
           <span onClick={() => setView('admin')} style={{ cursor: 'pointer', opacity: 0.2, marginRight: '15px' }} title="Modo Admin">⚙️</span>
           ♠♥ Salão Principal ♦♣
