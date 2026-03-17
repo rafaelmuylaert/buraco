@@ -5,7 +5,7 @@ import { cpus } from 'os';
 import { AI_CONFIG } from './game.js';
 
 const NUM_WORKERS = Math.max(1, cpus().length - 1); 
-const WORKER_PATH = new URL('./worker_binary.js', import.meta.url).pathname; 
+const WORKER_PATH = new URL('./worker.js', import.meta.url).pathname; 
 
 const BOTS_DIR = path.join(process.cwd(), 'bots');
 if (!fs.existsSync(BOTS_DIR)) fs.mkdirSync(BOTS_DIR, { recursive: true });
