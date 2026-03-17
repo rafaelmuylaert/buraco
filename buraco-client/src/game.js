@@ -178,8 +178,8 @@ function buildMeld(cardIds, rules) {
 }
 
 function appendCardsToMeld(meld, cards) {
-    if (meld[0] !== 0) return cardsToSeqSlots(cards, meld);
-    return cardsToRunnerSlots(cards, meld);
+    if (meld[0] === 0) return cardsToRunnerSlots(cards, meld);
+    return cardsToSeqSlots(cards, meld);
 }
 
 function appendToMeld(meld, cId) {
