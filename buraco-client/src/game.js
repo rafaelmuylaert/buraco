@@ -9,14 +9,21 @@ const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15];
 
 // 🚀 CENTRALIZED AI ARCHITECTURE CONFIGURATION
 export const AI_CONFIG = {
-    INPUT_INTS: 37,      // 37 * 32 = 1184 bits available for state features
-    HIDDEN_NODES: 128,   // Logical XNOR gates in the hidden layer
-    OUTPUT_NODES: 1,     // Final score output
-    STAGES: 4            // Pickup, Append, Meld, Discard
+    INPUT_INTS: 37,        // 37 * 32 = 1184 bits of game state
+    HIDDEN_NODES: 128,     // Logical XNOR gates in the hidden layer
+    MAX_PICKUP: 17,        // Max pickup candidates (1 deck draw + up to 16 discard melds)
+    MAX_MELD: 32,          // Max append/new-meld candidates scored per pass
+    DISCARD_CLASSES: 53,   // One score per card class (0-52, where 52=Joker)
 };
-// Dynamically calculate memory requirements
-AI_CONFIG.DNA_INTS_PER_STAGE = (AI_CONFIG.INPUT_INTS * AI_CONFIG.HIDDEN_NODES) + Math.ceil(AI_CONFIG.HIDDEN_NODES / 32) * AI_CONFIG.OUTPUT_NODES;
-AI_CONFIG.TOTAL_DNA_SIZE = AI_CONFIG.DNA_INTS_PER_STAGE * AI_CONFIG.STAGES;
+// DNA per stage = (input→hidden weights) + (hidden→output weights)
+AI_CONFIG.DNA_PICKUP  = (AI_CONFIG.INPUT_INTS * AI_CONFIG.HIDDEN_NODES) + Math.ceil(AI_CONFIG.HIDDEN_NODES / 32) * AI_CONFIG.MAX_PICKUP;
+AI_CONFIG.DNA_MELD    = (AI_CONFIG.INPUT_INTS * AI_CONFIG.HIDDEN_NODES) + Math.ceil(AI_CONFIG.HIDDEN_NODES / 32) * AI_CONFIG.MAX_MELD;
+AI_CONFIG.DNA_DISCARD = (AI_CONFIG.INPUT_INTS * AI_CONFIG.HIDDEN_NODES) + Math.ceil(AI_CONFIG.HIDDEN_NODES / 32) * AI_CONFIG.DISCARD_CLASSES;
+AI_CONFIG.TOTAL_DNA_SIZE = AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD + AI_CONFIG.DNA_MELD + AI_CONFIG.DNA_DISCARD;
+// Legacy aliases for trainer/worker compatibility
+AI_CONFIG.DNA_INTS_PER_STAGE = AI_CONFIG.DNA_PICKUP;
+AI_CONFIG.OUTPUT_NODES = AI_CONFIG.MAX_PICKUP;
+AI_CONFIG.STAGES = 4;
 
 export function sortCards(cards) {
   const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
@@ -311,10 +318,11 @@ export const nnHelpers = {
       return arr;
   },
 
-  forwardPass: (inputsArray, weightsArray) => {
-      let w_idx = 0; 
-      let hidden_activations = new Uint32Array(Math.ceil(AI_CONFIG.HIDDEN_NODES / 32)); 
-      
+  forwardPass: (inputsArray, weightsArray, outputNodes) => {
+      let w_idx = 0;
+      const hidden_ints = Math.ceil(AI_CONFIG.HIDDEN_NODES / 32);
+      let hidden_activations = new Uint32Array(hidden_ints);
+
       const popcount32 = (n) => {
           n = n >>> 0;
           n = n - ((n >>> 1) & 0x55555555);
@@ -325,18 +333,20 @@ export const nnHelpers = {
       for (let h = 0; h < AI_CONFIG.HIDDEN_NODES; h++) {
           let match_count = 0;
           for (let i = 0; i < AI_CONFIG.INPUT_INTS; i++) {
-              let xnor = ~(inputsArray[i] ^ weightsArray[w_idx++]);
-              match_count += popcount32(xnor);
+              match_count += popcount32(~(inputsArray[i] ^ weightsArray[w_idx++]));
           }
           if (match_count > (AI_CONFIG.INPUT_INTS * 16)) hidden_activations[h >> 5] |= (1 << (h & 31));
       }
-      
-      let final_score = 0;
-      for (let i = 0; i < hidden_activations.length; i++) {
-          let xnor = ~(hidden_activations[i] ^ weightsArray[w_idx++]);
-          final_score += popcount32(xnor);
+
+      const scores = new Uint32Array(outputNodes);
+      for (let o = 0; o < outputNodes; o++) {
+          let s = 0;
+          for (let i = 0; i < hidden_ints; i++) {
+              s += popcount32(~(hidden_activations[i] ^ weightsArray[w_idx++]));
+          }
+          scores[o] = s;
       }
-      return final_score;
+      return scores;
   }
 };
 
@@ -564,29 +574,21 @@ export const BuracoGame = {
       inputBuffer.set(G.bnn.cards[`k${partnerId}`] || [0,0], 29);
       inputBuffer.set(G.bnn.cards[`k${opp2Id}`] || [0,0], 31);
 
-      let DNA = customDNA || G.botGenomes?.[p] || new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE).fill(0); 
+      let DNA = customDNA || G.botGenomes?.[p] || new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE).fill(0);
       if (DNA.length !== AI_CONFIG.TOTAL_DNA_SIZE) DNA = new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE).fill(0);
 
-      const st = AI_CONFIG.DNA_INTS_PER_STAGE;
-      const dnaPickup = DNA.subarray(0, st);
-      const dnaAppend = DNA.subarray(st, st * 2);
-      const dnaMeld = DNA.subarray(st * 2, st * 3);
-      const dnaDiscard = DNA.subarray(st * 3, AI_CONFIG.TOTAL_DNA_SIZE);
+      let off = 0;
+      const dnaPickup  = DNA.subarray(off, off += AI_CONFIG.DNA_PICKUP);
+      const dnaAppend  = DNA.subarray(off, off += AI_CONFIG.DNA_MELD);
+      const dnaMeld    = DNA.subarray(off, off += AI_CONFIG.DNA_MELD);
+      const dnaDiscard = DNA.subarray(off, AI_CONFIG.TOTAL_DNA_SIZE);
 
-      const getScore = (actionType, actionCards, actionMeldIdx, activeWeights) => {
-          let input = new Uint32Array(inputBuffer); 
-          input[33] = actionType; 
-          let actCards = nnHelpers.packCards(actionCards);
-          input[34] = actCards[0]; input[35] = actCards[1];
-          if (actionMeldIdx !== null) input[36] = actionMeldIdx;
-          
-          return nnHelpers.forwardPass(input, activeWeights);
-      };
+      const mortoSafe = hasCleanTeam(myTeam) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
 
       const resolveQueue = (moves) => {
           let selected = []; let usedCards = new Set(); let projectedHandSize = myHandCards.length;
-          const mortoSafe = hasCleanTeam(myTeam) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
           for (let m of moves) {
+              if (m.score <= 0) continue;
               let conflict = false;
               for (let c of m.cards) { if (usedCards.has(c)) { conflict = true; break; } }
               if (conflict) continue;
@@ -598,13 +600,16 @@ export const BuracoGame = {
           return selected;
       };
 
+      // ── PICKUP STAGE ─────────────────────────────────────────────────────────
       if (!G.hasDrawn) {
           if (G.deck.length === 0 && G.pots.length === 0) return [{ move: 'declareExhausted', args: [] }];
-          let possiblePickups = [];
-          possiblePickups.push({ move: 'drawCard', args: [], actionType: 0, cards: [], mIdx: null });
-          
+
+          let candidates = [];
+          candidates.push({ move: 'drawCard', args: [] });
+
           if (topDiscard !== null) {
-              if (G.rules.discard === 'closed') {
+              const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
+              if (isClosedDiscard) {
                   const combos = getAllValidMelds([...myHandCards, topDiscard], G.rules);
                   let seenSigs = new Set();
                   for (let combo of combos) {
@@ -613,86 +618,90 @@ export const BuracoGame = {
                           let sig = combo.map(c => c >= 104 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
                           if (!seenSigs.has(sig)) {
                               seenSigs.add(sig);
-                              possiblePickups.push({ move: 'pickUpDiscard', args: [handCardsUsed, { type: 'new' }], actionType: 1, cards: combo, mIdx: null });
+                              candidates.push({ move: 'pickUpDiscard', args: [handCardsUsed, { type: 'new' }] });
                           }
                       }
                   }
-              } else possiblePickups.push({ move: 'pickUpDiscard', args: [], actionType: 1, cards: G.discardPile, mIdx: null });
+              } else {
+                  candidates.push({ move: 'pickUpDiscard', args: [] });
+              }
           }
-          for (let m of possiblePickups) m.score = getScore(m.actionType, m.cards, m.mIdx, dnaPickup);
-          possiblePickups.sort((a, b) => b.score - a.score);
-          return [{ move: possiblePickups[0].move, args: possiblePickups[0].args }];
-      } 
-      
+
+          // Pad to MAX_PICKUP slots, run one forward pass
+          const numCandidates = Math.min(candidates.length, AI_CONFIG.MAX_PICKUP);
+          const scores = nnHelpers.forwardPass(inputBuffer, dnaPickup, AI_CONFIG.MAX_PICKUP);
+          let bestIdx = 0;
+          for (let i = 1; i < numCandidates; i++) {
+              if (scores[i] > scores[bestIdx]) bestIdx = i;
+          }
+          const best = candidates[bestIdx];
+          return [{ move: best.move, args: best.args }];
+      }
+
+      // ── APPEND STAGE ─────────────────────────────────────────────────────────
       let possibleAppends = []; let appendSigs = new Set();
       (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIndex) => {
-              for (let i = 0; i < myHandCards.length; i++) {
-                  let card = myHandCards[i];
+              for (let card of myHandCards) {
                   if (appendToMeld(meld, card)) {
                       let cls = card >= 104 ? 52 : card % 52;
-                      let sig = `append-${tp}-${mIndex}-${cls}`;
+                      let sig = `${tp}-${mIndex}-${cls}`;
                       if (!appendSigs.has(sig)) {
                           appendSigs.add(sig);
-                          possibleAppends.push({ move: 'appendToMeld', args: [tp, mIndex, [card]], actionType: 2, cards: [card], mIdx: mIndex });
+                          possibleAppends.push({ move: 'appendToMeld', args: [tp, mIndex, [card]], cards: [card] });
                       }
                   }
               }
           });
       });
       if (possibleAppends.length > 0) {
-          for (let m of possibleAppends) m.score = getScore(m.actionType, m.cards, m.mIdx, dnaAppend);
-          possibleAppends = possibleAppends.sort((a,b) => b.score - a.score);
-          let queue = resolveQueue(possibleAppends);
+          const n = Math.min(possibleAppends.length, AI_CONFIG.MAX_MELD);
+          const scores = nnHelpers.forwardPass(inputBuffer, dnaAppend, AI_CONFIG.MAX_MELD);
+          for (let i = 0; i < n; i++) possibleAppends[i].score = scores[i];
+          const queue = resolveQueue(possibleAppends.slice(0, n));
           if (queue.length > 0) return queue.map(m => ({ move: m.move, args: m.args }));
       }
 
+      // ── NEW MELD STAGE ───────────────────────────────────────────────────────
       let possibleMelds = []; let meldSigs = new Set();
-      const validMelds = getAllValidMelds(myHandCards, G.rules);
-      for (let combo of validMelds) {
+      for (let combo of getAllValidMelds(myHandCards, G.rules)) {
           let sig = combo.map(c => c >= 104 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
           if (!meldSigs.has(sig)) {
               meldSigs.add(sig);
-              possibleMelds.push({ move: 'playMeld', args: [combo], actionType: 3, cards: combo, mIdx: null });
+              possibleMelds.push({ move: 'playMeld', args: [combo], cards: combo });
           }
       }
       if (possibleMelds.length > 0) {
-          for (let m of possibleMelds) m.score = getScore(m.actionType, m.cards, m.mIdx, dnaMeld);
-          possibleMelds = possibleMelds.sort((a,b) => b.score - a.score);
-          let queue = resolveQueue(possibleMelds);
+          const n = Math.min(possibleMelds.length, AI_CONFIG.MAX_MELD);
+          const scores = nnHelpers.forwardPass(inputBuffer, dnaMeld, AI_CONFIG.MAX_MELD);
+          for (let i = 0; i < n; i++) possibleMelds[i].score = scores[i];
+          const queue = resolveQueue(possibleMelds.slice(0, n));
           if (queue.length > 0) return queue.map(m => ({ move: m.move, args: m.args }));
       }
 
-      const isMortoSafe = hasCleanTeam(myTeam) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
+      // ── DISCARD STAGE ────────────────────────────────────────────────────────
+      const isMortoSafe = mortoSafe;
       if (myHandCards.length > 1 || isMortoSafe) {
-          let input = new Uint32Array(inputBuffer);
-          input[33] = 4; // Action 4 = Discard
+          const scores = nnHelpers.forwardPass(inputBuffer, dnaDiscard, AI_CONFIG.DISCARD_CLASSES);
 
-          const rawOutput = nnHelpers.forwardPass(input, dnaDiscard);
-          const targetClass = rawOutput % 55;
-
-          let selectedDiscard = null;
+          let bestCard = null, bestScore = -1;
           for (let card of myHandCards) {
-              let cls = card >= 104 ? 54 : card % 52;
-              if (cls === targetClass) {
-                  selectedDiscard = card; break;
-              }
+              const cls = card >= 104 ? 52 : card % 52;
+              if (scores[cls] > bestScore) { bestScore = scores[cls]; bestCard = card; }
           }
 
-          if (selectedDiscard !== null) {
-              return [{ move: 'discardCard', args: [selectedDiscard] }];
-          } else {
-              let worstCard = myHandCards[0];
-              let hVal = -1;
-              for (let card of myHandCards) {
-                  let val = getCardPoints(card); 
-                  if (val > hVal) { hVal = val; worstCard = card; }
-              }
-              return [{ move: 'discardCard', args: [worstCard] }];
+          if (bestCard !== null) return [{ move: 'discardCard', args: [bestCard] }];
+
+          // Fallback: discard highest point card
+          let worstCard = myHandCards[0], hVal = -1;
+          for (let card of myHandCards) {
+              const val = getCardPoints(card);
+              if (val > hVal) { hVal = val; worstCard = card; }
           }
+          return [{ move: 'discardCard', args: [worstCard] }];
       }
 
-      return []; 
+      return [];
     }
   }
 };

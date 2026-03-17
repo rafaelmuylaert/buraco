@@ -33,11 +33,9 @@ async function pollLobby() {
               if (dnaRes.ok) {
                   let loadedDNA = await dnaRes.json();
                   
-                  // 🚀 Centralized seamless dimension upgrade!
                   if (loadedDNA.length !== AI_CONFIG.TOTAL_DNA_SIZE) {
-                      let expanded = [];
-                      while(expanded.length < AI_CONFIG.TOTAL_DNA_SIZE) expanded.push(...loadedDNA);
-                      loadedDNA = expanded.slice(0, AI_CONFIG.TOTAL_DNA_SIZE);
+                      console.warn(`[BOT] DNA size mismatch for '${targetBotName}': got ${loadedDNA.length}, expected ${AI_CONFIG.TOTAL_DNA_SIZE}. Weights are incompatible — bot will play randomly.`);
+                      loadedDNA = null;
                   }
                   dnaCache[targetBotName] = loadedDNA;
               }
