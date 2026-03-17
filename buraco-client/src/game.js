@@ -281,92 +281,80 @@ function calculateFinalScores(G) {
   return scores;
 }
 
-export const nnHelpers = {
-  setBit: (arr, bitIdx) => { arr[bitIdx >> 5] |= (1 << (bitIdx & 31)); },
-  
-  packCards: (cards) => {
-      let arr = [0, 0];
-      for (let i = 0; i < cards.length; i++) {
-          let cls = cards[i] === 54 ? 54 : cards[i] % 52;
-          nnHelpers.setBit(arr, cls);
-      }
-      return arr;
-  },
+const _setBit = (arr, i) => { arr[i >> 5] |= (1 << (i & 31)); };
 
-  packMeldBits: (arr, startBitIdx, m) => {
-      if (!m || m.length === 0 || m[0] === undefined) return;
-      if (m[0] !== 0) { // Sequence
-          nnHelpers.setBit(arr, startBitIdx); 
-          for(let i=0; i<3; i++) if (m[0] & (1<<i)) nnHelpers.setBit(arr, startBitIdx + 1 + i); 
-          for(let i=0; i<3; i++) if (m[1] & (1<<i)) nnHelpers.setBit(arr, startBitIdx + 4 + i); 
-          for(let r=2; r<=15; r++) if (m[r] === 1) nnHelpers.setBit(arr, startBitIdx + 5 + r); 
-      } else { // Runner
-          for(let i=0; i<3; i++) if (m[1] & (1<<i)) nnHelpers.setBit(arr, startBitIdx + 1 + i); 
-          for(let i=0; i<4; i++) if (m[2] & (1<<i)) nnHelpers.setBit(arr, startBitIdx + 4 + i); 
-          for (let s=0; s<4; s++) {
-              let c = m[3 + s]; 
-              for (let i=0; i<3; i++) if (c & (1<<i)) nnHelpers.setBit(arr, startBitIdx + 8 + (s*3) + i); 
-          }
-      }
-  },
-
-  packTeamMelds: (melds) => {
-      let arr = new Array(11).fill(0);
-      for (let i = 0; i < 15; i++) {
-          if (i < melds.length) nnHelpers.packMeldBits(arr, i * 22, melds[i]);
-      }
-      return arr;
-  },
-
-  forwardPass: (inputsArray, weightsArray, outputNodes) => {
-      let w_idx = 0;
-      const hidden_ints = Math.ceil(AI_CONFIG.HIDDEN_NODES / 32);
-      let hidden_activations = new Uint32Array(hidden_ints);
-
-      const popcount32 = (n) => {
-          n = n >>> 0;
-          n = n - ((n >>> 1) & 0x55555555);
-          n = (n & 0x33333333) + ((n >>> 2) & 0x33333333);
-          return (((n + (n >>> 4)) & 0x0F0F0F0F) * 0x01010101) >>> 24;
-      };
-
-      for (let h = 0; h < AI_CONFIG.HIDDEN_NODES; h++) {
-          let match_count = 0;
-          for (let i = 0; i < AI_CONFIG.INPUT_INTS; i++) {
-              match_count += popcount32(~(inputsArray[i] ^ weightsArray[w_idx++]));
-          }
-          if (match_count > (AI_CONFIG.INPUT_INTS * 16)) hidden_activations[h >> 5] |= (1 << (h & 31));
-      }
-
-      const scores = new Uint32Array(outputNodes);
-      for (let o = 0; o < outputNodes; o++) {
-          let s = 0;
-          for (let i = 0; i < hidden_ints; i++) {
-              s += popcount32(~(hidden_activations[i] ^ weightsArray[w_idx++]));
-          }
-          scores[o] = s;
-      }
-      return scores;
-  }
-};
-
-export function syncGameBNN(G) {
-    if (!G.bnn) {
-        G.bnn = { melds: {}, cards: {} };
-    }
-    
-    for (const t of ['team0', 'team1']) {
-        let mList = G.teamPlayers[t].flatMap(p => G.melds[p] || []);
-        G.bnn.melds[t] = nnHelpers.packTeamMelds(mList);
-    }
-
-    G.bnn.cards.discard = nnHelpers.packCards(G.discardPile);
-    
-    for (let i=0; i<G.rules.numPlayers; i++) {
-        G.bnn.cards[`h${i}`] = nnHelpers.packCards(G.hands[i]);
-        G.bnn.cards[`k${i}`] = nnHelpers.packCards(G.knownCards[i]);
-    }
+function packCards(cards) {
+    const arr = new Uint32Array(2);
+    for (let i = 0; i < cards.length; i++) _setBit(arr, cards[i] === 54 ? 54 : cards[i] % 52);
+    return arr;
 }
+
+function packTeamMelds(melds) {
+    const arr = new Uint32Array(11);
+    const n = Math.min(melds.length, 15);
+    for (let i = 0; i < n; i++) {
+        const m = melds[i]; if (!m || !m.length) continue;
+        const base = i * 22;
+        if (m[0] !== 0) {
+            _setBit(arr, base);
+            for (let b = 0; b < 3; b++) if (m[0] & (1<<b)) _setBit(arr, base+1+b);
+            for (let b = 0; b < 3; b++) if (m[1] & (1<<b)) _setBit(arr, base+4+b);
+            for (let r = 2; r <= 15; r++) if (m[r]) _setBit(arr, base+5+r);
+        } else {
+            for (let b = 0; b < 3; b++) if (m[1] & (1<<b)) _setBit(arr, base+1+b);
+            for (let b = 0; b < 4; b++) if (m[2] & (1<<b)) _setBit(arr, base+4+b);
+            for (let s = 0; s < 4; s++) for (let b = 0; b < 3; b++) if (m[3+s] & (1<<b)) _setBit(arr, base+8+s*3+b);
+        }
+    }
+    return arr;
+}
+
+const HIDDEN_INTS = Math.ceil(AI_CONFIG.HIDDEN_NODES / 32);
+const FIXED_INTS  = 33;
+
+function pc32(n) {
+    n = n >>> 0;
+    n -= (n >>> 1) & 0x55555555;
+    n = (n & 0x33333333) + ((n >>> 2) & 0x33333333);
+    return (((n + (n >>> 4)) & 0x0F0F0F0F) * 0x01010101) >>> 24;
+}
+
+function jsEvaluate(meta, myTM, oppTM, disc, myH, o1, o2, o3, candFlat, weights, n) {
+    const inp = new Uint32Array(AI_CONFIG.INPUT_INTS);
+    inp[0]=meta>>>0; inp.set(myTM,1); inp.set(oppTM,12);
+    inp[23]=disc[0]; inp[24]=disc[1]; inp[25]=myH[0]; inp[26]=myH[1];
+    inp[27]=o1[0];   inp[28]=o1[1];   inp[29]=o2[0]; inp[30]=o2[1];
+    inp[31]=o3[0];   inp[32]=o3[1];
+    const thr = AI_CONFIG.INPUT_INTS * 16;
+    const fixedCounts = new Int32Array(AI_CONFIG.HIDDEN_NODES);
+    for (let h = 0; h < AI_CONFIG.HIDDEN_NODES; h++) {
+        let cnt = 0; const base = h * AI_CONFIG.INPUT_INTS;
+        for (let i = 0; i < FIXED_INTS; i++) cnt += pc32(~(inp[i] ^ weights[base+i]));
+        fixedCounts[h] = cnt;
+    }
+    const wOut = weights.subarray(AI_CONFIG.HIDDEN_NODES * AI_CONFIG.INPUT_INTS);
+    const scores = new Uint32Array(n);
+    for (let c = 0; c < n; c++) {
+        const c0 = candFlat ? candFlat[c*2]>>>0 : 0;
+        const c1 = candFlat ? candFlat[c*2+1]>>>0 : 0;
+        const hid = new Uint32Array(HIDDEN_INTS);
+        for (let h = 0; h < AI_CONFIG.HIDDEN_NODES; h++) {
+            const base = h * AI_CONFIG.INPUT_INTS;
+            const cnt = fixedCounts[h] + pc32(~(c0^weights[base+FIXED_INTS])) + pc32(~(c1^weights[base+FIXED_INTS+1]));
+            if (cnt > thr) hid[h>>5] |= (1<<(h&31));
+        }
+        let s = 0;
+        for (let i = 0; i < HIDDEN_INTS; i++) s += pc32(~(hid[i] ^ wOut[c*HIDDEN_INTS+i]));
+        scores[c] = s;
+    }
+    return scores;
+}
+
+export const nnHelpers = {
+    evaluatePickup:  (meta,myTM,oppTM,disc,myH,o1,o2,o3,cands,w,n) => jsEvaluate(meta,myTM,oppTM,disc,myH,o1,o2,o3,cands,w,n),
+    evaluateMeld:    (meta,myTM,oppTM,disc,myH,o1,o2,o3,cands,w,n) => jsEvaluate(meta,myTM,oppTM,disc,myH,o1,o2,o3,cands,w,n),
+    evaluateDiscard: (meta,myTM,oppTM,disc,myH,o1,o2,o3,w)         => jsEvaluate(meta,myTM,oppTM,disc,myH,o1,o2,o3,null,w,AI_CONFIG.DISCARD_CLASSES),
+};
 
 function getAllValidMelds(handCards, rules) {
     let validCombos = [];
@@ -433,9 +421,7 @@ export const BuracoGame = {
     if (numPlayers === 2) { teams = { '0': 'team0', '1': 'team1' }; teamPlayers = { team0: ['0'], team1: ['1'] }; } 
     else { teams = { '0': 'team0', '1': 'team1', '2': 'team0', '3': 'team1' }; teamPlayers = { team0: ['0', '2'], team1: ['1', '3'] }; }
 
-    const G = { rules, deck: initialDeck, discardPile: [initialDeck.pop()], pots, hands, melds, knownCards, hasDrawn: false, lastDrawnCard: null, teams, teamPlayers, teamMortos: { team0: false, team1: false }, mortoUsed: { team0: false, team1: false }, isExhausted: false, botGenomes };
-    syncGameBNN(G);
-    return G;
+    return { rules, deck: initialDeck, discardPile: [initialDeck.pop()], pots, hands, melds, knownCards, hasDrawn: false, lastDrawnCard: null, teams, teamPlayers, teamMortos: { team0: false, team1: false }, mortoUsed: { team0: false, team1: false }, isExhausted: false, botGenomes };
   },
 
   moves: {
@@ -443,7 +429,6 @@ export const BuracoGame = {
       if (G.hasDrawn) return 'INVALID_MOVE';
       if (G.deck.length === 0 && G.pots.length > 0) G.deck = G.pots.shift(); 
       if (G.deck.length > 0) { const card = G.deck.pop(); G.lastDrawnCard = card; G.hands[ctx.currentPlayer].push(card); G.hasDrawn = true; }
-      syncGameBNN(G);
     },
     pickUpDiscard: ({ G, ctx }, selectedHandIds = [], target = { type: 'new' }) => {
       if (G.hasDrawn || G.discardPile.length === 0) return 'INVALID_MOVE';
@@ -466,7 +451,6 @@ export const BuracoGame = {
       } else {
         G.lastDrawnCard = null; const openPickedUp = [...G.discardPile]; G.knownCards[ctx.currentPlayer].push(...G.discardPile); G.hands[ctx.currentPlayer].push(...G.discardPile); G.discardPile = []; G.hasDrawn = true; G.lastDrawnCard = openPickedUp;
       }
-      syncGameBNN(G);
     },
     playMeld: ({ G, ctx }, cardIds) => {
       if (!G.hasDrawn) return 'INVALID_MOVE'; 
@@ -483,7 +467,6 @@ export const BuracoGame = {
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
         if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[G.teams[ctx.currentPlayer]]) { G.hands[ctx.currentPlayer] = G.pots.shift(); G.teamMortos[G.teams[ctx.currentPlayer]] = true; }
       } else return 'INVALID_MOVE';
-      syncGameBNN(G);
     },
     appendToMeld: ({ G, ctx }, meldOwner, meldIndex, cardIds) => {
       if (!G.hasDrawn || G.teams[ctx.currentPlayer] !== G.teams[meldOwner]) return 'INVALID_MOVE';
@@ -500,7 +483,6 @@ export const BuracoGame = {
         if (G.teamMortos[G.teams[ctx.currentPlayer]]) G.mortoUsed[G.teams[ctx.currentPlayer]] = true;
         if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[G.teams[ctx.currentPlayer]]) { G.hands[ctx.currentPlayer] = G.pots.shift(); G.teamMortos[G.teams[ctx.currentPlayer]] = true; }
       } else return 'INVALID_MOVE';
-      syncGameBNN(G);
     },
     discardCard: ({ G, ctx, events }, cardId) => {
       if (!G.hasDrawn) return 'INVALID_MOVE'; 
@@ -514,7 +496,6 @@ export const BuracoGame = {
         if (G.hands[ctx.currentPlayer].length === 0 && G.pots.length > 0 && !G.teamMortos[G.teams[ctx.currentPlayer]]) { G.hands[ctx.currentPlayer] = G.pots.shift(); G.teamMortos[G.teams[ctx.currentPlayer]] = true; }
         G.hasDrawn = false; G.lastDrawnCard = null; events.endTurn();
       } else return 'INVALID_MOVE';
-      syncGameBNN(G);
     },
     declareExhausted: ({ G }) => { G.isExhausted = true; }
   },
@@ -539,166 +520,142 @@ export const BuracoGame = {
       const p = ctx.currentPlayer; const myTeam = G.teams[p]; const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
       const myHandCards = G.hands[p] || [];
       const topDiscard = G.discardPile.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
-      
       const numP = G.rules.numPlayers || 4; const pInt = parseInt(p);
       const opp1Id = ((pInt + 1) % numP).toString();
       const partnerId = numP === 4 ? ((pInt + 2) % numP).toString() : null;
-      const opp2Id = numP === 4 ? ((pInt + 3) % numP).toString() : null;
+      const opp2Id   = numP === 4 ? ((pInt + 3) % numP).toString() : null;
 
-      // 🧠 Initialize dynamic buffer using centralized AI_CONFIG
-      const inputBuffer = new Uint32Array(AI_CONFIG.INPUT_INTS);
-      
-      let meta = 0;
-      if (G.deck.length > 0) meta |= (1 << 0);
-      if (G.pots.length > 0) meta |= (1 << 1);
-      if (G.pots.length > 1) meta |= (1 << 2);
-      if (G.teamMortos[myTeam]) meta |= (1 << 3);
-      if (G.teamMortos[oppTeam]) meta |= (1 << 4);
-      
       const hasCleanTeam = tId => (G.teamPlayers[tId] || []).some(tp => G.melds[tp].some(m => getMeldLength(m) >= 7 && isMeldClean(m)));
-      if (hasCleanTeam(myTeam)) meta |= (1 << 5);
-      if (hasCleanTeam(oppTeam)) meta |= (1 << 6);
-      
-      const hs = pid => pid !== null ? Math.min(15, (G.hands[pid] || []).length) : 0;
-      meta |= (hs(pInt) << 7);
-      meta |= (hs(opp1Id) << 11);
-      meta |= (hs(partnerId) << 15);
-      meta |= (hs(opp2Id) << 19);
-      inputBuffer[0] = meta;
+      const mortoSafe = hasCleanTeam(myTeam) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
 
-      inputBuffer.set(G.bnn.melds[myTeam], 1);
-      inputBuffer.set(G.bnn.melds[oppTeam], 12);
-      inputBuffer.set(G.bnn.cards.discard, 23);
-      inputBuffer.set(G.bnn.cards[`h${pInt}`], 25);
-      inputBuffer.set(G.bnn.cards[`k${opp1Id}`], 27);
-      inputBuffer.set(G.bnn.cards[`k${partnerId}`] || [0,0], 29);
-      inputBuffer.set(G.bnn.cards[`k${opp2Id}`] || [0,0], 31);
+      // ── Build raw game-state arrays (no G.bnn needed) ──────────────────────
+      const myTeamMelds  = packTeamMelds((G.teamPlayers[myTeam]  || []).flatMap(tp => G.melds[tp] || []));
+      const oppTeamMelds = packTeamMelds((G.teamPlayers[oppTeam] || []).flatMap(tp => G.melds[tp] || []));
+      const discardBits  = packCards(G.discardPile);
+      const myHandBits   = packCards(myHandCards);
+      const opp1Bits     = packCards(G.knownCards[opp1Id] || []);
+      const opp2Bits     = packCards(partnerId ? (G.knownCards[partnerId] || []) : []);
+      const opp3Bits     = packCards(opp2Id   ? (G.knownCards[opp2Id]    || []) : []);
+
+      let meta = 0;
+      if (G.deck.length > 0)          meta |= (1 << 0);
+      if (G.pots.length > 0)          meta |= (1 << 1);
+      if (G.pots.length > 1)          meta |= (1 << 2);
+      if (G.teamMortos[myTeam])       meta |= (1 << 3);
+      if (G.teamMortos[oppTeam])      meta |= (1 << 4);
+      if (hasCleanTeam(myTeam))       meta |= (1 << 5);
+      if (hasCleanTeam(oppTeam))      meta |= (1 << 6);
+      const hs = pid => pid !== null ? Math.min(15, (G.hands[pid] || []).length) : 0;
+      meta |= (hs(pInt)      << 7);
+      meta |= (hs(opp1Id)    << 11);
+      meta |= (hs(partnerId) << 15);
+      meta |= (hs(opp2Id)    << 19);
 
       let DNA = customDNA || G.botGenomes?.[p] || new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE).fill(0);
       if (DNA.length !== AI_CONFIG.TOTAL_DNA_SIZE) DNA = new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE).fill(0);
-
       let off = 0;
       const dnaPickup  = DNA.subarray(off, off += AI_CONFIG.DNA_PICKUP);
       const dnaAppend  = DNA.subarray(off, off += AI_CONFIG.DNA_MELD);
       const dnaMeld    = DNA.subarray(off, off += AI_CONFIG.DNA_MELD);
       const dnaDiscard = DNA.subarray(off, AI_CONFIG.TOTAL_DNA_SIZE);
 
-      const mortoSafe = hasCleanTeam(myTeam) || (G.pots.length > 0 && !G.teamMortos[myTeam]);
-
       const resolveQueue = (moves) => {
-          let selected = []; let usedCards = new Set(); let projectedHandSize = myHandCards.length;
-          for (let m of moves) {
+          let selected = [], usedCards = new Set(), projectedSize = myHandCards.length;
+          for (const m of moves) {
               if (m.score <= 0) continue;
-              let conflict = false;
-              for (let c of m.cards) { if (usedCards.has(c)) { conflict = true; break; } }
-              if (conflict) continue;
-              if (projectedHandSize - m.cards.length < 2 && !mortoSafe) continue;
-              for (let c of m.cards) usedCards.add(c);
+              if (m.cards.some(c => usedCards.has(c))) continue;
+              if (projectedSize - m.cards.length < 2 && !mortoSafe) continue;
+              m.cards.forEach(c => usedCards.add(c));
               selected.push(m);
-              projectedHandSize -= m.cards.length;
+              projectedSize -= m.cards.length;
           }
           return selected;
       };
 
-      // ── PICKUP STAGE ─────────────────────────────────────────────────────────
+      // ── PICKUP ────────────────────────────────────────────────────────────
       if (!G.hasDrawn) {
           if (G.deck.length === 0 && G.pots.length === 0) return [{ move: 'declareExhausted', args: [] }];
 
-          let candidates = [];
-          candidates.push({ move: 'drawCard', args: [] });
-
+          const candidates = [{ move: 'drawCard', args: [], cards: [] }];
           if (topDiscard !== null) {
               const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
               if (isClosedDiscard) {
-                  const combos = getAllValidMelds([...myHandCards, topDiscard], G.rules);
-                  let seenSigs = new Set();
-                  for (let combo of combos) {
-                      if (combo.includes(topDiscard)) {
-                          let handCardsUsed = [...combo]; handCardsUsed.splice(handCardsUsed.indexOf(topDiscard), 1);
-                          let sig = combo.map(c => c >= 104 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
-                          if (!seenSigs.has(sig)) {
-                              seenSigs.add(sig);
-                              candidates.push({ move: 'pickUpDiscard', args: [handCardsUsed, { type: 'new' }] });
-                          }
-                      }
+                  const seenSigs = new Set();
+                  for (const combo of getAllValidMelds([...myHandCards, topDiscard], G.rules)) {
+                      if (!combo.includes(topDiscard)) continue;
+                      const sig = combo.map(c => c >= 104 ? 52 : c%52).sort((a,b)=>a-b).join(',');
+                      if (seenSigs.has(sig)) continue;
+                      seenSigs.add(sig);
+                      const handUsed = combo.filter(c => c !== topDiscard);
+                      candidates.push({ move: 'pickUpDiscard', args: [handUsed, { type: 'new' }], cards: combo });
                   }
               } else {
-                  candidates.push({ move: 'pickUpDiscard', args: [] });
+                  candidates.push({ move: 'pickUpDiscard', args: [], cards: G.discardPile });
               }
           }
 
-          // Pad to MAX_PICKUP slots, run one forward pass
-          const numCandidates = Math.min(candidates.length, AI_CONFIG.MAX_PICKUP);
-          const scores = nnHelpers.forwardPass(inputBuffer, dnaPickup, AI_CONFIG.MAX_PICKUP);
-          let bestIdx = 0;
-          for (let i = 1; i < numCandidates; i++) {
-              if (scores[i] > scores[bestIdx]) bestIdx = i;
-          }
-          const best = candidates[bestIdx];
-          return [{ move: best.move, args: best.args }];
+          const n = Math.min(candidates.length, AI_CONFIG.MAX_PICKUP);
+          const candBits = new Uint32Array(AI_CONFIG.MAX_PICKUP * 2);
+          for (let i = 0; i < n; i++) { const b = packCards(candidates[i].cards); candBits[i*2]=b[0]; candBits[i*2+1]=b[1]; }
+          const scores = nnHelpers.evaluatePickup(meta, myTeamMelds, oppTeamMelds, discardBits, myHandBits, opp1Bits, opp2Bits, opp3Bits, candBits, dnaPickup, n);
+          let best = 0;
+          for (let i = 1; i < n; i++) if (scores[i] > scores[best]) best = i;
+          return [{ move: candidates[best].move, args: candidates[best].args }];
       }
 
-      // ── APPEND STAGE ─────────────────────────────────────────────────────────
-      let possibleAppends = []; let appendSigs = new Set();
+      // ── APPEND ────────────────────────────────────────────────────────────
+      const possibleAppends = []; const appendSigs = new Set();
       (G.teamPlayers[myTeam] || []).forEach(tp => {
-          (G.melds[tp] || []).forEach((meld, mIndex) => {
-              for (let card of myHandCards) {
-                  if (appendToMeld(meld, card)) {
-                      let cls = card >= 104 ? 52 : card % 52;
-                      let sig = `${tp}-${mIndex}-${cls}`;
-                      if (!appendSigs.has(sig)) {
-                          appendSigs.add(sig);
-                          possibleAppends.push({ move: 'appendToMeld', args: [tp, mIndex, [card]], cards: [card] });
-                      }
-                  }
+          (G.melds[tp] || []).forEach((meld, mIdx) => {
+              for (const card of myHandCards) {
+                  if (!appendToMeld(meld, card)) continue;
+                  const sig = `${tp}-${mIdx}-${card>=104?52:card%52}`;
+                  if (appendSigs.has(sig)) continue;
+                  appendSigs.add(sig);
+                  possibleAppends.push({ move: 'appendToMeld', args: [tp, mIdx, [card]], cards: [card] });
               }
           });
       });
       if (possibleAppends.length > 0) {
           const n = Math.min(possibleAppends.length, AI_CONFIG.MAX_MELD);
-          const scores = nnHelpers.forwardPass(inputBuffer, dnaAppend, AI_CONFIG.MAX_MELD);
+          const candBits = new Uint32Array(AI_CONFIG.MAX_MELD * 2);
+          for (let i = 0; i < n; i++) { const b = packCards(possibleAppends[i].cards); candBits[i*2]=b[0]; candBits[i*2+1]=b[1]; }
+          const scores = nnHelpers.evaluateMeld(meta, myTeamMelds, oppTeamMelds, discardBits, myHandBits, opp1Bits, opp2Bits, opp3Bits, candBits, dnaAppend, n);
           for (let i = 0; i < n; i++) possibleAppends[i].score = scores[i];
           const queue = resolveQueue(possibleAppends.slice(0, n));
           if (queue.length > 0) return queue.map(m => ({ move: m.move, args: m.args }));
       }
 
-      // ── NEW MELD STAGE ───────────────────────────────────────────────────────
-      let possibleMelds = []; let meldSigs = new Set();
-      for (let combo of getAllValidMelds(myHandCards, G.rules)) {
-          let sig = combo.map(c => c >= 104 ? 52 : c % 52).sort((a,b)=>a-b).join(',');
-          if (!meldSigs.has(sig)) {
-              meldSigs.add(sig);
-              possibleMelds.push({ move: 'playMeld', args: [combo], cards: combo });
-          }
+      // ── NEW MELD ──────────────────────────────────────────────────────────
+      const possibleMelds = []; const meldSigs = new Set();
+      for (const combo of getAllValidMelds(myHandCards, G.rules)) {
+          const sig = combo.map(c => c>=104?52:c%52).sort((a,b)=>a-b).join(',');
+          if (meldSigs.has(sig)) continue;
+          meldSigs.add(sig);
+          possibleMelds.push({ move: 'playMeld', args: [combo], cards: combo });
       }
       if (possibleMelds.length > 0) {
           const n = Math.min(possibleMelds.length, AI_CONFIG.MAX_MELD);
-          const scores = nnHelpers.forwardPass(inputBuffer, dnaMeld, AI_CONFIG.MAX_MELD);
+          const candBits = new Uint32Array(AI_CONFIG.MAX_MELD * 2);
+          for (let i = 0; i < n; i++) { const b = packCards(possibleMelds[i].cards); candBits[i*2]=b[0]; candBits[i*2+1]=b[1]; }
+          const scores = nnHelpers.evaluateMeld(meta, myTeamMelds, oppTeamMelds, discardBits, myHandBits, opp1Bits, opp2Bits, opp3Bits, candBits, dnaMeld, n);
           for (let i = 0; i < n; i++) possibleMelds[i].score = scores[i];
           const queue = resolveQueue(possibleMelds.slice(0, n));
           if (queue.length > 0) return queue.map(m => ({ move: m.move, args: m.args }));
       }
 
-      // ── DISCARD STAGE ────────────────────────────────────────────────────────
-      const isMortoSafe = mortoSafe;
-      if (myHandCards.length > 1 || isMortoSafe) {
-          const scores = nnHelpers.forwardPass(inputBuffer, dnaDiscard, AI_CONFIG.DISCARD_CLASSES);
-
+      // ── DISCARD ───────────────────────────────────────────────────────────
+      if (myHandCards.length > 1 || mortoSafe) {
+          const scores = nnHelpers.evaluateDiscard(meta, myTeamMelds, oppTeamMelds, discardBits, myHandBits, opp1Bits, opp2Bits, opp3Bits, dnaDiscard);
           let bestCard = null, bestScore = -1;
-          for (let card of myHandCards) {
+          for (const card of myHandCards) {
               const cls = card >= 104 ? 52 : card % 52;
               if (scores[cls] > bestScore) { bestScore = scores[cls]; bestCard = card; }
           }
-
           if (bestCard !== null) return [{ move: 'discardCard', args: [bestCard] }];
-
-          // Fallback: discard highest point card
-          let worstCard = myHandCards[0], hVal = -1;
-          for (let card of myHandCards) {
-              const val = getCardPoints(card);
-              if (val > hVal) { hVal = val; worstCard = card; }
-          }
-          return [{ move: 'discardCard', args: [worstCard] }];
+          let worst = myHandCards[0], wVal = -1;
+          for (const card of myHandCards) { const v = getCardPoints(card); if (v > wVal) { wVal = v; worst = card; } }
+          return [{ move: 'discardCard', args: [worst] }];
       }
 
       return [];

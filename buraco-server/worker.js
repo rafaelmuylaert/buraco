@@ -1,12 +1,16 @@
 import { workerData, parentPort } from 'worker_threads';
 import {
     BuracoGame, nnHelpers, AI_CONFIG,
-    isMeldClean, getMeldLength, calculateMeldPoints, syncGameBNN
+    isMeldClean, getMeldLength, calculateMeldPoints
 } from './game.js';
-import { initWasm, wasmForwardPass } from './wasm_loader.js';
+import { initWasm, wasmEvaluatePickup, wasmEvaluateMeld, wasmEvaluateDiscard } from './wasm_loader.js';
 
 const wasmLoaded = await initWasm();
-if (wasmLoaded) nnHelpers.forwardPass = wasmForwardPass;
+if (wasmLoaded) {
+    nnHelpers.evaluatePickup  = wasmEvaluatePickup;
+    nnHelpers.evaluateMeld    = wasmEvaluateMeld;
+    nnHelpers.evaluateDiscard = wasmEvaluateDiscard;
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -190,8 +194,6 @@ function runMatch(genomes, rules, fixedDeck) {
         while (!gameover && moveCount < 2000) {
             const p = ctx.currentPlayer;
 
-            // syncGameBNN once per decision point (not after every sub-move)
-            syncGameBNN(S);
             const moves = BuracoGame.ai.enumerate(S, ctx);
 
             if (!moves || moves.length === 0) {
