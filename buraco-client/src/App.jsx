@@ -8,7 +8,7 @@ import { BuracoBoard } from './Board.jsx';
 
 const { port, hostname, protocol, origin } = window.location;
 const IS_DIRECT = ['8000','5173'].includes(port);
-const IS_SUBDOMAIN = !IS_DIRECT && hostname.startsWith('buraco.');
+const IS_SUBDOMAIN = hostname.startsWith('buraco.');
 const BASE_DOMAIN = IS_SUBDOMAIN ? hostname.replace('buraco.', '') : null;
 
 const API_ADDRESS = IS_DIRECT
