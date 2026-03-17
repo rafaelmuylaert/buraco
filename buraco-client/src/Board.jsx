@@ -423,13 +423,15 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
             return (
               <div key={team} style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
                 <span style={{ fontSize: '0.7em', color: hasMorto ? '#ffd700' : '#888', fontWeight: 'bold', minWidth: '28px' }}>{label}: {hasMorto ? '✔️' : '❌'}</span>
-                {ti === 0 && availablePots.map((_, i) => (
-                  <div key={i} style={{
-                    border: '1px solid white', borderRadius: '3px', width: '18px', height: '28px',
-                    backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 4px)',
-                    boxShadow: '1px 1px 2px rgba(0,0,0,0.5)', flexShrink: 0
-                  }} />
-                ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  {availablePots.map((_, i) => (
+                    <div key={i} style={{
+                      border: '1px solid white', borderRadius: '2px', width: '12px', height: '18px',
+                      backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 4px)',
+                      boxShadow: '1px 1px 2px rgba(0,0,0,0.5)', flexShrink: 0
+                    }} />
+                  ))}
+                </div>
               </div>
             );
           })}
