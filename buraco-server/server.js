@@ -39,7 +39,8 @@ const gameDB = new FlatFile({
 
 const server = Server({
   games: [BuracoGame],
-  db: gameDB, 
+  db: gameDB,
+  origins: ['https://buraco.rafamano.com', 'http://localhost:5173', 'http://10.0.0.4:5173'],
 });
 
 const tourneyFile = path.join(dbPath, 'tournaments.json');
