@@ -6,15 +6,21 @@ import { io } from 'socket.io-client';
 import { BuracoGame } from './game.js';
 import { BuracoBoard } from './Board.jsx';
 
-const API_ADDRESS = `${window.location.origin}/buraco`;
+const IS_PROXIED = window.location.pathname.startsWith('/buraco');
+const API_ADDRESS = IS_PROXIED
+  ? `${window.location.origin}/buraco`
+  : `${window.location.protocol}//${window.location.hostname}:8000`;
 const lobbyClient = new LobbyClient({ server: API_ADDRESS });
+
+const SOCKET_SERVER = IS_PROXIED ? window.location.origin : `${window.location.protocol}//${window.location.hostname}:8000`;
+const SOCKET_PATH = IS_PROXIED ? '/buraco/socket.io' : '/socket.io';
 
 const BuracoClient = Client({ 
   game: BuracoGame, 
   board: BuracoBoard, 
   multiplayer: SocketIO({ 
-    server: window.location.origin, 
-    socketOpts: { path: '/buraco/socket.io', reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000 } 
+    server: SOCKET_SERVER, 
+    socketOpts: { path: SOCKET_PATH, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000 } 
   }), 
   debug: false 
 });
@@ -22,7 +28,7 @@ const BuracoClient = Client({
 function ReconnectingClient({ matchID, playerID, credentials, tournament, tournamentStandings }) {
   const [key, setKey] = React.useState(0);
   React.useEffect(() => {
-    const socket = io(window.location.origin, { path: '/buraco/socket.io', autoConnect: true, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000 });
+    const socket = io(SOCKET_SERVER, { path: SOCKET_PATH, autoConnect: true, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000 });
     socket.on('reconnect', () => setKey(k => k + 1));
     return () => socket.close();
   }, []);

@@ -28,7 +28,23 @@ services:
           path: ./buraco-client/src/game.js
           target: /app/game.js
 
-  # ... (buraco-client remains the same as before) ...
+  buraco-client:
+    build: ./buraco-client
+    container_name: buraco-client
+    ports:
+      - "4173:5173"
+    depends_on:
+      - buraco-server
+    restart: unless-stopped
+    develop:
+      watch:
+        - action: rebuild
+          path: ./buraco-client/package.json
+        - action: sync
+          path: ./buraco-client/src
+          target: /app/src
+          ignore:
+            - node_modules/
 
   buraco-bot:
     build:
