@@ -99,14 +99,7 @@ function movePlayMeld(S, p, cardIds) {
     if (!S.hasDrawn) return false;
     const hand = S.hands[p];
     for (const c of cardIds) { if (hand.indexOf(c) === -1) return false; }
-    const result = BuracoGame.moves.playMeld(
-        { G: S, ctx: { currentPlayer: p }, events: { endTurn: () => {} } },
-        cardIds
-    );
-    if (result !== 'INVALID_MOVE') return true;
-    // In greedyMode, bypass the hand-size guard by temporarily relaxing it
-    if (!S.rules.greedyMode) return false;
-    const parsed = BuracoGame._buildMeld ? BuracoGame._buildMeld(cardIds, S.rules) : null;
+    const parsed = buildMeld(cardIds, S.rules);
     if (!parsed) return false;
     S.hands[p] = removeCards(hand, cardIds);
     S.melds[p] = [...(S.melds[p] || []), parsed];
@@ -118,11 +111,17 @@ function movePlayMeld(S, p, cardIds) {
 
 function moveAppendToMeld(S, p, meldOwner, meldIndex, cardIds) {
     if (!S.hasDrawn) return false;
-    const result = BuracoGame.moves.appendToMeld(
-        { G: S, ctx: { currentPlayer: p }, events: { endTurn: () => {} } },
-        meldOwner, meldIndex, cardIds
-    );
-    return result !== 'INVALID_MOVE';
+    const hand = S.hands[p];
+    for (const c of cardIds) { if (hand.indexOf(c) === -1) return false; }
+    const parsed = appendCardsToMeld(S.melds[meldOwner][meldIndex], cardIds);
+    if (!parsed) return false;
+    S.hands[p] = removeCards(hand, cardIds);
+    S.melds[meldOwner] = [...S.melds[meldOwner]];
+    S.melds[meldOwner][meldIndex] = parsed;
+    S.knownCards[p] = removeCards(S.knownCards[p], cardIds);
+    if (S.teamMortos[S.teams[p]]) S.mortoUsed[S.teams[p]] = true;
+    tryPickupMorto(S, p);
+    return true;
 }
 
 function moveDiscardCard(S, p, cardId, force = false) {
