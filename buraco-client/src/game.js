@@ -185,7 +185,7 @@ function isRunnerAllowed(rules, rank) {
     return false;
 }
 
-function buildMeld(cardIds, rules) {
+export function buildMeld(cardIds, rules) {
     if (cardIds.length < 3) return null;
     let seq = cardsToSeqSlots(cardIds);
     if (seq) return seq;
@@ -195,7 +195,7 @@ function buildMeld(cardIds, rules) {
     return null;
 }
 
-function appendCardsToMeld(meld, cards) {
+export function appendCardsToMeld(meld, cards) {
     if (meld[0] === 0) return cardsToRunnerSlots(cards, meld);
     return cardsToSeqSlots(cards, meld);
 }

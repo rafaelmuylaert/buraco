@@ -1,7 +1,8 @@
 import { workerData, parentPort } from 'worker_threads';
 import {
     BuracoGame, nnHelpers, AI_CONFIG,
-    isMeldClean, getMeldLength, calculateMeldPoints
+    isMeldClean, getMeldLength, calculateMeldPoints,
+    buildMeld, appendCardsToMeld
 } from './game.js';
 import { initWasm, wasmEvaluatePickup, wasmEvaluateMeld, wasmEvaluateDiscard } from './wasm_loader.js';
 
@@ -96,11 +97,23 @@ function movePickUpDiscard(S, p, selectedHandIds, target) {
 
 function movePlayMeld(S, p, cardIds) {
     if (!S.hasDrawn) return false;
+    const hand = S.hands[p];
+    for (const c of cardIds) { if (hand.indexOf(c) === -1) return false; }
     const result = BuracoGame.moves.playMeld(
         { G: S, ctx: { currentPlayer: p }, events: { endTurn: () => {} } },
         cardIds
     );
-    return result !== 'INVALID_MOVE';
+    if (result !== 'INVALID_MOVE') return true;
+    // In greedyMode, bypass the hand-size guard by temporarily relaxing it
+    if (!S.rules.greedyMode) return false;
+    const parsed = BuracoGame._buildMeld ? BuracoGame._buildMeld(cardIds, S.rules) : null;
+    if (!parsed) return false;
+    S.hands[p] = removeCards(hand, cardIds);
+    S.melds[p] = [...(S.melds[p] || []), parsed];
+    S.knownCards[p] = removeCards(S.knownCards[p], cardIds);
+    if (S.teamMortos[S.teams[p]]) S.mortoUsed[S.teams[p]] = true;
+    tryPickupMorto(S, p);
+    return true;
 }
 
 function moveAppendToMeld(S, p, meldOwner, meldIndex, cardIds) {
