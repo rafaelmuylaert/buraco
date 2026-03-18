@@ -37,7 +37,7 @@ async function pollLobby() {
                       console.warn(`[BOT] DNA size mismatch for '${targetBotName}': got ${loadedDNA.length}, expected ${AI_CONFIG.TOTAL_DNA_SIZE}. Weights are incompatible — bot will play randomly.`);
                       loadedDNA = null;
                   }
-                  dnaCache[targetBotName] = loadedDNA;
+                  dnaCache[targetBotName] = loadedDNA ? new Uint32Array(loadedDNA) : null;
               }
             } catch(e) {
               console.error(`[BOT] Could not fetch DNA for ${targetBotName}`);

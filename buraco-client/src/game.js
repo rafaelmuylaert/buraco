@@ -551,8 +551,9 @@ export const BuracoGame = {
       meta |= (hs(partnerId) << 15);
       meta |= (hs(opp2Id)    << 19);
 
-      let DNA = customDNA || G.botGenomes?.[p] || new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE).fill(0);
-      if (DNA.length !== AI_CONFIG.TOTAL_DNA_SIZE) DNA = new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE).fill(0);
+      let DNA = customDNA || G.botGenomes?.[p];
+      if (!DNA || DNA.length !== AI_CONFIG.TOTAL_DNA_SIZE) DNA = new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE).fill(0);
+      else if (!(DNA instanceof Uint32Array)) DNA = new Uint32Array(DNA);
       let off = 0;
       const dnaPickup  = DNA.subarray(off, off += AI_CONFIG.DNA_PICKUP);
       const dnaAppend  = DNA.subarray(off, off += AI_CONFIG.DNA_MELD);
