@@ -142,6 +142,15 @@ server.router.get('/api/bots/info', (ctx) => {
     });
 });
 
+server.router.post('/api/bots/stop', async (ctx) => {
+    setCors(ctx);
+    try {
+        const body = await parseBody(ctx);
+        const stopped = TrainerService.stopTraining(body.botName);
+        ctx.body = { success: stopped, message: stopped ? `Stop requested for ${body.botName}` : 'Not training' };
+    } catch (e) { ctx.status = 400; ctx.body = { error: e.message }; }
+});
+
 server.router.post('/api/bots/delete', async (ctx) => {
     setCors(ctx);
     try {

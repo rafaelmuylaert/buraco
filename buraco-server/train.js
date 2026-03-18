@@ -11,6 +11,7 @@ const BOTS_DIR = path.join(process.cwd(), 'bots');
 if (!fs.existsSync(BOTS_DIR)) fs.mkdirSync(BOTS_DIR, { recursive: true });
 
 const activeTrainings = new Map();
+const stopFlags = new Set();
 
 function mutate(genome, mutationRate = 0.005) {
     const mutated = new Uint32Array(genome);
@@ -145,6 +146,12 @@ async function runPlayoffTournament(population, rules) {
 
 export const TrainerService = {
 
+    stopTraining: (botName) => {
+        if (!activeTrainings.has(botName)) return false;
+        stopFlags.add(botName);
+        return true;
+    },
+
     getBotWeights: (botName) => {
         const filePath = path.join(BOTS_DIR, `${botName}.json`);
         if (!fs.existsSync(filePath)) return null;
@@ -174,28 +181,38 @@ export const TrainerService = {
         if (params.greedyMode) rules = { ...rules, greedyMode: true };
 
         const seedDNA = TrainerService.getBotWeights(botName);
-        const originalDNA = generateRandomGenome(); 
+        const originalDNA = generateRandomGenome();
+
+        // Load lifetime generation count from meta
+        const metaPath = path.join(BOTS_DIR, `${botName}.meta.json`);
+        const existingMeta = fs.existsSync(metaPath) ? JSON.parse(fs.readFileSync(metaPath, 'utf-8')) : null;
+        const lifetimeGenOffset = existingMeta?.lifetimeGenerations || 0;
 
         let population;
         if (seedDNA) {
             console.log(`🧠 Resuming training for '${botName}'...`);
-            let base = seedDNA;
-            if (base.length !== AI_CONFIG.TOTAL_DNA_SIZE) {
-                let expanded = [];
-                while (expanded.length < AI_CONFIG.TOTAL_DNA_SIZE) expanded.push(...base);
-                base = expanded.slice(0, AI_CONFIG.TOTAL_DNA_SIZE);
-            }
-            const baseU32 = new Uint32Array(base);
-            population = Array(POPULATION_SIZE).fill(null).map((_, i) =>
-                i === 0 ? baseU32 : mutate(baseU32, 0.01) 
-            );
         } else {
             console.log(`🧠 Starting fresh training for '${botName}'...`);
-            population = Array(POPULATION_SIZE).fill(null).map(() => generateRandomGenome());
         }
+
+        // Helper to load a saved island genome, falling back to seedDNA or random
+        const loadIslandSeed = (k) => {
+            const fp = path.join(BOTS_DIR, `${botName}_${k}.json`);
+            if (fs.existsSync(fp)) {
+                const raw = JSON.parse(fs.readFileSync(fp, 'utf-8'));
+                const arr = Array.isArray(raw) ? raw : Object.values(raw);
+                return new Uint32Array(arr.length === AI_CONFIG.TOTAL_DNA_SIZE ? arr : arr.slice(0, AI_CONFIG.TOTAL_DNA_SIZE));
+            }
+            if (seedDNA) {
+                let base = seedDNA.length === AI_CONFIG.TOTAL_DNA_SIZE ? seedDNA : seedDNA.slice(0, AI_CONFIG.TOTAL_DNA_SIZE);
+                return new Uint32Array(base);
+            }
+            return generateRandomGenome();
+        };
 
         activeTrainings.set(botName, {
             currentGeneration: 0, totalGenerations: GENERATIONS,
+            lifetimeGenOffset,
             benchmarkDiff: null,
             islands: []
         });
@@ -207,9 +224,13 @@ export const TrainerService = {
         for (let i = 0; i < 52; i++) baseDeck.push(i);
         if (!rules.noJokers) baseDeck.push(54, 54);
 
-        const islandPops = Array.from({ length: NUM_ISLANDS }, () =>
-            population.slice(0, POPULATION_SIZE).map(g => new Uint32Array(g))
-        );
+        const islandPops = Array.from({ length: NUM_ISLANDS }, (_, k) => {
+            const seed = loadIslandSeed(k);
+            // slot 0: exact clone of seed, rest: low-rate mutations
+            return Array.from({ length: POPULATION_SIZE }, (_, i) =>
+                i === 0 ? new Uint32Array(seed) : mutate(seed, 0.005)
+            );
+        });
         const islandElites = new Array(NUM_ISLANDS).fill(null);
 
         const runIslandGeneration = async (pop) => {
@@ -235,8 +256,11 @@ export const TrainerService = {
                 .sort((a, b) => b.score - a.score)
                 .map(x => x.genome);
                 
+            // slot 0: exact clone of best (elitism — never mutate the champion)
+            // slot 1: exact clone of 2nd best
+            // rest: mutations of top finalists + crossbreeds
             const clones = rankedFinalists.slice(0, 2).map(f => new Uint32Array(f));
-            const mutations = rankedFinalists.map(f => mutate(f, 0.005)); 
+            const mutations = rankedFinalists.slice(1).map(f => mutate(f, 0.005));
             const crossbreeds = [];
             while (crossbreeds.length < pop.length - clones.length - mutations.length) {
                 const pick = () => rankedFinalists[Math.floor(Math.random() * Math.random() * rankedFinalists.length)];
@@ -259,6 +283,7 @@ export const TrainerService = {
         const runIsland = async (islandIdx) => {
             try {
                 for (let gen = 1; gen <= GENERATIONS; gen++) {
+                    if (stopFlags.has(botName)) break;
                     if (!rules.fixedDeck && islandIdx === 0) {
                         shuffle(baseDeck);
                         getPool().broadcastDeck(baseDeck);
@@ -330,7 +355,8 @@ export const TrainerService = {
                         const bestIdx = wins.indexOf(Math.max(...wins));
                         const champion = candidates[bestIdx].genome;
                         fs.writeFileSync(path.join(BOTS_DIR, `${botName}.json`), JSON.stringify(Array.from(champion)));
-                        fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({ rules, trainParams: { populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, telepathy: params.telepathy, fixedDeck: params.fixedDeck } }));
+                        const currentLifetimeGen = lifetimeGenOffset + (activeTrainings.get(botName)?.currentGeneration || 0);
+                        fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({ rules, lifetimeGenerations: currentLifetimeGen, trainParams: { populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, telepathy: params.telepathy, fixedDeck: params.fixedDeck } }));
 
                         let benchmarkDiff = null;
                         if (originalDNA) {
@@ -359,6 +385,7 @@ export const TrainerService = {
             console.log(`✅ Training complete for '${botName}'!`);
             if (_pool) { _pool.terminate(); _pool = null; }
             activeTrainings.delete(botName);
+            stopFlags.delete(botName);
         }
     }
 };

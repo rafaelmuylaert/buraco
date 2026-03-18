@@ -604,12 +604,19 @@ const App = () => {
 
         {trainingStatus && trainingStatus.isTraining && trainingStatus.sessions.map(session => (
           <div key={session.botName} style={{ width: '100%', background: '#2b1055', padding: '20px', borderRadius: '10px', border: '1px solid #8a2be2', marginBottom: '30px', boxSizing: 'border-box' }}>
-            <h3 style={{ margin: '0 0 10px 0', color: '#ffb86c' }}>⚙️ Treinamento em Andamento: {session.botName}</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <h3 style={{ margin: 0, color: '#ffb86c' }}>⚙️ Treinamento em Andamento: {session.botName}</h3>
+              <button onClick={async () => {
+                if (!confirm(`Parar o treinamento de "${session.botName}"? O progresso atual será salvo.`)) return;
+                await fetch(`${API_ADDRESS}/api/bots/stop`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botName: session.botName }) });
+              }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 14px', fontWeight: 'bold', cursor: 'pointer' }}>⏹ Parar</button>
+            </div>
             <div style={{ background: '#111', borderRadius: '5px', width: '100%', height: '20px', overflow: 'hidden' }}>
               <div style={{ width: `${(session.progress.currentGeneration / session.progress.totalGenerations) * 100}%`, background: '#8a2be2', height: '100%', transition: 'width 1s' }} />
             </div>
             <div style={{ marginTop: '8px', color: '#aaa', fontSize: '0.85em', textAlign: 'right' }}>
-              Geração mais avançada: <strong style={{color:'white'}}>{session.progress.currentGeneration} / {session.progress.totalGenerations}</strong>
+              Sessão atual: <strong style={{color:'white'}}>{session.progress.currentGeneration} / {session.progress.totalGenerations}</strong>
+              {session.progress.lifetimeGenOffset > 0 && <span style={{color:'#b088f9'}}> &nbsp;(Total: {session.progress.lifetimeGenOffset + session.progress.currentGeneration} ger.)</span>}
             </div>
 
             <div style={{ marginTop: '15px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px' }}>
@@ -662,7 +669,9 @@ const App = () => {
                   <div>
                     <div style={{ fontWeight: 'bold', color: bot.isTraining ? '#ffb86c' : 'white' }}>{bot.name} {bot.isTraining ? '⚙️' : ''}</div>
                     <div style={{ fontSize: '0.75em', color: '#888' }}>
-                      {bot.isTraining ? `Gen ${bot.currentGen}/${bot.totalGen}` : `Salvo: ${new Date(bot.lastModified).toLocaleDateString()}`}
+                      {bot.isTraining
+                        ? `Sessão: Gen ${bot.currentGen}/${bot.totalGen}${bot.meta?.lifetimeGenerations ? ` · Total: ${bot.meta.lifetimeGenerations} ger.` : ''}`
+                        : `${bot.meta?.lifetimeGenerations ? `${bot.meta.lifetimeGenerations} ger. treinadas · ` : ''}Salvo: ${new Date(bot.lastModified).toLocaleDateString()}`}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '6px' }}>
