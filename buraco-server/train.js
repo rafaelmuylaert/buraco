@@ -135,7 +135,7 @@ async function runPlayoffTournament(population, rules) {
         let scoreIdx = 0;
         remaining = pairIndices.map(({ a, b, bye }) => {
             if (bye) return a || b;
-            const [sA] = scores[scoreIdx++]; 
+            const [sA] = scores[scoreIdx++];
             return sA >= 0 ? a : b;
         });
     }
@@ -224,10 +224,10 @@ export const TrainerService = {
             const finalistScores = new Array(finalists.length).fill(0);
             if (statPairs.length > 0) {
                 const results = await runMatchBatch(statPairs, rules);
-                results.forEach(([sA], idx) => {
+                results.forEach(([sA, , rawA, rawB], idx) => {
                     const [i, j] = statMeta[idx];
-                    allDiffs.push(Math.abs(sA));
-                    if (sA > 0) finalistScores[i]++; else finalistScores[j]++;
+                    allDiffs.push(rawA, rawB);
+                    if (sA > 0) finalistScores[i]++; else if (sA < 0) finalistScores[j]++;
                 });
             } else { allDiffs.push(0); }
             const rankedFinalists = finalists

@@ -262,12 +262,23 @@ function runMatch(genomes, rules, fixedDeck) {
         }
 
         const scores = gameover ? gameover.scores : (() => { console.warn('[runMatch] hit 2000 move limit'); return { team0: { total: -5000 }, team1: { total: -5000 } }; })();
-        return scores.team0.total - scores.team1.total;
+        const diff = scores.team0.total - scores.team1.total;
+        if (_diagCount < 2) {
+            _diagCount++;
+            const t0 = scores.team0, t1 = scores.team1;
+            const meldCount = Object.values(S.melds).reduce((s, m) => s + m.length, 0);
+            console.log(`[DIAG] reason=${gameover?.reason} moves=${moveCount} greedy=${rules.greedyMode} melds=${meldCount}`);
+            console.log(`[DIAG] t0: table=${t0.table} hand=${t0.hand} morto=${t0.mortoPenalty} total=${t0.total}`);
+            console.log(`[DIAG] t1: table=${t1.table} hand=${t1.hand} morto=${t1.mortoPenalty} total=${t1.total} diff=${diff}`);
+        }
+        return diff;
     } catch (e) {
         console.error('[runMatch] exception:', e?.message || e);
         return 0;
     }
 }
+
+let _diagCount = 0;
 
 // ── Job processing ────────────────────────────────────────────────────────────
 
@@ -282,7 +293,10 @@ function processJob(matches, rules) {
         const pairDeck = rules.fixedDeck ? _currentDeck : shuffle([..._currentDeck]);
         const g1 = runMatch({ '0': dnaA, '1': dnaB, '2': dnaA, '3': dnaB }, rules, pairDeck);
         const g2 = runMatch({ '0': dnaB, '1': dnaA, '2': dnaB, '3': dnaA }, rules, pairDeck);
-        return [g1 + (-g2), g2 + (-g1)];
+        // g1: positive = dnaA won game1. g2: positive = dnaB won game2.
+        // Combined: dnaA score = g1 - g2, dnaB score = g2 - g1
+        // Also expose raw g1,g2 for diff tracking
+        return [g1 - g2, g2 - g1, Math.abs(g1), Math.abs(g2)];
     });
 }
 
