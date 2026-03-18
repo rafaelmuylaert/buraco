@@ -250,22 +250,12 @@ function runMatch(genomes, rules, fixedDeck) {
         }
 
         const scores = gameover ? gameover.scores : (() => { console.warn('[runMatch] hit 2000 move limit'); return { team0: { total: -5000 }, team1: { total: -5000 } }; })();
-        const diff = scores.team0.total - scores.team1.total;
-        if (_diagCount < 3) {
-            _diagCount++;
-            const t0 = scores.team0; const t1 = scores.team1;
-            console.log(`[DIAG] reason=${gameover?.reason} moves=${moveCount} greedy=${rules.greedyMode}`);
-            console.log(`[DIAG] t0: table=${t0.table} hand=${t0.hand} morto=${t0.mortoPenalty} total=${t0.total}`);
-            console.log(`[DIAG] t1: table=${t1.table} hand=${t1.hand} morto=${t1.mortoPenalty} total=${t1.total}`);
-            console.log(`[DIAG] melds0=${Object.values(S.melds).flat().length} diff=${diff}`);
-        }
-        return diff;
+        return scores.team0.total - scores.team1.total;
     } catch (e) {
         console.error('[runMatch] exception:', e?.message || e);
         return 0;
     }
 }
-let _diagCount = 0;
 
 // ── Job processing ────────────────────────────────────────────────────────────
 
