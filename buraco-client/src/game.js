@@ -559,26 +559,11 @@ export const BuracoGame = {
       const dnaMeld    = DNA.subarray(off, off += AI_CONFIG.DNA_MELD);
       const dnaDiscard = DNA.subarray(off, AI_CONFIG.TOTAL_DNA_SIZE);
 
-      const resolveQueue = (moves) => {
-          if (G.rules.greedyMode) {
-              // Always play the single highest-scored move, ignoring hand-size safety
-              let best = moves[0];
-              for (let i = 1; i < moves.length; i++) if (moves[i].score > best.score) best = moves[i];
-              return [best];
-          }
-          let selected = [], usedCards = new Set(), projectedSize = myHandCards.length;
-          for (const m of moves) {
-              if (m.cards.some(c => usedCards.has(c))) continue;
-              if (projectedSize - m.cards.length < 2 && !mortoSafe) continue;
-              m.cards.forEach(c => usedCards.add(c));
-              selected.push(m);
-              projectedSize -= m.cards.length;
-          }
-          return selected;
-      };
-
       // ── PICKUP ────────────────────────────────────────────────────────────
       if (!G.hasDrawn) {
+          // Clear any stale cache for this player
+          enumerate._cache?.delete(p);
+
           if (G.deck.length === 0 && G.pots.length === 0) return [{ move: 'declareExhausted', args: [] }];
 
           const candidates = [{ move: 'drawCard', args: [], cards: [] }];
@@ -603,18 +588,46 @@ export const BuracoGame = {
           const candBits = new Uint32Array(AI_CONFIG.MAX_PICKUP * 2);
           for (let i = 0; i < n; i++) { const b = packCards(candidates[i].cards); candBits[i*2]=b[0]; candBits[i*2+1]=b[1]; }
           const scores = nnHelpers.evaluatePickup(meta, myTeamMelds, oppTeamMelds, discardBits, myHandBits, opp1Bits, opp2Bits, opp3Bits, candBits, dnaPickup, n);
+          // Always pick highest score — game must move forward
           let best = 0;
           for (let i = 1; i < n; i++) if (scores[i] > scores[best]) best = i;
           return [{ move: candidates[best].move, args: candidates[best].args }];
       }
 
-      // ── APPEND ────────────────────────────────────────────────────────────
+      // ── POST-PICKUP: serve from cache or build plan ───────────────────────
+      if (!enumerate._cache) enumerate._cache = new Map();
+      const cached = enumerate._cache.get(p);
+
+      // If we have a cached plan for this player's current hand, serve next move
+      if (cached) {
+          // Pop moves whose cards are all still in hand; skip those that aren't
+          while (cached.moves.length > 0) {
+              const next = cached.moves[0];
+              if (next.move === 'discardCard') {
+                  // Always serve the discard (it's the last move)
+                  enumerate._cache.delete(p);
+                  return [{ move: next.move, args: next.args }];
+              }
+              // Check all cards still available
+              const cardCounts = {};
+              for (const c of myHandCards) cardCounts[c] = (cardCounts[c] || 0) + 1;
+              const canPlay = next.cards.every(c => { if (cardCounts[c] > 0) { cardCounts[c]--; return true; } return false; });
+              if (!canPlay) { cached.moves.shift(); continue; }
+              cached.moves.shift();
+              return [{ move: next.move, args: next.args }];
+          }
+          enumerate._cache.delete(p);
+      }
+
+      // ── Build full meld plan with current (post-pickup) hand ──────────────
+      const planMoves = [];
+
+      // Score all appends
       const possibleAppends = []; const appendSigs = new Set();
       (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIdx) => {
               for (const card of myHandCards) {
                   if (!appendToMeld(meld, card)) continue;
-                  if (!mortoSafe && myHandCards.length - 1 < 2) continue;
                   const sig = `${tp}-${mIdx}-${card>=104?52:card%52}`;
                   if (appendSigs.has(sig)) continue;
                   appendSigs.add(sig);
@@ -628,14 +641,12 @@ export const BuracoGame = {
           for (let i = 0; i < n; i++) { const b = packCards(possibleAppends[i].cards); candBits[i*2]=b[0]; candBits[i*2+1]=b[1]; }
           const scores = nnHelpers.evaluateMeld(meta, myTeamMelds, oppTeamMelds, discardBits, myHandBits, opp1Bits, opp2Bits, opp3Bits, candBits, dnaAppend, n);
           for (let i = 0; i < n; i++) possibleAppends[i].score = scores[i];
-          const queue = resolveQueue(possibleAppends.slice(0, n));
-          if (queue.length > 0) return queue.map(m => ({ move: m.move, args: m.args }));
+          planMoves.push(...possibleAppends.slice(0, n));
       }
 
-      // ── NEW MELD ──────────────────────────────────────────────────────────
+      // Score all new melds
       const possibleMelds = []; const meldSigs = new Set();
       for (const combo of getAllValidMelds(myHandCards, G.rules)) {
-          if (!mortoSafe && myHandCards.length - combo.length < 2) continue;
           const sig = combo.map(c => c>=104?52:c%52).sort((a,b)=>a-b).join(',');
           if (meldSigs.has(sig)) continue;
           meldSigs.add(sig);
@@ -647,23 +658,64 @@ export const BuracoGame = {
           for (let i = 0; i < n; i++) { const b = packCards(possibleMelds[i].cards); candBits[i*2]=b[0]; candBits[i*2+1]=b[1]; }
           const scores = nnHelpers.evaluateMeld(meta, myTeamMelds, oppTeamMelds, discardBits, myHandBits, opp1Bits, opp2Bits, opp3Bits, candBits, dnaMeld, n);
           for (let i = 0; i < n; i++) possibleMelds[i].score = scores[i];
-          const queue = resolveQueue(possibleMelds.slice(0, n));
-          if (queue.length > 0) return queue.map(m => ({ move: m.move, args: m.args }));
+          planMoves.push(...possibleMelds.slice(0, n));
+      }
+
+      // Sort all candidates by score descending
+      planMoves.sort((a, b) => b.score - a.score);
+
+      // Select which plays to make
+      const selectedPlays = [];
+      const usedCardCounts = {};
+      for (const c of myHandCards) usedCardCounts[c] = (usedCardCounts[c] || 0) + 1;
+      let projectedSize = myHandCards.length;
+
+      for (const m of planMoves) {
+          // Check cards available
+          const tempCounts = { ...usedCardCounts };
+          const canPlay = m.cards.every(c => { if (tempCounts[c] > 0) { tempCounts[c]--; return true; } return false; });
+          if (!canPlay) continue;
+          // Hand-size guard (skip if would leave < 2 and not mortoSafe), unless greedy
+          if (!mortoSafe && projectedSize - m.cards.length < 2 && !G.rules.greedyMode) continue;
+          // In normal mode, only play positive scores
+          if (!G.rules.greedyMode && m.score <= 0) continue;
+          // Commit
+          for (const c of m.cards) usedCardCounts[c]--;
+          projectedSize -= m.cards.length;
+          selectedPlays.push(m);
+          // In greedy mode, only play the single best move
+          if (G.rules.greedyMode) break;
       }
 
       // ── DISCARD ───────────────────────────────────────────────────────────
-      if (myHandCards.length > 0) {
-          const scores = nnHelpers.evaluateDiscard(meta, myTeamMelds, oppTeamMelds, discardBits, myHandBits, opp1Bits, opp2Bits, opp3Bits, dnaDiscard);
-          let bestCard = null, bestScore = -1;
-          // Prefer cards that don't violate the 1-card rule, fall back to any card
-          for (const card of myHandCards) {
-              if (myHandCards.length === 1 && !mortoSafe) continue;
+      // Compute remaining hand after simulated plays
+      const playedCounts = {};
+      for (const m of selectedPlays) for (const c of m.cards) playedCounts[c] = (playedCounts[c] || 0) + 1;
+      const remainingHand = myHandCards.filter(c => { if (playedCounts[c] > 0) { playedCounts[c]--; return false; } return true; });
+
+      let discardMove = null;
+      if (remainingHand.length > 0) {
+          const discardHandBits = packCards(remainingHand);
+          const discardScores = nnHelpers.evaluateDiscard(meta, myTeamMelds, oppTeamMelds, discardBits, discardHandBits, opp1Bits, opp2Bits, opp3Bits, dnaDiscard);
+          let bestCard = null, bestScore = -Infinity;
+          for (const card of remainingHand) {
               const cls = card >= 104 ? 52 : card % 52;
-              if (scores[cls] > bestScore) { bestScore = scores[cls]; bestCard = card; }
+              if (discardScores[cls] > bestScore) { bestScore = discardScores[cls]; bestCard = card; }
           }
-          if (bestCard === null) bestCard = myHandCards[0]; // force discard if stuck
-          return [{ move: 'discardCard', args: [bestCard] }];
+          if (bestCard === null) bestCard = remainingHand[0];
+          discardMove = { move: 'discardCard', args: [bestCard], cards: [] };
       }
+
+      // Build the full turn sequence and cache it
+      const turnQueue = [...selectedPlays];
+      if (discardMove) turnQueue.push(discardMove);
+
+      if (turnQueue.length > 1) {
+          // Cache remaining moves (after we return the first one)
+          enumerate._cache.set(p, { moves: turnQueue.slice(1) });
+      }
+
+      if (turnQueue.length > 0) return [{ move: turnQueue[0].move, args: turnQueue[0].args }];
 
       return [];
     }

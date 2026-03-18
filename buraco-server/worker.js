@@ -205,22 +205,20 @@ function runMatch(genomes, rules, fixedDeck) {
 
         while (!gameover && moveCount < 2000) {
             const p = ctx.currentPlayer;
+            let endedTurn = false;
 
-            const moves = BuracoGame.ai.enumerate(S, ctx);
+            // Keep calling enumerate until the turn ends (discard/exhausted) or fallback
+            for (let safetyLimit = 0; safetyLimit < 50 && !endedTurn; safetyLimit++) {
+                const moves = BuracoGame.ai.enumerate(S, ctx);
 
-            if (!moves || moves.length === 0) {
-                // Fallback (force=true to bypass morto-safe guard)
-                if (S.hasDrawn && S.hands[p]?.length > 0) {
-                    moveDiscardCard(S, p, S.hands[p][0], true);
-                } else if (!S.hasDrawn) {
-                    moveDrawCard(S, p);
+                if (!moves || moves.length === 0) {
+                    // Fallback: force draw or discard
+                    if (!S.hasDrawn) moveDrawCard(S, p);
+                    else if (S.hands[p]?.length > 0) { moveDiscardCard(S, p, S.hands[p][0], true); endedTurn = true; }
+                    else endedTurn = true;
+                    break;
                 }
-                // End turn
-                ctx.currentPlayer = String((parseInt(p) + 1) % numPlayers);
-                S.hasDrawn = false;
-                S.lastDrawnCard = null;
-            } else {
-                let endedTurn = false;
+
                 for (const move of moves) {
                     let ok = false;
                     if (move.move === 'drawCard') {
@@ -232,7 +230,6 @@ function runMatch(genomes, rules, fixedDeck) {
                     } else if (move.move === 'appendToMeld') {
                         ok = moveAppendToMeld(S, p, move.args[0], move.args[1], move.args[2]);
                     } else if (move.move === 'discardCard') {
-                        // force=true: enumerate already validated the discard choice
                         ok = moveDiscardCard(S, p, move.args[0], true);
                         if (ok) { endedTurn = true; break; }
                     } else if (move.move === 'declareExhausted') {
@@ -241,21 +238,15 @@ function runMatch(genomes, rules, fixedDeck) {
                     if (rules.telepathy && ok)
                         for (const pl of Object.keys(S.hands)) S.knownCards[pl] = [...S.hands[pl]];
                 }
-
-                if (!endedTurn) {
-                    // No discard happened — force one (bypass morto-safe guard)
-                    if (S.hasDrawn && S.hands[p]?.length > 0) {
-                        moveDiscardCard(S, p, S.hands[p][0], true);
-                    }
-                    ctx.currentPlayer = String((parseInt(p) + 1) % numPlayers);
-                    S.hasDrawn = false;
-                    S.lastDrawnCard = null;
-                } else {
-                    ctx.currentPlayer = String((parseInt(p) + 1) % numPlayers);
-                    S.hasDrawn = false;
-                    S.lastDrawnCard = null;
-                }
             }
+
+            if (!endedTurn && S.hasDrawn && S.hands[p]?.length > 0) {
+                moveDiscardCard(S, p, S.hands[p][0], true);
+            }
+
+            ctx.currentPlayer = String((parseInt(p) + 1) % numPlayers);
+            S.hasDrawn = false;
+            S.lastDrawnCard = null;
 
             gameover = checkGameOver(S);
             moveCount++;
