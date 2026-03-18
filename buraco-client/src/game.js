@@ -562,7 +562,8 @@ export const BuracoGame = {
       // ── PICKUP ────────────────────────────────────────────────────────────
       if (!G.hasDrawn) {
           // Clear any stale cache for this player
-          enumerate._cache?.delete(p);
+          if (!enumerate._cache) enumerate._cache = new Map();
+          enumerate._cache.delete(p);
 
           if (G.deck.length === 0 && G.pots.length === 0) return [{ move: 'declareExhausted', args: [] }];
 
@@ -596,7 +597,9 @@ export const BuracoGame = {
 
       // ── POST-PICKUP: serve from cache or build plan ───────────────────────
       if (!enumerate._cache) enumerate._cache = new Map();
-      const cached = enumerate._cache.get(p);
+      // Cache key includes hand contents to avoid cross-match contamination
+      const cacheKey = p + ':' + myHandCards.slice().sort((a,b)=>a-b).join(',');
+      const cached = enumerate._cache.get(cacheKey);
 
       // If we have a cached plan for this player's current hand, serve next move
       if (cached) {
@@ -604,11 +607,9 @@ export const BuracoGame = {
           while (cached.moves.length > 0) {
               const next = cached.moves[0];
               if (next.move === 'discardCard') {
-                  // Always serve the discard (it's the last move)
-                  enumerate._cache.delete(p);
+                  enumerate._cache.delete(cacheKey);
                   return [{ move: next.move, args: next.args }];
               }
-              // Check all cards still available
               const cardCounts = {};
               for (const c of myHandCards) cardCounts[c] = (cardCounts[c] || 0) + 1;
               const canPlay = next.cards.every(c => { if (cardCounts[c] > 0) { cardCounts[c]--; return true; } return false; });
@@ -616,7 +617,7 @@ export const BuracoGame = {
               cached.moves.shift();
               return [{ move: next.move, args: next.args }];
           }
-          enumerate._cache.delete(p);
+          enumerate._cache.delete(cacheKey);
       }
 
       // ── Build full meld plan with current (post-pickup) hand ──────────────
@@ -711,8 +712,7 @@ export const BuracoGame = {
       if (discardMove) turnQueue.push(discardMove);
 
       if (turnQueue.length > 1) {
-          // Cache remaining moves (after we return the first one)
-          enumerate._cache.set(p, { moves: turnQueue.slice(1) });
+          enumerate._cache.set(cacheKey, { moves: turnQueue.slice(1) });
       }
 
       if (turnQueue.length > 0) return [{ move: turnQueue[0].move, args: turnQueue[0].args }];
