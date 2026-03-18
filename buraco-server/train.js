@@ -171,6 +171,7 @@ export const TrainerService = {
         const POPULATION_SIZE = Math.max(8, params.populationSize || 24);
         const GENERATIONS = params.generations || 500;
         const SAVE_EVERY = params.saveInterval || params.matchesPerGeneration || 12;
+        if (params.greedyMode) rules = { ...rules, greedyMode: true };
 
         const seedDNA = TrainerService.getBotWeights(botName);
         const originalDNA = generateRandomGenome(); 

@@ -86,6 +86,7 @@ const App = () => {
     saveInterval: 10,
     telepathy: true,
     fixedDeck: false,
+    greedyMode: true,
     rules: { discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true }
   });
 
@@ -151,7 +152,8 @@ const App = () => {
               generations: trainBotConfig.generations,
               saveInterval: trainBotConfig.saveInterval,
               telepathy: trainBotConfig.telepathy,
-              fixedDeck: trainBotConfig.fixedDeck
+              fixedDeck: trainBotConfig.fixedDeck,
+              greedyMode: trainBotConfig.greedyMode
            }
         })
       });
@@ -757,6 +759,7 @@ const App = () => {
                     <label><input type="checkbox" checked={trainBotConfig.rules.showKnownCards} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, showKnownCards: e.target.checked}})} /> Memorizadas</label>
                     <label style={{color: '#ffb86c'}}><input type="checkbox" checked={trainBotConfig.telepathy} onChange={e => setTrainBotConfig({...trainBotConfig, telepathy: e.target.checked})} /> Telepatia Parça</label>
                     <label style={{color: '#ff5555'}}><input type="checkbox" checked={trainBotConfig.fixedDeck} onChange={e => setTrainBotConfig({...trainBotConfig, fixedDeck: e.target.checked})} /> Baralho Fixo (Teste)</label>
+                    <label style={{color: '#50fa7b', gridColumn:'1/-1'}}><input type="checkbox" checked={trainBotConfig.greedyMode} onChange={e => setTrainBotConfig({...trainBotConfig, greedyMode: e.target.checked})} /> 🤑 Modo Ganancioso (sempre joga a melhor jogada)</label>
                 </div>
               </div>
 

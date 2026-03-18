@@ -560,6 +560,12 @@ export const BuracoGame = {
       const dnaDiscard = DNA.subarray(off, AI_CONFIG.TOTAL_DNA_SIZE);
 
       const resolveQueue = (moves) => {
+          if (G.rules.greedyMode) {
+              // Always play the single highest-scored move, ignoring hand-size safety
+              let best = moves[0];
+              for (let i = 1; i < moves.length; i++) if (moves[i].score > best.score) best = moves[i];
+              return [best];
+          }
           let selected = [], usedCards = new Set(), projectedSize = myHandCards.length;
           for (const m of moves) {
               if (m.cards.some(c => usedCards.has(c))) continue;
