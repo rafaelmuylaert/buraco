@@ -516,7 +516,7 @@ export const BuracoGame = {
   },
 
   ai: {
-    enumerate: (G, ctx, customDNA) => {
+    enumerate: function enumerate(G, ctx, customDNA) {
       const p = ctx.currentPlayer; const myTeam = G.teams[p]; const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
       const myHandCards = G.hands[p] || [];
       const topDiscard = G.discardPile.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
