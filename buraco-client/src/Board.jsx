@@ -273,9 +273,12 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
   const myTeamPlayers = G.teamPlayers[myTeam] || [];
   const oppTeamPlayers = G.teamPlayers[oppTeam] || [];
 
+  const LEFT_COL_W = 100;
+  // How many cards fit per row in the open discard view (card is 46px wide, 2px margin each side)
+  const cardsPerDiscardRow = Math.max(1, Math.floor((LEFT_COL_W - 12) / (CARD_W - 37)));
   const chunkedDiscard = [];
   if (G.discardPile && G.discardPile.length > 0) {
-    for (let i = 0; i < G.discardPile.length; i += 9) chunkedDiscard.push(G.discardPile.slice(i, i + 9).map(intToCardObj));
+    for (let i = 0; i < G.discardPile.length; i += cardsPerDiscardRow) chunkedDiscard.push(G.discardPile.slice(i, i + cardsPerDiscardRow).map(intToCardObj));
   }
 
   const calcTeamTablePoints = (teamPlayers) => {
@@ -320,7 +323,6 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
       const renderedCards = meldToCards(meldGroup);
       return (
         <div key={`${p}-${index}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ color: borderColor !== 'transparent' ? borderColor : '#aaa', fontSize: '0.8em', fontWeight: 'bold', marginBottom: '3px' }}>{points} pts</div>
           <div onClick={() => {
               if (!isMyTurn || !isMyTeam) return;
               if (!G.hasDrawn && isClosedDiscard && G.discardPile.length > 0) {
@@ -329,7 +331,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
                 moves.appendToMeld(p, index, selectedCardIds()); setSelectedCards([]);
               }
             }}
-            style={{ display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: `2px solid ${borderColor}`, cursor: (isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default' }}>
+            style={{ position: 'relative', display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: `2px solid ${borderColor}`, cursor: (isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default' }}>
             {renderedCards.map((card, i) => (
               <Card key={card.id} card={card} customStyle={{
                 marginLeft: (!isRunner && i > 0) ? `-${CARD_W - 14}px` : '0',
@@ -337,6 +339,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
                 zIndex: i
               }} />
             ))}
+            <div style={{ position: 'absolute', bottom: '15%', left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.72)', color: borderColor !== 'transparent' ? borderColor : '#ddd', fontSize: '0.7em', fontWeight: 'bold', padding: '1px 5px', borderRadius: '4px', whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 99 }}>{points} pts</div>
           </div>
         </div>
       );
@@ -382,7 +385,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100vh', boxSizing: 'border-box', overflow: 'hidden', padding: '15px', fontFamily: 'sans-serif', backgroundColor: '#2d6a4f', color: 'white', display: 'flex', gap: '15px' }}>
       
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: G.rules?.openDiscardView ? '150px' : '130px', minWidth: G.rules?.openDiscardView ? '150px' : '130px', flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: `${LEFT_COL_W}px`, minWidth: `${LEFT_COL_W}px`, flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
         
         <button onClick={() => window.location.reload()} style={{ width: '100%', background: '#4da6ff', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.8em', boxSizing: 'border-box' }}>
           ⬅ Salão
@@ -429,22 +432,22 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
         <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '8px', boxSizing: 'border-box' }}>
           <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Mortos</h4>
           {(() => {
-            const allPots = Array.isArray(G.pots) ? G.pots : Object.values(G.pots || {}).filter(p => p && p.length > 0);
-            const potCount = Math.ceil(allPots.length / 2);
             return [myTeam, oppTeam].map((team, ti) => {
               const label = ti === 0 ? 'Nós' : 'Eles';
               const hasMorto = G.teamMortos[team];
+              // Show icon only if this team's morto is still in the pot (not yet picked up)
+              const mortoAvailable = !hasMorto && G.pots.length > ti;
               return (
                 <div key={team} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <span style={{ fontSize: '0.7em', color: hasMorto ? '#ffd700' : '#888', fontWeight: 'bold' }}>{label}: {hasMorto ? '✔️' : '❌'}</span>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
-                    {Array.from({ length: potCount }).map((_, i) => (
-                      <div key={i} style={{
+                    {mortoAvailable && (
+                      <div style={{
                         border: '1px solid white', borderRadius: '2px', width: '10px', height: '14px',
                         backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 4px)',
                         boxShadow: '1px 1px 2px rgba(0,0,0,0.5)'
                       }} />
-                    ))}
+                    )}
                   </div>
                 </div>
               );
