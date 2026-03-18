@@ -613,7 +613,8 @@ export const BuracoGame = {
       (G.teamPlayers[myTeam] || []).forEach(tp => {
           (G.melds[tp] || []).forEach((meld, mIdx) => {
               for (const card of myHandCards) {
-                  if (!appendToMeld(meld, card)) continue;`r`n                  if (!mortoSafe && myHandCards.length - 1 < 2) continue;
+                  if (!appendToMeld(meld, card)) continue;
+                  if (!mortoSafe && myHandCards.length - 1 < 2) continue;
                   const sig = `${tp}-${mIdx}-${card>=104?52:card%52}`;
                   if (appendSigs.has(sig)) continue;
                   appendSigs.add(sig);
@@ -633,7 +634,8 @@ export const BuracoGame = {
 
       // ── NEW MELD ──────────────────────────────────────────────────────────
       const possibleMelds = []; const meldSigs = new Set();
-      for (const combo of getAllValidMelds(myHandCards, G.rules)) {`r`n          if (!mortoSafe && myHandCards.length - combo.length < 2) continue;
+      for (const combo of getAllValidMelds(myHandCards, G.rules)) {
+          if (!mortoSafe && myHandCards.length - combo.length < 2) continue;
           const sig = combo.map(c => c>=104?52:c%52).sort((a,b)=>a-b).join(',');
           if (meldSigs.has(sig)) continue;
           meldSigs.add(sig);
