@@ -9,19 +9,28 @@ const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15];
 
 // 🚀 CENTRALIZED AI ARCHITECTURE CONFIGURATION
 export const AI_CONFIG = {
-    INPUT_INTS: 37,        // 37 * 32 = 1184 bits of game state
-    HIDDEN_NODES: 128,     // Logical XNOR gates in the hidden layer
-    MAX_PICKUP: 17,        // Max pickup candidates (1 deck draw + up to 16 discard melds)
-    MAX_MELD: 32,          // Max append/new-meld candidates scored per pass
-    DISCARD_CLASSES: 53,   // One score per card class (0-52, where 52=Joker)
+    INPUT_SIZE: 39,        // 37 fixed state ints + 2 candidate ints, each treated as float
+    H1: 64,
+    H2: 32,
+    H3: 16,
+    MAX_PICKUP: 17,
+    MAX_MELD: 32,
+    DISCARD_CLASSES: 53,
 };
-// DNA per stage = (input→hidden weights) + (hidden→output weights)
-AI_CONFIG.DNA_PICKUP  = (AI_CONFIG.INPUT_INTS * AI_CONFIG.HIDDEN_NODES) + Math.ceil(AI_CONFIG.HIDDEN_NODES / 32) * AI_CONFIG.MAX_PICKUP;
-AI_CONFIG.DNA_MELD    = (AI_CONFIG.INPUT_INTS * AI_CONFIG.HIDDEN_NODES) + Math.ceil(AI_CONFIG.HIDDEN_NODES / 32) * AI_CONFIG.MAX_MELD;
-AI_CONFIG.DNA_DISCARD = (AI_CONFIG.INPUT_INTS * AI_CONFIG.HIDDEN_NODES) + Math.ceil(AI_CONFIG.HIDDEN_NODES / 32) * AI_CONFIG.DISCARD_CLASSES;
-AI_CONFIG.TOTAL_DNA_SIZE = AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD + AI_CONFIG.DNA_MELD + AI_CONFIG.DNA_DISCARD;
-// Legacy aliases for trainer/worker compatibility
-AI_CONFIG.DNA_INTS_PER_STAGE = AI_CONFIG.DNA_PICKUP;
+// Weights per layer (includes biases as extra input row)
+AI_CONFIG.W1 = (AI_CONFIG.INPUT_SIZE + 1) * AI_CONFIG.H1;  // +1 for bias
+AI_CONFIG.W2 = (AI_CONFIG.H1 + 1) * AI_CONFIG.H2;
+AI_CONFIG.W3 = (AI_CONFIG.H2 + 1) * AI_CONFIG.H3;
+AI_CONFIG.WO = (AI_CONFIG.H3 + 1) * 1;                     // single output score
+AI_CONFIG.WEIGHTS_PER_NET = AI_CONFIG.W1 + AI_CONFIG.W2 + AI_CONFIG.W3 + AI_CONFIG.WO;
+AI_CONFIG.TOTAL_DNA_SIZE = AI_CONFIG.WEIGHTS_PER_NET * 4;  // 4 nets: pickup, append, meld, discard
+// Legacy aliases
+AI_CONFIG.DNA_PICKUP  = AI_CONFIG.WEIGHTS_PER_NET;
+AI_CONFIG.DNA_MELD    = AI_CONFIG.WEIGHTS_PER_NET;
+AI_CONFIG.DNA_DISCARD = AI_CONFIG.WEIGHTS_PER_NET;
+AI_CONFIG.INPUT_INTS  = AI_CONFIG.INPUT_SIZE;  // kept for any external references
+AI_CONFIG.HIDDEN_NODES = AI_CONFIG.H1;
+AI_CONFIG.DNA_INTS_PER_STAGE = AI_CONFIG.WEIGHTS_PER_NET;
 AI_CONFIG.OUTPUT_NODES = AI_CONFIG.MAX_PICKUP;
 AI_CONFIG.STAGES = 4;
 
@@ -309,51 +318,84 @@ function packTeamMelds(melds) {
     return arr;
 }
 
-const HIDDEN_INTS = Math.ceil(AI_CONFIG.HIDDEN_NODES / 32);
-const FIXED_INTS  = 33;
+// ── Float 3-layer neural network ─────────────────────────────────────────────
+// Input: 39 floats (37 packed state ints + 2 candidate ints, normalised to [0,1])
+// Hidden: H1=64 → H2=32 → H3=16, ReLU activations
+// Output: 1 float score per candidate
+// Weights stored as Float32Array, layout: [W1 | b1 | W2 | b2 | W3 | b3 | WO | bO]
 
-function pc32(n) {
-    n = n >>> 0;
-    n -= (n >>> 1) & 0x55555555;
-    n = (n & 0x33333333) + ((n >>> 2) & 0x33333333);
-    return (((n + (n >>> 4)) & 0x0F0F0F0F) * 0x01010101) >>> 24;
-}
+function relu(x) { return x > 0 ? x : 0; }
 
-function jsEvaluate(meta, myTM, oppTM, disc, myH, o1, o2, o3, candFlat, weights, n) {
-    const inp = new Uint32Array(AI_CONFIG.INPUT_INTS);
-    inp[0]=meta>>>0; inp.set(myTM,1); inp.set(oppTM,12);
-    inp[23]=disc[0]; inp[24]=disc[1]; inp[25]=myH[0]; inp[26]=myH[1];
-    inp[27]=o1[0];   inp[28]=o1[1];   inp[29]=o2[0]; inp[30]=o2[1];
-    inp[31]=o3[0];   inp[32]=o3[1];
-    const thr = AI_CONFIG.INPUT_INTS * 16;
-    const fixedCounts = new Int32Array(AI_CONFIG.HIDDEN_NODES);
-    for (let h = 0; h < AI_CONFIG.HIDDEN_NODES; h++) {
-        let cnt = 0; const base = h * AI_CONFIG.INPUT_INTS;
-        for (let i = 0; i < FIXED_INTS; i++) cnt += pc32(~(inp[i] ^ weights[base+i]));
-        fixedCounts[h] = cnt;
-    }
-    const wOut = weights.subarray(AI_CONFIG.HIDDEN_NODES * AI_CONFIG.INPUT_INTS);
-    const scores = new Uint32Array(n);
+function floatEvaluate(meta, myTM, oppTM, disc, myH, o1, o2, o3, candFlat, weights, n) {
+    const { INPUT_SIZE, H1, H2, H3, W1, W2, W3 } = AI_CONFIG;
+    // Build fixed input vector (normalised uint32 → float in [0,1])
+    const inp = new Float32Array(INPUT_SIZE);
+    inp[0]  = (meta >>> 0) / 4294967295;
+    for (let i = 0; i < 11; i++) inp[1  + i] = (myTM[i]  >>> 0) / 4294967295;
+    for (let i = 0; i < 11; i++) inp[12 + i] = (oppTM[i] >>> 0) / 4294967295;
+    inp[23] = (disc[0] >>> 0) / 4294967295;
+    inp[24] = (disc[1] >>> 0) / 4294967295;
+    inp[25] = (myH[0]  >>> 0) / 4294967295;
+    inp[26] = (myH[1]  >>> 0) / 4294967295;
+    inp[27] = (o1[0]   >>> 0) / 4294967295;
+    inp[28] = (o1[1]   >>> 0) / 4294967295;
+    inp[29] = (o2[0]   >>> 0) / 4294967295;
+    inp[30] = (o2[1]   >>> 0) / 4294967295;
+    inp[31] = (o3[0]   >>> 0) / 4294967295;
+    inp[32] = (o3[1]   >>> 0) / 4294967295;
+    // slots 33-36 unused (zero) — reserved for future state
+
+    // Precompute fixed hidden layers up to H1 output (candidate-independent part)
+    // W1 layout: [H1 rows × (INPUT_SIZE-2) cols] then candidate cols appended per candidate
+    // Actually we include candidate in inp[37] and inp[38], so recompute per candidate
+    const w1 = weights.subarray(0, W1 + H1);           // weights + biases
+    const w2 = weights.subarray(W1 + H1, W1 + H1 + W2 + H2);
+    const w3 = weights.subarray(W1 + H1 + W2 + H2, W1 + H1 + W2 + H2 + W3 + H3);
+    const wo = weights.subarray(W1 + H1 + W2 + H2 + W3 + H3);
+
+    const h1 = new Float32Array(H1);
+    const h2 = new Float32Array(H2);
+    const h3 = new Float32Array(H3);
+    const scores = new Float32Array(n);
+
     for (let c = 0; c < n; c++) {
-        const c0 = candFlat ? candFlat[c*2]>>>0 : 0;
-        const c1 = candFlat ? candFlat[c*2+1]>>>0 : 0;
-        const hid = new Uint32Array(HIDDEN_INTS);
-        for (let h = 0; h < AI_CONFIG.HIDDEN_NODES; h++) {
-            const base = h * AI_CONFIG.INPUT_INTS;
-            const cnt = fixedCounts[h] + pc32(~(c0^weights[base+FIXED_INTS])) + pc32(~(c1^weights[base+FIXED_INTS+1]));
-            if (cnt > thr) hid[h>>5] |= (1<<(h&31));
+        // Set candidate bits into input slots 37 & 38
+        inp[37] = candFlat ? (candFlat[c*2]   >>> 0) / 4294967295 : 0;
+        inp[38] = candFlat ? (candFlat[c*2+1] >>> 0) / 4294967295 : 0;
+
+        // Layer 1: INPUT_SIZE → H1
+        for (let h = 0; h < H1; h++) {
+            let sum = w1[W1 + h]; // bias
+            const base = h * INPUT_SIZE;
+            for (let i = 0; i < INPUT_SIZE; i++) sum += inp[i] * w1[base + i];
+            h1[h] = relu(sum);
         }
-        let s = 0;
-        for (let i = 0; i < HIDDEN_INTS; i++) s += pc32(~(hid[i] ^ wOut[c*HIDDEN_INTS+i]));
-        scores[c] = s;
+        // Layer 2: H1 → H2
+        for (let h = 0; h < H2; h++) {
+            let sum = w2[W2 + h];
+            const base = h * H1;
+            for (let i = 0; i < H1; i++) sum += h1[i] * w2[base + i];
+            h2[h] = relu(sum);
+        }
+        // Layer 3: H2 → H3
+        for (let h = 0; h < H3; h++) {
+            let sum = w3[W3 + h];
+            const base = h * H2;
+            for (let i = 0; i < H2; i++) sum += h2[i] * w3[base + i];
+            h3[h] = relu(sum);
+        }
+        // Output: H3 → 1
+        let out = wo[H3]; // bias
+        for (let i = 0; i < H3; i++) out += h3[i] * wo[i];
+        scores[c] = out;
     }
     return scores;
 }
 
 export const nnHelpers = {
-    evaluatePickup:  (meta,myTM,oppTM,disc,myH,o1,o2,o3,cands,w,n) => jsEvaluate(meta,myTM,oppTM,disc,myH,o1,o2,o3,cands,w,n),
-    evaluateMeld:    (meta,myTM,oppTM,disc,myH,o1,o2,o3,cands,w,n) => jsEvaluate(meta,myTM,oppTM,disc,myH,o1,o2,o3,cands,w,n),
-    evaluateDiscard: (meta,myTM,oppTM,disc,myH,o1,o2,o3,w)         => jsEvaluate(meta,myTM,oppTM,disc,myH,o1,o2,o3,null,w,AI_CONFIG.DISCARD_CLASSES),
+    evaluatePickup:  (meta,myTM,oppTM,disc,myH,o1,o2,o3,cands,w,n) => floatEvaluate(meta,myTM,oppTM,disc,myH,o1,o2,o3,cands,w,n),
+    evaluateMeld:    (meta,myTM,oppTM,disc,myH,o1,o2,o3,cands,w,n) => floatEvaluate(meta,myTM,oppTM,disc,myH,o1,o2,o3,cands,w,n),
+    evaluateDiscard: (meta,myTM,oppTM,disc,myH,o1,o2,o3,w)         => floatEvaluate(meta,myTM,oppTM,disc,myH,o1,o2,o3,null,w,AI_CONFIG.DISCARD_CLASSES),
 };
 
 function getAllValidMelds(handCards, rules) {
@@ -552,8 +594,8 @@ export const BuracoGame = {
       meta |= (hs(opp2Id)    << 19);
 
       let DNA = customDNA || G.botGenomes?.[p];
-      if (!DNA || DNA.length !== AI_CONFIG.TOTAL_DNA_SIZE) DNA = new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE).fill(0);
-      else if (!(DNA instanceof Uint32Array)) DNA = new Uint32Array(DNA);
+      if (!DNA || DNA.length !== AI_CONFIG.TOTAL_DNA_SIZE) DNA = new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE).fill(0);
+      else if (!(DNA instanceof Float32Array)) DNA = new Float32Array(DNA);
       let off = 0;
       const dnaPickup  = DNA.subarray(off, off += AI_CONFIG.DNA_PICKUP);
       const dnaAppend  = DNA.subarray(off, off += AI_CONFIG.DNA_MELD);

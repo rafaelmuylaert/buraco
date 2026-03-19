@@ -143,9 +143,9 @@ function moveDiscardCard(S, p, cardId, force = false) {
 // ── Match runner ─────────────────────────────────────────────────────────────
 
 function prepareGenome(raw) {
-    let dna = raw instanceof Uint32Array ? raw : new Uint32Array(raw);
+    let dna = raw instanceof Float32Array ? raw : new Float32Array(raw);
     if (dna.length !== AI_CONFIG.TOTAL_DNA_SIZE) {
-        const d = new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE);
+        const d = new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE);
         for (let i = 0; i < AI_CONFIG.TOTAL_DNA_SIZE; i++) d[i] = dna[i % dna.length] || 0;
         dna = d;
     }
@@ -192,7 +192,10 @@ function runMatch(genomes, rules, fixedDeck) {
 
     // Build local state S — same shape as G but we own it entirely
     const S = BuracoGame.setup({ random: fakeRandom, ctx: { numPlayers } }, { ...rules, numPlayers });
-    S.botGenomes = Object.fromEntries(Object.entries(genomes).map(([k, v]) => [k, prepareGenome(v)]));
+    S.botGenomes = Object.fromEntries(Object.entries(genomes).map(([k, v]) => {
+        const arr = v instanceof SharedArrayBuffer ? new Float32Array(v) : new Float32Array(v);
+        return [k, prepareGenome(arr)];
+    }));
 
     if (rules.telepathy)
         for (const p of Object.keys(S.hands)) S.knownCards[p] = [...S.hands[p]];

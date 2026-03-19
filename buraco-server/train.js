@@ -13,31 +13,39 @@ if (!fs.existsSync(BOTS_DIR)) fs.mkdirSync(BOTS_DIR, { recursive: true });
 const activeTrainings = new Map();
 const stopFlags = new Set();
 
-function mutate(genome, mutationRate = 0.005) {
-    const mutated = new Uint32Array(genome);
-    for (let i = 0; i < AI_CONFIG.TOTAL_DNA_SIZE; i++) {
-        for (let bit = 0; bit < 32; bit++) {
-            if (Math.random() < mutationRate) {
-                mutated[i] ^= (1 << bit); 
-            }
+function gaussianRandom() {
+    // Box-Muller transform
+    let u, v;
+    do { u = Math.random(); } while (u === 0);
+    do { v = Math.random(); } while (v === 0);
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+function mutate(genome, mutationRate = 0.05, mutationStrength = 0.1) {
+    const mutated = new Float32Array(genome);
+    for (let i = 0; i < mutated.length; i++) {
+        if (Math.random() < mutationRate) {
+            mutated[i] += gaussianRandom() * mutationStrength;
         }
     }
     return mutated;
 }
 
 function breed(parentA, parentB) {
-    const child = new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE);
-    for (let i = 0; i < AI_CONFIG.TOTAL_DNA_SIZE; i++) {
-        child[i] = Math.random() > 0.5 ? parentA[i] : parentB[i];
+    const child = new Float32Array(parentA.length);
+    for (let i = 0; i < child.length; i++) {
+        // Uniform blend crossover with small mutation
+        const alpha = Math.random();
+        child[i] = alpha * parentA[i] + (1 - alpha) * parentB[i];
     }
-    return mutate(child, 0.005);
+    return mutate(child, 0.05, 0.05);
 }
 
 const generateRandomGenome = () => {
-    const g = new Uint32Array(AI_CONFIG.TOTAL_DNA_SIZE);
-    for (let i = 0; i < AI_CONFIG.TOTAL_DNA_SIZE; i++) {
-        g[i] = Math.floor(Math.random() * 4294967296) >>> 0;
-    }
+    const g = new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE);
+    // Xavier initialisation: scale by 1/sqrt(input_size)
+    const scale = 1 / Math.sqrt(AI_CONFIG.INPUT_SIZE);
+    for (let i = 0; i < g.length; i++) g[i] = gaussianRandom() * scale;
     return g;
 };
 
@@ -51,7 +59,7 @@ function shuffle(arr) {
 
 function toBuffer(genome) {
     const buf = new SharedArrayBuffer(AI_CONFIG.TOTAL_DNA_SIZE * 4);
-    new Uint32Array(buf).set(genome);
+    new Float32Array(buf).set(genome);
     return buf;
 }
 
@@ -201,11 +209,11 @@ export const TrainerService = {
             if (fs.existsSync(fp)) {
                 const raw = JSON.parse(fs.readFileSync(fp, 'utf-8'));
                 const arr = Array.isArray(raw) ? raw : Object.values(raw);
-                return new Uint32Array(arr.length === AI_CONFIG.TOTAL_DNA_SIZE ? arr : arr.slice(0, AI_CONFIG.TOTAL_DNA_SIZE));
+                return new Float32Array(arr.length === AI_CONFIG.TOTAL_DNA_SIZE ? arr : arr.slice(0, AI_CONFIG.TOTAL_DNA_SIZE));
             }
             if (seedDNA) {
-                let base = seedDNA.length === AI_CONFIG.TOTAL_DNA_SIZE ? seedDNA : seedDNA.slice(0, AI_CONFIG.TOTAL_DNA_SIZE);
-                return new Uint32Array(base);
+                const arr = Array.isArray(seedDNA) ? seedDNA : Array.from(seedDNA);
+                return new Float32Array(arr.length === AI_CONFIG.TOTAL_DNA_SIZE ? arr : arr.slice(0, AI_CONFIG.TOTAL_DNA_SIZE));
             }
             return generateRandomGenome();
         };
@@ -226,9 +234,8 @@ export const TrainerService = {
 
         const islandPops = Array.from({ length: NUM_ISLANDS }, (_, k) => {
             const seed = loadIslandSeed(k);
-            // slot 0: exact clone of seed, rest: low-rate mutations
             return Array.from({ length: POPULATION_SIZE }, (_, i) =>
-                i === 0 ? new Uint32Array(seed) : mutate(seed, 0.005)
+                i === 0 ? new Float32Array(seed) : mutate(seed, 0.05, 0.1)
             );
         });
         const islandElites = new Array(NUM_ISLANDS).fill(null);
@@ -256,11 +263,8 @@ export const TrainerService = {
                 .sort((a, b) => b.score - a.score)
                 .map(x => x.genome);
                 
-            // slot 0: exact clone of best (elitism — never mutate the champion)
-            // slot 1: exact clone of 2nd best
-            // rest: mutations of top finalists + crossbreeds
-            const clones = rankedFinalists.slice(0, 2).map(f => new Uint32Array(f));
-            const mutations = rankedFinalists.slice(1).map(f => mutate(f, 0.005));
+            const clones = rankedFinalists.slice(0, 2).map(f => new Float32Array(f));
+            const mutations = rankedFinalists.slice(1).map(f => mutate(f, 0.05, 0.1));
             const crossbreeds = [];
             while (crossbreeds.length < pop.length - clones.length - mutations.length) {
                 const pick = () => rankedFinalists[Math.floor(Math.random() * Math.random() * rankedFinalists.length)];
@@ -337,7 +341,7 @@ export const TrainerService = {
                             const fp = path.join(BOTS_DIR, `${botName}_${k}.json`);
                             if (!fs.existsSync(fp)) continue;
                             const raw = JSON.parse(fs.readFileSync(fp, 'utf-8'));
-                            candidates.push({ k, genome: new Uint32Array(Array.isArray(raw) ? raw : Object.values(raw)) });
+                            candidates.push({ k, genome: new Float32Array(Array.isArray(raw) ? raw : Object.values(raw)) });
                         }
                         if (candidates.length < 2) continue;
 
