@@ -315,8 +315,10 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
   const oppTeamPlayers = G.teamPlayers[oppTeam] || [];
 
   const LEFT_COL_W = 100;
-  // How many cards fit per row in the open discard view (card is 46px wide, 2px margin each side)
-  const cardsPerDiscardRow = Math.max(1, Math.floor((LEFT_COL_W - 12) / (CARD_W - 37)));
+  // In open discard view cards overlap: first card takes CARD_W, each additional takes (CARD_W - 37)px
+  // Solve: CARD_W + (n-1)*(CARD_W-37) <= LEFT_COL_W - 12 (padding)
+  const CARD_OVERLAP_STEP = CARD_W - 37; // 9px per additional card
+  const cardsPerDiscardRow = Math.max(1, Math.floor((LEFT_COL_W - 12 - CARD_W) / CARD_OVERLAP_STEP) + 1);
   const chunkedDiscard = [];
   if (G.discardPile && G.discardPile.length > 0) {
     for (let i = 0; i < G.discardPile.length; i += cardsPerDiscardRow) chunkedDiscard.push(G.discardPile.slice(i, i + cardsPerDiscardRow).map(intToCardObj));
@@ -462,7 +464,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
             {G.discardPile.length > 0 ? (
               G.rules?.openDiscardView ? (
                 chunkedDiscard.map((row, rIdx) => (
-                  <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-36px' : '0' }}>
+                  <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-22px' : '0' }}>
                     {row.map((c, i) => <Card key={c.id} card={c} customStyle={{ marginLeft: i > 0 ? '-37px' : '0' }} />)}
                   </div>
                 ))
