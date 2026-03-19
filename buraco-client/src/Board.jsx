@@ -157,6 +157,46 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
   const [selectedCards, setSelectedCards] = useState([]);
   const isMyTurn = ctx.currentPlayer === playerID;
 
+  // Track melds snapshot at end of my last turn to highlight opponent additions
+  const meldSnapshotRef = React.useRef(null);
+  const [newMeldCards, setNewMeldCards] = useState({}); // { 'p-meldIdx-cardPos': true }
+
+  // When it becomes my turn, snapshot current melds; when it stops being my turn, diff and highlight
+  const wasMyTurnRef = React.useRef(false);
+  useEffect(() => {
+    if (!G || !ctx) return;
+    if (isMyTurn && !wasMyTurnRef.current) {
+      // Just became my turn — diff melds against snapshot to find what opponents added
+      if (meldSnapshotRef.current) {
+        const highlights = {};
+        Object.keys(G.melds).forEach(p => {
+          if (p === playerID) return; // skip my own melds
+          const prev = meldSnapshotRef.current[p] || [];
+          const curr = G.melds[p] || [];
+          curr.forEach((meld, mIdx) => {
+            const prevLen = prev[mIdx] ? getMeldLength(prev[mIdx]) : 0;
+            const currLen = getMeldLength(meld);
+            if (currLen > prevLen) highlights[`${p}-${mIdx}`] = currLen - prevLen;
+          });
+          // New melds that didn't exist before
+          if (curr.length > prev.length) {
+            for (let mIdx = prev.length; mIdx < curr.length; mIdx++)
+              highlights[`${p}-${mIdx}`] = getMeldLength(curr[mIdx]);
+          }
+        });
+        setNewMeldCards(highlights);
+      }
+    }
+    if (!isMyTurn && wasMyTurnRef.current) {
+      // My turn just ended — snapshot current melds
+      const snapshot = {};
+      Object.keys(G.melds).forEach(p => { snapshot[p] = (G.melds[p] || []).map(m => [...m]); });
+      meldSnapshotRef.current = snapshot;
+      setNewMeldCards({});
+    }
+    wasMyTurnRef.current = isMyTurn;
+  }, [isMyTurn, ctx?.currentPlayer]);
+
   useEffect(() => {
     if (ctx && G && ctx.phase === 'waitingRoom' && G.players && !G.players.includes(playerID)) {
       moves.joinTable(playerID);
@@ -263,9 +303,10 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
 
   const rawHandObj = Object.values(G.hands[playerID] || []).map((c, i) => ({ ...intToCardObj(c), uid: `${c}_${i}` }));
   const sortedHandObj = sortCards(rawHandObj);
-  const newlyDrawnUid = ctx.currentPlayer === playerID
-    ? (sortedHandObj.find(c => c.id === G.lastDrawnCard)?.uid ?? null)
-    : null;
+  const newlyDrawnIds = ctx.currentPlayer === playerID && G.lastDrawnCard != null
+    ? (Array.isArray(G.lastDrawnCard) ? new Set(G.lastDrawnCard) : new Set([G.lastDrawnCard]))
+    : new Set();
+  const newlyDrawnUid = (card) => newlyDrawnIds.has(card.id);
   const topDiscard = G.discardPile.length > 0 ? intToCardObj(G.discardPile[G.discardPile.length - 1]) : null;
   
   const myTeam = G.teams[playerID];
@@ -321,6 +362,8 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
       const borderColor = status === 'clean' ? '#ffd700' : (status === 'dirty' ? '#c0c0c0' : 'transparent');
       const isRunner = meldGroup[0] === 0;
       const renderedCards = meldToCards(meldGroup);
+      const hasNewCards = !!newMeldCards[`${p}-${index}`];
+      const newCount = newMeldCards[`${p}-${index}`] || 0;
       return (
         <div key={`${p}-${index}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div onClick={() => {
@@ -331,14 +374,17 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
                 moves.appendToMeld(p, index, selectedCardIds()); setSelectedCards([]);
               }
             }}
-            style={{ position: 'relative', display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: `2px solid ${borderColor}`, cursor: (isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default' }}>
-            {renderedCards.map((card, i) => (
-              <Card key={card.id} card={card} customStyle={{
-                marginLeft: (!isRunner && i > 0) ? `-${CARD_W - 14}px` : '0',
-                marginTop: (isRunner && i > 0) ? `-${CARD_H - 18}px` : '0',
-                zIndex: i
-              }} />
-            ))}
+            style={{ position: 'relative', display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: hasNewCards ? '2px solid #50fa7b' : `2px solid ${borderColor}`, boxShadow: hasNewCards ? '0 0 10px rgba(80,250,123,0.5)' : 'none', cursor: (isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default' }}>
+            {renderedCards.map((card, i) => {
+              const isNewCard = hasNewCards && i >= renderedCards.length - newCount;
+              return (
+                <Card key={card.id} card={card} isNewlyDrawn={isNewCard} customStyle={{
+                  marginLeft: (!isRunner && i > 0) ? `-${CARD_W - 14}px` : '0',
+                  marginTop: (isRunner && i > 0) ? `-${CARD_H - 18}px` : '0',
+                  zIndex: i
+                }} />
+              );
+            })}
             <div style={{ position: 'absolute', bottom: '15%', left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.72)', color: borderColor !== 'transparent' ? borderColor : '#ddd', fontSize: '0.7em', fontWeight: 'bold', padding: '1px 5px', borderRadius: '4px', whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 99 }}>{points} pts</div>
           </div>
         </div>
@@ -511,7 +557,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
         <div style={{ flexShrink: 0 }}>
           <h2 style={{ fontSize: '1.2em', margin: '0 0 10px 0' }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-            {sortedHandObj.map(card => <Card key={card.uid} card={card} isSelected={selectedCards.includes(card.uid)} isNewlyDrawn={card.uid === newlyDrawnUid} onClick={() => toggleCardSelection(card.uid)} />)}
+            {sortedHandObj.map(card => <Card key={card.uid} card={card} isSelected={selectedCards.includes(card.uid)} isNewlyDrawn={newlyDrawnUid(card)} onClick={() => toggleCardSelection(card.uid)} />)}
           </div>
         </div>
       </div>
