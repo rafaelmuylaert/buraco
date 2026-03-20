@@ -4,13 +4,11 @@ import {
     isMeldClean, getMeldLength, calculateMeldPoints,
     buildMeld, appendCardsToMeld
 } from './game.js';
-import { initWasm, wasmEvaluatePickup, wasmEvaluateMeld, wasmEvaluateDiscard } from './wasm_loader.js';
+import { initWasm, wasmEvaluateCandidates } from './wasm_loader.js';
 
 const wasmLoaded = await initWasm();
 if (wasmLoaded) {
-    nnHelpers.evaluatePickup  = wasmEvaluatePickup;
-    nnHelpers.evaluateMeld    = wasmEvaluateMeld;
-    nnHelpers.evaluateDiscard = wasmEvaluateDiscard;
+    nnHelpers.evaluateCandidates = wasmEvaluateCandidates;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
