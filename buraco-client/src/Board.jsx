@@ -159,18 +159,18 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
 
   // Track melds snapshot at end of my last turn to highlight opponent additions
   const meldSnapshotRef = React.useRef(null);
-  const [newMeldCards, setNewMeldCards] = useState({}); // { 'p-meldIdx-cardPos': true }
+  const [newMeldCards, setNewMeldCards] = useState({}); // { 'p-meldIdx': count }
 
-  // When it becomes my turn, snapshot current melds; when it stops being my turn, diff and highlight
+  // When it becomes my turn, diff melds against snapshot; when it ends, take snapshot
   const wasMyTurnRef = React.useRef(false);
   useEffect(() => {
     if (!G || !ctx) return;
     if (isMyTurn && !wasMyTurnRef.current) {
-      // Just became my turn — diff melds against snapshot to find what opponents added
+      // Just became my turn — diff melds against snapshot
       if (meldSnapshotRef.current) {
         const highlights = {};
         Object.keys(G.melds).forEach(p => {
-          if (p === playerID) return; // skip my own melds
+          if (p === playerID) return;
           const prev = meldSnapshotRef.current[p] || [];
           const curr = G.melds[p] || [];
           curr.forEach((meld, mIdx) => {
@@ -178,7 +178,6 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
             const currLen = getMeldLength(meld);
             if (currLen > prevLen) highlights[`${p}-${mIdx}`] = currLen - prevLen;
           });
-          // New melds that didn't exist before
           if (curr.length > prev.length) {
             for (let mIdx = prev.length; mIdx < curr.length; mIdx++)
               highlights[`${p}-${mIdx}`] = getMeldLength(curr[mIdx]);
@@ -188,14 +187,14 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
       }
     }
     if (!isMyTurn && wasMyTurnRef.current) {
-      // My turn just ended — snapshot current melds
+      // My turn just ended — snapshot current melds for ALL players
       const snapshot = {};
       Object.keys(G.melds).forEach(p => { snapshot[p] = (G.melds[p] || []).map(m => [...m]); });
       meldSnapshotRef.current = snapshot;
       setNewMeldCards({});
     }
     wasMyTurnRef.current = isMyTurn;
-  }, [isMyTurn, ctx?.currentPlayer]);
+  }, [isMyTurn, ctx?.currentPlayer, G.melds]);
 
   useEffect(() => {
     if (ctx && G && ctx.phase === 'waitingRoom' && G.players && !G.players.includes(playerID)) {
@@ -303,10 +302,26 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
 
   const rawHandObj = Object.values(G.hands[playerID] || []).map((c, i) => ({ ...intToCardObj(c), uid: `${c}_${i}` }));
   const sortedHandObj = sortCards(rawHandObj);
-  const newlyDrawnIds = ctx.currentPlayer === playerID && G.lastDrawnCard != null
-    ? (Array.isArray(G.lastDrawnCard) ? new Set(G.lastDrawnCard) : new Set([G.lastDrawnCard]))
-    : new Set();
-  const newlyDrawnUid = (card) => newlyDrawnIds.has(card.id);
+
+  // Build a set of UIDs for newly drawn cards, handling duplicates correctly.
+  // lastDrawnCard can be a single int or an array of ints (discard pickup).
+  const newlyDrawnUids = React.useMemo(() => {
+    if (ctx.currentPlayer !== playerID || G.lastDrawnCard == null) return new Set();
+    const drawnRaw = Array.isArray(G.lastDrawnCard) ? G.lastDrawnCard : [G.lastDrawnCard];
+    // Count how many of each card id were drawn
+    const drawnCounts = {};
+    drawnRaw.forEach(c => { drawnCounts[c] = (drawnCounts[c] || 0) + 1; });
+    // Walk rawHandObj (pre-sort, index-stable) from the END to find the drawn copies
+    // The drawn cards are always appended to the end of the hand array by the game engine
+    const uids = new Set();
+    const remaining = { ...drawnCounts };
+    for (let i = rawHandObj.length - 1; i >= 0; i--) {
+      const id = rawHandObj[i].id;
+      if (remaining[id] > 0) { uids.add(rawHandObj[i].uid); remaining[id]--; }
+    }
+    return uids;
+  }, [G.lastDrawnCard, G.hands[playerID]]);
+  const newlyDrawnUid = (card) => newlyDrawnUids.has(card.uid);
   const topDiscard = G.discardPile.length > 0 ? intToCardObj(G.discardPile[G.discardPile.length - 1]) : null;
   
   const myTeam = G.teams[playerID];
