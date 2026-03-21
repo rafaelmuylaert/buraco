@@ -67,8 +67,8 @@ export async function initWasm() {
     vOpp2     = new Uint32Array(buf, OPP2_OFF,             2);
     vOpp3     = new Uint32Array(buf, OPP3_OFF,             2);
     vCands    = new Uint32Array(buf, CANDS_OFF,  MAX_CANDS * 2);
-    vWeights  = new Uint32Array(buf, WEIGHTS_OFF, MAX_WEIGHTS);
-    vScores   = new Uint32Array(buf, SCORES_OFF,  MAX_SCORES);
+    vWeights  = new Float32Array(buf, WEIGHTS_OFF, MAX_WEIGHTS);
+    vScores   = new Float32Array(buf, SCORES_OFF,  MAX_SCORES);
 
     console.log('🚀 Pure Binary Logic Engine Online!');
     return true;
@@ -110,7 +110,7 @@ export function wasmEvaluatePickup(
         CANDS_OFF, WEIGHTS_OFF, SCORES_OFF,
         numCandidates
     );
-    return new Uint32Array(memory.buffer, SCORES_OFF, numCandidates).slice();
+    return new Float32Array(memory.buffer, SCORES_OFF, numCandidates).slice();
 }
 
 export function wasmEvaluateMeld(
@@ -132,7 +132,7 @@ export function wasmEvaluateMeld(
         CANDS_OFF, WEIGHTS_OFF, SCORES_OFF,
         numCandidates
     );
-    return new Uint32Array(memory.buffer, SCORES_OFF, numCandidates).slice();
+    return new Float32Array(memory.buffer, SCORES_OFF, numCandidates).slice();
 }
 
 export function wasmEvaluateDiscard(
@@ -151,5 +151,5 @@ export function wasmEvaluateDiscard(
         WEIGHTS_OFF, SCORES_OFF,
         AI_CONFIG.DISCARD_CLASSES
     );
-    return new Uint32Array(memory.buffer, SCORES_OFF, AI_CONFIG.DISCARD_CLASSES).slice();
+    return new Float32Array(memory.buffer, SCORES_OFF, AI_CONFIG.DISCARD_CLASSES).slice();
 }

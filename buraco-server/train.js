@@ -299,7 +299,7 @@ export const TrainerService = {
                     for (let src = 0; src < NUM_ISLANDS; src++) {
                         if (src === islandIdx || !islandElites[src]) continue;
                         const replaceIdx = 2 + Math.floor(Math.random() * (islandPops[islandIdx].length - 2));
-                        islandPops[islandIdx][replaceIdx] = new Uint32Array(islandElites[src]);
+                        islandPops[islandIdx][replaceIdx] = new Float32Array(islandElites[src]);
                     }
 
                     if (gen % SAVE_EVERY === 0 || gen === GENERATIONS) {
@@ -331,57 +331,64 @@ export const TrainerService = {
         };
 
         try {
-            await Promise.all([
-                ...Array.from({ length: NUM_ISLANDS }, (_, k) => runIsland(k)),
-                (async () => {
-                    while (completedIslands < NUM_ISLANDS) {
-                        await new Promise(r => setTimeout(r, SAVE_EVERY * 800)); 
-                        const candidates = [];
-                        for (let k = 0; k < NUM_ISLANDS; k++) {
-                            const fp = path.join(BOTS_DIR, `${botName}_${k}.json`);
-                            if (!fs.existsSync(fp)) continue;
-                            const raw = JSON.parse(fs.readFileSync(fp, 'utf-8'));
-                            candidates.push({ k, genome: new Float32Array(Array.isArray(raw) ? raw : Object.values(raw)) });
-                        }
-                        if (candidates.length < 2) continue;
+            // Run all islands concurrently, catching per-island errors independently
+            const islandPromises = Array.from({ length: NUM_ISLANDS }, (_, k) => runIsland(k));
 
-                        const wins = new Array(candidates.length).fill(0);
-                        const pairs = [];
-                        for (let i = 0; i < candidates.length; i++)
-                            for (let j = i + 1; j < candidates.length; j++)
-                                pairs.push({ i, j, dnaA: toBuffer(candidates[i].genome), dnaB: toBuffer(candidates[j].genome) });
-
-                        const results = await runMatchBatch(pairs.map(p => ({ dnaA: p.dnaA, dnaB: p.dnaB })), rules);
-                        results.forEach(([sA], idx) => {
-                            if (sA > 0) wins[pairs[idx].i]++; else wins[pairs[idx].j]++;
-                        });
-
-                        const bestIdx = wins.indexOf(Math.max(...wins));
-                        const champion = candidates[bestIdx].genome;
-                        fs.writeFileSync(path.join(BOTS_DIR, `${botName}.json`), JSON.stringify(Array.from(champion)));
-                        const currentLifetimeGen = lifetimeGenOffset + (activeTrainings.get(botName)?.currentGeneration || 0);
-                        fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({ rules, lifetimeGenerations: currentLifetimeGen, trainParams: { populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, telepathy: params.telepathy, fixedDeck: params.fixedDeck } }));
-
-                        let benchmarkDiff = null;
-                        if (originalDNA) {
-                            try {
-                                const benchDeck = rules.noJokers ? [...baseDeck] : [...baseDeck, 54, 54];
-                                shuffle(benchDeck);
-                                getPool().broadcastDeck(benchDeck);
-                                const [[benchScore]] = await runMatchBatch(
-                                    [{ dnaA: toBuffer(champion), dnaB: toBuffer(originalDNA) }],
-                                    { ...rules, fixedDeck: true }
-                                );
-                                benchmarkDiff = benchScore;
-                            } catch (e) {}
-                        }
-
-                        const prev = activeTrainings.get(botName);
-                        if (prev) activeTrainings.set(botName, { ...prev, benchmarkDiff });
-                        console.log(`[${botName}] 🏆 Champion: Island ${candidates[bestIdx].k} | Bench: ${benchmarkDiff ?? 'N/A'}`);
+            const championLoop = async () => {
+                while (completedIslands < NUM_ISLANDS) {
+                    await new Promise(r => setTimeout(r, SAVE_EVERY * 800)); 
+                    const candidates = [];
+                    for (let k = 0; k < NUM_ISLANDS; k++) {
+                        const fp = path.join(BOTS_DIR, `${botName}_${k}.json`);
+                        if (!fs.existsSync(fp)) continue;
+                        const raw = JSON.parse(fs.readFileSync(fp, 'utf-8'));
+                        candidates.push({ k, genome: new Float32Array(Array.isArray(raw) ? raw : Object.values(raw)) });
                     }
-                })()
-            ]);
+                    if (candidates.length < 2) continue;
+
+                    const wins = new Array(candidates.length).fill(0);
+                    const pairs = [];
+                    for (let i = 0; i < candidates.length; i++)
+                        for (let j = i + 1; j < candidates.length; j++)
+                            pairs.push({ i, j, dnaA: toBuffer(candidates[i].genome), dnaB: toBuffer(candidates[j].genome) });
+
+                    const results = await runMatchBatch(pairs.map(p => ({ dnaA: p.dnaA, dnaB: p.dnaB })), rules);
+                    results.forEach(([sA], idx) => {
+                        if (sA > 0) wins[pairs[idx].i]++; else wins[pairs[idx].j]++;
+                    });
+
+                    const bestIdx = wins.indexOf(Math.max(...wins));
+                    const champion = candidates[bestIdx].genome;
+                    fs.writeFileSync(path.join(BOTS_DIR, `${botName}.json`), JSON.stringify(Array.from(champion)));
+                    const currentLifetimeGen = lifetimeGenOffset + (activeTrainings.get(botName)?.currentGeneration || 0);
+                    fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({ rules, lifetimeGenerations: currentLifetimeGen, trainParams: { populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, telepathy: params.telepathy, fixedDeck: params.fixedDeck } }));
+
+                    let benchmarkDiff = null;
+                    if (originalDNA) {
+                        try {
+                            const benchDeck = rules.noJokers ? [...baseDeck] : [...baseDeck, 54, 54];
+                            shuffle(benchDeck);
+                            getPool().broadcastDeck(benchDeck);
+                            const [[benchScore]] = await runMatchBatch(
+                                [{ dnaA: toBuffer(champion), dnaB: toBuffer(originalDNA) }],
+                                { ...rules, fixedDeck: true }
+                            );
+                            benchmarkDiff = benchScore;
+                        } catch (e) {}
+                    }
+
+                    const prev = activeTrainings.get(botName);
+                    if (prev) activeTrainings.set(botName, { ...prev, benchmarkDiff });
+                    console.log(`[${botName}] 🏆 Champion: Island ${candidates[bestIdx].k} | Bench: ${benchmarkDiff ?? 'N/A'}`);
+                }
+            };
+
+            // Wait for all islands to finish, then let the champion loop exit naturally
+            await Promise.allSettled(islandPromises);
+            // Run champion selection one final time
+            completedIslands = NUM_ISLANDS;
+            await championLoop().catch(e => console.error(`[TRAINER] Champion loop error:`, e));
+
             if (islandErrors.length) console.error(`[TRAINER] ${islandErrors.length} island(s) failed for ${botName}`);
         } catch (error) {
             console.error(`[TRAINER] Error for ${botName}:`, error);
