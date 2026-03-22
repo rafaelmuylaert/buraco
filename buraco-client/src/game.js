@@ -424,6 +424,7 @@ export function checkGameOver(G) {
     return null;
 }
 
+let _scoresDiagCount = 0;
 export function calculateFinalScores(G) {
   const dirtyCanastraBonus = G.rules?.dirtyCanastraBonus ?? 100;
   const cleanCanastraBonus = G.rules?.cleanCanastraBonus ?? 200;
