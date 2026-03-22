@@ -180,8 +180,8 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
 
   // Persist the last seen gameover so a server hiccup after endIf never causes a white screen
   const lastGameoverRef = React.useRef(null);
-  if (ctx?.gameover && !lastGameoverRef.current) lastGameoverRef.current = ctx.gameover;
-  const gameover = ctx?.gameover || lastGameoverRef.current;
+  if (ctx?.gameover) lastGameoverRef.current = ctx.gameover;
+  const gameover = lastGameoverRef.current;
 
   // Track melds snapshot at end of my last turn to highlight opponent additions
   const meldSnapshotRef = React.useRef(null);
@@ -190,7 +190,7 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
   // When it becomes my turn, diff melds against snapshot; when it ends, take snapshot
   const wasMyTurnRef = React.useRef(false);
   useEffect(() => {
-    if (!G || !ctx) return;
+    if (!G || !ctx || gameover) return;
     if (isMyTurn && !wasMyTurnRef.current) {
       // Just became my turn — diff melds against snapshot
       if (meldSnapshotRef.current) {
@@ -220,10 +220,10 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
       setNewMeldCards({});
     }
     wasMyTurnRef.current = isMyTurn;
-  }, [isMyTurn, ctx?.currentPlayer, G.melds]);
+  }, [isMyTurn, ctx?.currentPlayer]);
 
   useEffect(() => {
-    if (ctx && G && ctx.phase === 'waitingRoom' && G.players && !G.players.includes(playerID)) {
+    if (ctx && G && !gameover && ctx.phase === 'waitingRoom' && G.players && !G.players.includes(playerID)) {
       moves.joinTable(playerID);
     }
   }, [ctx, G, playerID, moves]);

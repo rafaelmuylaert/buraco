@@ -99,10 +99,8 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
 
     for (let c of aces) {
         if (getSuit(c) !== suit) return null;
-        // Try high-A first (slot 15) if K is present, otherwise try low-A (slot 2)
-        const kPresent = m[14] === 1;
-        if (kPresent && m[15] === 0) m[15] = 1;
-        else if (m[2] === 0) m[2] = 1;
+        // Try low-A first (slot 2); only use high-A (slot 15) if low-A is already taken
+        if (m[2] === 0) m[2] = 1;
         else if (m[15] === 0) m[15] = 1;
         else return null;
     }
