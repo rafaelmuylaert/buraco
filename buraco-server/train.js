@@ -256,7 +256,8 @@ export const TrainerService = {
                 results.forEach(([sA, , rawA, rawB], idx) => {
                     const [i, j] = statMeta[idx];
                     allDiffs.push(rawA, rawB);
-                    if (sA > 0) finalistScores[i]++; else if (sA < 0) finalistScores[j]++;
+                    finalistScores[i] += sA;
+                    finalistScores[j] -= sA;
                 });
             } else { allDiffs.push(0); }
             const rankedFinalists = finalists
@@ -357,7 +358,8 @@ export const TrainerService = {
 
                         const results = await runMatchBatch(pairs.map(p => ({ dnaA: p.dnaA, dnaB: p.dnaB })), rules);
                         results.forEach(([sA], idx) => {
-                            if (sA > 0) wins[pairs[idx].i]++; else wins[pairs[idx].j]++;
+                            wins[pairs[idx].i] += sA;
+                            wins[pairs[idx].j] -= sA;
                         });
 
                         const bestIdx = wins.indexOf(Math.max(...wins));
