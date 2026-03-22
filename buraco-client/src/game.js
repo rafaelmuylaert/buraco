@@ -754,16 +754,18 @@ export function planTurn(G, p, DNA) {
     if (topDiscard !== null) {
         const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
         if (isClosedDiscard) {
-            const discardSentinel = topDiscard + 52;
+            const handWithTop = [...G.hands[p], topDiscard];
             const seenSigs = new Set();
-            for (const combo of getAllValidMelds([...G.hands[p], discardSentinel], G.rules)) {
-                if (!combo.includes(discardSentinel)) continue;
-                const sig = combo.map(c => c >= 104 ? 52 : c % 52).sort((a, b) => a - b).join(',');
+            for (const combo of getAllValidMelds(handWithTop, G.rules)) {
+                // Find the last occurrence of topDiscard (the one we added)
+                let topIdx = -1;
+                for (let i = combo.length - 1; i >= 0; i--) { if (combo[i] === topDiscard) { topIdx = i; break; } }
+                if (topIdx === -1) continue;
+                const sig = combo.map(c => c % 52).sort((a, b) => a - b).join(',');
                 if (seenSigs.has(sig)) continue;
                 seenSigs.add(sig);
-                const handUsed = combo.filter(c => c !== discardSentinel);
-                const realCombo = combo.map(c => c === discardSentinel ? topDiscard : c);
-                pickupCands.push({ move: 'pickUpDiscard', args: [handUsed, { type: 'new' }], cards: realCombo, parsedMeld: buildMeld(realCombo, G.rules), appendIdx: 0 });
+                const handUsed = [...combo]; handUsed.splice(topIdx, 1);
+                pickupCands.push({ move: 'pickUpDiscard', args: [handUsed, { type: 'new' }], cards: combo, parsedMeld: buildMeld(combo, G.rules), appendIdx: 0 });
             }
         } else {
             pickupCands.push({ move: 'pickUpDiscard', args: [], cards: G.discardPile, parsedMeld: null, appendIdx: 0 });
@@ -956,16 +958,18 @@ export const BuracoGame = {
           if (topDiscard !== null) {
               const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
               if (isClosedDiscard) {
-                  const discardSentinel = topDiscard + 52;
+                  const handWithTop = [...(G.hands[p] || []), topDiscard];
                   const seenSigs = new Set();
-                  for (const combo of getAllValidMelds([...(G.hands[p] || []), discardSentinel], G.rules)) {
-                      if (!combo.includes(discardSentinel)) continue;
-                      const sig = combo.map(c => c >= 104 ? 52 : c % 52).sort((a, b) => a - b).join(',');
+                  for (const combo of getAllValidMelds(handWithTop, G.rules)) {
+                      let topIdx = -1;
+                      for (let i = combo.length - 1; i >= 0; i--) { if (combo[i] === topDiscard) { topIdx = i; break; } }
+                      if (topIdx === -1) continue;
+                      const sig = combo.map(c => c % 52).sort((a, b) => a - b).join(',');
                       if (seenSigs.has(sig)) continue;
                       seenSigs.add(sig);
-                      const handUsed = combo.filter(c => c !== discardSentinel);
-                      const realCombo = combo.map(c => c === discardSentinel ? topDiscard : c);
-                      pickupCands.push({ move: 'pickUpDiscard', args: [handUsed, { type: 'new' }], cards: realCombo, parsedMeld: buildMeld(realCombo, G.rules), appendIdx: 0 });
+                      const handUsed = [...combo]; handUsed.splice(topIdx, 1);
+                      pickupCands.push({ move: 'pickUpDiscard', args: [handUsed, { type: 'new' }], cards: combo, parsedMeld: buildMeld(combo, G.rules), appendIdx: 0 });
+                  }
                   }
               } else {
                   pickupCands.push({ move: 'pickUpDiscard', args: [], cards: G.discardPile, parsedMeld: null, appendIdx: 0 });
