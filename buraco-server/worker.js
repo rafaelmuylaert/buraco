@@ -64,6 +64,17 @@ function runMatch(genomes, rules, fixedDeck) {
             // planTurn executes the pickup internally; skip plan[0] (the pickup move)
             let endedTurn = false;
 
+            // plan[0] is the pickup move (already executed inside planTurn);
+            // if it was declareExhausted the plan has only 1 element
+            if (plan[0]?.move === 'declareExhausted') {
+                S.isExhausted = true;
+                gameover = checkGameOver(S);
+                ctx.currentPlayer = String((parseInt(p) + 1) % numPlayers);
+                S.hasDrawn = false; S.lastDrawnCard = null;
+                moveCount++;
+                continue;
+            }
+
             for (const move of plan.slice(1)) {
                 let ok = false;
                 if (move.move === 'declareExhausted') {
