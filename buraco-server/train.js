@@ -84,6 +84,7 @@ class WorkerPool {
     }
 
     run(matchPairs, rules) {
+        if (matchPairs.length === 0) return Promise.resolve([]);
         return new Promise((resolve) => {
             const allResults = new Array(matchPairs.length);
             const chunkSize = Math.max(1, Math.ceil(matchPairs.length / this.workers.length));
