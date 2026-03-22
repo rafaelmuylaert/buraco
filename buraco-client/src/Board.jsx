@@ -1,5 +1,22 @@
 import React, { useState, useEffect } from 'react';
 
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ color: 'white', padding: '40px', backgroundColor: '#1b4332', minHeight: '100vh', fontFamily: 'sans-serif' }}>
+          <h1 style={{ color: '#ffd700' }}>Fim de Jogo</h1>
+          <p style={{ color: '#ccc' }}>A partida terminou. Por favor, volte ao salão.</p>
+          <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>⬅ Voltar ao Salão</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // Inlined dependencies from game.js to resolve preview environment import errors
 const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
 const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
@@ -153,7 +170,11 @@ const CardBack = ({ label, count, onClick }) => (
   </div>
 );
 
-export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = null, tournamentStandings = null }) {
+export function BuracoBoard(props) {
+  return <ErrorBoundary><BuracoBoardInner {...props} /></ErrorBoundary>;
+}
+
+function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null, tournamentStandings = null }) {
   const [selectedCards, setSelectedCards] = useState([]);
   const isMyTurn = ctx.currentPlayer === playerID;
 
@@ -224,6 +245,17 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
   }, [gameover, matchID]);
 
   if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregando Mesa...</div>;
+
+  // Guard: if G is missing key fields the game is over/broken — show fallback
+  if (!G.hands || !G.teams || !G.teamPlayers) {
+    return (
+      <div style={{ color: 'white', padding: '40px', backgroundColor: '#1b4332', minHeight: '100vh', fontFamily: 'sans-serif' }}>
+        <h1 style={{ color: '#ffd700' }}>Fim de Jogo</h1>
+        <p style={{ color: '#ccc' }}>A partida terminou. Por favor, volte ao salão.</p>
+        <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>⬅ Voltar ao Salão</button>
+      </div>
+    );
+  }
 
   if (gameover) {
     const s0 = gameover.scores.team0;
