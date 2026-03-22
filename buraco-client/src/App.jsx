@@ -693,7 +693,30 @@ const App = () => {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '6px' }}>
-                    <button onClick={() => { setTrainBotIsNew(false); setTrainBotConfig(prev => ({ ...prev, name: bot.name, ...(bot.meta?.trainParams || {}), rules: bot.meta?.rules || prev.rules })); setShowTrainBotPopup(true); }} style={{ background: '#8a2be2', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>▶ Treinar</button>
+                    <button onClick={() => {
+                      const meta = bot.meta?.trainParams || {};
+                      setTrainBotIsNew(false);
+                      setTrainBotConfig(prev => ({
+                        ...prev,
+                        name: bot.name,
+                        populationSize:      meta.populationSize      ?? prev.populationSize,
+                        generations:         meta.generations         ?? prev.generations,
+                        saveInterval:        meta.saveInterval        ?? prev.saveInterval,
+                        telepathy:           meta.telepathy           ?? prev.telepathy,
+                        fixedDeck:           meta.fixedDeck           ?? prev.fixedDeck,
+                        greedyMode:          meta.greedyMode          ?? prev.greedyMode,
+                        scoreCardPoints:     meta.scoreCardPoints     ?? prev.scoreCardPoints,
+                        scoreHandPenalty:    meta.scoreHandPenalty    ?? prev.scoreHandPenalty,
+                        dirtyCanastraBonus:  meta.dirtyCanastraBonus  ?? prev.dirtyCanastraBonus,
+                        cleanCanastraBonus:  meta.cleanCanastraBonus  ?? prev.cleanCanastraBonus,
+                        mortoPenalty:        meta.mortoPenalty        ?? prev.mortoPenalty,
+                        endGameBonus:        meta.endGameBonus        ?? prev.endGameBonus,
+                        cardPointValues:     meta.cardPointValues     ?? prev.cardPointValues,
+                        meldSizeBonus:       meta.meldSizeBonus       ?? prev.meldSizeBonus,
+                        rules: bot.meta?.rules || prev.rules
+                      }));
+                      setShowTrainBotPopup(true);
+                    }} style={{ background: '#8a2be2', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>▶ Treinar</button>
                     <button onClick={async () => { if (!confirm(`Apagar bot "${bot.name}"?`)) return; await fetch(`${API_ADDRESS}/api/bots/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botName: bot.name }) }); setBotInfoList(prev => prev.filter(b => b.name !== bot.name)); setAvailableBots(prev => prev.filter(b => b !== bot.name)); }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Apagar</button>
                   </div>
                 </div>

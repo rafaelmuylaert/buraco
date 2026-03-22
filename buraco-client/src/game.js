@@ -424,7 +424,6 @@ export function checkGameOver(G) {
     return null;
 }
 
-let _scoresDiagCount = 0;
 export function calculateFinalScores(G) {
   const dirtyCanastraBonus = G.rules?.dirtyCanastraBonus ?? 100;
   const cleanCanastraBonus = G.rules?.cleanCanastraBonus ?? 200;
@@ -442,6 +441,8 @@ export function calculateFinalScores(G) {
     const players = G.teamPlayers[teamId] || [];
     if (scoreCardPoints)
       players.flatMap(p => G.melds[p] || []).forEach(meld => scores[teamId].table += calculateMeldPoints(meld, G.rules, dirtyCanastraBonus, cleanCanastraBonus));
+    else if (G.rules?.meldSizeBonus)
+      players.flatMap(p => G.melds[p] || []).forEach(meld => { const l = getMeldLength(meld); if (l >= 4) scores[teamId].table += Math.min(l - 3, 4); });
     if (scoreHandPenalty)
       players.flatMap(p => G.hands[p] || []).forEach(card => scores[teamId].hand -= getCardPoints(card, G.rules));
     if (!G.teamMortos[teamId] || (G.teamMortos[teamId] && !G.mortoUsed[teamId])) if (players.length > 0) scores[teamId].mortoPenalty -= mortoPenaltyAmt;
