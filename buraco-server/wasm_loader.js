@@ -6,25 +6,8 @@ import { AI_CONFIG, buildStateVector, encodeCandidateMeld, suitsToEvaluate } fro
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let wasmExports = null;
-let memory = null;
+let wasmMemory = null;
 let vInp, vCands, vWeights, vScores;
-
-// Memory layout (all f32):
-//   [INP_OFF]     303 floats  — state vector
-//   [CANDS_OFF]   MAX_CANDS*18 floats — packed candidate features
-//   [WEIGHTS_OFF] WEIGHTS_PER_NET floats — one net's weights
-//   [SCORES_OFF]  MAX_CANDS floats — output scores
-
-const MAX_CANDS = Math.max(AI_CONFIG.MAX_PICKUP, AI_CONFIG.MAX_MELD);
-
-function align64(o) { return (o + 63) & ~63; }
-
-const INP_OFF     = 0;
-const CANDS_OFF   = align64(INP_OFF     + AI_CONFIG.INPUT_SIZE * 4);
-const WEIGHTS_OFF = align64(CANDS_OFF   + MAX_CANDS * 18 * 4);
-const SCORES_OFF  = align64(WEIGHTS_OFF + AI_CONFIG.WEIGHTS_PER_NET * 4);
-const TOTAL_BYTES = SCORES_OFF + MAX_CANDS * 4;
-const PAGES_NEEDED = Math.ceil(TOTAL_BYTES / 65536);
 
 export async function initWasm() {
     const wasmPath = path.join(__dirname, 'nn_engine.wasm');
@@ -32,30 +15,41 @@ export async function initWasm() {
 
     try {
         const wasmBuffer = fs.readFileSync(wasmPath);
-        // Instantiate without injecting memory — let WASM own its memory,
-        // then use the exported memory object to read/write data.
         const { instance } = await WebAssembly.instantiate(wasmBuffer, {});
         wasmExports = instance.exports;
-        memory = wasmExports.memory;
-        if (!memory) {
-            console.warn('[WASM] No exported memory, falling back to JS');
+        wasmMemory = wasmExports.memory;
+
+        if (!wasmMemory || !wasmExports.evaluate || !wasmExports.get_inp) {
+            console.warn('[WASM] Missing required exports, falling back to JS');
             return false;
         }
 
-        // Grow memory if needed
-        const currentBytes = memory.buffer.byteLength;
-        if (currentBytes < TOTAL_BYTES) {
-            const pagesNeeded = Math.ceil((TOTAL_BYTES - currentBytes) / 65536);
-            memory.grow(pagesNeeded);
+        // Verify WEIGHTS_PER_NET matches what the C++ was compiled with
+        const cppWeightsSize = wasmExports.get_weights_size();
+        if (cppWeightsSize !== AI_CONFIG.WEIGHTS_PER_NET) {
+            console.warn(`[WASM] Weight size mismatch: C++=${cppWeightsSize} JS=${AI_CONFIG.WEIGHTS_PER_NET}, falling back to JS`);
+            return false;
         }
 
-        const buf = memory.buffer;
-        vInp     = new Float32Array(buf, INP_OFF,      AI_CONFIG.INPUT_SIZE);
-        vCands   = new Float32Array(buf, CANDS_OFF,    MAX_CANDS * 18);
-        vWeights = new Float32Array(buf, WEIGHTS_OFF,  AI_CONFIG.WEIGHTS_PER_NET);
-        vScores  = new Float32Array(buf, SCORES_OFF,   MAX_CANDS);
+        // Get buffer pointers from WASM — these are byte offsets into wasmMemory.buffer
+        const inpPtr     = wasmExports.get_inp();
+        const candsPtr   = wasmExports.get_cands();
+        const weightsPtr = wasmExports.get_weights();
+        const scoresPtr  = wasmExports.get_scores();
 
-        console.log(`🚀 WASM Neural Network Engine Online! (${memory.buffer.byteLength} bytes, SCORES_OFF=${SCORES_OFF})`);
+        // Ensure memory is large enough to cover all static buffers
+        const maxPtr = scoresPtr + 32 * 4;
+        const neededPages = Math.ceil(maxPtr / 65536);
+        const currentPages = wasmMemory.buffer.byteLength / 65536;
+        if (neededPages > currentPages) wasmMemory.grow(neededPages - currentPages);
+
+        const buf = wasmMemory.buffer;
+        vInp     = new Float32Array(buf, inpPtr,     AI_CONFIG.INPUT_SIZE);
+        vCands   = new Float32Array(buf, candsPtr,   32 * 18);
+        vWeights = new Float32Array(buf, weightsPtr, AI_CONFIG.WEIGHTS_PER_NET);
+        vScores  = new Float32Array(buf, scoresPtr,  32);
+
+        console.log('🚀 WASM Neural Network Engine Online!');
         return true;
     } catch (e) {
         console.warn('[WASM] Failed to load nn_engine.wasm, falling back to JS:', e.message);
@@ -63,9 +57,6 @@ export async function initWasm() {
     }
 }
 
-// Replaces nnHelpers.evaluateCandidates in worker.js when WASM is available.
-// Scores each candidate by writing its 18 features into the candidate slot of
-// the state vector and running the WASM forward pass.
 export function wasmEvaluateCandidates(
     G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
     candidates, weights, topDiscard
@@ -74,21 +65,26 @@ export function wasmEvaluateCandidates(
     const n = candidates.length;
     const totals = new Float32Array(n);
 
-    // Pack candidate features once
-    const candFlat = new Float32Array(n * 18);
+    // Re-fetch views in case memory.buffer was detached by a grow()
+    if (vInp.buffer !== wasmMemory.buffer) {
+        const buf = wasmMemory.buffer;
+        vInp     = new Float32Array(buf, wasmExports.get_inp(),     AI_CONFIG.INPUT_SIZE);
+        vCands   = new Float32Array(buf, wasmExports.get_cands(),   32 * 18);
+        vWeights = new Float32Array(buf, wasmExports.get_weights(), AI_CONFIG.WEIGHTS_PER_NET);
+        vScores  = new Float32Array(buf, wasmExports.get_scores(),  32);
+    }
+
+    // Pack candidate features into WASM buffer once
     for (let c = 0; c < n; c++)
-        encodeCandidateMeld(candFlat, c * 18, candidates[c].parsedMeld, candidates[c].appendIdx);
+        encodeCandidateMeld(vCands, c * 18, candidates[c].parsedMeld, candidates[c].appendIdx);
 
     vWeights.set(weights);
-    vCands.set(candFlat.subarray(0, n * 18));
 
     for (const _s of suits) {
         const inp = buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id);
-        // Zero the candidate slot — evaluate() fills it per candidate
-        for (let i = 285; i < 303; i++) inp[i] = 0;
         vInp.set(inp);
 
-        wasmExports.evaluate(INP_OFF, CANDS_OFF, WEIGHTS_OFF, SCORES_OFF, n);
+        wasmExports.evaluate(n);
 
         for (let c = 0; c < n; c++) totals[c] += vScores[c];
     }
