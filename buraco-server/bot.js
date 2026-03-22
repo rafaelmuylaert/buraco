@@ -85,21 +85,27 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
   let failStreak = 0;
   let lastDispatchedAt = 0;
   let lastStateId = null;
+  let stopped = false;
+
+  const shutdown = () => {
+    if (stopped) return;
+    stopped = true;
+    console.log(`[BOT] Match ended. Shutting down ${botName}.`);
+    if (activeIntervals[clientKey]) {
+      clearInterval(activeIntervals[clientKey]);
+      delete activeIntervals[clientKey];
+    }
+    delete activeBots[clientKey];
+    try { client.stop(); } catch (_) {}
+  };
 
   client.subscribe(state => {
     if (!state) return;
-    if (state.ctx.gameover) {
-      console.log(`[BOT] Match ended. Shutting down ${botName}.`);
-      client.stop();
-      delete activeBots[clientKey];
-      if (activeIntervals[clientKey]) {
-        clearInterval(activeIntervals[clientKey]);
-        delete activeIntervals[clientKey];
-      }
-    }
+    if (state.ctx.gameover) shutdown();
   });
 
   const processQueue = () => {
+    if (stopped) return;
     const currentState = client.getState();
     if (!currentState || currentState.ctx.gameover) return;
 
