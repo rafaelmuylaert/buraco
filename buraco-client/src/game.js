@@ -689,18 +689,33 @@ export const BuracoGame = {
           _turnPlan.delete(p);
           if (G.deck.length === 0 && G.pots.length === 0) return [{ move: 'declareExhausted', args: [] }];
           const myHandCards = G.hands[p] || [];
-          const pickupCands = [{ move: 'drawCard', args: [], cards: [], parsedMeld: null, appendIdx: 0 }];
+          // drawCard candidate: encode topDiscard as a single-rank fakeMeld so the NN
+          // sees what card it's choosing NOT to pick up (all-zero features are unlearnable)
+          const drawFakeMeld = topDiscard !== null ? (() => {
+              const r = getRank(topDiscard), s = getSuit(topDiscard);
+              const fm = new Array(16).fill(0);
+              fm[0] = s === 5 ? 1 : s;
+              if (r >= 3 && r <= 13) fm[r + 1] = 1;
+              else if (r === 1) fm[2] = 1;
+              else if (r === 2) fm[1] = s === 5 ? 1 : s; // wild
+              return fm;
+          })() : null;
+          const pickupCands = [{ move: 'drawCard', args: [], cards: [], parsedMeld: drawFakeMeld, appendIdx: 0 }];
           if (topDiscard !== null) {
               const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
               if (isClosedDiscard) {
+                  // Use sentinel topDiscard+52 to distinguish the discard copy from any hand copy
+                  // (+52 preserves rank/suit via modulo, stays < 104 so joker check is safe)
+                  const discardSentinel = topDiscard + 52;
                   const seenSigs = new Set();
-                  for (const combo of getAllValidMelds([...myHandCards, topDiscard], G.rules)) {
-                      if (!combo.includes(topDiscard)) continue;
+                  for (const combo of getAllValidMelds([...myHandCards, discardSentinel], G.rules)) {
+                      if (!combo.includes(discardSentinel)) continue;
                       const sig = combo.map(c => c >= 104 ? 52 : c % 52).sort((a, b) => a - b).join(',');
                       if (seenSigs.has(sig)) continue;
                       seenSigs.add(sig);
-                      const handUsed = combo.filter(c => c !== topDiscard);
-                      pickupCands.push({ move: 'pickUpDiscard', args: [handUsed, { type: 'new' }], cards: combo, parsedMeld: buildMeld(combo, G.rules), appendIdx: 0 });
+                      const handUsed = combo.filter(c => c !== discardSentinel);
+                      const realCombo = combo.map(c => c === discardSentinel ? topDiscard : c);
+                      pickupCands.push({ move: 'pickUpDiscard', args: [handUsed, { type: 'new' }], cards: realCombo, parsedMeld: buildMeld(realCombo, G.rules), appendIdx: 0 });
                   }
               } else {
                   pickupCands.push({ move: 'pickUpDiscard', args: [], cards: G.discardPile, parsedMeld: null, appendIdx: 0 });
