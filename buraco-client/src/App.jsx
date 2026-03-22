@@ -63,14 +63,14 @@ const App = () => {
     targetPoints: 3000,
     maxRounds: 3,
     botName: '',
-    rules: { discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true }
+    rules: { discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true, cardPointValues: { joker: 50, two: 20, ace: 15, high: 10, low: 5 }, meldSizeBonus: false }
   });
 
   const [newTourney, setNewTourney] = useState({ 
     name: '', type: 'team', format: 'points', targetPoints: 3000, maxRounds: 3, 
     players: 'João, Maria, Pedro, Ana',
     botName: '',
-    rules: { numPlayers: 4, discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true }
+    rules: { numPlayers: 4, discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true, cardPointValues: { joker: 50, two: 20, ace: 15, high: 10, low: 5 }, meldSizeBonus: false }
   });
 
   const [availableBots, setAvailableBots] = useState([]);
@@ -78,6 +78,8 @@ const App = () => {
   const [showTrainBotPopup, setShowTrainBotPopup] = useState(false);
   const [trainBotIsNew, setTrainBotIsNew] = useState(false);
   const [trainingStatus, setTrainingStatus] = useState(null);
+
+  const DEFAULT_CARD_POINT_VALUES = { joker: 50, two: 20, ace: 15, high: 10, low: 5 };
 
   const [trainBotConfig, setTrainBotConfig] = useState({
     name: 'BotPrometheus',
@@ -93,6 +95,8 @@ const App = () => {
     cleanCanastraBonus: 200,
     mortoPenalty: 100,
     endGameBonus: 100,
+    cardPointValues: { ...DEFAULT_CARD_POINT_VALUES },
+    meldSizeBonus: false,
     rules: { discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true }
   });
 
@@ -165,7 +169,9 @@ const App = () => {
               dirtyCanastraBonus: trainBotConfig.dirtyCanastraBonus,
               cleanCanastraBonus: trainBotConfig.cleanCanastraBonus,
               mortoPenalty: trainBotConfig.mortoPenalty,
-              endGameBonus: trainBotConfig.endGameBonus
+              endGameBonus: trainBotConfig.endGameBonus,
+              cardPointValues: trainBotConfig.cardPointValues,
+              meldSizeBonus: trainBotConfig.meldSizeBonus
            }
         })
       });
@@ -791,6 +797,15 @@ const App = () => {
                     <label>Canastra Limpa: <input type="number" value={trainBotConfig.cleanCanastraBonus} onChange={e => setTrainBotConfig({...trainBotConfig, cleanCanastraBonus: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
                     <label>Penalidade Morto: <input type="number" value={trainBotConfig.mortoPenalty} onChange={e => setTrainBotConfig({...trainBotConfig, mortoPenalty: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
                     <label>Bônus Bater: <input type="number" value={trainBotConfig.endGameBonus} onChange={e => setTrainBotConfig({...trainBotConfig, endGameBonus: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
+                    <label style={{gridColumn:'1/-1'}}><input type="checkbox" checked={trainBotConfig.meldSizeBonus} onChange={e => setTrainBotConfig({...trainBotConfig, meldSizeBonus: e.target.checked})} /> Bônus por tamanho de meld (4=+1, 5=+2, 6=+3, 7+=+4)</label>
+                    <div style={{gridColumn:'1/-1', marginTop:'6px'}}>
+                      <div style={{fontSize:'0.8em', color:'#aaa', marginBottom:'4px'}}>Valor das cartas:</div>
+                      <div style={{display:'flex', flexWrap:'wrap', gap:'6px'}}>
+                        {[['joker','Curinga'],['two','2'],['ace','A'],['high','8-K'],['low','3-7']].map(([k,lbl]) => (
+                          <label key={k} style={{fontSize:'0.8em'}}>{lbl}: <input type="number" value={trainBotConfig.cardPointValues[k]} onChange={e => setTrainBotConfig({...trainBotConfig, cardPointValues: {...trainBotConfig.cardPointValues, [k]: parseInt(e.target.value)||0}})} style={{width:'40px', padding:'2px'}} /></label>
+                        ))}
+                      </div>
+                    </div>
                 </div>
               </div>
 
@@ -861,6 +876,15 @@ const App = () => {
               <label><input type="checkbox" checked={newTourney.rules.noJokers} onChange={e => { const r = {...newTourney.rules, noJokers: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Sem Curingas (Jokers)</label>
               <label><input type="checkbox" checked={newTourney.rules.openDiscardView} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
               <label><input type="checkbox" checked={newTourney.rules.showKnownCards} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas (Async)</label>
+              <label><input type="checkbox" checked={newTourney.rules.meldSizeBonus} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, meldSizeBonus: e.target.checked}})} /> Bônus por tamanho de meld (4=+1, 5=+2, 6=+3, 7+=+4)</label>
+              <div>
+                <div style={{fontSize:'0.85em', color:'#aaa', marginBottom:'4px'}}>Valor das cartas:</div>
+                <div style={{display:'flex', flexWrap:'wrap', gap:'4px'}}>
+                  {[['joker','Curinga'],['two','2'],['ace','A'],['high','8-K'],['low','3-7']].map(([k,lbl]) => (
+                    <label key={k} style={{fontSize:'0.85em'}}>{lbl}: <input type="number" value={newTourney.rules.cardPointValues[k]} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, cardPointValues: {...newTourney.rules.cardPointValues, [k]: parseInt(e.target.value)||0}}})} style={{width:'40px', padding:'2px'}} /></label>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
           <button onClick={handleCreateTournament} style={{ width: '100%', marginTop: '30px', padding: '15px', background: '#ffd700', fontSize: '1.2em', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Iniciar Torneio</button>
@@ -919,6 +943,15 @@ const App = () => {
               <label><input type="checkbox" checked={quickGameConfig.rules.noJokers} onChange={e => { const r = {...quickGameConfig.rules, noJokers: e.target.checked}; setQuickGameConfig(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Sem Curingas (Jokers)</label>
               <label><input type="checkbox" checked={quickGameConfig.rules.openDiscardView} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
               <label><input type="checkbox" checked={quickGameConfig.rules.showKnownCards} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas Memorizadas (Para Bot/Async)</label>
+              <label><input type="checkbox" checked={quickGameConfig.rules.meldSizeBonus} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, meldSizeBonus: e.target.checked}})} /> Bônus por tamanho de meld (4=+1, 5=+2, 6=+3, 7+=+4)</label>
+              <div>
+                <div style={{fontSize:'0.85em', color:'#aaa', marginBottom:'4px'}}>Valor das cartas:</div>
+                <div style={{display:'flex', flexWrap:'wrap', gap:'6px'}}>
+                  {[['joker','Curinga'],['two','2'],['ace','A'],['high','8-K'],['low','3-7']].map(([k,lbl]) => (
+                    <label key={k} style={{fontSize:'0.85em'}}>{lbl}: <input type="number" value={quickGameConfig.rules.cardPointValues[k]} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, cardPointValues: {...quickGameConfig.rules.cardPointValues, [k]: parseInt(e.target.value)||0}}})} style={{width:'40px', padding:'2px'}} /></label>
+                  ))}
+                </div>
+              </div>
               <label>Selecione a IA:
                 <select value={quickGameConfig.botName || ''} onChange={e => setQuickGameConfig({...quickGameConfig, botName: e.target.value})} style={{ padding: '5px', marginLeft: '10px' }}>
                   {availableBots.length === 0 && <option value="">(Nenhum Bot Treinado)</option>}

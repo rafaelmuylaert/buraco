@@ -246,6 +246,10 @@ export function calculateMeldPoints(meld, rules, dirtyCanastraBonus, cleanCanast
         if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20);
     }
 
+    if (rules?.meldSizeBonus && length >= 4) {
+        pts += Math.min(length - 3, 4);
+    }
+
     if (isCanasta) {
         pts += isClean ? cleanBonus : dirtyBonus;
         if (rules?.largeCanasta && isClean) {
@@ -256,10 +260,14 @@ export function calculateMeldPoints(meld, rules, dirtyCanastraBonus, cleanCanast
     return pts;
 }
 
-export function getCardPoints(c) {
+export function getCardPoints(c, rules) {
     const s = getSuit(c); const r = getRank(c);
-    if (s === 5) return 50; if (r === 2) return 20; if (r === 1) return 15;
-    if (r >= 8 && r <= 13) return 10; return 5;
+    const v = rules?.cardPointValues;
+    if (s === 5) return v?.joker ?? 50;
+    if (r === 2) return v?.two   ?? 20;
+    if (r === 1) return v?.ace   ?? 15;
+    if (r >= 8 && r <= 13) return v?.high ?? 10;
+    return v?.low ?? 5;
 }
 
 export function removeCards(hand, cardIds) {
@@ -430,7 +438,7 @@ export function calculateFinalScores(G) {
     if (scoreCardPoints)
       players.flatMap(p => G.melds[p] || []).forEach(meld => scores[teamId].table += calculateMeldPoints(meld, G.rules, dirtyCanastraBonus, cleanCanastraBonus));
     if (scoreHandPenalty)
-      players.flatMap(p => G.hands[p] || []).forEach(card => scores[teamId].hand -= getCardPoints(card));
+      players.flatMap(p => G.hands[p] || []).forEach(card => scores[teamId].hand -= getCardPoints(card, G.rules));
     if (!G.teamMortos[teamId] || (G.teamMortos[teamId] && !G.mortoUsed[teamId])) if (players.length > 0) scores[teamId].mortoPenalty -= mortoPenaltyAmt;
     scores[teamId].total = scores[teamId].table + scores[teamId].hand + scores[teamId].mortoPenalty;
   }
