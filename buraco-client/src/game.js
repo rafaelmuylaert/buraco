@@ -24,11 +24,11 @@ export const AI_CONFIG = {
     MAX_MELD: 32,
     DISCARD_CLASSES: 53,
 };
-AI_CONFIG.W1 = (AI_CONFIG.INPUT_SIZE + 1) * AI_CONFIG.H1;
-AI_CONFIG.W2 = (AI_CONFIG.H1 + 1) * AI_CONFIG.H2;
-AI_CONFIG.W3 = (AI_CONFIG.H2 + 1) * AI_CONFIG.H3;
-AI_CONFIG.WO = (AI_CONFIG.H3 + 1) * 1;
-AI_CONFIG.WEIGHTS_PER_NET = AI_CONFIG.W1 + AI_CONFIG.W2 + AI_CONFIG.W3 + AI_CONFIG.WO;
+AI_CONFIG.W1 = AI_CONFIG.INPUT_SIZE * AI_CONFIG.H1;
+AI_CONFIG.W2 = AI_CONFIG.H1 * AI_CONFIG.H2;
+AI_CONFIG.W3 = AI_CONFIG.H2 * AI_CONFIG.H3;
+AI_CONFIG.WO = AI_CONFIG.H3;
+AI_CONFIG.WEIGHTS_PER_NET = AI_CONFIG.W1 + AI_CONFIG.H1 + AI_CONFIG.W2 + AI_CONFIG.H2 + AI_CONFIG.W3 + AI_CONFIG.H3 + AI_CONFIG.WO + 1;
 AI_CONFIG.TOTAL_DNA_SIZE = AI_CONFIG.WEIGHTS_PER_NET * 4;  // 4 nets: pickup, append, meld, discard
 AI_CONFIG.DNA_PICKUP  = AI_CONFIG.WEIGHTS_PER_NET;
 AI_CONFIG.DNA_MELD    = AI_CONFIG.WEIGHTS_PER_NET;
@@ -415,36 +415,42 @@ export function buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2I
 
 function relu(x) { return x > 0 ? x : 0; }
 
+// Weight layout (matches nn_engine.cpp exactly):
+//   W1(INPUT_SIZE*H1) | b1(H1) | W2(H1*H2) | b2(H2) | W3(H2*H3) | b3(H3) | WO(H3) | bO(1)
 function forwardPass(inp, weights) {
-    // Weight layout: each neuron stores [w0..wN-1, bias] contiguously.
-    // W1 = (INPUT_SIZE+1)*H1, W2 = (H1+1)*H2, W3 = (H2+1)*H3, WO = (H3+1)*1
-    const { INPUT_SIZE, H1, H2, H3, W1, W2, W3 } = AI_CONFIG;
-    const w1off = 0, w2off = W1, w3off = W1 + W2, wooff = W1 + W2 + W3;
+    const { INPUT_SIZE, H1, H2, H3 } = AI_CONFIG;
+    const W1 = INPUT_SIZE * H1, W2 = H1 * H2, W3 = H2 * H3;
+    let off = 0;
+    const w1off = off; off += W1;
+    const b1off = off; off += H1;
+    const w2off = off; off += W2;
+    const b2off = off; off += H2;
+    const w3off = off; off += W3;
+    const b3off = off; off += H3;
+    const wooff = off; off += H3;
+    const booff = off;
     const h1 = new Float32Array(H1);
     const h2 = new Float32Array(H2);
     const h3 = new Float32Array(H3);
-    const stride1 = INPUT_SIZE + 1;
     for (let h = 0; h < H1; h++) {
-        const base = w1off + h * stride1;
-        let sum = weights[base + INPUT_SIZE];
+        let sum = weights[b1off + h];
+        const base = w1off + h * INPUT_SIZE;
         for (let i = 0; i < INPUT_SIZE; i++) sum += inp[i] * weights[base + i];
         h1[h] = relu(sum);
     }
-    const stride2 = H1 + 1;
     for (let h = 0; h < H2; h++) {
-        const base = w2off + h * stride2;
-        let sum = weights[base + H1];
+        let sum = weights[b2off + h];
+        const base = w2off + h * H1;
         for (let i = 0; i < H1; i++) sum += h1[i] * weights[base + i];
         h2[h] = relu(sum);
     }
-    const stride3 = H2 + 1;
     for (let h = 0; h < H3; h++) {
-        const base = w3off + h * stride3;
-        let sum = weights[base + H2];
+        let sum = weights[b3off + h];
+        const base = w3off + h * H2;
         for (let i = 0; i < H2; i++) sum += h2[i] * weights[base + i];
         h3[h] = relu(sum);
     }
-    let out = weights[wooff + H3];
+    let out = weights[booff];
     for (let i = 0; i < H3; i++) out += h3[i] * weights[wooff + i];
     return out;
 }
@@ -673,19 +679,16 @@ export const BuracoGame = {
       const dnaMeld    = DNA.subarray(doff, doff += AI_CONFIG.DNA_MELD);
       const dnaDiscard = DNA.subarray(doff);
 
-      // Helper: score an array of candidates with a given network, summing across suit passes
+      // Helper: score an array of candidates with a given network, summing across suit passes.
+      // Delegates to nnHelpers.evaluateCandidates so the WASM override in worker.js is used.
       const scoreCandidates = (cands, weights) => {
-          const suits = suitsToEvaluate(topDiscard);
-          const n = cands.length;
-          const totals = new Float32Array(n);
-          for (const s of suits) {
-              const inp = buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id);
-              for (let c = 0; c < n; c++) {
-                  encodeCandidateMeld(inp, 285, cands[c].parsedMeld, cands[c].appendIdx);
-                  totals[c] += forwardPass(inp, weights);
-              }
-          }
-          return totals;
+          const scores = nnHelpers.evaluateCandidates(
+              G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
+              cands, weights, topDiscard
+          );
+          // wasmEvaluateCandidates returns flat totals; JS version returns suit-split array
+          if (scores.length === cands.length) return scores;
+          return nnHelpers.sumSuitScores(scores, cands.length, scores.length / cands.length);
       };
 
       // ── PICKUP ────────────────────────────────────────────────────────────
@@ -824,16 +827,14 @@ export const BuracoGame = {
               else if (r === 1) fakeMeld[2] = 1;
               return { card, parsedMeld: fakeMeld, appendIdx: 0 };
           });
-          const suits = suitsToEvaluate(topDiscard);
           const n = discardCands.length;
-          const totals = new Float32Array(n);
-          for (const s of suits) {
-              const inp = buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id);
-              for (let c = 0; c < n; c++) {
-                  encodeCandidateMeld(inp, 285, discardCands[c].parsedMeld, 0);
-                  totals[c] += forwardPass(inp, dnaDiscard);
-              }
-          }
+          const discardScores = nnHelpers.evaluateCandidates(
+              G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
+              discardCands, dnaDiscard, topDiscard
+          );
+          const totals = discardScores.length === n
+              ? discardScores
+              : nnHelpers.sumSuitScores(discardScores, n, discardScores.length / n);
           let bestCard = remainingHand[0], bestScore = -Infinity;
           for (let i = 0; i < n; i++) if (totals[i] > bestScore) { bestScore = totals[i]; bestCard = discardCands[i].card; }
           discardMove = { move: 'discardCard', args: [bestCard], cards: [] };
