@@ -757,11 +757,16 @@ export function planTurn(G, p, DNA) {
             pickupCands.push({ move: 'pickUpDiscard', args: [], cards: G.discardPile, parsedMeld: null, appendIdx: 0 });
         }
     }
-    const n1 = Math.min(pickupCands.length, AI_CONFIG.MAX_PICKUP);
-    const pickupScores = score(pickupCands.slice(0, n1), dnaPickup);
-    let bestPickup = 0;
-    for (let i = 1; i < n1; i++) if (pickupScores[i] > pickupScores[bestPickup]) bestPickup = i;
-    const pickupMove = pickupCands[bestPickup];
+    let pickupMove;
+    if (pickupCands.length === 1) {
+        pickupMove = pickupCands[0];
+    } else {
+        const n1 = Math.min(pickupCands.length, AI_CONFIG.MAX_PICKUP);
+        const pickupScores = score(pickupCands.slice(0, n1), dnaPickup);
+        let bestPickup = 0;
+        for (let i = 1; i < n1; i++) if (pickupScores[i] > pickupScores[bestPickup]) bestPickup = i;
+        pickupMove = pickupCands[bestPickup];
+    }
 
     // ── Execute pickup on G so phase 2 sees the real post-pickup hand ─────────
     if (pickupMove.move === 'drawCard') moveDrawCard(G, p);
@@ -800,17 +805,25 @@ export function planTurn(G, p, DNA) {
     }
 
     const planMoves = [];
-    if (appendCands.length > 0) {
+    if (appendCands.length > 0 && meldCands.length > 0) {
+        const na = Math.min(appendCands.length, AI_CONFIG.MAX_MELD);
+        const sc = score(appendCands.slice(0, na), dnaAppend);
+        for (let i = 0; i < na; i++) planMoves.push({ ...appendCands[i], score: sc[i] });
+        const nm = Math.min(meldCands.length, AI_CONFIG.MAX_MELD);
+        const sm = score(meldCands.slice(0, nm), dnaMeld);
+        for (let i = 0; i < nm; i++) planMoves.push({ ...meldCands[i], score: sm[i] });
+        planMoves.sort((a, b) => b.score - a.score);
+    } else if (appendCands.length > 0) {
         const n = Math.min(appendCands.length, AI_CONFIG.MAX_MELD);
         const sc = score(appendCands.slice(0, n), dnaAppend);
         for (let i = 0; i < n; i++) planMoves.push({ ...appendCands[i], score: sc[i] });
-    }
-    if (meldCands.length > 0) {
+        planMoves.sort((a, b) => b.score - a.score);
+    } else if (meldCands.length > 0) {
         const n = Math.min(meldCands.length, AI_CONFIG.MAX_MELD);
         const sc = score(meldCands.slice(0, n), dnaMeld);
         for (let i = 0; i < n; i++) planMoves.push({ ...meldCands[i], score: sc[i] });
+        planMoves.sort((a, b) => b.score - a.score);
     }
-    planMoves.sort((a, b) => b.score - a.score);
 
     const isMortoSafe = mortoSafe(G, myTeam);
     const selectedPlays = [];
@@ -947,11 +960,16 @@ export const BuracoGame = {
               }
           }
           const n1 = Math.min(pickupCands.length, AI_CONFIG.MAX_PICKUP);
-          const pickupScores = nnHelpers.evaluateCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, pickupCands.slice(0, n1), dnaPickup, topDiscard);
-          const pickupTotals = pickupScores.length === n1 ? pickupScores : nnHelpers.sumSuitScores(pickupScores, n1, pickupScores.length / n1);
-          let best = 0;
-          for (let i = 1; i < n1; i++) if (pickupTotals[i] > pickupTotals[best]) best = i;
-          const pickupMove = pickupCands[best];
+          let pickupMove;
+          if (n1 === 1) {
+              pickupMove = pickupCands[0];
+          } else {
+              const pickupScores = nnHelpers.evaluateCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, pickupCands.slice(0, n1), dnaPickup, topDiscard);
+              const pickupTotals = pickupScores.length === n1 ? pickupScores : nnHelpers.sumSuitScores(pickupScores, n1, pickupScores.length / n1);
+              let best = 0;
+              for (let i = 1; i < n1; i++) if (pickupTotals[i] > pickupTotals[best]) best = i;
+              pickupMove = pickupCands[best];
+          }
           _turnPlan.set(p, { pendingPlan: true, pickupMove, DNA });
           return [{ move: pickupMove.move, args: pickupMove.args }];
       }

@@ -876,7 +876,6 @@ const App = () => {
               <label><input type="checkbox" checked={newTourney.rules.noJokers} onChange={e => { const r = {...newTourney.rules, noJokers: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Sem Curingas (Jokers)</label>
               <label><input type="checkbox" checked={newTourney.rules.openDiscardView} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
               <label><input type="checkbox" checked={newTourney.rules.showKnownCards} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas (Async)</label>
-              <label><input type="checkbox" checked={newTourney.rules.meldSizeBonus} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, meldSizeBonus: e.target.checked}})} /> Bônus por tamanho de meld (4=+1, 5=+2, 6=+3, 7+=+4)</label>
               <div>
                 <div style={{fontSize:'0.85em', color:'#aaa', marginBottom:'4px'}}>Valor das cartas:</div>
                 <div style={{display:'flex', flexWrap:'wrap', gap:'4px'}}>
@@ -943,7 +942,6 @@ const App = () => {
               <label><input type="checkbox" checked={quickGameConfig.rules.noJokers} onChange={e => { const r = {...quickGameConfig.rules, noJokers: e.target.checked}; setQuickGameConfig(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Sem Curingas (Jokers)</label>
               <label><input type="checkbox" checked={quickGameConfig.rules.openDiscardView} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
               <label><input type="checkbox" checked={quickGameConfig.rules.showKnownCards} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas Memorizadas (Para Bot/Async)</label>
-              <label><input type="checkbox" checked={quickGameConfig.rules.meldSizeBonus} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, meldSizeBonus: e.target.checked}})} /> Bônus por tamanho de meld (4=+1, 5=+2, 6=+3, 7+=+4)</label>
               <div>
                 <div style={{fontSize:'0.85em', color:'#aaa', marginBottom:'4px'}}>Valor das cartas:</div>
                 <div style={{display:'flex', flexWrap:'wrap', gap:'6px'}}>
