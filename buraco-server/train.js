@@ -187,15 +187,15 @@ export const TrainerService = {
         const POPULATION_SIZE = Math.max(8, params.populationSize || 24);
         const GENERATIONS = params.generations || 500;
         const SAVE_EVERY = params.saveInterval || params.matchesPerGeneration || 12;
-        if (params.greedyMode) rules = { ...rules, greedyMode: true };
-        if (params.scoreCardPoints    === false) rules = { ...rules, scoreCardPoints: false };
-        if (params.scoreHandPenalty   === false) rules = { ...rules, scoreHandPenalty: false };
-        if (params.dirtyCanastraBonus != null)   rules = { ...rules, dirtyCanastraBonus: params.dirtyCanastraBonus };
-        if (params.cleanCanastraBonus != null)   rules = { ...rules, cleanCanastraBonus: params.cleanCanastraBonus };
-        if (params.mortoPenalty       != null)   rules = { ...rules, mortoPenalty: params.mortoPenalty };
-        if (params.endGameBonus       != null)   rules = { ...rules, endGameBonus: params.endGameBonus };
-        if (params.cardPointValues    != null)   rules = { ...rules, cardPointValues: params.cardPointValues };
-        if (params.meldSizeBonus      != null)   rules = { ...rules, meldSizeBonus: params.meldSizeBonus };
+        if (params.greedyMode     != null) rules = { ...rules, greedyMode:          params.greedyMode };
+        if (params.scoreCardPoints != null) rules = { ...rules, scoreCardPoints:     params.scoreCardPoints };
+        if (params.scoreHandPenalty!= null) rules = { ...rules, scoreHandPenalty:    params.scoreHandPenalty };
+        if (params.dirtyCanastraBonus!=null)rules = { ...rules, dirtyCanastraBonus:  params.dirtyCanastraBonus };
+        if (params.cleanCanastraBonus!=null)rules = { ...rules, cleanCanastraBonus:  params.cleanCanastraBonus };
+        if (params.mortoPenalty    != null) rules = { ...rules, mortoPenalty:        params.mortoPenalty };
+        if (params.endGameBonus    != null) rules = { ...rules, endGameBonus:        params.endGameBonus };
+        if (params.cardPointValues != null) rules = { ...rules, cardPointValues:     params.cardPointValues };
+        if (params.meldSizeBonus   != null) rules = { ...rules, meldSizeBonus:       params.meldSizeBonus };
 
         const seedDNA = TrainerService.getBotWeights(botName);
         const originalDNA = generateRandomGenome();
