@@ -424,6 +424,7 @@ export function checkGameOver(G) {
     return null;
 }
 
+let _scoresDiagCount = 0;
 export function calculateFinalScores(G) {
   const dirtyCanastraBonus = G.rules?.dirtyCanastraBonus ?? 100;
   const cleanCanastraBonus = G.rules?.cleanCanastraBonus ?? 200;
@@ -431,6 +432,10 @@ export function calculateFinalScores(G) {
   const endGameBonusAmt    = G.rules?.endGameBonus       ?? 100;
   const scoreCardPoints    = G.rules?.scoreCardPoints    !== false;
   const scoreHandPenalty   = G.rules?.scoreHandPenalty   !== false;
+  if (_scoresDiagCount < 1) {
+    _scoresDiagCount++;
+    console.log(`[SCORES DIAG] scoreCardPoints=${scoreCardPoints} scoreHandPenalty=${scoreHandPenalty} mortoPenalty=${mortoPenaltyAmt} dirty=${dirtyCanastraBonus} clean=${cleanCanastraBonus} meldSizeBonus=${G.rules?.meldSizeBonus} cardPointValues=${JSON.stringify(G.rules?.cardPointValues)}`);
+  }
 
   let scores = { team0: { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 }, team1: { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 } };
   for (const teamId of ['team0', 'team1']) {
