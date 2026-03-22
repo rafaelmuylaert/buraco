@@ -77,9 +77,7 @@ export function wasmEvaluateCandidates(
 
         wasmExports.evaluate(INP_OFF, CANDS_OFF, WEIGHTS_OFF, SCORES_OFF, n);
 
-        // evaluate() writes scores to SCORES_OFF; read them back
-        const scores = new Float32Array(memory.buffer, SCORES_OFF, n);
-        for (let c = 0; c < n; c++) totals[c] += scores[c];
+        for (let c = 0; c < n; c++) totals[c] += vScores[c];
     }
 
     return totals;

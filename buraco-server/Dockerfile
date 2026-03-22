@@ -12,6 +12,7 @@ COPY buraco-client/src/game.js ./game.js
 RUN apk add --no-cache clang lld && \
     clang --target=wasm32 -O3 -flto -nostdlib \
       -Wl,--no-entry -Wl,--export-all -Wl,--allow-undefined \
+      -Wl,--import-memory \
       -msimd128 \
       -o nn_engine.wasm nn_engine.cpp && \
     apk del clang lld
