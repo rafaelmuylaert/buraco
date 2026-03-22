@@ -416,35 +416,36 @@ export function buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2I
 function relu(x) { return x > 0 ? x : 0; }
 
 function forwardPass(inp, weights) {
+    // Weight layout: each neuron stores [w0..wN-1, bias] contiguously.
+    // W1 = (INPUT_SIZE+1)*H1, W2 = (H1+1)*H2, W3 = (H2+1)*H3, WO = (H3+1)*1
     const { INPUT_SIZE, H1, H2, H3, W1, W2, W3 } = AI_CONFIG;
-    const w1 = weights.subarray(0, W1);
-    const b1 = weights.subarray(W1, W1 + H1);
-    const w2 = weights.subarray(W1 + H1, W1 + H1 + W2);
-    const b2 = weights.subarray(W1 + H1 + W2, W1 + H1 + W2 + H2);
-    const w3 = weights.subarray(W1 + H1 + W2 + H2, W1 + H1 + W2 + H2 + W3);
-    const b3 = weights.subarray(W1 + H1 + W2 + H2 + W3, W1 + H1 + W2 + H2 + W3 + H3);
-    const wo = weights.subarray(W1 + H1 + W2 + H2 + W3 + H3, W1 + H1 + W2 + H2 + W3 + H3 + H3);
-    const bo = weights.subarray(W1 + H1 + W2 + H2 + W3 + H3 + H3);
+    const w1off = 0, w2off = W1, w3off = W1 + W2, wooff = W1 + W2 + W3;
     const h1 = new Float32Array(H1);
     const h2 = new Float32Array(H2);
     const h3 = new Float32Array(H3);
+    const stride1 = INPUT_SIZE + 1;
     for (let h = 0; h < H1; h++) {
-        let sum = b1[h]; const base = h * INPUT_SIZE;
-        for (let i = 0; i < INPUT_SIZE; i++) sum += inp[i] * w1[base + i];
+        const base = w1off + h * stride1;
+        let sum = weights[base + INPUT_SIZE];
+        for (let i = 0; i < INPUT_SIZE; i++) sum += inp[i] * weights[base + i];
         h1[h] = relu(sum);
     }
+    const stride2 = H1 + 1;
     for (let h = 0; h < H2; h++) {
-        let sum = b2[h]; const base = h * H1;
-        for (let i = 0; i < H1; i++) sum += h1[i] * w2[base + i];
+        const base = w2off + h * stride2;
+        let sum = weights[base + H1];
+        for (let i = 0; i < H1; i++) sum += h1[i] * weights[base + i];
         h2[h] = relu(sum);
     }
+    const stride3 = H2 + 1;
     for (let h = 0; h < H3; h++) {
-        let sum = b3[h]; const base = h * H2;
-        for (let i = 0; i < H2; i++) sum += h2[i] * w3[base + i];
+        const base = w3off + h * stride3;
+        let sum = weights[base + H2];
+        for (let i = 0; i < H2; i++) sum += h2[i] * weights[base + i];
         h3[h] = relu(sum);
     }
-    let out = bo[0];
-    for (let i = 0; i < H3; i++) out += h3[i] * wo[i];
+    let out = weights[wooff + H3];
+    for (let i = 0; i < H3; i++) out += h3[i] * weights[wooff + i];
     return out;
 }
 
