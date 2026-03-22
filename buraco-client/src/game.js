@@ -143,6 +143,12 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
         }
     }
 
+    // If the only gap is at slot 3 (natural 2) and the wild IS a same-suit 2,
+    // place it as a natural 2 instead of a wild, making the meld clean.
+    if (gaps === 1 && m[1] === suit && m[3] === 0) {
+        m[3] = 1; m[1] = 0;
+        if (checkGaps(m) > 0) { m[3] = 0; m[1] = suit; }
+    }
     if (gaps === 0 && m[1] === suit && m[3] === 0) {
         m[3] = 1; m[1] = 0; 
         if (checkGaps(m) > 0) {

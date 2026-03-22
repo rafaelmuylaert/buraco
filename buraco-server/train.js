@@ -299,7 +299,7 @@ export const TrainerService = {
                     for (let src = 0; src < NUM_ISLANDS; src++) {
                         if (src === islandIdx || !islandElites[src]) continue;
                         const replaceIdx = 2 + Math.floor(Math.random() * (islandPops[islandIdx].length - 2));
-                        islandPops[islandIdx][replaceIdx] = new Uint32Array(islandElites[src]);
+                        islandPops[islandIdx][replaceIdx] = new Float32Array(islandElites[src]);
                     }
 
                     if (gen % SAVE_EVERY === 0 || gen === GENERATIONS) {
@@ -331,7 +331,10 @@ export const TrainerService = {
         };
 
         try {
-            await Promise.all([
+            // Run all islands + champion loop concurrently.
+            // Use allSettled so one failing island doesn't reject the whole batch
+            // and kill the worker pool while others are still running.
+            await Promise.allSettled([
                 ...Array.from({ length: NUM_ISLANDS }, (_, k) => runIsland(k)),
                 (async () => {
                     while (completedIslands < NUM_ISLANDS) {
