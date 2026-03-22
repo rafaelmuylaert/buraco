@@ -32,9 +32,41 @@ try {
   console.error("[SWEEPER] Error during sweep:", e);
 }
 
-const gameDB = new FlatFile({
+const _rawDB = new FlatFile({
   dir: gamesPath,
   logging: false,
+});
+
+// Wrap every FlatFile method to catch corrupted file errors at runtime.
+// On any read error: delete the bad file and return empty state so boardgame.io
+// can recreate it cleanly rather than crashing mid-game.
+function safeDBMethod(target, fn) {
+  return async (...args) => {
+    try {
+      return await fn.apply(target, args);
+    } catch (e) {
+      if (e.message && e.message.includes('does not look like a valid storage file')) {
+        const id = args[0];
+        console.warn(`[DB] Deleting corrupted game file at runtime: ${id}`);
+        const fp = path.join(gamesPath, id);
+        try { fs.unlinkSync(fp); } catch (_) {}
+        // Return a minimal valid response so boardgame.io can continue
+        return { state: undefined, metadata: undefined, initialState: undefined };
+      }
+      throw e;
+    }
+  };
+}
+
+const gameDB = new Proxy(_rawDB, {
+  get(target, prop) {
+    const val = target[prop];
+    if (typeof val !== 'function') return val;
+    // Wrap all async db methods
+    if (['fetch', 'setState', 'setMetadata', 'setInitialState'].includes(prop))
+      return safeDBMethod(target, val);
+    return val.bind(target);
+  }
 });
 
 const server = Server({

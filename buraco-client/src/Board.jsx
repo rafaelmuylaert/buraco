@@ -157,6 +157,11 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
   const [selectedCards, setSelectedCards] = useState([]);
   const isMyTurn = ctx.currentPlayer === playerID;
 
+  // Persist the last seen gameover so a server hiccup after endIf never causes a white screen
+  const lastGameoverRef = React.useRef(null);
+  if (ctx?.gameover && !lastGameoverRef.current) lastGameoverRef.current = ctx.gameover;
+  const gameover = ctx?.gameover || lastGameoverRef.current;
+
   // Track melds snapshot at end of my last turn to highlight opponent additions
   const meldSnapshotRef = React.useRef(null);
   const [newMeldCards, setNewMeldCards] = useState({}); // { 'p-meldIdx': count }
@@ -203,7 +208,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
   }, [ctx, G, playerID, moves]);
 
   useEffect(() => {
-    if (ctx?.gameover && matchID) {
+    if (gameover && matchID) {
       const { port, hostname, protocol, origin } = window.location;
       const apiBase = ['8000','5173'].includes(port)
         ? `${protocol}//${hostname}:8000`
@@ -213,16 +218,16 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
       fetch(`${apiBase}/api/history/add`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matchID, date: new Date().toLocaleString(), scores: ctx.gameover.scores })
+        body: JSON.stringify({ matchID, date: new Date().toLocaleString(), scores: gameover.scores })
       }).then(() => window.dispatchEvent(new Event('history_updated')));
     }
-  }, [ctx?.gameover, matchID]);
+  }, [gameover, matchID]);
 
   if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregando Mesa...</div>;
 
-  if (ctx.gameover) {
-    const s0 = ctx.gameover.scores.team0;
-    const s1 = ctx.gameover.scores.team1;
+  if (gameover) {
+    const s0 = gameover.scores.team0;
+    const s1 = gameover.scores.team1;
     const team0NamesArr = (G.teamPlayers.team0 || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`);
     const team1NamesArr = (G.teamPlayers.team1 || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`);
     const team0Names = team0NamesArr.join(' & ');
@@ -244,7 +249,7 @@ export function BuracoBoard({ ctx, G, moves, playerID, matchID, tournament = nul
       <div style={{ display: 'flex', flexDirection: 'column', padding: '40px', height: '100vh', backgroundColor: '#1b4332', color: 'white', fontFamily: 'sans-serif', overflowY: 'auto' }}>
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
           <h1 style={{ fontSize: '3em', color: '#ffd700', margin: '0 0 10px 0' }}>Fim de Jogo!</h1>
-          <h2 style={{ margin: 0, color: '#ccc' }}>Motivo: {ctx.gameover.reason}</h2>
+          <h2 style={{ margin: 0, color: '#ccc' }}>Motivo: {gameover.reason}</h2>
         </div>
         
         <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', justifyContent: 'center', marginBottom: '40px' }}>
