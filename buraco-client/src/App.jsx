@@ -87,6 +87,12 @@ const App = () => {
     telepathy: true,
     fixedDeck: false,
     greedyMode: true,
+    scoreCardPoints: true,
+    scoreHandPenalty: true,
+    dirtyCanastraBonus: 100,
+    cleanCanastraBonus: 200,
+    mortoPenalty: 100,
+    endGameBonus: 100,
     rules: { discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true }
   });
 
@@ -153,7 +159,13 @@ const App = () => {
               saveInterval: trainBotConfig.saveInterval,
               telepathy: trainBotConfig.telepathy,
               fixedDeck: trainBotConfig.fixedDeck,
-              greedyMode: trainBotConfig.greedyMode
+              greedyMode: trainBotConfig.greedyMode,
+              scoreCardPoints: trainBotConfig.scoreCardPoints,
+              scoreHandPenalty: trainBotConfig.scoreHandPenalty,
+              dirtyCanastraBonus: trainBotConfig.dirtyCanastraBonus,
+              cleanCanastraBonus: trainBotConfig.cleanCanastraBonus,
+              mortoPenalty: trainBotConfig.mortoPenalty,
+              endGameBonus: trainBotConfig.endGameBonus
            }
         })
       });
@@ -769,6 +781,16 @@ const App = () => {
                     <label style={{color: '#ffb86c'}}><input type="checkbox" checked={trainBotConfig.telepathy} onChange={e => setTrainBotConfig({...trainBotConfig, telepathy: e.target.checked})} /> Telepatia Parça</label>
                     <label style={{color: '#ff5555'}}><input type="checkbox" checked={trainBotConfig.fixedDeck} onChange={e => setTrainBotConfig({...trainBotConfig, fixedDeck: e.target.checked})} /> Baralho Fixo (Teste)</label>
                     <label style={{color: '#50fa7b', gridColumn:'1/-1'}}><input type="checkbox" checked={trainBotConfig.greedyMode} onChange={e => setTrainBotConfig({...trainBotConfig, greedyMode: e.target.checked})} /> 🤑 Modo Ganancioso (sempre joga a melhor jogada)</label>
+                </div>
+
+                <h4 style={{ margin: '10px 0 0 0', color: '#ff79c6' }}>Pressão Evolutiva (Pontuação)</h4>
+                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '5px'}}>
+                    <label><input type="checkbox" checked={trainBotConfig.scoreCardPoints} onChange={e => setTrainBotConfig({...trainBotConfig, scoreCardPoints: e.target.checked})} /> Pontos das cartas na mesa</label>
+                    <label><input type="checkbox" checked={trainBotConfig.scoreHandPenalty} onChange={e => setTrainBotConfig({...trainBotConfig, scoreHandPenalty: e.target.checked})} /> Penalidade por cartas na mão</label>
+                    <label>Canastra Suja: <input type="number" value={trainBotConfig.dirtyCanastraBonus} onChange={e => setTrainBotConfig({...trainBotConfig, dirtyCanastraBonus: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
+                    <label>Canastra Limpa: <input type="number" value={trainBotConfig.cleanCanastraBonus} onChange={e => setTrainBotConfig({...trainBotConfig, cleanCanastraBonus: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
+                    <label>Penalidade Morto: <input type="number" value={trainBotConfig.mortoPenalty} onChange={e => setTrainBotConfig({...trainBotConfig, mortoPenalty: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
+                    <label>Bônus Bater: <input type="number" value={trainBotConfig.endGameBonus} onChange={e => setTrainBotConfig({...trainBotConfig, endGameBonus: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
                 </div>
               </div>
 

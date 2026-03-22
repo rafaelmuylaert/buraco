@@ -3,7 +3,10 @@ import {
     BuracoGame, nnHelpers, AI_CONFIG,
     isMeldClean, getMeldLength, calculateMeldPoints,
     buildMeld, appendCardsToMeld, getAllValidMelds,
-    getSuit, getRank, getCardPoints, removeCards, calculateFinalScores
+    getSuit, getRank, getCardPoints, removeCards, calculateFinalScores,
+    teamHasClean, mortoSafe, tryPickupMorto,
+    moveDrawCard, movePickUpDiscard, movePlayMeld, moveAppendToMeld, moveDiscardCard,
+    checkGameOver, planTurn
 } from './game.js';
 import { initWasm, wasmEvaluateCandidates } from './wasm_loader.js';
 
@@ -22,109 +25,6 @@ function shuffle(arr) {
     return arr;
 }
 
-function teamHasClean(S, teamId) {
-    return (S.teamPlayers[teamId] || []).some(tp =>
-        (S.melds[tp] || []).some(m => getMeldLength(m) >= 7 && (!S.rules.cleanCanastaToWin || isMeldClean(m)))
-    );
-}
-
-function mortoSafe(S, team) {
-    return teamHasClean(S, team) || (S.pots.length > 0 && !S.teamMortos[team]);
-}
-
-function tryPickupMorto(S, p) {
-    const team = S.teams[p];
-    if (S.hands[p].length === 0 && S.pots.length > 0 && !S.teamMortos[team]) {
-        S.hands[p] = S.pots.shift();
-        S.teamMortos[team] = true;
-    }
-}
-
-// ── Inline move implementations (no boardgame.io wrapper, no syncGameBNN) ────
-
-function moveDrawCard(S, p) {
-    if (S.hasDrawn) return false;
-    if (S.deck.length === 0 && S.pots.length > 0) S.deck = S.pots.shift();
-    if (S.deck.length === 0) return false;
-    const card = S.deck.pop();
-    S.lastDrawnCard = card;
-    S.hands[p].push(card);
-    S.hasDrawn = true;
-    return true;
-}
-
-function movePickUpDiscard(S, p, selectedHandIds, target) {
-    if (S.hasDrawn || S.discardPile.length === 0) return false;
-    const hand = S.hands[p];
-    const topCard = S.discardPile[S.discardPile.length - 1];
-    const isClosedDiscard = S.rules.discard === 'closed' || S.rules.discard === true;
-
-    if (isClosedDiscard) {
-        // Validate meld inline via BuracoGame.moves (only for validation, not state mutation)
-        // We re-use the move from BuracoGame but on our local S — it mutates S directly
-        const result = BuracoGame.moves.pickUpDiscard(
-            { G: S, ctx: { currentPlayer: p }, events: { endTurn: () => {} } },
-            selectedHandIds, target
-        );
-        return result !== 'INVALID_MOVE';
-    } else {
-        const pickedUp = [...S.discardPile];
-        S.knownCards[p].push(...S.discardPile);
-        S.hands[p].push(...S.discardPile);
-        S.discardPile = [];
-        S.hasDrawn = true;
-        S.lastDrawnCard = pickedUp;
-        tryPickupMorto(S, p);
-        return true;
-    }
-}
-
-function movePlayMeld(S, p, cardIds) {
-    if (!S.hasDrawn) return false;
-    const hand = S.hands[p];
-    for (const c of cardIds) { if (hand.indexOf(c) === -1) return false; }
-    const parsed = buildMeld(cardIds, S.rules);
-    if (!parsed) return false;
-    S.hands[p] = removeCards(hand, cardIds);
-    S.melds[p] = [...(S.melds[p] || []), parsed];
-    S.knownCards[p] = removeCards(S.knownCards[p], cardIds);
-    if (S.teamMortos[S.teams[p]]) S.mortoUsed[S.teams[p]] = true;
-    tryPickupMorto(S, p);
-    return true;
-}
-
-function moveAppendToMeld(S, p, meldOwner, meldIndex, cardIds) {
-    if (!S.hasDrawn) return false;
-    const hand = S.hands[p];
-    for (const c of cardIds) { if (hand.indexOf(c) === -1) return false; }
-    const parsed = appendCardsToMeld(S.melds[meldOwner][meldIndex], cardIds);
-    if (!parsed) return false;
-    S.hands[p] = removeCards(hand, cardIds);
-    S.melds[meldOwner] = [...S.melds[meldOwner]];
-    S.melds[meldOwner][meldIndex] = parsed;
-    S.knownCards[p] = removeCards(S.knownCards[p], cardIds);
-    if (S.teamMortos[S.teams[p]]) S.mortoUsed[S.teams[p]] = true;
-    tryPickupMorto(S, p);
-    return true;
-}
-
-function moveDiscardCard(S, p, cardId, force = false) {
-    if (!S.hasDrawn) return false;
-    const hand = S.hands[p];
-    const team = S.teams[p];
-    if (!force && hand.length === 1 && !mortoSafe(S, team)) return false;
-    const idx = hand.indexOf(cardId);
-    if (idx === -1) return false;
-    S.discardPile.push(hand.splice(idx, 1)[0]);
-    S.knownCards[p] = S.knownCards[p].filter(c => c !== cardId);
-    if (S.teamMortos[team]) S.mortoUsed[team] = true;
-    tryPickupMorto(S, p);
-    S.hasDrawn = false;
-    S.lastDrawnCard = null;
-    return true;
-}
-
-// ── Match runner ─────────────────────────────────────────────────────────────
 
 function prepareGenome(raw) {
     let dna = raw instanceof Float32Array ? raw : new Float32Array(raw);
@@ -136,192 +36,7 @@ function prepareGenome(raw) {
     return dna;
 }
 
-function checkGameOver(S) {
-    if (S.isExhausted) return { reason: 'Monte Esgotado', scores: calculateFinalScores(S) };
-    if (S.deck.length === 0 && S.pots.length === 0 && S.discardPile.length <= 1 && !S.hasDrawn)
-        return { reason: 'Monte Esgotado', scores: calculateFinalScores(S) };
-    for (let i = 0; i < S.rules.numPlayers; i++) {
-        const p = i.toString(), team = S.teams[p];
-        if (S.hands[p]?.length === 0 && (S.teamMortos[team] || S.pots.length === 0)) {
-            if (teamHasClean(S, team)) {
-                const finalScores = calculateFinalScores(S);
-                finalScores[team].baterBonus = 100;
-                finalScores[team].total += 100;
-                return { winner: team, reason: 'Bateu!', scores: finalScores };
-            }
-        }
-    }
-    return null;
-}
-
-// ── Per-turn NN planner ───────────────────────────────────────────────────────
-// Runs forwardPass exactly 3 times per turn (pickup, melds/appends, discard).
-// Returns an ordered list of moves to execute for the full turn.
-function planTurn(S, p, DNA) {
-    const myTeam  = S.teams[p];
-    const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
-    const numP    = S.rules.numPlayers || 4;
-    const pInt    = parseInt(p);
-    const opp1Id    = ((pInt + 1) % numP).toString();
-    const partnerId = numP === 4 ? ((pInt + 2) % numP).toString() : null;
-    const opp2Id    = numP === 4 ? ((pInt + 3) % numP).toString() : null;
-    const topDiscard = S.discardPile.length > 0 ? S.discardPile[S.discardPile.length - 1] : null;
-
-    let doff = 0;
-    const dnaPickup  = DNA.subarray(doff, doff += AI_CONFIG.DNA_PICKUP);
-    const dnaAppend  = DNA.subarray(doff, doff += AI_CONFIG.DNA_MELD);
-    const dnaMeld    = DNA.subarray(doff, doff += AI_CONFIG.DNA_MELD);
-    const dnaDiscard = DNA.subarray(doff);
-
-    const score = (cands, weights) => {
-        const scores = nnHelpers.evaluateCandidates(
-            S, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
-            cands, weights, topDiscard
-        );
-        if (scores.length === cands.length) return scores;
-        return nnHelpers.sumSuitScores(scores, cands.length, scores.length / cands.length);
-    };
-
-    // ── Phase 1: Pickup ───────────────────────────────────────────────────────
-    if (S.deck.length === 0 && S.pots.length === 0)
-        return [{ move: 'declareExhausted', args: [] }];
-
-    // drawCard candidate: encode topDiscard as a single-rank fakeMeld so the NN
-    // sees what card it's choosing NOT to pick up (all-zero features are unlearnable)
-    const drawFakeMeld = topDiscard !== null ? (() => {
-        const r = getRank(topDiscard), s = getSuit(topDiscard);
-        const fm = new Array(16).fill(0);
-        fm[0] = s === 5 ? 1 : s;
-        if (r >= 3 && r <= 13) fm[r + 1] = 1;
-        else if (r === 1) fm[2] = 1;
-        else if (r === 2) fm[1] = s === 5 ? 1 : s;
-        return fm;
-    })() : null;
-    const pickupCands = [{ move: 'drawCard', args: [], cards: [], parsedMeld: drawFakeMeld, appendIdx: 0 }];
-    if (topDiscard !== null) {
-        const isClosedDiscard = S.rules.discard === 'closed' || S.rules.discard === true;
-        if (isClosedDiscard) {
-            const discardSentinel = topDiscard + 52;
-            const seenSigs = new Set();
-            for (const combo of getAllValidMelds([...S.hands[p], discardSentinel], S.rules)) {
-                if (!combo.includes(discardSentinel)) continue;
-                const sig = combo.map(c => c >= 104 ? 52 : c % 52).sort((a, b) => a - b).join(',');
-                if (seenSigs.has(sig)) continue;
-                seenSigs.add(sig);
-                const handUsed = combo.filter(c => c !== discardSentinel);
-                const realCombo = combo.map(c => c === discardSentinel ? topDiscard : c);
-                pickupCands.push({ move: 'pickUpDiscard', args: [handUsed, { type: 'new' }], cards: realCombo, parsedMeld: buildMeld(realCombo, S.rules), appendIdx: 0 });
-            }
-        } else {
-            pickupCands.push({ move: 'pickUpDiscard', args: [], cards: S.discardPile, parsedMeld: null, appendIdx: 0 });
-        }
-    }
-    const n1 = Math.min(pickupCands.length, AI_CONFIG.MAX_PICKUP);
-    const pickupScores = score(pickupCands.slice(0, n1), dnaPickup);
-    let bestPickup = 0;
-    for (let i = 1; i < n1; i++) if (pickupScores[i] > pickupScores[bestPickup]) bestPickup = i;
-    const pickupMove = pickupCands[bestPickup];
-
-    // ── Execute pickup on S so phase 2 sees the real post-pickup hand ─────────
-    if (pickupMove.move === 'drawCard') {
-        moveDrawCard(S, p);
-    } else if (pickupMove.move === 'pickUpDiscard') {
-        movePickUpDiscard(S, p, pickupMove.args[0] || [], pickupMove.args[1] || { type: 'new' });
-    }
-
-    // ── Phase 2: Melds & Appends (real post-pickup hand) ─────────────────────
-    const postHand = S.hands[p];
-
-    const myTeamSeqMelds = [];
-    (S.teamPlayers[myTeam] || []).forEach(tp =>
-        (S.melds[tp] || []).forEach((meld, mIdx) => {
-            if (meld && meld[0] !== 0) myTeamSeqMelds.push({ tp, mIdx, meld });
-        })
-    );
-
-    const appendCands = []; const appendSigs = new Set();
-    (S.teamPlayers[myTeam] || []).forEach(tp =>
-        (S.melds[tp] || []).forEach((meld, mIdx) => {
-            for (const card of postHand) {
-                const parsed = appendCardsToMeld(meld, [card]);
-                if (!parsed) continue;
-                const sig = `${tp}-${mIdx}-${card >= 104 ? 52 : card % 52}`;
-                if (appendSigs.has(sig)) continue;
-                appendSigs.add(sig);
-                const seqPos = meld[0] !== 0 ? myTeamSeqMelds.findIndex(e => e.tp === tp && e.mIdx === mIdx) + 1 : 0;
-                appendCands.push({ move: 'appendToMeld', args: [tp, mIdx, [card]], cards: [card], parsedMeld: parsed, appendIdx: seqPos });
-            }
-        })
-    );
-
-    const meldCands = []; const meldSigs = new Set();
-    for (const combo of getAllValidMelds(postHand, S.rules)) {
-        const sig = combo.map(c => c >= 104 ? 52 : c % 52).sort((a, b) => a - b).join(',');
-        if (meldSigs.has(sig)) continue;
-        meldSigs.add(sig);
-        meldCands.push({ move: 'playMeld', args: [combo], cards: combo, parsedMeld: buildMeld(combo, S.rules), appendIdx: 0 });
-    }
-
-    const planMoves = [];
-    if (appendCands.length > 0) {
-        const n = Math.min(appendCands.length, AI_CONFIG.MAX_MELD);
-        const sc = score(appendCands.slice(0, n), dnaAppend);
-        for (let i = 0; i < n; i++) planMoves.push({ ...appendCands[i], score: sc[i] });
-    }
-    if (meldCands.length > 0) {
-        const n = Math.min(meldCands.length, AI_CONFIG.MAX_MELD);
-        const sc = score(meldCands.slice(0, n), dnaMeld);
-        for (let i = 0; i < n; i++) planMoves.push({ ...meldCands[i], score: sc[i] });
-    }
-    planMoves.sort((a, b) => b.score - a.score);
-
-    const safe = mortoSafe(S, myTeam);
-    const selectedPlays = [];
-    const usedCounts = {};
-    for (const c of postHand) usedCounts[c] = (usedCounts[c] || 0) + 1;
-    let projectedSize = postHand.length;
-    for (const m of planMoves) {
-        const tmp = { ...usedCounts };
-        if (!m.cards.every(c => { if (tmp[c] > 0) { tmp[c]--; return true; } return false; })) continue;
-        if (!safe && projectedSize - m.cards.length < 2 && !S.rules.greedyMode) continue;
-        if (!S.rules.greedyMode && m.score <= 0) continue;
-        for (const c of m.cards) usedCounts[c]--;
-        projectedSize -= m.cards.length;
-        selectedPlays.push(m);
-        if (S.rules.greedyMode) break;
-    }
-
-    // ── Phase 3: Discard ──────────────────────────────────────────────────────
-    const playedCounts = {};
-    for (const m of selectedPlays) for (const c of m.cards) playedCounts[c] = (playedCounts[c] || 0) + 1;
-    const remainingHand = postHand.filter(c => { if (playedCounts[c] > 0) { playedCounts[c]--; return false; } return true; });
-
-    let discardMove = null;
-    if (remainingHand.length > 0) {
-        const discardCands = remainingHand.map(card => {
-            const r = getRank(card), s = getSuit(card);
-            const fakeMeld = new Array(16).fill(0);
-            fakeMeld[0] = s === 5 ? 1 : s;
-            if (r >= 2 && r <= 13) fakeMeld[r + 1] = 1;
-            else if (r === 1) fakeMeld[2] = 1;
-            return { card, parsedMeld: fakeMeld, appendIdx: 0 };
-        });
-        const discardScores = nnHelpers.evaluateCandidates(
-            S, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
-            discardCands, dnaDiscard, topDiscard
-        );
-        const totals = discardScores.length === discardCands.length
-            ? discardScores
-            : nnHelpers.sumSuitScores(discardScores, discardCands.length, discardScores.length / discardCands.length);
-        let bestCard = remainingHand[0], bestScore = -Infinity;
-        for (let i = 0; i < discardCands.length; i++)
-            if (totals[i] > bestScore) { bestScore = totals[i]; bestCard = discardCands[i].card; }
-        discardMove = { move: 'discardCard', args: [bestCard], cards: [] };
-    }
-
-    return [pickupMove, ...selectedPlays, ...(discardMove ? [discardMove] : [])];
-}
-
+// ── Match runner ───────────────────────────────────────────────────────
 function runMatch(genomes, rules, fixedDeck) {
     const numPlayers = rules.numPlayers || 4;
     const fakeRandom = { Shuffle: arr => fixedDeck ? [...fixedDeck] : shuffle(arr) };
@@ -346,9 +61,10 @@ function runMatch(genomes, rules, fixedDeck) {
             const p = ctx.currentPlayer;
             const DNA = S.botGenomes[p];
             const plan = planTurn(S, p, DNA);
+            // planTurn executes the pickup internally; skip plan[0] (the pickup move)
             let endedTurn = false;
 
-            for (const move of plan) {
+            for (const move of plan.slice(1)) {
                 let ok = false;
                 if (move.move === 'declareExhausted') {
                     S.isExhausted = true; endedTurn = true; break;

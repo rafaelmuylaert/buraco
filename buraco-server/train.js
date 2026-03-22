@@ -188,6 +188,12 @@ export const TrainerService = {
         const GENERATIONS = params.generations || 500;
         const SAVE_EVERY = params.saveInterval || params.matchesPerGeneration || 12;
         if (params.greedyMode) rules = { ...rules, greedyMode: true };
+        if (params.scoreCardPoints    === false) rules = { ...rules, scoreCardPoints: false };
+        if (params.scoreHandPenalty   === false) rules = { ...rules, scoreHandPenalty: false };
+        if (params.dirtyCanastraBonus != null)   rules = { ...rules, dirtyCanastraBonus: params.dirtyCanastraBonus };
+        if (params.cleanCanastraBonus != null)   rules = { ...rules, cleanCanastraBonus: params.cleanCanastraBonus };
+        if (params.mortoPenalty       != null)   rules = { ...rules, mortoPenalty: params.mortoPenalty };
+        if (params.endGameBonus       != null)   rules = { ...rules, endGameBonus: params.endGameBonus };
 
         const seedDNA = TrainerService.getBotWeights(botName);
         const originalDNA = generateRandomGenome();
@@ -366,7 +372,7 @@ export const TrainerService = {
                         const champion = candidates[bestIdx].genome;
                         fs.writeFileSync(path.join(BOTS_DIR, `${botName}.json`), JSON.stringify(Array.from(champion)));
                         const currentLifetimeGen = lifetimeGenOffset + (activeTrainings.get(botName)?.currentGeneration || 0);
-                        fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({ rules, lifetimeGenerations: currentLifetimeGen, trainParams: { populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, telepathy: params.telepathy, fixedDeck: params.fixedDeck } }));
+                        fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({ rules, lifetimeGenerations: currentLifetimeGen, trainParams: { populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, telepathy: params.telepathy, fixedDeck: params.fixedDeck, scoreCardPoints: params.scoreCardPoints, scoreHandPenalty: params.scoreHandPenalty, dirtyCanastraBonus: params.dirtyCanastraBonus, cleanCanastraBonus: params.cleanCanastraBonus, mortoPenalty: params.mortoPenalty, endGameBonus: params.endGameBonus } }));
 
                         let benchmarkDiff = null;
                         if (originalDNA) {
