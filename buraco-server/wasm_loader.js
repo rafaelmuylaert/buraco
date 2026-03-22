@@ -32,9 +32,22 @@ export async function initWasm() {
 
     try {
         const wasmBuffer = fs.readFileSync(wasmPath);
-        memory = new WebAssembly.Memory({ initial: PAGES_NEEDED });
-        const { instance } = await WebAssembly.instantiate(wasmBuffer, { env: { memory } });
+        // Instantiate without injecting memory — let WASM own its memory,
+        // then use the exported memory object to read/write data.
+        const { instance } = await WebAssembly.instantiate(wasmBuffer, {});
         wasmExports = instance.exports;
+        memory = wasmExports.memory;
+        if (!memory) {
+            console.warn('[WASM] No exported memory, falling back to JS');
+            return false;
+        }
+
+        // Grow memory if needed
+        const currentBytes = memory.buffer.byteLength;
+        if (currentBytes < TOTAL_BYTES) {
+            const pagesNeeded = Math.ceil((TOTAL_BYTES - currentBytes) / 65536);
+            memory.grow(pagesNeeded);
+        }
 
         const buf = memory.buffer;
         vInp     = new Float32Array(buf, INP_OFF,      AI_CONFIG.INPUT_SIZE);
@@ -42,7 +55,7 @@ export async function initWasm() {
         vWeights = new Float32Array(buf, WEIGHTS_OFF,  AI_CONFIG.WEIGHTS_PER_NET);
         vScores  = new Float32Array(buf, SCORES_OFF,   MAX_CANDS);
 
-        console.log('🚀 WASM Neural Network Engine Online!');
+        console.log(`🚀 WASM Neural Network Engine Online! (${memory.buffer.byteLength} bytes, SCORES_OFF=${SCORES_OFF})`);
         return true;
     } catch (e) {
         console.warn('[WASM] Failed to load nn_engine.wasm, falling back to JS:', e.message);
