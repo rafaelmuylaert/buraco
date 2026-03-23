@@ -30,7 +30,7 @@ export const AI_CONFIG = {
     MELD_SEQ_SLOTS:        10,
     MELD_RUNNER_SLOTS:      4,
     MELD_CARD_GROUPS:       5,
-    MELD_CANDIDATES:       32,  // max meld/append options scored in one pass
+    MELD_CANDIDATES:        5,  // max meld/append options per suit pass
 
     // Discard net (all-suit, no seq/runner/candidate context)
     DISCARD_CARD_GROUPS:    5,
@@ -704,22 +704,34 @@ export function scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp
                                     candidates, weights, topDiscard, layerKey) {
     if (_scoreAllCandidates) return _scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, weights, topDiscard, layerKey);
     const suits = suitsToEvaluate(topDiscard);
-    const n = candidates.length;
+    const maxSlots = AI_CONFIG[layerKey + '_CANDIDATES'];
     const layerSizes = AI_CONFIG[layerKey + '_LAYER_SIZES'];
-    const totals = new Float32Array(n);
+    const totals = new Float32Array(candidates.length);
     for (const suit of suits) {
-        // Recompute appendIdx: 1-based position among seq melds of this suit only
         const suitSeqMelds = (G.teamPlayers[myTeam] || []).flatMap(tp =>
             (G.melds[tp] || []).map((meld, mIdx) => ({ tp, mIdx, meld }))
         ).filter(e => e.meld && e.meld[0] === suit);
-        const suitCands = candidates.map(cand => {
-            if (cand.move !== 'appendToMeld') return cand;
-            const suitIdx = suitSeqMelds.findIndex(e => e.tp === cand.args[0] && e.mIdx === cand.args[1]);
-            return { ...cand, appendIdx: suitIdx >= 0 ? suitIdx + 1 : 0 };
-        });
+
+        // Filter candidates relevant to this suit, recompute appendIdx, slice to maxSlots
+        const suitCands = [];
+        const suitIndices = [];
+        for (let i = 0; i < candidates.length && suitCands.length < maxSlots; i++) {
+            const cand = candidates[i];
+            const candSuit = cand.parsedMeld ? (cand.parsedMeld[0] === 0 ? 0 : cand.parsedMeld[0]) : suit;
+            if (candSuit !== 0 && candSuit !== suit) continue; // skip candidates of wrong suit
+            let appendIdx = cand.appendIdx;
+            if (cand.move === 'appendToMeld') {
+                const suitIdx = suitSeqMelds.findIndex(e => e.tp === cand.args[0] && e.mIdx === cand.args[1]);
+                appendIdx = suitIdx >= 0 ? suitIdx + 1 : 0;
+            }
+            suitCands.push({ ...cand, appendIdx });
+            suitIndices.push(i);
+        }
+        if (suitCands.length === 0) continue;
+
         const inp = buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, layerKey, suitCands, suit);
         const scores = forwardPass(inp, weights, layerSizes);
-        for (let i = 0; i < n; i++) totals[i] += scores[i];
+        for (let i = 0; i < suitCands.length; i++) totals[suitIndices[i]] += scores[i];
     }
     return totals;
 }
@@ -734,25 +746,21 @@ export function scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, w
 export function getAllValidMelds(handCards, rules, mustInclude = null) {
     let validCombos = [];
     let seenSigs = new Set();
-    
+
     const tryCombo = (arr) => {
-        if (mustInclude !== null && !arr.includes(mustInclude)) return;
-        if (buildMeld(arr, rules)) { 
-            let sig = arr.slice().sort((a,b)=>a-b).join(',');
-            if (!seenSigs.has(sig)) {
-                seenSigs.add(sig);
-                validCombos.push(arr);
-            }
+        if (buildMeld(arr, rules)) {
+            const sig = arr.slice().sort((a, b) => a - b).join(',');
+            if (!seenSigs.has(sig)) { seenSigs.add(sig); validCombos.push(arr); }
         }
     };
 
     let wilds = [];
     let natsBySuit = {1:[], 2:[], 3:[], 4:[]};
     let natsByRank = {};
-    
+
     for (let c of handCards) {
-        let cs = getSuit(c), cr = getRank(c);
-        if (cs === 5 || cr === 2) wilds.unshift(c); 
+        const cs = getSuit(c), cr = getRank(c);
+        if (cs === 5 || cr === 2) wilds.unshift(c);
         else {
             natsBySuit[cs].push(c);
             if (!natsByRank[cr]) natsByRank[cr] = [];
@@ -760,11 +768,62 @@ export function getAllValidMelds(handCards, rules, mustInclude = null) {
         }
     }
 
+    if (mustInclude !== null) {
+        // Only enumerate combos that structurally contain mustInclude.
+        const ms = getSuit(mustInclude), mr = getRank(mustInclude);
+        const isWild = ms === 5 || mr === 2;
+
+        if (isWild) {
+            // mustInclude is a wild — enumerate seq combos of each suit using it,
+            // and runner combos of each rank using it.
+            for (let s = 1; s <= 4; s++) {
+                const nats = natsBySuit[s].sort((a, b) => getRank(a) - getRank(b));
+                for (let i = 0; i < nats.length; i++) {
+                    const combo = [nats[i]];
+                    for (let j = i + 1; j < nats.length; j++) {
+                        combo.push(nats[j]);
+                        if (combo.length >= 2) tryCombo([...combo, mustInclude]);
+                    }
+                }
+            }
+            if (rules.runners !== 'none' && !(Array.isArray(rules.runners) && rules.runners.length === 0)) {
+                for (const r in natsByRank) {
+                    const combo = natsByRank[r];
+                    if (combo.length >= 2) tryCombo([...combo, mustInclude]);
+                }
+            }
+        } else if (mr === 1 || (mr >= 3 && mr <= 13)) {
+            // mustInclude is a natural sequence card — only enumerate combos of its suit.
+            const nats = natsBySuit[ms].sort((a, b) => getRank(a) - getRank(b));
+            const anchor = nats.indexOf(mustInclude);
+            // Combos anchored on mustInclude: extend left and/or right from it.
+            for (let i = 0; i <= anchor; i++) {
+                const combo = [nats[i]];
+                for (let j = i + 1; j < nats.length; j++) {
+                    combo.push(nats[j]);
+                    const hasAnchor = i <= anchor && anchor < i + combo.length;
+                    if (hasAnchor) {
+                        if (combo.length >= 3) tryCombo([...combo]);
+                        if (wilds.length > 0 && combo.length >= 2) tryCombo([...combo, wilds[0]]);
+                    }
+                }
+            }
+            // Runner combos for mustInclude's rank
+            if (rules.runners !== 'none' && !(Array.isArray(rules.runners) && rules.runners.length === 0)) {
+                const combo = natsByRank[mr] || [];
+                if (combo.includes(mustInclude)) {
+                    if (combo.length >= 3) tryCombo([...combo]);
+                    if (combo.length >= 2 && wilds.length > 0) tryCombo([...combo, wilds[0]]);
+                }
+            }
+        }
+        return validCombos;
+    }
+
     for (let s = 1; s <= 4; s++) {
-        let nats = natsBySuit[s].sort((a,b) => getRank(a) - getRank(b));
-        
+        const nats = natsBySuit[s].sort((a, b) => getRank(a) - getRank(b));
         for (let i = 0; i < nats.length; i++) {
-            let combo = [nats[i]];
+            const combo = [nats[i]];
             for (let j = i + 1; j < nats.length; j++) {
                 combo.push(nats[j]);
                 if (combo.length >= 3) tryCombo(combo);
@@ -774,8 +833,8 @@ export function getAllValidMelds(handCards, rules, mustInclude = null) {
     }
 
     if (rules.runners !== 'none' && !(Array.isArray(rules.runners) && rules.runners.length === 0)) {
-        for (let r in natsByRank) {
-            let combo = natsByRank[r];
+        for (const r in natsByRank) {
+            const combo = natsByRank[r];
             if (combo.length >= 3) tryCombo(combo);
             if (combo.length >= 2 && wilds.length > 0) tryCombo([...combo, wilds[0]]);
         }
@@ -881,11 +940,8 @@ export function planTurn(G, p, DNA) {
         meldCands.push({ move: 'playMeld', args: [combo], cards: combo, parsedMeld: buildMeld(combo, G.rules), appendIdx: 0 });
     }
 
-    // Score all appends + melds together in one pass (shared MELD net)
-    const allMeldCands = [
-        ...appendCands.slice(0, AI_CONFIG.MAX_MELD),
-        ...meldCands.slice(0, AI_CONFIG.MAX_MELD)
-    ].slice(0, AI_CONFIG.MAX_MELD);
+    // Score all appends + melds together (slicing to MAX_MELD per suit happens inside scoreAllCandidates)
+    const allMeldCands = [...appendCands, ...meldCands];
     const planMoves = [];
     if (allMeldCands.length > 0) {
         const meldScores = scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, allMeldCands, dnaMeld, topDiscard, 'MELD');
