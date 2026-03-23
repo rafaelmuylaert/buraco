@@ -970,7 +970,6 @@ export const BuracoGame = {
                       const handUsed = [...combo]; handUsed.splice(topIdx, 1);
                       pickupCands.push({ move: 'pickUpDiscard', args: [handUsed, { type: 'new' }], cards: combo, parsedMeld: buildMeld(combo, G.rules), appendIdx: 0 });
                   }
-                  }
               } else {
                   pickupCands.push({ move: 'pickUpDiscard', args: [], cards: G.discardPile, parsedMeld: null, appendIdx: 0 });
               }
