@@ -97,24 +97,20 @@ let _diagCount = 0;
 const _baseDeck = [];
 for (let i = 0; i < 52; i++) _baseDeck.push(i);
 for (let i = 0; i < 52; i++) _baseDeck.push(i);
-
-let _currentDeck = [..._baseDeck];
+let _fixedDeck = null;
 
 function processJob(matches, rules) {
     return matches.map(({ dnaA, dnaB }) => {
-        const pairDeck = rules.fixedDeck ? _currentDeck : shuffle([..._currentDeck]);
+        const pairDeck = rules.fixedDeck ? _fixedDeck : shuffle([..._baseDeck]);
         const g1 = runMatch({ '0': dnaA, '1': dnaB, '2': dnaA, '3': dnaB }, rules, pairDeck);
         const g2 = runMatch({ '0': dnaB, '1': dnaA, '2': dnaB, '3': dnaA }, rules, pairDeck);
-        // g1: positive = dnaA won game1. g2: positive = dnaB won game2.
-        // Combined: dnaA score = g1 - g2, dnaB score = g2 - g1
-        // Also expose raw g1,g2 for diff tracking
         return [g1 - g2, g2 - g1, Math.abs(g1), Math.abs(g2)];
     });
 }
 
 if (workerData.matches.length === 0) {
     parentPort.on('message', ({ type, matches, rules, deck }) => {
-        if (type === 'shuffleDeck') { _currentDeck = deck; return; }
+        if (type === 'shuffleDeck') { _fixedDeck = deck; return; }
         parentPort.postMessage(processJob(matches, rules));
     });
 } else {

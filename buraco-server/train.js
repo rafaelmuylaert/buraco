@@ -133,7 +133,7 @@ function runMatchBatch(matchPairs, rules) {
 }
 
 async function runPlayoffTournament(population, rules) {
-    let remaining = population.map((genome, i) => ({ genome, id: i, buf: toBuffer(genome) }));
+    let remaining = population.map((genome, i) => ({ genome, id: i }));
     shuffle(remaining);
     while (remaining.length & (remaining.length - 1)) remaining.push(null);
 
@@ -143,7 +143,7 @@ async function runPlayoffTournament(population, rules) {
         for (let i = 0; i < remaining.length; i += 2) {
             const a = remaining[i], b = remaining[i + 1];
             if (!a || !b) { pairIndices.push({ a, b, bye: true }); continue; }
-            pairs.push({ dnaA: a.buf, dnaB: b.buf });
+            pairs.push({ dnaA: toBuffer(a.genome), dnaB: toBuffer(b.genome) });
             pairIndices.push({ a, b, bye: false });
         }
 
@@ -351,9 +351,6 @@ export const TrainerService = {
             }
         };
 
-        if (!rules.fixedDeck) shuffle(baseDeck);
-        getPool().broadcastDeck(baseDeck);
-
         let completedIslands = 0;
         const islandErrors = [];
 
@@ -361,11 +358,6 @@ export const TrainerService = {
             try {
                 for (let gen = 1; gen <= GENERATIONS; gen++) {
                     if (stopFlags.has(botName)) break;
-                    if (!rules.fixedDeck && islandIdx === 0) {
-                        shuffle(baseDeck);
-                        getPool().broadcastDeck(baseDeck);
-                    }
-
                     const result = await runIslandGeneration(islandPops[islandIdx]);
                     islandPops[islandIdx] = result.nextPop;
 
