@@ -247,7 +247,13 @@ export const TrainerService = {
                 i === 0 ? new Float32Array(seed) : mutate(seed, 0.05, 0.1)
             );
         });
-        const islandElites = new Array(NUM_ISLANDS).fill(null);
+
+        // Shared state for island coordination
+        const islandElites = new Array(NUM_ISLANDS).fill(null);  // latest champion per island
+        const islandBroadcastGen = new Array(NUM_ISLANDS).fill(0); // gen at which each island last broadcast
+        const islandLastInjectedGen = new Array(NUM_ISLANDS).fill(0); // gen at which each island last injected champion
+        let latestChampion = null;   // winner of last inter-island tournament
+        let championTournamentRunning = false;
 
         const runIslandGeneration = async (pop) => {
             const finalists = await runPlayoffTournament(pop, rules);
@@ -272,7 +278,7 @@ export const TrainerService = {
                 .map((f, i) => ({ genome: f, score: finalistScores[i] }))
                 .sort((a, b) => b.score - a.score)
                 .map(x => x.genome);
-                
+
             const clones = rankedFinalists.slice(0, 2).map(f => new Float32Array(f));
             const mutations = rankedFinalists.slice(1).map(f => mutate(f, 0.05, 0.1));
             const crossbreeds = [];
@@ -286,6 +292,57 @@ export const TrainerService = {
                 bestDiff: Math.max(...allDiffs),
                 avgDiff: allDiffs.reduce((a, b) => a + b, 0) / allDiffs.length
             };
+        };
+
+        // Run inter-island champion tournament and broadcast winner back to all islands.
+        // Called by whichever island triggers the condition; guarded by championTournamentRunning.
+        const runChampionTournament = async () => {
+            if (championTournamentRunning) return;
+            championTournamentRunning = true;
+            try {
+                const candidates = islandElites
+                    .map((genome, k) => genome ? { k, genome } : null)
+                    .filter(Boolean);
+                if (candidates.length < 2) return;
+
+                const wins = new Array(candidates.length).fill(0);
+                const pairs = [];
+                for (let i = 0; i < candidates.length; i++)
+                    for (let j = i + 1; j < candidates.length; j++)
+                        pairs.push({ i, j, dnaA: toBuffer(candidates[i].genome), dnaB: toBuffer(candidates[j].genome) });
+
+                const results = await runMatchBatch(pairs.map(p => ({ dnaA: p.dnaA, dnaB: p.dnaB })), rules);
+                results.forEach(([sA], idx) => {
+                    wins[pairs[idx].i] += sA;
+                    wins[pairs[idx].j] -= sA;
+                });
+
+                const bestIdx = wins.indexOf(Math.max(...wins));
+                latestChampion = new Float32Array(candidates[bestIdx].genome);
+
+                fs.writeFileSync(path.join(BOTS_DIR, `${botName}.json`), JSON.stringify(Array.from(latestChampion)));
+                const currentLifetimeGen = lifetimeGenOffset + (activeTrainings.get(botName)?.currentGeneration || 0);
+                fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({ rules, lifetimeGenerations: currentLifetimeGen, trainParams: { populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, telepathy: params.telepathy, fixedDeck: params.fixedDeck, scoreCardPoints: params.scoreCardPoints, scoreHandPenalty: params.scoreHandPenalty, dirtyCanastraBonus: params.dirtyCanastraBonus, cleanCanastraBonus: params.cleanCanastraBonus, mortoPenalty: params.mortoPenalty, endGameBonus: params.endGameBonus, cardPointValues: params.cardPointValues, meldSizeBonus: params.meldSizeBonus } }));
+
+                let benchmarkDiff = null;
+                if (originalDNA) {
+                    try {
+                        const benchDeck = [...baseDeck];
+                        shuffle(benchDeck);
+                        getPool().broadcastDeck(benchDeck);
+                        const [[benchScore]] = await runMatchBatch(
+                            [{ dnaA: toBuffer(latestChampion), dnaB: toBuffer(originalDNA) }],
+                            { ...rules, fixedDeck: true }
+                        );
+                        benchmarkDiff = benchScore;
+                    } catch (e) {}
+                }
+                const prev = activeTrainings.get(botName);
+                if (prev) activeTrainings.set(botName, { ...prev, benchmarkDiff });
+                console.log(`[${botName}] 🏆 Champion: Island ${candidates[bestIdx].k} | Bench: ${benchmarkDiff ?? 'N/A'}`);
+            } finally {
+                championTournamentRunning = false;
+            }
         };
 
         if (!rules.fixedDeck) shuffle(baseDeck);
@@ -306,14 +363,17 @@ export const TrainerService = {
                     const result = await runIslandGeneration(islandPops[islandIdx]);
                     islandPops[islandIdx] = result.nextPop;
 
-                    for (let src = 0; src < NUM_ISLANDS; src++) {
-                        if (src === islandIdx || !islandElites[src]) continue;
-                        const replaceIdx = 2 + Math.floor(Math.random() * (islandPops[islandIdx].length - 2));
-                        islandPops[islandIdx][replaceIdx] = new Float32Array(islandElites[src]);
-                    }
-
                     if (gen % SAVE_EVERY === 0 || gen === GENERATIONS) {
+                        // Inject latest champion once per broadcast cycle
+                        if (latestChampion && gen - islandLastInjectedGen[islandIdx] >= SAVE_EVERY) {
+                            const replaceIdx = 2 + Math.floor(Math.random() * (islandPops[islandIdx].length - 2));
+                            islandPops[islandIdx][replaceIdx] = new Float32Array(latestChampion);
+                            islandLastInjectedGen[islandIdx] = gen;
+                        }
+
+                        // Broadcast this island's champion
                         islandElites[islandIdx] = result.rankedFinalists[0];
+                        islandBroadcastGen[islandIdx] = gen;
 
                         fs.writeFileSync(
                             path.join(BOTS_DIR, `${botName}_${islandIdx}.json`),
@@ -330,6 +390,22 @@ export const TrainerService = {
                             islands
                         });
                         console.log(`[${botName}] Island ${islandIdx} Gen ${gen}/${GENERATIONS} | MaxDiff: ${result.bestDiff.toFixed(0)} | AvgDiff: ${result.avgDiff.toFixed(0)}`);
+
+                        // Trigger champion tournament when all islands have broadcast at least once
+                        // and all have a new elite since the last tournament round.
+                        // Islands that are ahead just keep running; stragglers are skipped (we use
+                        // their last known elite). We only require every island has broadcast at
+                        // least once so we always have a full field.
+                        const minBroadcastGen = Math.min(...islandBroadcastGen);
+                        if (minBroadcastGen > 0 && islandElites.every(e => e !== null)) {
+                            // Check if all islands have broadcast in the same "round"
+                            // (within SAVE_EVERY gens of each other) — if so, run tournament.
+                            // If one island is far ahead, we still run with latest elites.
+                            const maxBroadcastGen = Math.max(...islandBroadcastGen);
+                            if (maxBroadcastGen - minBroadcastGen < SAVE_EVERY * 2) {
+                                runChampionTournament(); // fire-and-forget, guarded internally
+                            }
+                        }
                     }
                 }
             } catch (err) {
@@ -341,61 +417,9 @@ export const TrainerService = {
         };
 
         try {
-            // Run all islands + champion loop concurrently.
-            // Use allSettled so one failing island doesn't reject the whole batch
-            // and kill the worker pool while others are still running.
-            await Promise.allSettled([
-                ...Array.from({ length: NUM_ISLANDS }, (_, k) => runIsland(k)),
-                (async () => {
-                    while (completedIslands < NUM_ISLANDS) {
-                        await new Promise(r => setTimeout(r, SAVE_EVERY * 800)); 
-                        const candidates = [];
-                        for (let k = 0; k < NUM_ISLANDS; k++) {
-                            const fp = path.join(BOTS_DIR, `${botName}_${k}.json`);
-                            if (!fs.existsSync(fp)) continue;
-                            const raw = JSON.parse(fs.readFileSync(fp, 'utf-8'));
-                            candidates.push({ k, genome: new Float32Array(Array.isArray(raw) ? raw : Object.values(raw)) });
-                        }
-                        if (candidates.length < 2) continue;
-
-                        const wins = new Array(candidates.length).fill(0);
-                        const pairs = [];
-                        for (let i = 0; i < candidates.length; i++)
-                            for (let j = i + 1; j < candidates.length; j++)
-                                pairs.push({ i, j, dnaA: toBuffer(candidates[i].genome), dnaB: toBuffer(candidates[j].genome) });
-
-                        const results = await runMatchBatch(pairs.map(p => ({ dnaA: p.dnaA, dnaB: p.dnaB })), rules);
-                        results.forEach(([sA], idx) => {
-                            wins[pairs[idx].i] += sA;
-                            wins[pairs[idx].j] -= sA;
-                        });
-
-                        const bestIdx = wins.indexOf(Math.max(...wins));
-                        const champion = candidates[bestIdx].genome;
-                        fs.writeFileSync(path.join(BOTS_DIR, `${botName}.json`), JSON.stringify(Array.from(champion)));
-                        const currentLifetimeGen = lifetimeGenOffset + (activeTrainings.get(botName)?.currentGeneration || 0);
-                        fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({ rules, lifetimeGenerations: currentLifetimeGen, trainParams: { populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, telepathy: params.telepathy, fixedDeck: params.fixedDeck, scoreCardPoints: params.scoreCardPoints, scoreHandPenalty: params.scoreHandPenalty, dirtyCanastraBonus: params.dirtyCanastraBonus, cleanCanastraBonus: params.cleanCanastraBonus, mortoPenalty: params.mortoPenalty, endGameBonus: params.endGameBonus, cardPointValues: params.cardPointValues, meldSizeBonus: params.meldSizeBonus } }));
-
-                        let benchmarkDiff = null;
-                        if (originalDNA) {
-                            try {
-                                const benchDeck = rules.noJokers ? [...baseDeck] : [...baseDeck, 54, 54];
-                                shuffle(benchDeck);
-                                getPool().broadcastDeck(benchDeck);
-                                const [[benchScore]] = await runMatchBatch(
-                                    [{ dnaA: toBuffer(champion), dnaB: toBuffer(originalDNA) }],
-                                    { ...rules, fixedDeck: true }
-                                );
-                                benchmarkDiff = benchScore;
-                            } catch (e) {}
-                        }
-
-                        const prev = activeTrainings.get(botName);
-                        if (prev) activeTrainings.set(botName, { ...prev, benchmarkDiff });
-                        console.log(`[${botName}] 🏆 Champion: Island ${candidates[bestIdx].k} | Bench: ${benchmarkDiff ?? 'N/A'}`);
-                    }
-                })()
-            ]);
+            await Promise.allSettled(Array.from({ length: NUM_ISLANDS }, (_, k) => runIsland(k)));
+            // Final champion tournament after all islands finish
+            if (islandElites.some(e => e !== null)) await runChampionTournament();
             if (islandErrors.length) console.error(`[TRAINER] ${islandErrors.length} island(s) failed for ${botName}`);
         } catch (error) {
             console.error(`[TRAINER] Error for ${botName}:`, error);
