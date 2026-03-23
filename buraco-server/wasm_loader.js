@@ -1,13 +1,28 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { AI_CONFIG, buildStateVector, encodeCandidateMeld, suitsToEvaluate } from './game.js';
+import { AI_CONFIG, buildStateVector, buildDiscardVector, suitsToEvaluate, setScoreFunctions } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let wasmExports = null;
-let wasmMemory = null;
-let vInp, vCands, vWeights, vScores;
+let wasmMemory  = null;
+let vWeights, vInps, vOut, vLayerSizesBuf;  // vInps[0..3] = one view per suit slot
+
+const pickupWeightOffset  = 0;
+const meldWeightOffset    = AI_CONFIG.DNA_PICKUP;
+const discardWeightOffset = AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD;
+
+const maxInputSize  = Math.max(AI_CONFIG.PICKUP_INPUT_SIZE, AI_CONFIG.MELD_INPUT_SIZE, AI_CONFIG.DISCARD_INPUT_SIZE);
+const maxOutputSize = Math.max(AI_CONFIG.PICKUP_CANDIDATES, AI_CONFIG.MELD_CANDIDATES, AI_CONFIG.DISCARD_CLASSES);
+
+function refreshViews() {
+    const buf = wasmMemory.buffer;
+    vWeights       = new Float32Array(buf, wasmExports.get_weights(),         AI_CONFIG.TOTAL_DNA_SIZE);
+    vInps          = [0, 1, 2, 3].map(i => new Float32Array(buf, wasmExports.get_inp(i), maxInputSize));
+    vOut           = new Float32Array(buf, wasmExports.get_out(),             maxOutputSize);
+    vLayerSizesBuf = new Int32Array (buf, wasmExports.get_layer_sizes_buf(),  8);
+}
 
 export async function initWasm() {
     const wasmPath = path.join(__dirname, 'nn_engine.wasm');
@@ -17,38 +32,37 @@ export async function initWasm() {
         const wasmBuffer = fs.readFileSync(wasmPath);
         const { instance } = await WebAssembly.instantiate(wasmBuffer, {});
         wasmExports = instance.exports;
-        wasmMemory = wasmExports.memory;
+        wasmMemory  = wasmExports.memory;
 
-        if (!wasmMemory || !wasmExports.evaluate || !wasmExports.get_inp) {
-            console.warn('[WASM] Missing required exports, falling back to JS');
+        const required = ['evaluate', 'configure', 'set_num_inputs',
+                          'get_weights', 'get_inp', 'get_out', 'get_layer_sizes_buf', 'get_max_weights'];
+        for (const fn of required) {
+            if (!wasmExports[fn]) {
+                console.warn(`[WASM] Missing export: ${fn}, falling back to JS`);
+                return false;
+            }
+        }
+
+        const maxWeights = wasmExports.get_max_weights();
+        if (maxWeights < AI_CONFIG.TOTAL_DNA_SIZE) {
+            console.warn(`[WASM] MAX_WEIGHTS=${maxWeights} < TOTAL_DNA_SIZE=${AI_CONFIG.TOTAL_DNA_SIZE}, falling back to JS`);
             return false;
         }
 
-        // Verify WEIGHTS_PER_NET matches what the C++ was compiled with
-        const cppWeightsSize = wasmExports.get_weights_size();
-        if (cppWeightsSize !== AI_CONFIG.WEIGHTS_PER_NET) {
-            console.warn(`[WASM] Weight size mismatch: C++=${cppWeightsSize} JS=${AI_CONFIG.WEIGHTS_PER_NET}, falling back to JS`);
-            return false;
-        }
-
-        // Get buffer pointers from WASM — these are byte offsets into wasmMemory.buffer
-        const inpPtr     = wasmExports.get_inp();
-        const candsPtr   = wasmExports.get_cands();
-        const weightsPtr = wasmExports.get_weights();
-        const scoresPtr  = wasmExports.get_scores();
-
-        // Ensure memory is large enough to cover all static buffers
-        const maxPtr = scoresPtr + 32 * 4;
-        const neededPages = Math.ceil(maxPtr / 65536);
+        // Grow memory if needed to cover all static buffers (4 suit inputs + output + weights + layer buf)
+        const neededBytes  = AI_CONFIG.TOTAL_DNA_SIZE * 4 + 4 * maxInputSize * 4 + maxOutputSize * 4 + 8 * 4 + 65536;
+        const neededPages  = Math.ceil(neededBytes / 65536);
         const currentPages = wasmMemory.buffer.byteLength / 65536;
         if (neededPages > currentPages) wasmMemory.grow(neededPages - currentPages);
 
-        const buf = wasmMemory.buffer;
-        vInp     = new Float32Array(buf, inpPtr,     AI_CONFIG.INPUT_SIZE);
-        vCands   = new Float32Array(buf, candsPtr,   32 * 18);
-        vWeights = new Float32Array(buf, weightsPtr, AI_CONFIG.WEIGHTS_PER_NET);
-        vScores  = new Float32Array(buf, scoresPtr,  32);
-
+        refreshViews();
+        setScoreFunctions(
+            (G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, weights, topDiscard, layerKey) =>
+                wasmScoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, weights, topDiscard, layerKey,
+                             layerKey === 'PICKUP' ? pickupWeightOffset : meldWeightOffset),
+            (G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, weights) =>
+                wasmScoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, weights)
+        );
         console.log('🚀 WASM Neural Network Engine Online!');
         return true;
     } catch (e) {
@@ -57,37 +71,62 @@ export async function initWasm() {
     }
 }
 
-export function wasmEvaluateCandidates(
-    G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
-    candidates, weights, topDiscard
-) {
-    const suits = suitsToEvaluate(topDiscard);
-    const n = candidates.length;
-    const totals = new Float32Array(n);
-
-    // Re-fetch views in case memory.buffer was detached by a grow()
-    if (vInp.buffer !== wasmMemory.buffer) {
-        const buf = wasmMemory.buffer;
-        vInp     = new Float32Array(buf, wasmExports.get_inp(),     AI_CONFIG.INPUT_SIZE);
-        vCands   = new Float32Array(buf, wasmExports.get_cands(),   32 * 18);
-        vWeights = new Float32Array(buf, wasmExports.get_weights(), AI_CONFIG.WEIGHTS_PER_NET);
-        vScores  = new Float32Array(buf, wasmExports.get_scores(),  32);
-    }
-
-    // Pack candidate features into WASM buffer once
-    for (let c = 0; c < n; c++)
-        encodeCandidateMeld(vCands, c * 18, candidates[c].parsedMeld, candidates[c].appendIdx);
-
-    vWeights.set(weights);
-
-    for (const _s of suits) {
-        const inp = buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id);
-        vInp.set(inp);
-
-        wasmExports.evaluate(n);
-
-        for (let c = 0; c < n; c++) totals[c] += vScores[c];
-    }
-
-    return totals;
+function configureNet(layerSizes, weightOffset) {
+    if (vLayerSizesBuf.buffer !== wasmMemory.buffer) refreshViews();
+    for (let i = 0; i < layerSizes.length; i++) vLayerSizesBuf[i] = layerSizes[i];
+    wasmExports.configure(layerSizes.length, weightOffset);
 }
+
+// Build all suit input vectors, write into WASM g_inp[0..n-1], call evaluate() once.
+// appendIdx is recomputed per suit relative to suit-filtered seq melds, matching game.js logic.
+function wasmScoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
+                      candidates, weights, topDiscard, layerKey, weightOffset) {
+    if (vWeights.buffer !== wasmMemory.buffer) refreshViews();
+    vWeights.set(weights, weightOffset);
+    configureNet(AI_CONFIG[layerKey + '_LAYER_SIZES'], weightOffset);
+
+    const suits = suitsToEvaluate(topDiscard);
+    for (let si = 0; si < suits.length; si++) {
+        const suit = suits[si];
+        const suitSeqMelds = (G.teamPlayers[myTeam] || []).flatMap(tp =>
+            (G.melds[tp] || []).map((meld, mIdx) => ({ tp, mIdx, meld }))
+        ).filter(e => e.meld && e.meld[0] === suit);
+        const suitCands = candidates.map(cand => {
+            if (cand.move !== 'appendToMeld') return cand;
+            const suitIdx = suitSeqMelds.findIndex(e => e.tp === cand.args[0] && e.mIdx === cand.args[1]);
+            return { ...cand, appendIdx: suitIdx >= 0 ? suitIdx + 1 : 0 };
+        });
+        const inp = buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, layerKey, suitCands, suit);
+        vInps[si].set(inp);
+    }
+    wasmExports.set_num_inputs(suits.length);
+    wasmExports.evaluate();
+
+    // g_out now contains summed scores across all suit passes
+    return new Float32Array(vOut.buffer, vOut.byteOffset, candidates.length);
+}
+
+export function wasmScorePickup(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
+                                 candidates, weights, topDiscard) {
+    return wasmScoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
+                        candidates, weights, topDiscard, 'PICKUP', pickupWeightOffset);
+}
+
+export function wasmScoreMeld(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
+                               candidates, weights, topDiscard) {
+    return wasmScoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
+                        candidates, weights, topDiscard, 'MELD', meldWeightOffset);
+}
+
+export function wasmScoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, weights) {
+    if (vWeights.buffer !== wasmMemory.buffer) refreshViews();
+    vWeights.set(weights, discardWeightOffset);
+    configureNet(AI_CONFIG.DISCARD_LAYER_SIZES, discardWeightOffset);
+    const inp = buildDiscardVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id);
+    vInps[0].set(inp);
+    wasmExports.set_num_inputs(1);
+    wasmExports.evaluate();
+    return new Float32Array(vOut.buffer, vOut.byteOffset, AI_CONFIG.DISCARD_CLASSES);
+}
+
+export function isWasmReady() { return wasmExports !== null; }

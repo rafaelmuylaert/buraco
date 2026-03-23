@@ -1,19 +1,12 @@
 import { workerData, parentPort } from 'worker_threads';
 import {
-    BuracoGame, nnHelpers, AI_CONFIG,
-    isMeldClean, getMeldLength, calculateMeldPoints,
-    buildMeld, appendCardsToMeld, getAllValidMelds,
-    getSuit, getRank, getCardPoints, removeCards, calculateFinalScores,
-    teamHasClean, mortoSafe, tryPickupMorto,
-    moveDrawCard, movePickUpDiscard, movePlayMeld, moveAppendToMeld, moveDiscardCard,
+    BuracoGame, AI_CONFIG,
+    movePlayMeld, moveAppendToMeld, moveDiscardCard,
     checkGameOver, planTurn
 } from './game.js';
-import { initWasm, wasmEvaluateCandidates } from './wasm_loader.js';
+import { initWasm } from './wasm_loader.js';
 
-const wasmLoaded = await initWasm();
-if (wasmLoaded) {
-    nnHelpers.evaluateCandidates = wasmEvaluateCandidates;
-}
+await initWasm();
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -61,37 +54,15 @@ function runMatch(genomes, rules, fixedDeck) {
             const p = ctx.currentPlayer;
             const DNA = S.botGenomes[p];
             const plan = planTurn(S, p, DNA);
-            // planTurn executes the pickup internally; skip plan[0] (the pickup move)
-            let endedTurn = false;
+            // planTurn executes all moves on S internally; just check for exhaustion
+            if (plan[0]?.move === 'declareExhausted') S.isExhausted = true;
 
-            // plan[0] is the pickup move (already executed inside planTurn);
-            // if it was declareExhausted the plan has only 1 element
-            if (plan[0]?.move === 'declareExhausted') {
-                S.isExhausted = true;
-                gameover = checkGameOver(S);
-                ctx.currentPlayer = String((parseInt(p) + 1) % numPlayers);
-                S.hasDrawn = false; S.lastDrawnCard = null;
-                moveCount++;
-                continue;
-            }
+            if (rules.telepathy)
+                for (const pl of Object.keys(S.hands)) S.knownCards[pl] = [...S.hands[pl]];
 
-            for (const move of plan.slice(1)) {
-                let ok = false;
-                if (move.move === 'declareExhausted') {
-                    S.isExhausted = true; endedTurn = true; break;
-                } else if (move.move === 'playMeld') {
-                    ok = movePlayMeld(S, p, move.args[0]);
-                } else if (move.move === 'appendToMeld') {
-                    ok = moveAppendToMeld(S, p, move.args[0], move.args[1], move.args[2]);
-                } else if (move.move === 'discardCard') {
-                    ok = moveDiscardCard(S, p, move.args[0], true);
-                    if (ok) { endedTurn = true; break; }
-                }
-                if (rules.telepathy && ok)
-                    for (const pl of Object.keys(S.hands)) S.knownCards[pl] = [...S.hands[pl]];
-            }
-
-            if (!endedTurn && S.hasDrawn && S.hands[p]?.length > 0)
+            // If planTurn didn't end the turn (no discard), force-discard first card
+            const didDiscard = plan.some(m => m.move === 'discardCard');
+            if (!didDiscard && S.hasDrawn && S.hands[p]?.length > 0)
                 moveDiscardCard(S, p, S.hands[p][0], true);
 
             ctx.currentPlayer = String((parseInt(p) + 1) % numPlayers);

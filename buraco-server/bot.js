@@ -1,6 +1,9 @@
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import { BuracoGame, AI_CONFIG } from './game.js';
+import { initWasm } from './wasm_loader.js';
+
+await initWasm();
 
 const SERVER_URL = 'http://buraco-server:8000';
 const activeBots = {};

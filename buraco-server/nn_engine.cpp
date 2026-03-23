@@ -1,92 +1,92 @@
 #include <stdint.h>
 #include <stddef.h>
+#include <stdlib.h>
 
 #define WASM_EXPORT __attribute__((visibility("default")))
 
-// Architecture mirrors game.js exactly.
-// Input  : 303 floats
-// Hidden : H1=128 → H2=64 → H3=32, ReLU
-// Output : 1 float score
-// Weight layout per net: W1 | b1 | W2 | b2 | W3 | b3 | WO | bO
+// Generic multi-layer neural network engine.
+// Architecture is configured at runtime by calling configure() with layer sizes.
+// Supports up to MAX_LAYERS layers and MAX_LAYER_SIZE neurons per layer.
+// All 3 networks (pickup, meld, discard) share this engine; JS calls configure()
+// before each evaluate() to switch networks.
 
-#define INPUT_SIZE 303
-#define H1 128
-#define H2  64
-#define H3  32
-#define MAX_CANDS 32
+#define MAX_LAYERS     8
+#define MAX_LAYER_SIZE 1024
+#define MAX_INPUT_SIZE 2048
+#define MAX_OUTPUT_SIZE 64
+#define MAX_WEIGHTS    4000000  // ~16MB, covers all 3 nets combined
 
-#define W1_SIZE (INPUT_SIZE * H1)
-#define W2_SIZE (H1 * H2)
-#define W3_SIZE (H2 * H3)
-#define WO_SIZE (H3)
-#define WEIGHTS_PER_NET (W1_SIZE + H1 + W2_SIZE + H2 + W3_SIZE + H3 + WO_SIZE + 1)
+#define MAX_SUITS 4
 
-// Static buffers — WASM owns its own linear memory, no import needed
-static float g_inp    [INPUT_SIZE];
-static float g_cands  [MAX_CANDS * 18];
-static float g_weights[WEIGHTS_PER_NET];
-static float g_scores [MAX_CANDS];
+static float  g_weights[MAX_WEIGHTS];
+static float  g_inp    [MAX_SUITS][MAX_INPUT_SIZE];  // one input per suit pass
+static float  g_out    [MAX_OUTPUT_SIZE];             // summed scores across all suit passes
+static int    g_layer_sizes_buf[MAX_LAYERS];
+static int    g_num_inputs;   // how many suit inputs JS has written (1-4)
+
+static int g_layer_sizes[MAX_LAYERS];
+static int g_num_layers;
+static int g_weight_offset;
+
+static float g_buf0[MAX_LAYER_SIZE];
+static float g_buf1[MAX_LAYER_SIZE];
 
 static inline float relu(float x) { return x > 0.0f ? x : 0.0f; }
 
-static float forwardPass(const float* inp, const float* w) {
-    const float* w1 = w;
-    const float* b1 = w1 + W1_SIZE;
-    const float* w2 = b1 + H1;
-    const float* b2 = w2 + W2_SIZE;
-    const float* w3 = b2 + H2;
-    const float* b3 = w3 + W3_SIZE;
-    const float* wo = b3 + H3;
-    const float  bo = *(wo + WO_SIZE);
-
-    float h1[H1], h2[H2], h3[H3];
-
-    for (int h = 0; h < H1; h++) {
-        float sum = b1[h];
-        const float* row = w1 + h * INPUT_SIZE;
-        #pragma clang loop vectorize(enable)
-        for (int i = 0; i < INPUT_SIZE; i++) sum += inp[i] * row[i];
-        h1[h] = relu(sum);
+static void forward_into(const float* inp, float* out_acc) {
+    const float* cur = inp;
+    float* next;
+    int woff = g_weight_offset;
+    for (int l = 0; l < g_num_layers - 1; l++) {
+        const int inSz  = g_layer_sizes[l];
+        const int outSz = g_layer_sizes[l + 1];
+        const int isLast = (l == g_num_layers - 2);
+        next = (l & 1) ? g_buf1 : g_buf0;
+        if (isLast) next = out_acc;  // write final layer directly into accumulator
+        const float* w = g_weights + woff;
+        const float* b = w + inSz * outSz;
+        for (int o = 0; o < outSz; o++) {
+            float sum = b[o];
+            const float* row = w + o * inSz;
+            #pragma clang loop vectorize(enable)
+            for (int i = 0; i < inSz; i++) sum += cur[i] * row[i];
+            next[o] = isLast ? sum : relu(sum);
+        }
+        woff += inSz * outSz + outSz;
+        cur = next;
     }
-    for (int h = 0; h < H2; h++) {
-        float sum = b2[h];
-        const float* row = w2 + h * H1;
-        #pragma clang loop vectorize(enable)
-        for (int i = 0; i < H1; i++) sum += h1[i] * row[i];
-        h2[h] = relu(sum);
-    }
-    for (int h = 0; h < H3; h++) {
-        float sum = b3[h];
-        const float* row = w3 + h * H2;
-        #pragma clang loop vectorize(enable)
-        for (int i = 0; i < H2; i++) sum += h2[i] * row[i];
-        h3[h] = relu(sum);
-    }
-    float out = bo;
-    #pragma clang loop vectorize(enable)
-    for (int i = 0; i < H3; i++) out += h3[i] * wo[i];
-    return out;
 }
 
 extern "C" {
 
-// Pointer getters — JS reads these once after instantiation to get buffer offsets
-WASM_EXPORT float* get_inp()     { return g_inp; }
-WASM_EXPORT float* get_cands()   { return g_cands; }
-WASM_EXPORT float* get_weights() { return g_weights; }
-WASM_EXPORT float* get_scores()  { return g_scores; }
-WASM_EXPORT int    get_weights_size() { return WEIGHTS_PER_NET; }
+WASM_EXPORT float* get_weights()         { return g_weights; }
+WASM_EXPORT float* get_inp(int i)        { return g_inp[i]; }   // i = 0..3
+WASM_EXPORT float* get_out()             { return g_out; }
+WASM_EXPORT int*   get_layer_sizes_buf() { return g_layer_sizes_buf; }
+WASM_EXPORT int    get_max_weights()     { return MAX_WEIGHTS; }
 
-// Evaluate n candidates. JS must have written:
-//   g_inp[0..302]         — state vector (candidate slot zeroed)
-//   g_cands[0..n*18-1]    — candidate features
-//   g_weights[0..WPN-1]   — network weights
-// Results written to g_scores[0..n-1].
-WASM_EXPORT void evaluate(int n) {
-    for (int c = 0; c < n; c++) {
-        const float* cand = g_cands + c * 18;
-        for (int i = 0; i < 18; i++) g_inp[285 + i] = cand[i];
-        g_scores[c] = forwardPass(g_inp, g_weights);
+WASM_EXPORT void configure(int num_layers, int weight_offset) {
+    for (int i = 0; i < num_layers && i < MAX_LAYERS; i++)
+        g_layer_sizes[i] = g_layer_sizes_buf[i];
+    g_num_layers    = num_layers;
+    g_weight_offset = weight_offset;
+}
+
+// Set how many suit inputs JS has written before calling evaluate().
+WASM_EXPORT void set_num_inputs(int n) { g_num_inputs = n; }
+
+// Run forward pass for each suit input and SUM results into g_out.
+// JS must have written g_inp[0..n-1] and called set_num_inputs(n).
+WASM_EXPORT void evaluate() {
+    const int outSz = g_layer_sizes[g_num_layers - 1];
+    // Zero the output accumulator
+    for (int o = 0; o < outSz; o++) g_out[o] = 0.0f;
+    // Accumulate each suit pass
+    static float suit_out[MAX_OUTPUT_SIZE];
+    for (int s = 0; s < g_num_inputs; s++) {
+        for (int o = 0; o < outSz; o++) suit_out[o] = 0.0f;
+        forward_into(g_inp[s], suit_out);
+        for (int o = 0; o < outSz; o++) g_out[o] += suit_out[o];
     }
 }
 

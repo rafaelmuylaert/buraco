@@ -43,9 +43,15 @@ function breed(parentA, parentB) {
 
 const generateRandomGenome = () => {
     const g = new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE);
-    // Xavier initialisation: scale by 1/sqrt(input_size)
-    const scale = 1 / Math.sqrt(AI_CONFIG.INPUT_SIZE);
-    for (let i = 0; i < g.length; i++) g[i] = gaussianRandom() * scale;
+    // Xavier init per network segment using each net's input size
+    let off = 0;
+    for (const key of ['PICKUP', 'MELD', 'DISCARD']) {
+        const inSize = AI_CONFIG[key + '_INPUT_SIZE'];
+        const scale = 1 / Math.sqrt(inSize);
+        const end = off + AI_CONFIG['DNA_' + key];
+        for (let i = off; i < end; i++) g[i] = gaussianRandom() * scale;
+        off = end;
+    }
     return g;
 };
 
