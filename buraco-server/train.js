@@ -72,11 +72,17 @@ function toBuffer(genome) {
 class WorkerPool {
     constructor(size, path) {
         this.queue = [];
+        this._timings = { buildStateVector: 0, buildDiscardVector: 0, forwardPass: 0, getAllValidMelds: 0 };
         this.workers = Array.from({ length: size }, () => {
             const w = new Worker(path, { workerData: { matches: [], rules: {} } });
             w.idle = true;
-            w.on('message', (results) => {
+            w.on('message', (msg) => {
                 if (!w.currentJob) return; // shuffleDeck ack or stray message
+                const results = msg?.results ?? msg;
+                if (msg?.timings) {
+                    for (const k of Object.keys(this._timings))
+                        this._timings[k] += msg.timings[k] ?? 0;
+                }
                 const { offset, allResults, remaining, onDone } = w.currentJob;
                 results.forEach((r, i) => allResults[offset + i] = r);
                 remaining.count--;
@@ -87,6 +93,12 @@ class WorkerPool {
             });
             return w;
         });
+    }
+
+    getAndResetTimings() {
+        const snap = { ...this._timings };
+        for (const k of Object.keys(this._timings)) this._timings[k] = 0;
+        return snap;
     }
 
     run(matchPairs, rules) {
@@ -388,6 +400,8 @@ export const TrainerService = {
                             islands
                         });
                         console.log(`[${botName}] Island ${islandIdx} Gen ${gen}/${GENERATIONS} | MaxDiff: ${result.bestDiff.toFixed(0)} | AvgDiff: ${result.avgDiff.toFixed(0)}`);
+                        const t = getPool().getAndResetTimings();
+                        console.log(`[${botName}] [TIMING] buildStateVector=${t.buildStateVector.toFixed(0)}ms buildDiscardVector=${t.buildDiscardVector.toFixed(0)}ms forwardPass=${t.forwardPass.toFixed(0)}ms getAllValidMelds=${t.getAllValidMelds.toFixed(0)}ms`);
 
                         // Trigger champion tournament when all islands have broadcast at least once
                         // and all have a new elite since the last tournament round.

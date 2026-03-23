@@ -757,6 +757,7 @@ export function getAndResetTimings() {
     _timings.forwardPass = 0; _timings.getAllValidMelds = 0;
     return snap;
 }
+export function addForwardPassTime(ms) { _timings.forwardPass += ms; }
 
 export function getAllValidMelds(handCards, rules, mustInclude = null) {
     const _t0 = performance.now();

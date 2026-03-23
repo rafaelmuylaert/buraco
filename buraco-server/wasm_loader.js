@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { AI_CONFIG, buildStateVector, buildDiscardVector, suitsToEvaluate, setScoreFunctions } from './game.js';
+import { AI_CONFIG, buildStateVector, buildDiscardVector, suitsToEvaluate, setScoreFunctions, addForwardPassTime } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -100,7 +100,9 @@ function wasmScoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
         vInps[si].set(inp);
     }
     wasmExports.set_num_inputs(suits.length);
+    const _t0 = performance.now();
     wasmExports.evaluate();
+    addForwardPassTime(performance.now() - _t0);
 
     // g_out now contains summed scores across all suit passes
     return new Float32Array(vOut.buffer, vOut.byteOffset, candidates.length);
@@ -125,7 +127,9 @@ export function wasmScoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2I
     const inp = buildDiscardVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id);
     vInps[0].set(inp);
     wasmExports.set_num_inputs(1);
+    const _t0 = performance.now();
     wasmExports.evaluate();
+    addForwardPassTime(performance.now() - _t0);
     return new Float32Array(vOut.buffer, vOut.byteOffset, AI_CONFIG.DISCARD_CLASSES);
 }
 

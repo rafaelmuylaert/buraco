@@ -106,9 +106,7 @@ function processJob(matches, rules) {
         const g2 = runMatch({ '0': dnaB, '1': dnaA, '2': dnaB, '3': dnaA }, rules, pairDeck);
         return [g1 - g2, g2 - g1, Math.abs(g1), Math.abs(g2)];
     });
-    const t = getAndResetTimings();
-    console.log(`[TIMING] buildStateVector=${t.buildStateVector.toFixed(1)}ms buildDiscardVector=${t.buildDiscardVector.toFixed(1)}ms forwardPass=${t.forwardPass.toFixed(1)}ms getAllValidMelds=${t.getAllValidMelds.toFixed(1)}ms`);
-    return results;
+    return { results, timings: getAndResetTimings() };
 }
 
 if (workerData.matches.length === 0) {
