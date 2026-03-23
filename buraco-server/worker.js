@@ -2,7 +2,7 @@ import { workerData, parentPort } from 'worker_threads';
 import {
     BuracoGame, AI_CONFIG,
     movePlayMeld, moveAppendToMeld, moveDiscardCard,
-    checkGameOver, planTurn
+    checkGameOver, planTurn, getAndResetTimings
 } from './game.js';
 import { initWasm } from './wasm_loader.js';
 
@@ -100,12 +100,15 @@ for (let i = 0; i < 52; i++) _baseDeck.push(i);
 let _fixedDeck = null;
 
 function processJob(matches, rules) {
-    return matches.map(({ dnaA, dnaB }) => {
+    const results = matches.map(({ dnaA, dnaB }) => {
         const pairDeck = rules.fixedDeck ? _fixedDeck : shuffle([..._baseDeck]);
         const g1 = runMatch({ '0': dnaA, '1': dnaB, '2': dnaA, '3': dnaB }, rules, pairDeck);
         const g2 = runMatch({ '0': dnaB, '1': dnaA, '2': dnaB, '3': dnaA }, rules, pairDeck);
         return [g1 - g2, g2 - g1, Math.abs(g1), Math.abs(g2)];
     });
+    const t = getAndResetTimings();
+    console.log(`[TIMING] buildStateVector=${t.buildStateVector.toFixed(1)}ms buildDiscardVector=${t.buildDiscardVector.toFixed(1)}ms forwardPass=${t.forwardPass.toFixed(1)}ms getAllValidMelds=${t.getAllValidMelds.toFixed(1)}ms`);
+    return results;
 }
 
 if (workerData.matches.length === 0) {

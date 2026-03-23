@@ -570,6 +570,7 @@ export function encodeCandidateMeld(inp, off, parsedMeld, appendIdx) {
 // suit=1-4: only seq melds of this suit are encoded; card groups show only cards of this suit.
 // candidates must already have appendIdx set relative to suit-filtered seq melds (see scoreAllCandidates).
 export function buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, layerKey, candidates, suit) {
+    const _t0 = performance.now();
     const C = AI_CONFIG;
     const seqSlots       = C[layerKey + '_SEQ_SLOTS'];
     const runnerSlots    = C[layerKey + '_RUNNER_SLOTS'];
@@ -620,11 +621,13 @@ export function buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2I
     inp[off++] = G.pots.length / 2;
     inp[off++] = hasCleanTeam(myTeam)  ? 1 : 0;
     inp[off++] = hasCleanTeam(oppTeam) ? 1 : 0;
+    _timings.buildStateVector += performance.now() - _t0;
     return inp;
 }
 
 // Build the input vector for the discard network (all-suit, no melds/candidates).
 export function buildDiscardVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id) {
+    const _t0 = performance.now();
     const C = AI_CONFIG;
     const inp = new Float32Array(C.DISCARD_INPUT_SIZE);
     let off = 0;
@@ -647,6 +650,7 @@ export function buildDiscardVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp
     inp[off++] = G.pots.length / 2;
     inp[off++] = hasCleanTeam(myTeam)  ? 1 : 0;
     inp[off++] = hasCleanTeam(oppTeam) ? 1 : 0;
+    _timings.buildDiscardVector += performance.now() - _t0;
     return inp;
 }
 
@@ -658,6 +662,7 @@ function relu(x) { return x > 0 ? x : 0; }
 // Weight layout per layer l: W(sizes[l]*sizes[l+1]) | b(sizes[l+1])
 // Returns a Float32Array of length layerSizes[last].
 function forwardPass(inp, weights, layerSizes) {
+    const _t0 = performance.now();
     let woff = 0;
     let cur = inp;
     for (let l = 0; l < layerSizes.length - 1; l++) {
@@ -676,6 +681,7 @@ function forwardPass(inp, weights, layerSizes) {
         woff += inSize * outSize + outSize;
         cur = next;
     }
+    _timings.forwardPass += performance.now() - _t0;
     return cur;
 }
 
@@ -743,7 +749,17 @@ export function scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, w
     return forwardPass(inp, weights, AI_CONFIG.DISCARD_LAYER_SIZES);
 }
 
+// ── Timing accumulators ───────────────────────────────────────────────────────
+const _timings = { buildStateVector: 0, buildDiscardVector: 0, forwardPass: 0, getAllValidMelds: 0 };
+export function getAndResetTimings() {
+    const snap = { ..._timings };
+    _timings.buildStateVector = 0; _timings.buildDiscardVector = 0;
+    _timings.forwardPass = 0; _timings.getAllValidMelds = 0;
+    return snap;
+}
+
 export function getAllValidMelds(handCards, rules, mustInclude = null) {
+    const _t0 = performance.now();
     let validCombos = [];
     let seenSigs = new Set();
 
@@ -839,6 +855,7 @@ export function getAllValidMelds(handCards, rules, mustInclude = null) {
             if (combo.length >= 2 && wilds.length > 0) tryCombo([...combo, wilds[0]]);
         }
     }
+    _timings.getAllValidMelds += performance.now() - _t0;
     return validCombos;
 }
 
