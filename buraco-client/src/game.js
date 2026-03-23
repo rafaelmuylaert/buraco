@@ -872,6 +872,13 @@ export function planTurn(G, p, DNA) {
         else if (r === 2) fm[1] = s === 5 ? 1 : s;
         return fm;
     })() : null;
+    const myTeamSeqMelds = [];
+    (G.teamPlayers[myTeam] || []).forEach(tp =>
+        (G.melds[tp] || []).forEach((meld, mIdx) => {
+            if (meld && meld[0] !== 0) myTeamSeqMelds.push({ tp, mIdx, meld });
+        })
+    );
+
     const pickupCands = [{ move: 'drawCard', args: [], cards: [], parsedMeld: drawFakeMeld, appendIdx: 0 }];
     if (topDiscard !== null) {
         const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
@@ -888,6 +895,32 @@ export function planTurn(G, p, DNA) {
                 const handUsed = [...combo]; handUsed.splice(topIdx, 1);
                 pickupCands.push({ move: 'pickUpDiscard', args: [handUsed, { type: 'new' }], cards: combo, parsedMeld: buildMeld(combo, G.rules), appendIdx: 0 });
             }
+            // Also consider appending topDiscard (+ optional hand cards) to existing team melds
+            const appendSeenSigs = new Set();
+            (G.teamPlayers[myTeam] || []).forEach(tp =>
+                (G.melds[tp] || []).forEach((meld, mIdx) => {
+                    // topDiscard alone
+                    const parsed0 = appendCardsToMeld(meld, [topDiscard]);
+                    if (parsed0) {
+                        const sig0 = `${tp}-${mIdx}-${topDiscard % 52}`;
+                        if (!appendSeenSigs.has(sig0)) {
+                            appendSeenSigs.add(sig0);
+                            const seqPos = myTeamSeqMelds.findIndex(e => e.tp === tp && e.mIdx === mIdx) + 1;
+                            pickupCands.push({ move: 'pickUpDiscard', args: [[], { type: 'append', player: tp, index: mIdx }], cards: [topDiscard], parsedMeld: parsed0, appendIdx: seqPos });
+                        }
+                    }
+                    // topDiscard + one hand card
+                    for (const hCard of G.hands[p]) {
+                        const parsed1 = appendCardsToMeld(meld, [hCard, topDiscard]);
+                        if (!parsed1) continue;
+                        const sig1 = `${tp}-${mIdx}-${hCard % 52}-${topDiscard % 52}`;
+                        if (appendSeenSigs.has(sig1)) continue;
+                        appendSeenSigs.add(sig1);
+                        const seqPos = myTeamSeqMelds.findIndex(e => e.tp === tp && e.mIdx === mIdx) + 1;
+                        pickupCands.push({ move: 'pickUpDiscard', args: [[hCard], { type: 'append', player: tp, index: mIdx }], cards: [hCard, topDiscard], parsedMeld: parsed1, appendIdx: seqPos });
+                    }
+                })
+            );
         } else {
             pickupCands.push({ move: 'pickUpDiscard', args: [], cards: G.discardPile, parsedMeld: null, appendIdx: 0 });
         }
@@ -910,7 +943,7 @@ export function planTurn(G, p, DNA) {
 
     // ── Phase 2: Melds & Appends ──────────────────────────────────────────────
     const postHand = G.hands[p];
-    const myTeamSeqMelds = [];
+    myTeamSeqMelds.length = 0;
     (G.teamPlayers[myTeam] || []).forEach(tp =>
         (G.melds[tp] || []).forEach((meld, mIdx) => {
             if (meld && meld[0] !== 0) myTeamSeqMelds.push({ tp, mIdx, meld });
