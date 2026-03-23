@@ -1,6 +1,5 @@
 #include <stdint.h>
 #include <stddef.h>
-#include <stdlib.h>
 
 #define WASM_EXPORT __attribute__((visibility("default")))
 
