@@ -5,7 +5,17 @@ export const getRank = c => c >= 104 ? 2 : (c % 13) + 1; // 1:A, 2:2... 11:J, 12
 export const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
 export const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
 
-const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15]; 
+const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15];
+
+// ── Timing accumulators ───────────────────────────────────────────────────────
+const _timings = { buildStateVector: 0, buildDiscardVector: 0, forwardPass: 0, getAllValidMelds: 0 };
+export function getAndResetTimings() {
+    const snap = { ..._timings };
+    _timings.buildStateVector = 0; _timings.buildDiscardVector = 0;
+    _timings.forwardPass = 0; _timings.getAllValidMelds = 0;
+    return snap;
+}
+export function addForwardPassTime(ms) { _timings.forwardPass += ms; }
 
 // 🚀 CENTRALIZED AI ARCHITECTURE CONFIGURATION
 // 3 networks: pickup (per-suit, outputs MAX_CANDIDATES scores), meld (same), discard (all-suit, outputs DISCARD_CLASSES scores)
@@ -748,16 +758,6 @@ export function scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, w
     const inp = buildDiscardVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id);
     return forwardPass(inp, weights, AI_CONFIG.DISCARD_LAYER_SIZES);
 }
-
-// ── Timing accumulators ───────────────────────────────────────────────────────
-const _timings = { buildStateVector: 0, buildDiscardVector: 0, forwardPass: 0, getAllValidMelds: 0 };
-export function getAndResetTimings() {
-    const snap = { ..._timings };
-    _timings.buildStateVector = 0; _timings.buildDiscardVector = 0;
-    _timings.forwardPass = 0; _timings.getAllValidMelds = 0;
-    return snap;
-}
-export function addForwardPassTime(ms) { _timings.forwardPass += ms; }
 
 export function getAllValidMelds(handCards, rules, mustInclude = null) {
     const _t0 = performance.now();
