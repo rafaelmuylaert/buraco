@@ -147,67 +147,64 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
     // Separate wilds into same-suit 2s (candidates for natural-2 slot) and foreign wilds
     const sameSuit2s = wilds.filter(c => getSuit(c) === suit && getRank(c) === 2);
     const foreignWilds = wilds.filter(c => !(getSuit(c) === suit && getRank(c) === 2));
-    if (foreignWilds.length > 1) return null;  // at most one foreign wild per meld
     const hasForeignWild = foreignWilds.length === 1;
     const existingForeignWild = base[1] !== 0 && base[1] !== suit; // wild already in meld
+    // At most one wild total: reject impossible combinations up front
+    if (foreignWilds.length > 1) return null;
+    if (sameSuit2s.length > 1) return null;
     if (hasForeignWild && existingForeignWild) return null;
+    if (hasForeignWild && sameSuit2s.length > 0) return null; // foreign wild + same-suit 2 = 2 wilds
 
-    // Count how many same-suit 2s are already placed naturally in the base
-    const baseSameSuit2Count = base[3];  // slot 3 = natural 2
-    // New same-suit 2s to place: try natural slot first, overflow becomes wild
-    let naturalTwosToPlace = sameSuit2s.length;
-    if (base[3] === 0 && naturalTwosToPlace > 0) { m[3] = 1; naturalTwosToPlace--; }
-    // Any remaining same-suit 2s must act as wilds
-    const extraSameSuit2AsWild = naturalTwosToPlace; // 0 or 1
-    if (extraSameSuit2AsWild > 1) return null;
-    // Total wild budget: at most 1 (foreign or extra same-suit-2, not both)
-    const wildCard = hasForeignWild ? foreignWilds[0] : (extraSameSuit2AsWild > 0 ? wilds.find(c => getSuit(c) === suit && getRank(c) === 2) : null);
-    const wildSuitNew = wildCard ? getSuit(wildCard) : 0;
-    if (hasForeignWild && extraSameSuit2AsWild > 0) return null;
+    // Enumerate wild placement modes for the same-suit 2 (if present):
+    //   mode 0: place in natural slot (m[3]=1, no wild)
+    //   mode 1: use as wild (m[3] unchanged, wildSuit=suit)
+    // Foreign wild: always mode 1 only.
+    const wildModes = [];
+    if (hasForeignWild) {
+        wildModes.push({ nat2: base[3] === 1 ? 1 : 0, wildSuit: getSuit(foreignWilds[0]) });
+    } else if (sameSuit2s.length === 1) {
+        if (base[3] === 0) wildModes.push({ nat2: 1, wildSuit: 0 });   // natural slot
+        wildModes.push({ nat2: 0, wildSuit: suit });                    // as wild
+    } else {
+        wildModes.push({ nat2: base[3] === 1 ? 1 : 0, wildSuit: 0 }); // no new 2
+    }
 
-    // Now try all valid ace placements: each ace can go low (slot 2) or high (slot 15)
-    // Enumerate the 2^n combinations (n ≤ 2 in practice)
     const aceCount = aces.length;
-    const aceSlots = [2, 15];
     let bestM = null, bestGaps = 99;
 
-    const tryAcePlacement = (placement) => {
+    const tryAcePlacement = (placement, nat2, wildSuit) => {
         const t = [...m];
-        // Apply existing wild from base or new wild
-        t[1] = existingForeignWild ? base[1] : (wildSuitNew || 0);
-        // Check existing ace slots aren't double-filled
+        t[3] = nat2;
+        t[1] = existingForeignWild ? base[1] : wildSuit;
         for (const slot of placement) {
-            if (t[slot] === 1) return; // collision
+            if (t[slot] === 1) return;
             t[slot] = 1;
         }
-        // Prefer same-suit-2 in natural slot over wild when it closes a gap
-        // (already placed above via m[3])
         const gaps = _checkGaps(t);
-        // If wild available and exactly 1 gap, it can fill it → effective gaps = 0
         const hasWild = t[1] !== 0;
         const effective = (gaps === 1 && hasWild) ? 0 : gaps;
         if (effective < bestGaps || (effective === bestGaps && bestM !== null && gaps < _checkGaps(bestM))) {
             bestGaps = effective;
-            bestM = t;
+            bestM = [...t];
         }
     };
 
-    if (aceCount === 0) {
-        tryAcePlacement([]);
-    } else if (aceCount === 1) {
-        tryAcePlacement([2]);
-        tryAcePlacement([15]);
-    } else if (aceCount === 2) {
-        if (base[2] === 0 && base[15] === 0) tryAcePlacement([2, 15]);
-        // two aces can only go low+high; same slot twice is invalid
-    } else {
-        return null; // >2 aces impossible in a sequence
+    for (const { nat2, wildSuit } of wildModes) {
+        if (aceCount === 0) {
+            tryAcePlacement([], nat2, wildSuit);
+        } else if (aceCount === 1) {
+            tryAcePlacement([2],  nat2, wildSuit);
+            tryAcePlacement([15], nat2, wildSuit);
+        } else if (aceCount === 2) {
+            if (base[2] === 0 && base[15] === 0) tryAcePlacement([2, 15], nat2, wildSuit);
+        } else {
+            return null;
+        }
     }
 
     if (!bestM || bestGaps > 0) return null;
 
     // Prefer natural-2 over wild when the wild is same-suit and slot 3 is open
-    // (already handled above, but re-check after ace placement settled the range)
     if (bestM[1] === suit && bestM[3] === 0) {
         bestM[3] = 1; bestM[1] = 0;
         if (_checkGaps(bestM) > 0) { bestM[3] = 0; bestM[1] = suit; }
@@ -623,7 +620,7 @@ export function buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2I
     const seqSlots       = C[layerKey + '_SEQ_SLOTS'];
     const runnerSlots    = C[layerKey + '_RUNNER_SLOTS'];
     const candidateSlots = C[layerKey + '_CANDIDATES'];
-    const inp = new Float32Array(C[layerKey + '_INPUT_SIZE']);
+    const inp = _getStateBuf(layerKey);
     let off = 0;
 
     // ── Sequence melds of this suit only ──────────────────────────────────────
@@ -679,7 +676,7 @@ export function buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2I
 export function buildDiscardVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, meldIdx) {
     const _t0 = performance.now();
     const C = AI_CONFIG;
-    const inp = new Float32Array(C.DISCARD_INPUT_SIZE);
+    const inp = _getDiscardBuf();
     let off = 0;
     const partnerId2 = partnerId || p;
     encodeCardGroup(inp, off, G.hands[p] || [],                             0); off += C.CARDS_FEATURES_ALL;
@@ -709,20 +706,54 @@ export function buildDiscardVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp
 
 // ── Neural network forward pass ───────────────────────────────────────────────
 
+// Pre-allocated ping-pong buffers for forwardPass hidden layers.
+// Sized to the largest hidden layer (HIDDEN_WIDTH). Output layer uses a dedicated buffer per network.
+// These are overwritten each call — safe because JS is single-threaded.
+const _fpBufA = new Float32Array(256); // ping
+const _fpBufB = new Float32Array(256); // pong
+const _fpOutPickup  = new Float32Array(AI_CONFIG.PICKUP_CANDIDATES);
+const _fpOutMeld    = new Float32Array(AI_CONFIG.MELD_CANDIDATES);
+const _fpOutDiscard = new Float32Array(AI_CONFIG.DISCARD_CLASSES);
+// Map layerSizes last element → output buffer
+function _fpOutBuf(outLen) {
+    if (outLen === AI_CONFIG.PICKUP_CANDIDATES)  return _fpOutPickup;
+    if (outLen === AI_CONFIG.MELD_CANDIDATES)    return _fpOutMeld;
+    if (outLen === AI_CONFIG.DISCARD_CLASSES)    return _fpOutDiscard;
+    return new Float32Array(outLen); // fallback (shouldn't happen)
+}
+
+// Pre-allocated state/discard input buffers — one per network, reused each call.
+let _svPickupBuf  = null;
+let _svMeldBuf    = null;
+let _svDiscardBuf = null;
+function _getStateBuf(layerKey) {
+    const size = AI_CONFIG[layerKey + '_INPUT_SIZE'];
+    if (layerKey === 'PICKUP')  { if (!_svPickupBuf  || _svPickupBuf.length  !== size) _svPickupBuf  = new Float32Array(size); return _svPickupBuf; }
+    if (layerKey === 'MELD')    { if (!_svMeldBuf    || _svMeldBuf.length    !== size) _svMeldBuf    = new Float32Array(size); return _svMeldBuf; }
+    return new Float32Array(size);
+}
+let _svDiscardBufInst = null;
+function _getDiscardBuf() {
+    const size = AI_CONFIG.DISCARD_INPUT_SIZE;
+    if (!_svDiscardBufInst || _svDiscardBufInst.length !== size) _svDiscardBufInst = new Float32Array(size);
+    return _svDiscardBufInst;
+}
+
 function relu(x) { return x > 0 ? x : 0; }
 
 // One forward pass through a network defined by layerSizes.
 // Weight layout per layer l: W(sizes[l]*sizes[l+1]) | b(sizes[l+1])
-// Returns a Float32Array of length layerSizes[last].
+// Returns a Float32Array of length layerSizes[last] (pre-allocated, overwritten each call).
 function forwardPass(inp, weights, layerSizes) {
     const _t0 = performance.now();
     let woff = 0;
     let cur = inp;
-    for (let l = 0; l < layerSizes.length - 1; l++) {
+    const lastL = layerSizes.length - 2;
+    for (let l = 0; l <= lastL; l++) {
         const inSize  = layerSizes[l];
         const outSize = layerSizes[l + 1];
-        const isLast  = l === layerSizes.length - 2;
-        const next = new Float32Array(outSize);
+        const isLast  = l === lastL;
+        const next = isLast ? _fpOutBuf(outSize) : (l % 2 === 0 ? _fpBufA : _fpBufB);
         const wBase = woff;
         const bBase = woff + inSize * outSize;
         for (let o = 0; o < outSize; o++) {
@@ -807,10 +838,10 @@ export function getAllValidMelds(handCards, rules, mustInclude = null) {
     const seenSigs = Object.create(null); // plain object faster than Set for string keys
 
     const tryCombo = (arr) => {
-        if (!buildMeld(arr, rules)) return;
-        // Build a compact key: sort card types (c % 52, joker=52) into a Uint8Array and join
+        // Build key first — cheaper than buildMeld for duplicates
         const key = arr.map(c => c >= 104 ? 52 : c % 52).sort((a, b) => a - b).join(',');
         if (seenSigs[key]) return;
+        if (!buildMeld(arr, rules)) return;
         seenSigs[key] = 1;
         validCombos.push(arr);
     };
