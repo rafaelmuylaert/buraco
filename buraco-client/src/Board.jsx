@@ -178,9 +178,16 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
   const [selectedCards, setSelectedCards] = useState([]);
   const isMyTurn = ctx.currentPlayer === playerID;
 
-  // Persist the last seen gameover so a server hiccup after endIf never causes a white screen
+  // Persist the last seen gameover across remounts (ReconnectingClient resets key on reconnect)
+  const storageKey = matchID ? `gameover_${matchID}_${playerID}` : null;
   const lastGameoverRef = React.useRef(null);
-  if (ctx?.gameover) lastGameoverRef.current = ctx.gameover;
+  if (ctx?.gameover) {
+    lastGameoverRef.current = ctx.gameover;
+    if (storageKey) sessionStorage.setItem(storageKey, JSON.stringify(ctx.gameover));
+  } else if (!lastGameoverRef.current && storageKey) {
+    const stored = sessionStorage.getItem(storageKey);
+    if (stored) try { lastGameoverRef.current = JSON.parse(stored); } catch (_) {}
+  }
   const gameover = lastGameoverRef.current;
 
   // Track melds snapshot at end of my last turn to highlight opponent additions
@@ -269,9 +276,13 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
     const isTournamentComplete = tournament && tournament.status === 'completed';
     const showNextButton = !isTournament || (isTournament && !isTournamentComplete);
 
-    const handleReturnLobby = () => { window.location.reload(); };
+    const handleReturnLobby = () => {
+      if (storageKey) sessionStorage.removeItem(storageKey);
+      window.location.reload();
+    };
 
     const handleNextMatch = () => {
+      if (storageKey) sessionStorage.removeItem(storageKey);
         if (isTournament) sessionStorage.setItem('auto_join_tournament', JSON.stringify({ tournamentId: tournament.id, playerName: myName }));
         else sessionStorage.setItem('quick_game_rematch', JSON.stringify({ rules: G.rules, numPlayers: G.rules.numPlayers, myName }));
         window.location.reload();
