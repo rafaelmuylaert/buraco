@@ -148,11 +148,10 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
     const sameSuit2s = wilds.filter(c => getSuit(c) === suit && getRank(c) === 2);
     const foreignWilds = wilds.filter(c => !(getSuit(c) === suit && getRank(c) === 2));
     const hasForeignWild = foreignWilds.length === 1;
-    const existingForeignWild = base[1] !== 0 && base[1] !== suit; // wild already in meld
     // At most one wild total: reject impossible combinations up front
     if (foreignWilds.length > 1) return null;
     if (sameSuit2s.length > 1) return null;
-    if (hasForeignWild && existingForeignWild) return null;
+    if (hasForeignWild && base[1] !== 0) return null; // meld already has a wild, can't add another
     if (hasForeignWild && sameSuit2s.length > 0) return null; // foreign wild + same-suit 2 = 2 wilds
 
     // Enumerate wild placement modes for the same-suit 2 (if present):
@@ -175,7 +174,8 @@ function cardsToSeqSlots(cardIds, existingMeld = null) {
     const tryAcePlacement = (placement, nat2, wildSuit) => {
         const t = [...m];
         t[3] = nat2;
-        t[1] = existingForeignWild ? base[1] : wildSuit;
+        // Preserve existing wild if no new wild is being introduced
+        t[1] = (wildSuit !== 0) ? wildSuit : base[1];
         for (const slot of placement) {
             if (t[slot] === 1) return;
             t[slot] = 1;
