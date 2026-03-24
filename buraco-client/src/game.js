@@ -835,22 +835,40 @@ export function scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, w
 export function getAllValidMelds(handCards, rules, mustInclude = null) {
     const _t0 = performance.now();
     const validCombos = [];
-    const seenSigs = Object.create(null); // plain object faster than Set for string keys
 
-    const tryCombo = (arr) => {
-        // Build key first — cheaper than buildMeld for duplicates
-        const key = arr.map(c => c >= 104 ? 52 : c % 52).sort((a, b) => a - b).join(',');
-        if (seenSigs[key]) return;
-        if (!buildMeld(arr, rules)) return;
-        seenSigs[key] = 1;
-        validCombos.push(arr);
+    // Cheap inline sequence validator for sorted same-suit naturals + optional wild.
+    // ranks[] is already sorted ascending (getRank values, 1=A treated as high=14 for seq purposes).
+    // Returns true if the ranks form a contiguous run with at most 1 gap (filled by wild).
+    const isValidSeq = (ranks, hasWild) => {
+        if (ranks.length + (hasWild ? 1 : 0) < 3) return false;
+        // Aces can be low (rank 1, slot 2) or high (rank 14, slot 15).
+        // Try both placements for any aces in the list.
+        const tryRanks = (rs) => {
+            let gaps = 0;
+            for (let k = 1; k < rs.length; k++) {
+                const diff = rs[k] - rs[k - 1];
+                if (diff === 0) return false; // duplicate rank
+                gaps += diff - 1;
+                if (gaps > 1) return false;
+            }
+            return gaps === 0 || (gaps === 1 && hasWild);
+        };
+        // Check if any ace is present (rank===1)
+        if (ranks[0] === 1) {
+            // Try ace as low (keep rank 1) or high (replace with 14)
+            const withHigh = [14, ...ranks.slice(1)].sort((a, b) => a - b);
+            return tryRanks(ranks) || tryRanks(withHigh);
+        }
+        return tryRanks(ranks);
     };
+
+    const runnersAllowed = rules.runners !== 'none' && !(Array.isArray(rules.runners) && rules.runners.length === 0);
 
     let wilds = [];
     let natsBySuit = {1:[], 2:[], 3:[], 4:[]};
     let natsByRank = {};
 
-    for (let c of handCards) {
+    for (const c of handCards) {
         const cs = getSuit(c), cr = getRank(c);
         if (cs === 5 || cr === 2) wilds.unshift(c);
         else {
@@ -860,75 +878,79 @@ export function getAllValidMelds(handCards, rules, mustInclude = null) {
         }
     }
 
+    const hasWild = wilds.length > 0;
+    const wild0 = hasWild ? wilds[0] : null;
+
     if (mustInclude !== null) {
-        // Only enumerate combos that structurally contain mustInclude.
         const ms = getSuit(mustInclude), mr = getRank(mustInclude);
         const isWild = ms === 5 || mr === 2;
 
         if (isWild) {
-            // mustInclude is a wild — enumerate seq combos of each suit using it,
-            // and runner combos of each rank using it.
             for (let s = 1; s <= 4; s++) {
                 const nats = natsBySuit[s].sort((a, b) => getRank(a) - getRank(b));
                 for (let i = 0; i < nats.length; i++) {
-                    const combo = [nats[i]];
+                    const ranks = [getRank(nats[i])];
                     for (let j = i + 1; j < nats.length; j++) {
-                        combo.push(nats[j]);
-                        if (combo.length >= 2) tryCombo([...combo, mustInclude]);
+                        ranks.push(getRank(nats[j]));
+                        if (isValidSeq(ranks, true))
+                            validCombos.push([...nats.slice(i, j + 1), mustInclude]);
                     }
                 }
             }
-            if (rules.runners !== 'none' && !(Array.isArray(rules.runners) && rules.runners.length === 0)) {
+            if (runnersAllowed) {
                 for (const r in natsByRank) {
                     const combo = natsByRank[r];
-                    if (combo.length >= 2) tryCombo([...combo, mustInclude]);
+                    if (combo.length >= 2 && isRunnerAllowed(rules, +r))
+                        validCombos.push([...combo, mustInclude]);
                 }
             }
         } else if (mr === 1 || (mr >= 3 && mr <= 13)) {
-            // mustInclude is a natural sequence card — only enumerate combos of its suit.
             const nats = natsBySuit[ms].sort((a, b) => getRank(a) - getRank(b));
             const anchor = nats.indexOf(mustInclude);
-            // Combos anchored on mustInclude: extend left and/or right from it.
             for (let i = 0; i <= anchor; i++) {
-                const combo = [nats[i]];
+                const ranks = [getRank(nats[i])];
                 for (let j = i + 1; j < nats.length; j++) {
-                    combo.push(nats[j]);
-                    const hasAnchor = i <= anchor && anchor < i + combo.length;
-                    if (hasAnchor) {
-                        if (combo.length >= 3) tryCombo([...combo]);
-                        if (wilds.length > 0 && combo.length >= 2) tryCombo([...combo, wilds[0]]);
+                    ranks.push(getRank(nats[j]));
+                    if (i <= anchor && anchor <= j) {
+                        if (ranks.length >= 3 && isValidSeq(ranks, false))
+                            validCombos.push(nats.slice(i, j + 1));
+                        if (hasWild && ranks.length >= 2 && isValidSeq(ranks, true))
+                            validCombos.push([...nats.slice(i, j + 1), wild0]);
                     }
                 }
             }
-            // Runner combos for mustInclude's rank
-            if (rules.runners !== 'none' && !(Array.isArray(rules.runners) && rules.runners.length === 0)) {
+            if (runnersAllowed) {
                 const combo = natsByRank[mr] || [];
-                if (combo.includes(mustInclude)) {
-                    if (combo.length >= 3) tryCombo([...combo]);
-                    if (combo.length >= 2 && wilds.length > 0) tryCombo([...combo, wilds[0]]);
+                if (combo.includes(mustInclude) && isRunnerAllowed(rules, mr)) {
+                    if (combo.length >= 3) validCombos.push([...combo]);
+                    if (combo.length >= 2 && hasWild) validCombos.push([...combo, wild0]);
                 }
             }
         }
+        _timings.getAllValidMelds += performance.now() - _t0;
         return validCombos;
     }
 
     for (let s = 1; s <= 4; s++) {
         const nats = natsBySuit[s].sort((a, b) => getRank(a) - getRank(b));
         for (let i = 0; i < nats.length; i++) {
-            const combo = [nats[i]];
+            const ranks = [getRank(nats[i])];
             for (let j = i + 1; j < nats.length; j++) {
-                combo.push(nats[j]);
-                if (combo.length >= 3) tryCombo(combo);
-                if (wilds.length > 0 && combo.length >= 2) tryCombo([...combo, wilds[0]]);
+                ranks.push(getRank(nats[j]));
+                if (ranks.length >= 3 && isValidSeq(ranks, false))
+                    validCombos.push(nats.slice(i, j + 1));
+                if (hasWild && ranks.length >= 2 && isValidSeq(ranks, true))
+                    validCombos.push([...nats.slice(i, j + 1), wild0]);
             }
         }
     }
 
-    if (rules.runners !== 'none' && !(Array.isArray(rules.runners) && rules.runners.length === 0)) {
+    if (runnersAllowed) {
         for (const r in natsByRank) {
+            if (!isRunnerAllowed(rules, +r)) continue;
             const combo = natsByRank[r];
-            if (combo.length >= 3) tryCombo(combo);
-            if (combo.length >= 2 && wilds.length > 0) tryCombo([...combo, wilds[0]]);
+            if (combo.length >= 3) validCombos.push(combo);
+            if (combo.length >= 2 && hasWild) validCombos.push([...combo, wild0]);
         }
     }
     _timings.getAllValidMelds += performance.now() - _t0;
