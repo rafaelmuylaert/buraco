@@ -251,19 +251,6 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
     }
   }, [gameover, matchID]);
 
-  if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregando Mesa...</div>;
-
-  // Guard: if G is missing key fields the game is over/broken — show fallback
-  if (!G.hands || !G.teams || !G.teamPlayers) {
-    return (
-      <div style={{ color: 'white', padding: '40px', backgroundColor: '#1b4332', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-        <h1 style={{ color: '#ffd700' }}>Fim de Jogo</h1>
-        <p style={{ color: '#ccc' }}>A partida terminou. Por favor, volte ao salão.</p>
-        <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>⬅ Voltar ao Salão</button>
-      </div>
-    );
-  }
-
   if (gameover) {
     const s0 = gameover.scores.team0;
     const s1 = gameover.scores.team1;
@@ -344,6 +331,18 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
                 </button>
             )}
         </div>
+      </div>
+    );
+  }
+
+  if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregando Mesa...</div>;
+
+  if (!G.hands || !G.teams || !G.teamPlayers) {
+    return (
+      <div style={{ color: 'white', padding: '40px', backgroundColor: '#1b4332', minHeight: '100vh', fontFamily: 'sans-serif' }}>
+        <h1 style={{ color: '#ffd700' }}>Fim de Jogo</h1>
+        <p style={{ color: '#ccc' }}>A partida terminou. Por favor, volte ao salão.</p>
+        <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>⬅ Voltar ao Salão</button>
       </div>
     );
   }
