@@ -29,6 +29,7 @@ export const AI_CONFIG = {
     CARDS_FEATURES_SUIT:   18,  // per-suit: 13 rank counts/8 + 5 wild counts/4
     CARDS_FEATURES_ALL:    53,  // all-suit: 13×4 rank counts/8 + 4 suited-2 counts/4 + joker/4
     HIDDEN_LAYERS:          2,
+    HIDDEN_WIDTH:          32,  // fixed hidden layer width (null = use linear interpolation)
 
     // Pickup net (per-suit)
     PICKUP_SEQ_SLOTS:      10,  // 5 my team + 5 opp
@@ -59,7 +60,7 @@ function nn_size(key, seqSlots, runnerSlots, candidateSlots, cardGroups, perSuit
                     + C.SCALARS_FEATURES;
     const layerSizes = [inputSize];
     for (let l = 1; l <= C.HIDDEN_LAYERS; l++)
-        layerSizes.push(Math.round(inputSize + l * (outputs - inputSize) / (C.HIDDEN_LAYERS + 1)));
+        layerSizes.push(C.HIDDEN_WIDTH ?? Math.round(inputSize + l * (outputs - inputSize) / (C.HIDDEN_LAYERS + 1)));
     layerSizes.push(outputs);
     let dnaSize = 0;
     for (let l = 0; l < layerSizes.length - 1; l++)
