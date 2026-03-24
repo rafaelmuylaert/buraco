@@ -100,132 +100,144 @@ export function getMeldLength(m) {
     return m[3] + m[4] + m[5] + m[6] + (m[1] !== 0 ? 1 : 0);
 }
 
+const _checkGaps = (m) => {
+    let min = 16, max = 0;
+    for (let r = 2; r <= 15; r++) if (m[r]) { if (r < min) min = r; if (r > max) max = r; }
+    if (min > max) return 0;
+    let gaps = 0;
+    for (let r = min; r <= max; r++) if (!m[r]) gaps++;
+    return gaps;
+};
+
 function cardsToSeqSlots(cardIds, existingMeld = null) {
-    let m = existingMeld ? [...existingMeld] : new Array(16).fill(0);
-    let suit = m[0];
-    let wildSuit = m[1];
-    
-    let wilds = [];
-    let aces = [];
-    let twos = [];
-    
-    for (let c of cardIds) {
-        let s = getSuit(c), r = getRank(c);
-        if (s === 5 || r === 2) {
-            twos.push(c); 
-        } else if (r === 1) {
-            aces.push(c);
-        } else {
-            if (suit === 0) suit = s;
-            else if (s !== suit) return null;
-            if (m[r + 1] === 1) return null; 
-            m[r + 1] = 1;
-        }
+    // Start from a copy of the existing meld (or blank)
+    const base = existingMeld ? [...existingMeld] : new Array(16).fill(0);
+    let suit = base[0];
+
+    // Separate incoming cards into naturals (non-ace, non-wild), aces, and wilds
+    const naturals = [], aces = [], wilds = [];
+    for (const c of cardIds) {
+        const s = getSuit(c), r = getRank(c);
+        if (s === 5 || r === 2) wilds.push(c);
+        else if (r === 1)       aces.push(c);
+        else                    naturals.push(c);
     }
-    
+
+    // Place unambiguous naturals first — they fix the suit and fill definite slots
+    const m = [...base];
+    for (const c of naturals) {
+        const s = getSuit(c), r = getRank(c);
+        if (suit === 0) suit = s;
+        else if (s !== suit) return null;
+        if (m[r + 1] === 1) return null;   // duplicate rank
+        m[r + 1] = 1;
+    }
+
+    // Infer suit from aces or wilds if still unknown
     if (suit === 0) {
-        if (aces.length > 0) suit = getSuit(aces[0]);
-        else if (twos.length > 0) suit = getSuit(twos[0]);
-        else return null; 
+        if (aces.length > 0)  suit = getSuit(aces[0]);
+        else if (wilds.length > 0) suit = getSuit(wilds[0]);
+        else return null;
     }
     m[0] = suit;
 
-    for (let c of twos) {
-        let s = getSuit(c), r = getRank(c);
-        if (s === suit && r === 2 && m[3] === 0) {
-            m[3] = 1; 
-        } else {
-            if (wildSuit !== 0) return null; 
-            wildSuit = s;
+    // Validate ace suits
+    for (const c of aces) if (getSuit(c) !== suit) return null;
+
+    // Separate wilds into same-suit 2s (candidates for natural-2 slot) and foreign wilds
+    const sameSuit2s = wilds.filter(c => getSuit(c) === suit && getRank(c) === 2);
+    const foreignWilds = wilds.filter(c => !(getSuit(c) === suit && getRank(c) === 2));
+    if (foreignWilds.length > 1) return null;  // at most one foreign wild per meld
+    const hasForeignWild = foreignWilds.length === 1;
+    const existingForeignWild = base[1] !== 0 && base[1] !== suit; // wild already in meld
+    if (hasForeignWild && existingForeignWild) return null;
+
+    // Count how many same-suit 2s are already placed naturally in the base
+    const baseSameSuit2Count = base[3];  // slot 3 = natural 2
+    // New same-suit 2s to place: try natural slot first, overflow becomes wild
+    let naturalTwosToPlace = sameSuit2s.length;
+    if (base[3] === 0 && naturalTwosToPlace > 0) { m[3] = 1; naturalTwosToPlace--; }
+    // Any remaining same-suit 2s must act as wilds
+    const extraSameSuit2AsWild = naturalTwosToPlace; // 0 or 1
+    if (extraSameSuit2AsWild > 1) return null;
+    // Total wild budget: at most 1 (foreign or extra same-suit-2, not both)
+    const wildCard = hasForeignWild ? foreignWilds[0] : (extraSameSuit2AsWild > 0 ? wilds.find(c => getSuit(c) === suit && getRank(c) === 2) : null);
+    const wildSuitNew = wildCard ? getSuit(wildCard) : 0;
+    if (hasForeignWild && extraSameSuit2AsWild > 0) return null;
+
+    // Now try all valid ace placements: each ace can go low (slot 2) or high (slot 15)
+    // Enumerate the 2^n combinations (n ≤ 2 in practice)
+    const aceCount = aces.length;
+    const aceSlots = [2, 15];
+    let bestM = null, bestGaps = 99;
+
+    const tryAcePlacement = (placement) => {
+        const t = [...m];
+        // Apply existing wild from base or new wild
+        t[1] = existingForeignWild ? base[1] : (wildSuitNew || 0);
+        // Check existing ace slots aren't double-filled
+        for (const slot of placement) {
+            if (t[slot] === 1) return; // collision
+            t[slot] = 1;
         }
-    }
-
-    for (let c of aces) {
-        if (getSuit(c) !== suit) return null;
-        // Try low-A first (slot 2); only use high-A (slot 15) if low-A is already taken
-        if (m[2] === 0) m[2] = 1;
-        else if (m[15] === 0) m[15] = 1;
-        else return null;
-    }
-
-    m[1] = wildSuit;
-
-    const checkGaps = (arr) => {
-        let min = 16, max = 0;
-        for(let r=2; r<=15; r++) if(arr[r]) { if(r<min) min=r; if(r>max) max=r; }
-        if (min > max) return 0;
-        let gaps = 0;
-        for(let r=min; r<=max; r++) if(!arr[r]) gaps++;
-        return gaps;
+        // Prefer same-suit-2 in natural slot over wild when it closes a gap
+        // (already placed above via m[3])
+        const gaps = _checkGaps(t);
+        // If wild available and exactly 1 gap, it can fill it → effective gaps = 0
+        const hasWild = t[1] !== 0;
+        const effective = (gaps === 1 && hasWild) ? 0 : gaps;
+        if (effective < bestGaps || (effective === bestGaps && bestM !== null && gaps < _checkGaps(bestM))) {
+            bestGaps = effective;
+            bestM = t;
+        }
     };
 
-    let gaps = checkGaps(m);
-
-    if (gaps > 0) {
-        // Try moving low-A to high-A position
-        if (m[2] === 1 && m[15] === 0) {
-            m[2] = 0; m[15] = 1;
-            let newGaps = checkGaps(m);
-            if (newGaps < gaps) gaps = newGaps;
-            else { m[2] = 1; m[15] = 0; }
-        }
-        // Try moving high-A to low-A position
-        if (gaps > 0 && m[15] === 1 && m[2] === 0) {
-            m[15] = 0; m[2] = 1;
-            let newGaps = checkGaps(m);
-            if (newGaps < gaps) gaps = newGaps;
-            else { m[15] = 1; m[2] = 0; }
-        }
-        if (gaps > 0 && m[3] === 1 && m[1] === 0) {
-            m[3] = 0; m[1] = suit;
-            let newGaps = checkGaps(m);
-            if (newGaps <= 1) gaps = newGaps;
-            else { m[3] = 1; m[1] = 0; }
-        }
+    if (aceCount === 0) {
+        tryAcePlacement([]);
+    } else if (aceCount === 1) {
+        tryAcePlacement([2]);
+        tryAcePlacement([15]);
+    } else if (aceCount === 2) {
+        if (base[2] === 0 && base[15] === 0) tryAcePlacement([2, 15]);
+        // two aces can only go low+high; same slot twice is invalid
+    } else {
+        return null; // >2 aces impossible in a sequence
     }
 
-    // If the only gap is at slot 3 (natural 2) and the wild IS a same-suit 2,
-    // place it as a natural 2 instead of a wild, making the meld clean.
-    if (gaps === 1 && m[1] === suit && m[3] === 0) {
-        m[3] = 1; m[1] = 0;
-        if (checkGaps(m) > 0) { m[3] = 0; m[1] = suit; }
-    }
-    if (gaps === 0 && m[1] === suit && m[3] === 0) {
-        m[3] = 1; m[1] = 0; 
-        if (checkGaps(m) > 0) {
-            m[3] = 0; m[1] = suit; 
-        }
+    if (!bestM || bestGaps > 0) return null;
+
+    // Prefer natural-2 over wild when the wild is same-suit and slot 3 is open
+    // (already handled above, but re-check after ace placement settled the range)
+    if (bestM[1] === suit && bestM[3] === 0) {
+        bestM[3] = 1; bestM[1] = 0;
+        if (_checkGaps(bestM) > 0) { bestM[3] = 0; bestM[1] = suit; }
     }
 
-    if (gaps > 1) return null; 
-    if (gaps === 1 && m[1] === 0) return null; 
-    
     let len = 0;
-    for(let r=2; r<=15; r++) len += m[r];
-    if (len + (m[1] !== 0 ? 1 : 0) > 14) return null; 
+    for (let r = 2; r <= 15; r++) len += bestM[r];
+    if (len + (bestM[1] !== 0 ? 1 : 0) > 14) return null;
 
-    return m;
+    return bestM;
 }
 
 function cardsToRunnerSlots(cardIds, existingMeld = null) {
-    let m = existingMeld ? [...existingMeld] : [0, 0, 0, 0, 0, 0, 0];
+    const m = existingMeld ? [...existingMeld] : [0, 0, 0, 0, 0, 0, 0];
     let wildSuit = m[1];
     let rank = m[2];
-    
-    for (let c of cardIds) {
-        let s = getSuit(c), r = getRank(c);
+
+    for (const c of cardIds) {
+        const s = getSuit(c), r = getRank(c);
         if (s === 5 || r === 2) {
-            if (wildSuit !== 0) return null; 
+            if (wildSuit !== 0) return null;
             wildSuit = s;
         } else {
             if (rank === 0) rank = r;
-            else if (r !== rank) return null; 
+            else if (r !== rank) return null;
             m[s + 2]++;
         }
     }
-    
-    if (rank === 0) return null; 
-    
+
+    if (rank === 0) return null;
     m[1] = wildSuit;
     m[2] = rank;
     return m;
@@ -500,6 +512,26 @@ export function calculateFinalScores(G) {
   return scores;
 }
 
+// ── Meld index helpers ───────────────────────────────────────────────────────
+
+// Build derived views of G.melds for one team in a single pass.
+// Returns { seqBySuit: { 1:[], 2:[], 3:[], 4:[] }, runners: [] }
+// Each seq entry is { tp, mIdx, meld }; runner entries are the meld arrays.
+function _meldsByType(G, teamId) {
+    const seqBySuit = { 1: [], 2: [], 3: [], 4: [] };
+    const runners = [];
+    for (const tp of (G.teamPlayers[teamId] || [])) {
+        const melds = G.melds[tp] || [];
+        for (let mIdx = 0; mIdx < melds.length; mIdx++) {
+            const m = melds[mIdx];
+            if (!m) continue;
+            if (m[0] === 0) runners.push(m);
+            else seqBySuit[m[0]].push({ tp, mIdx, meld: m });
+        }
+    }
+    return { seqBySuit, runners };
+}
+
 // ── Input encoding ────────────────────────────────────────────────────────────
 
 // Encode one sequence meld into 16 floats starting at inp[off]
@@ -526,28 +558,33 @@ function encodeRunnerMeld(inp, off, m) {
     inp[off + 5] = m[1] !== 0 ? 1 : 0;
 }
 
+// Reusable scratch buffers — avoids GC pressure in the hot encoding path
+const _cgCounts    = new Int32Array(54);
+const _cgRankCounts = new Int32Array(14);
+const _cgWildCounts = new Int32Array(6);
+
 // Encode a card collection into floats at inp[off].
 // suit=0 (all-suit, 53 floats): 52 card-type counts/8 + joker count/4
 // suit=1-4 (per-suit, 18 floats): counts of cards of that suit by rank/8 + wild counts/4
 //   wilds (jokers + 2s of any suit) are included regardless of suit filter
 function encodeCardGroup(inp, off, cards, suit) {
     if (suit === 0) {
-        const counts = new Int32Array(54);
-        for (const c of cards) counts[c >= 104 ? 53 : c % 52]++;
-        for (let i = 0; i < 52; i++) inp[off + i] = counts[i] / 8;
-        inp[off + 52] = counts[53] / 4;
+        _cgCounts.fill(0);
+        for (const c of cards) _cgCounts[c >= 104 ? 53 : c % 52]++;
+        for (let i = 0; i < 52; i++) inp[off + i] = _cgCounts[i] / 8;
+        inp[off + 52] = _cgCounts[53] / 4;
     } else {
-        const rankCounts = new Int32Array(14);
-        const wildCounts = new Int32Array(6);
+        _cgRankCounts.fill(0);
+        _cgWildCounts.fill(0);
         for (const c of cards) {
             const s = getSuit(c), r = getRank(c);
-            if (s === 5) wildCounts[5]++;
-            else if (r === 2) wildCounts[s]++;  // suited 2s are wilds for any suit
-            else if (s === suit) rankCounts[r]++; // only count naturals of this suit
+            if (s === 5) _cgWildCounts[5]++;
+            else if (r === 2) _cgWildCounts[s]++;
+            else if (s === suit) _cgRankCounts[r]++;
         }
-        for (let r = 1; r <= 13; r++) inp[off + r - 1] = rankCounts[r] / 8;
-        for (let s = 1; s <= 4; s++) inp[off + 12 + s] = wildCounts[s] / 4;
-        inp[off + 17] = wildCounts[5] / 4;
+        for (let r = 1; r <= 13; r++) inp[off + r - 1] = _cgRankCounts[r] / 8;
+        for (let s = 1; s <= 4; s++) inp[off + 12 + s] = _cgWildCounts[s] / 4;
+        inp[off + 17] = _cgWildCounts[5] / 4;
     }
 }
 
@@ -579,8 +616,8 @@ export function encodeCandidateMeld(inp, off, parsedMeld, appendIdx) {
 
 // Build the input vector for one suit pass of the pickup or meld network.
 // suit=1-4: only seq melds of this suit are encoded; card groups show only cards of this suit.
-// candidates must already have appendIdx set relative to suit-filtered seq melds (see scoreAllCandidates).
-export function buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, layerKey, candidates, suit) {
+// meldIdx must be { my: _meldsByType(G,myTeam), opp: _meldsByType(G,oppTeam) }, pre-computed by caller.
+export function buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, layerKey, candidates, suit, meldIdx) {
     const _t0 = performance.now();
     const C = AI_CONFIG;
     const seqSlots       = C[layerKey + '_SEQ_SLOTS'];
@@ -590,18 +627,18 @@ export function buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2I
     let off = 0;
 
     // ── Sequence melds of this suit only ──────────────────────────────────────
-    const mySeqMelds  = (G.teamPlayers[myTeam]  || []).flatMap(tp => (G.melds[tp] || []).filter(m => m && m[0] === suit));
-    const oppSeqMelds = (G.teamPlayers[oppTeam] || []).flatMap(tp => (G.melds[tp] || []).filter(m => m && m[0] === suit));
+    const myIdx  = meldIdx ? meldIdx.my  : _meldsByType(G, myTeam);
+    const oppIdx = meldIdx ? meldIdx.opp : _meldsByType(G, oppTeam);
+    const mySeqMelds  = myIdx.seqBySuit[suit];
+    const oppSeqMelds = oppIdx.seqBySuit[suit];
     const mySlots = seqSlots >> 1, oppSlots = seqSlots - mySlots;
-    for (let i = 0; i < mySlots;  i++) { encodeSeqMeld(inp, off, mySeqMelds[i]  || null); off += C.SEQ_FEATURES; }
-    for (let i = 0; i < oppSlots; i++) { encodeSeqMeld(inp, off, oppSeqMelds[i] || null); off += C.SEQ_FEATURES; }
+    for (let i = 0; i < mySlots;  i++) { encodeSeqMeld(inp, off, mySeqMelds[i]  ? mySeqMelds[i].meld  : null); off += C.SEQ_FEATURES; }
+    for (let i = 0; i < oppSlots; i++) { encodeSeqMeld(inp, off, oppSeqMelds[i] ? oppSeqMelds[i].meld : null); off += C.SEQ_FEATURES; }
 
     // ── Runner melds (runners are suit-agnostic, include all) ─────────────────
-    const myRunMelds  = (G.teamPlayers[myTeam]  || []).flatMap(tp => (G.melds[tp] || []).filter(m => m && m[0] === 0));
-    const oppRunMelds = (G.teamPlayers[oppTeam] || []).flatMap(tp => (G.melds[tp] || []).filter(m => m && m[0] === 0));
     const myRSlots = runnerSlots >> 1, oppRSlots = runnerSlots - myRSlots;
-    for (let i = 0; i < myRSlots;  i++) { encodeRunnerMeld(inp, off, myRunMelds[i]  || null); off += C.RUNNER_FEATURES; }
-    for (let i = 0; i < oppRSlots; i++) { encodeRunnerMeld(inp, off, oppRunMelds[i] || null); off += C.RUNNER_FEATURES; }
+    for (let i = 0; i < myRSlots;  i++) { encodeRunnerMeld(inp, off, myIdx.runners[i]  || null); off += C.RUNNER_FEATURES; }
+    for (let i = 0; i < oppRSlots; i++) { encodeRunnerMeld(inp, off, oppIdx.runners[i] || null); off += C.RUNNER_FEATURES; }
 
     // ── All candidate slots packed ────────────────────────────────────────────
     for (let i = 0; i < candidateSlots; i++) {
@@ -620,7 +657,8 @@ export function buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2I
 
     // ── Scalars ───────────────────────────────────────────────────────────────
     const hs = pid => pid !== null ? (G.hands[pid] || []).length : 0;
-    const hasCleanTeam = tId => (G.teamPlayers[tId] || []).some(tp => G.melds[tp].some(m => getMeldLength(m) >= 7 && isMeldClean(m)));
+    const hasCleanIdx = idx => idx.runners.some(m => getMeldLength(m) >= 7 && isMeldClean(m)) ||
+        [1,2,3,4].some(s => idx.seqBySuit[s].some(e => getMeldLength(e.meld) >= 7 && isMeldClean(e.meld)));
     inp[off++] = hs(p)          / 22;
     inp[off++] = hs(opp1Id)     / 22;
     inp[off++] = hs(partnerId)  / 22;
@@ -630,14 +668,15 @@ export function buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2I
     inp[off++] = G.teamMortos[myTeam]  ? 1 : 0;
     inp[off++] = G.teamMortos[oppTeam] ? 1 : 0;
     inp[off++] = G.pots.length / 2;
-    inp[off++] = hasCleanTeam(myTeam)  ? 1 : 0;
-    inp[off++] = hasCleanTeam(oppTeam) ? 1 : 0;
+    inp[off++] = hasCleanIdx(myIdx)  ? 1 : 0;
+    inp[off++] = hasCleanIdx(oppIdx) ? 1 : 0;
     _timings.buildStateVector += performance.now() - _t0;
     return inp;
 }
 
 // Build the input vector for the discard network (all-suit, no melds/candidates).
-export function buildDiscardVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id) {
+// meldIdx must be { my, opp } pre-computed by caller to avoid redundant _meldsByType calls.
+export function buildDiscardVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, meldIdx) {
     const _t0 = performance.now();
     const C = AI_CONFIG;
     const inp = new Float32Array(C.DISCARD_INPUT_SIZE);
@@ -649,7 +688,10 @@ export function buildDiscardVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp
     encodeCardGroup(inp, off, G.knownCards[opp1Id] || [],                   0); off += C.CARDS_FEATURES_ALL;
     encodeCardGroup(inp, off, opp2Id ? (G.knownCards[opp2Id] || []) : [],   0); off += C.CARDS_FEATURES_ALL;
     const hs = pid => pid !== null ? (G.hands[pid] || []).length : 0;
-    const hasCleanTeam = tId => (G.teamPlayers[tId] || []).some(tp => G.melds[tp].some(m => getMeldLength(m) >= 7 && isMeldClean(m)));
+    const myIdxD  = meldIdx ? meldIdx.my  : _meldsByType(G, myTeam);
+    const oppIdxD = meldIdx ? meldIdx.opp : _meldsByType(G, oppTeam);
+    const hasCleanIdx = idx => idx.runners.some(m => getMeldLength(m) >= 7 && isMeldClean(m)) ||
+        [1,2,3,4].some(s => idx.seqBySuit[s].some(e => getMeldLength(e.meld) >= 7 && isMeldClean(e.meld)));
     inp[off++] = hs(p)          / 22;
     inp[off++] = hs(opp1Id)     / 22;
     inp[off++] = hs(partnerId)  / 22;
@@ -659,8 +701,8 @@ export function buildDiscardVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp
     inp[off++] = G.teamMortos[myTeam]  ? 1 : 0;
     inp[off++] = G.teamMortos[oppTeam] ? 1 : 0;
     inp[off++] = G.pots.length / 2;
-    inp[off++] = hasCleanTeam(myTeam)  ? 1 : 0;
-    inp[off++] = hasCleanTeam(oppTeam) ? 1 : 0;
+    inp[off++] = hasCleanIdx(myIdxD)  ? 1 : 0;
+    inp[off++] = hasCleanIdx(oppIdxD) ? 1 : 0;
     _timings.buildDiscardVector += performance.now() - _t0;
     return inp;
 }
@@ -718,16 +760,15 @@ export function setScoreFunctions(scoreAll, scoreDisc) {
 // suit-specific input vector, runs one forward pass, accumulates scores.
 // Returns Float32Array[n] of summed scores across suits.
 export function scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
-                                    candidates, weights, topDiscard, layerKey) {
+                                    candidates, weights, topDiscard, layerKey, meldIdx) {
     if (_scoreAllCandidates) return _scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, weights, topDiscard, layerKey);
     const suits = suitsToEvaluate(topDiscard);
     const maxSlots = AI_CONFIG[layerKey + '_CANDIDATES'];
     const layerSizes = AI_CONFIG[layerKey + '_LAYER_SIZES'];
     const totals = new Float32Array(candidates.length);
+    const idx = meldIdx || { my: _meldsByType(G, myTeam), opp: _meldsByType(G, oppTeam) };
     for (const suit of suits) {
-        const suitSeqMelds = (G.teamPlayers[myTeam] || []).flatMap(tp =>
-            (G.melds[tp] || []).map((meld, mIdx) => ({ tp, mIdx, meld }))
-        ).filter(e => e.meld && e.meld[0] === suit);
+        const suitSeqMelds = idx.my.seqBySuit[suit];
 
         // Filter candidates relevant to this suit, recompute appendIdx, slice to maxSlots
         const suitCands = [];
@@ -746,7 +787,7 @@ export function scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp
         }
         if (suitCands.length === 0) continue;
 
-        const inp = buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, layerKey, suitCands, suit);
+        const inp = buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, layerKey, suitCands, suit, idx);
         const scores = forwardPass(inp, weights, layerSizes);
         for (let i = 0; i < suitCands.length; i++) totals[suitIndices[i]] += scores[i];
     }
@@ -754,22 +795,24 @@ export function scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp
 }
 
 // Score discard candidates (all-suit, one pass, returns Float32Array[DISCARD_CLASSES]).
-export function scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, weights) {
+export function scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, weights, meldIdx) {
     if (_scoreDiscard) return _scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, weights);
-    const inp = buildDiscardVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id);
+    const inp = buildDiscardVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, meldIdx);
     return forwardPass(inp, weights, AI_CONFIG.DISCARD_LAYER_SIZES);
 }
 
 export function getAllValidMelds(handCards, rules, mustInclude = null) {
     const _t0 = performance.now();
-    let validCombos = [];
-    let seenSigs = new Set();
+    const validCombos = [];
+    const seenSigs = Object.create(null); // plain object faster than Set for string keys
 
     const tryCombo = (arr) => {
-        if (buildMeld(arr, rules)) {
-            const sig = arr.slice().sort((a, b) => a - b).join(',');
-            if (!seenSigs.has(sig)) { seenSigs.add(sig); validCombos.push(arr); }
-        }
+        if (!buildMeld(arr, rules)) return;
+        // Build a compact key: sort card types (c % 52, joker=52) into a Uint8Array and join
+        const key = arr.map(c => c >= 104 ? 52 : c % 52).sort((a, b) => a - b).join(',');
+        if (seenSigs[key]) return;
+        seenSigs[key] = 1;
+        validCombos.push(arr);
     };
 
     let wilds = [];
@@ -882,6 +925,9 @@ export function planTurn(G, p, DNA) {
     if (G.deck.length === 0 && G.pots.length === 0)
         return [{ move: 'declareExhausted', args: [] }];
 
+    // Pre-compute meld index once per turn — shared across all scoreAllCandidates / scoreDiscard calls
+    const turnMeldIdx = { my: _meldsByType(G, myTeam), opp: _meldsByType(G, oppTeam) };
+
     const drawFakeMeld = topDiscard !== null ? (() => {
         const r = getRank(topDiscard), s = getSuit(topDiscard);
         const fm = new Array(16).fill(0);
@@ -950,7 +996,7 @@ export function planTurn(G, p, DNA) {
     } else {
         const n1 = Math.min(pickupCands.length, AI_CONFIG.MAX_PICKUP);
         const cands1 = pickupCands.slice(0, n1);
-        const pickupScores = scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, cands1, dnaPickup, topDiscard, 'PICKUP');
+        const pickupScores = scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, cands1, dnaPickup, topDiscard, 'PICKUP', turnMeldIdx);
         let bestPickup = 0;
         for (let i = 1; i < n1; i++) if (pickupScores[i] > pickupScores[bestPickup]) bestPickup = i;
         pickupMove = cands1[bestPickup];
@@ -996,7 +1042,10 @@ export function planTurn(G, p, DNA) {
     const allMeldCands = [...appendCands, ...meldCands];
     const planMoves = [];
     if (allMeldCands.length > 0) {
-        const meldScores = scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, allMeldCands, dnaMeld, topDiscard, 'MELD');
+        // Refresh meld index after pickup may have added melds
+        turnMeldIdx.my  = _meldsByType(G, myTeam);
+        turnMeldIdx.opp = _meldsByType(G, oppTeam);
+        const meldScores = scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, allMeldCands, dnaMeld, topDiscard, 'MELD', turnMeldIdx);
         for (let i = 0; i < allMeldCands.length; i++) planMoves.push({ ...allMeldCands[i], score: meldScores[i] });
         planMoves.sort((a, b) => b.score - a.score);
     }
@@ -1031,7 +1080,7 @@ export function planTurn(G, p, DNA) {
     let discardMove = null;
     if (remainingHand.length > 0) {
         // Discard net outputs DISCARD_CLASSES scores; map each hand card to its class index (card % 52, joker = 52)
-        const discardScores = scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, dnaDiscard);
+        const discardScores = scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, dnaDiscard, turnMeldIdx);
         let bestCard = remainingHand[0], bestScore = -Infinity;
         for (const card of remainingHand) {
             const cls = card >= 104 ? 52 : card % 52;
