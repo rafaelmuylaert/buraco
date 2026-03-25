@@ -20,7 +20,9 @@ class ErrorBoundary extends React.Component {
 // Inlined dependencies from game.js to resolve preview environment import errors
 const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
 const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
-const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15]; // Pre-mapped points for slots 2-15
+// Seq format: [A-low, A-high, nat2, 3, 4..K, foreignWildSuit, nat2-wild-count]  (16 elements, indices 0-15)
+// Runner format: [rank, ♠cnt, ♥cnt, ♦cnt, ♣cnt, wildSuit]  (6 elements)
+const SEQ_POINTS_NEW = [15, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10]; // indices 0-13 → A-low,A-high,nat2,3..K
 
 function sortCards(cards) {
   const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
@@ -30,45 +32,43 @@ function sortCards(cards) {
   });
 }
 
+// Seq: clean = m[14]===0 (no foreign wild) && m[15]===0 (no nat2-wild)
+// Runner: clean = m[5]===0
 function isMeldClean(m) {
     if (!m || m.length === 0) return false;
-    return m[1] === 0; // Unified: wildSuit is always at index 1!
+    if (m.length === 6) return m[5] === 0; // runner
+    return m[14] === 0 && m[15] === 0;     // seq
 }
 
 function getMeldLength(m) {
     if (!m || m.length === 0) return 0;
-    if (m[0] !== 0) { // Sequence
-        let c = 0;
-        for (let r = 2; r <= 15; r++) c += m[r];
-        return c + (m[1] !== 0 ? 1 : 0); // Add 1 if there's a wild
+    if (m.length === 6) { // runner
+        return m[1] + m[2] + m[3] + m[4] + (m[5] !== 0 ? 1 : 0);
     }
-    // Runner: [0, wildSuit, rank, spades, hearts, diamonds, clubs]
-    return m[3] + m[4] + m[5] + m[6] + (m[1] !== 0 ? 1 : 0);
+    // seq: m[0]=A-low, m[1]=A-high, m[2]=nat2, m[3..13]=3..K, m[14]=foreignWildSuit, m[15]=nat2-wild
+    let c = m[0] + m[1];
+    for (let r = 2; r <= 13; r++) c += m[r];
+    return c + m[15] + (m[14] !== 0 ? 1 : 0);
 }
 
 function calculateMeldPoints(meld, rules) {
     let pts = 0;
     if (!meld || meld.length === 0) return 0;
-
-    const isSeq = meld[0] !== 0;
+    const isSeq = meld.length !== 6;
     const isClean = isMeldClean(meld);
     const length = getMeldLength(meld);
     const isCanasta = length >= 7;
-    
     if (isSeq) {
-        for(let r = 2; r <= 15; r++) {
-            pts += meld[r] * SEQ_POINTS[r];
-        }
-        if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20); // wildSuit at m[1]
+        for (let r = 0; r <= 13; r++) pts += meld[r] * SEQ_POINTS_NEW[r];
+        pts += meld[15] * 20;
+        if (meld[14] !== 0) pts += (meld[14] === 5 ? 50 : 20);
     } else {
-        const rank = meld[2];
-        const nats = meld[3] + meld[4] + meld[5] + meld[6];
+        const rank = meld[0];
+        const nats = meld[1] + meld[2] + meld[3] + meld[4];
         const rankPt = (rank === 1) ? 15 : (rank >= 8 ? 10 : (rank === 2 ? 20 : 5));
         pts += nats * rankPt;
-        
-        if (meld[1] !== 0) pts += (meld[1] === 5 ? 50 : 20); // wildSuit at m[1]
+        if (meld[5] !== 0) pts += (meld[5] === 5 ? 50 : 20);
     }
-
     if (isCanasta) {
         pts += isClean ? 200 : 100;
         if (rules?.largeCanasta && isClean) {
@@ -88,45 +88,50 @@ function intToCardObj(c) {
     return { rank: s === 5 ? 'JOKER' : getRankChar(r), suit: getSuitChar(s), id: c };
 }
 
-// 🧠 NEW STRUCTURE:
-// Sequence: [suit, wildSuit, A, 2, 3, 4, 5, 6, 7, 8, 9, 10, J, Q, K, High_A]
-// Runner:   [0, wildSuit, rank, spades_cnt, hearts_cnt, diamonds_cnt, clubs_cnt]
-function meldToCards(m) {
+// Seq format: [A-low, A-high, nat2, 3..K, foreignWildSuit, nat2-wild-count] (16 elements)
+// Runner format: [rank, ♠cnt, ♥cnt, ♦cnt, ♣cnt, wildSuit] (6 elements)
+function meldToCards(m, suit) {
     let cards = [];
-    if (m[0] !== 0) { // Sequence
-        let suit = m[0];
-        let wildSuit = m[1];
-        let min = 16, max = 0;
-        for (let r = 2; r <= 15; r++) {
-            if (m[r] === 1) { if (r < min) min = r; if (r > max) max = r; }
-        }
-        let wildPlaced = false;
+    if (m.length !== 6) { // Sequence
+        // suit is stored externally (from G.table[team][0][suit]); passed in as param
+        const foreignWildSuit = m[14];
+        const hasNat2Wild = m[15] > 0;
+        // Build positional array: pos 0=A-low, 1=A-high, 2=nat2, 3..13=3..K
+        // Find min/max occupied positions
+        let min = 15, max = -1;
+        for (let r = 0; r <= 13; r++) { if (m[r]) { if (r < min) min = r; if (r > max) max = r; } }
+        if (min > max) return cards;
+        let wildUsed = false;
         for (let r = min; r <= max; r++) {
-            if (m[r] === 1) {
-                let rank = r === 15 ? 1 : r - 1;
+            if (m[r]) {
+                // rank: 0→A(1), 1→A(1) high, 2→2, 3→3..13→K
+                const rank = r === 0 ? 1 : r === 1 ? 1 : r;
                 cards.push({ rank: getRankChar(rank), suit: getSuitChar(suit), id: `n-${r}` });
             } else {
-                cards.push({ rank: wildSuit === 5 ? 'JOKER' : '2', suit: wildSuit === 5 ? '★' : getSuitChar(wildSuit), id: `w-${r}` });
-                wildPlaced = true;
+                // gap filled by wild
+                const ws = foreignWildSuit !== 0 ? foreignWildSuit : (hasNat2Wild ? suit : 0);
+                cards.push({ rank: ws === 5 ? 'JOKER' : '2', suit: ws === 5 ? '★' : getSuitChar(ws || suit), id: `w-${r}` });
+                wildUsed = true;
             }
         }
-        if (wildSuit !== 0 && !wildPlaced) {
-            // Unused wild logic (usually happens while building before final validation)
-            if (max < 14) cards.push({ rank: wildSuit === 5 ? 'JOKER' : '2', suit: wildSuit === 5 ? '★' : getSuitChar(wildSuit), id: `w-edge` });
-            else cards.unshift({ rank: wildSuit === 5 ? 'JOKER' : '2', suit: wildSuit === 5 ? '★' : getSuitChar(wildSuit), id: `w-edge` });
-        }
-    } else { // Runner
-        let wildSuit = m[1];
-        let rank = m[2];
-        for (let s = 1; s <= 4; s++) {
-            // Suit counts start at index 3
-            for (let i = 0; i < m[s + 2]; i++) {
-                cards.push({ rank: getRankChar(rank), suit: getSuitChar(s), id: `r-${s}-${i}` }); 
+        // Append any wild not placed in a gap (edge wild)
+        if (!wildUsed) {
+            if (foreignWildSuit !== 0) {
+                const ws = foreignWildSuit;
+                const wCard = { rank: ws === 5 ? 'JOKER' : '2', suit: ws === 5 ? '★' : getSuitChar(ws), id: 'w-edge' };
+                if (max < 13) cards.push(wCard); else cards.unshift(wCard);
+            } else if (hasNat2Wild) {
+                const wCard = { rank: '2', suit: getSuitChar(suit), id: 'w-edge' };
+                if (max < 13) cards.push(wCard); else cards.unshift(wCard);
             }
         }
-        if (wildSuit !== 0) {
-            cards.push({ rank: wildSuit === 5 ? 'JOKER' : '2', suit: wildSuit === 5 ? '★' : getSuitChar(wildSuit), id: `w-run` });
-        }
+    } else { // Runner: [rank, ♠cnt, ♥cnt, ♦cnt, ♣cnt, wildSuit]
+        const rank = m[0], wildSuit = m[5];
+        for (let s = 1; s <= 4; s++)
+            for (let i = 0; i < m[s]; i++)
+                cards.push({ rank: getRankChar(rank), suit: getSuitChar(s), id: `r-${s}-${i}` });
+        if (wildSuit !== 0)
+            cards.push({ rank: wildSuit === 5 ? 'JOKER' : '2', suit: wildSuit === 5 ? '★' : getSuitChar(wildSuit), id: 'w-run' });
     }
     return cards;
 }
@@ -435,7 +440,7 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
       const status = isCanasta ? (isMeldClean(meldGroup) ? 'clean' : 'dirty') : null;
       const points = calculateMeldPoints(meldGroup, G.rules);
       const borderColor = status === 'clean' ? '#ffd700' : (status === 'dirty' ? '#c0c0c0' : 'transparent');
-      const renderedCards = meldToCards(meldGroup);
+      const renderedCards = meldToCards(meldGroup, suit);
       const hasNewCards = !!newMeldCards[key];
       const newCount = newMeldCards[key] || 0;
       return (
