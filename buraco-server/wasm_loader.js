@@ -88,12 +88,12 @@ function wasmScoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
     const suits = suitsToEvaluate(topDiscard);
     for (let si = 0; si < suits.length; si++) {
         const suit = suits[si];
-        const suitSeqMelds = (G.teamPlayers[myTeam] || []).flatMap(tp =>
-            (G.melds[tp] || []).map((meld, mIdx) => ({ tp, mIdx, meld }))
-        ).filter(e => e.meld && e.meld[0] === suit);
+        const suitSeqMelds = (G.table[myTeam][0][suit] || []).map((meld, index) => ({ meld, index }));
         const suitCands = candidates.map(cand => {
             if (cand.move !== 'appendToMeld') return cand;
-            const suitIdx = suitSeqMelds.findIndex(e => e.tp === cand.args[0] && e.mIdx === cand.args[1]);
+            const t = cand.args[0];
+            if (!t || t.type !== 'seq' || t.suit !== suit) return { ...cand, appendIdx: 0 };
+            const suitIdx = suitSeqMelds.findIndex(e => e.index === t.index);
             return { ...cand, appendIdx: suitIdx >= 0 ? suitIdx + 1 : 0 };
         });
         const inp = buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, layerKey, suitCands, suit);
