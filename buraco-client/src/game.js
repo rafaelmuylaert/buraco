@@ -105,7 +105,7 @@ export function getMeldLength(m, isSeq) {
 
 // Seq gap check: positional values A-low=0, nat2=2, 3=3 ... K=13, A-high=14
 // pos(i): 0→m[0], 1→0 (unused), 2..13→m[i], 14→m[1]
-const _pos = (m, i) => i === 0 ? m[0] : i === 14 ? m[1] : i === 1 ? 0 : m[i];
+const _pos = (m, i) => i === 1 ? m[0] : i === 14 ? m[1] : m[i];
 const _checkGaps = (m) => {
     let min, max;
     if (m[0]) { min = 0; }
@@ -114,7 +114,7 @@ const _checkGaps = (m) => {
     else { for (max = 13; max >= 2 && !m[max]; max--); }
     if (min > max) return 0;
     let gaps = 0;
-    for (let i = min; i <= max; i++) if (i !== 1 && !_pos(m, i)) gaps++;
+    for (let i = min; i <= max; i++) if (!_pos(m, i)) gaps++;
     return gaps;
 };
 
@@ -201,7 +201,11 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
     // A same-suit nat-2 acting as wild should be demoted back to m[2] only when
     // rank 3 is present (so the 2 naturally belongs next to it) and there are no
     // other gaps that actually need filling.
-    if (m[15] === 1 && m[3] === 1 && gaps === 0) { m[2] = 1; m[15] = 0; }
+    if (m[15] === 1) {
+        if (m[3] === 1 && (gaps === 0 || m[0] === 1)) {
+            m[2] = 1; m[15] = 0;
+        }
+    }
     return m;
 }
 
