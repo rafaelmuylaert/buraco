@@ -1092,6 +1092,8 @@ export function planTurn(G, p, DNA) {
                     }
                     for (const cards of cardSets) {
                         const parsed = appendCardsToMeld(meld, cards, G.rules, suit);
+                        if (!parsed) continue;
+                        const handUsed = cards.filter(c => c !== topDiscard);
                         const sig = `pickup-seq-${suit}-${mIdx}-${cards.map(c => c >= 104 ? 52 : c % 52).sort().join(',')}`;
                         if (seenSigs.has(sig)) continue;
                         seenSigs.add(sig);
