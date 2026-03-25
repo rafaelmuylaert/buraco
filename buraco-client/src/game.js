@@ -248,7 +248,7 @@ export function buildMeld(cardIds, rules) {
     return cardsToRunnerSlots(cardIds, rules);
 }
 
-export function appendCardsToMeld(meld, cards) {
+export function appendCardsToMeld(meld, cards, rules) {
     if (meld.length === 6) return cardsToRunnerSlots(cards, meld, rules);
     return cardsToSeqSlots(cards, meld);
 }
