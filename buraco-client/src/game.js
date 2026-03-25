@@ -614,7 +614,7 @@ function _meldsByType(G, teamId) {
 // [14]    = wildForeign present (0/1)
 // [15]    = wildNatural present (0/1)
 function encodeMeld(inp, off, m) {
-    if (!m) { for (let i = 0; i < m.length; i++) inp[off + i] = 0; return; }
+    if (!m) return;
     for (let i = 0; i < m.length; i++) inp[off + i] = m[i];
 }
 
