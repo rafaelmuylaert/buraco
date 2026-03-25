@@ -192,38 +192,47 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
 
   // Track melds snapshot at end of my last turn to highlight opponent additions
   const meldSnapshotRef = React.useRef(null);
-  const [newMeldCards, setNewMeldCards] = useState({}); // { 'p-meldIdx': count }
+  const [newMeldCards, setNewMeldCards] = useState({}); // { 'runner-N': count, 'seq-SUIT-N': count }
 
-  // When it becomes my turn, diff melds against snapshot; when it ends, take snapshot
+  const snapshotTable = (table) => {
+    const snap = {};
+    for (const teamId of ['team0', 'team1']) {
+      snap[teamId] = { seqs: {}, runners: [] };
+      for (let s = 1; s <= 4; s++)
+        snap[teamId].seqs[s] = (table[teamId][0][s] || []).map(m => [...m]);
+      snap[teamId].runners = (table[teamId][1] || []).map(m => [...m]);
+    }
+    return snap;
+  };
+
   const wasMyTurnRef = React.useRef(false);
   useEffect(() => {
     if (!G || !ctx || gameover) return;
     if (isMyTurn && !wasMyTurnRef.current) {
-      // Just became my turn — diff melds against snapshot
       if (meldSnapshotRef.current) {
         const highlights = {};
-        Object.keys(G.melds).forEach(p => {
-          if (p === playerID) return;
-          const prev = meldSnapshotRef.current[p] || [];
-          const curr = G.melds[p] || [];
-          curr.forEach((meld, mIdx) => {
-            const prevLen = prev[mIdx] ? getMeldLength(prev[mIdx]) : 0;
+        const oppTeamId = G.teams[playerID] === 'team0' ? 'team1' : 'team0';
+        const prev = meldSnapshotRef.current[oppTeamId];
+        const curr = G.table[oppTeamId];
+        for (let s = 1; s <= 4; s++) {
+          const prevSeqs = prev.seqs[s] || [];
+          const currSeqs = curr[0][s] || [];
+          currSeqs.forEach((meld, i) => {
+            const prevLen = prevSeqs[i] ? getMeldLength(prevSeqs[i]) : 0;
             const currLen = getMeldLength(meld);
-            if (currLen > prevLen) highlights[`${p}-${mIdx}`] = currLen - prevLen;
+            if (currLen > prevLen) highlights[`seq-${s}-${i}`] = currLen - prevLen;
           });
-          if (curr.length > prev.length) {
-            for (let mIdx = prev.length; mIdx < curr.length; mIdx++)
-              highlights[`${p}-${mIdx}`] = getMeldLength(curr[mIdx]);
-          }
+        }
+        (curr[1] || []).forEach((meld, i) => {
+          const prevLen = prev.runners[i] ? getMeldLength(prev.runners[i]) : 0;
+          const currLen = getMeldLength(meld);
+          if (currLen > prevLen) highlights[`runner-${i}`] = currLen - prevLen;
         });
         setNewMeldCards(highlights);
       }
     }
     if (!isMyTurn && wasMyTurnRef.current) {
-      // My turn just ended — snapshot current melds for ALL players
-      const snapshot = {};
-      Object.keys(G.melds).forEach(p => { snapshot[p] = (G.melds[p] || []).map(m => [...m]); });
-      meldSnapshotRef.current = snapshot;
+      meldSnapshotRef.current = snapshotTable(G.table);
       setNewMeldCards({});
     }
     wasMyTurnRef.current = isMyTurn;
@@ -386,9 +395,10 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
     for (let i = 0; i < G.discardPile.length; i += cardsPerDiscardRow) chunkedDiscard.push(G.discardPile.slice(i, i + cardsPerDiscardRow).map(intToCardObj));
   }
 
-  const calcTeamTablePoints = (teamPlayers) => {
+  const calcTeamTablePoints = (teamId) => {
     let total = 0;
-    teamPlayers.forEach(p => (G.melds[p] || []).forEach(m => total += calculateMeldPoints(m, G.rules)));
+    Object.values(G.table[teamId][0]).forEach(arr => arr.forEach(m => total += calculateMeldPoints(m, G.rules)));
+    (G.table[teamId][1] || []).forEach(m => total += calculateMeldPoints(m, G.rules));
     return total;
   };
 
@@ -413,29 +423,32 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
     }
   };
 
-  const renderTeamTable = (teamPlayers, title, isMyTeam) => {
-    // Split melds into runners and sequences for layout (issue 4)
-    const allMelds = teamPlayers.flatMap(p => (G.melds[p] || []).map((meldGroup, index) => ({ p, index, meldGroup })));
-    const runners = allMelds.filter(x => x.meldGroup[0] === 0);
-    const sequences = allMelds.filter(x => x.meldGroup[0] !== 0);
+  const renderTeamTable = (teamId, title, isMyTeam) => {
+    const teamTable = G.table[teamId];
+    const runners = (teamTable[1] || []).map((meldGroup, index) => ({ key: `runner-${index}`, index, meldGroup, isRunner: true }));
+    const sequences = [1,2,3,4].flatMap(suit =>
+      (teamTable[0][suit] || []).map((meldGroup, index) => ({ key: `seq-${suit}-${index}`, index, suit, meldGroup, isRunner: false }))
+    );
 
-    const renderMeld = ({ p, index, meldGroup }) => {
+    const renderMeld = ({ key, index, suit, meldGroup, isRunner }) => {
       const isCanasta = getMeldLength(meldGroup) >= 7;
       const status = isCanasta ? (isMeldClean(meldGroup) ? 'clean' : 'dirty') : null;
       const points = calculateMeldPoints(meldGroup, G.rules);
       const borderColor = status === 'clean' ? '#ffd700' : (status === 'dirty' ? '#c0c0c0' : 'transparent');
-      const isRunner = meldGroup[0] === 0;
       const renderedCards = meldToCards(meldGroup);
-      const hasNewCards = !!newMeldCards[`${p}-${index}`];
-      const newCount = newMeldCards[`${p}-${index}`] || 0;
+      const hasNewCards = !!newMeldCards[key];
+      const newCount = newMeldCards[key] || 0;
       return (
-        <div key={`${p}-${index}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div onClick={() => {
               if (!isMyTurn || !isMyTeam) return;
+              const target = isRunner
+                  ? { type: 'runner', index }
+                  : { type: 'seq', suit, index };
               if (!G.hasDrawn && isClosedDiscard && G.discardPile.length > 0) {
-                moves.pickUpDiscard(selectedCardIds(), { type: 'append', player: p, index }); setSelectedCards([]);
+                moves.pickUpDiscard(selectedCardIds(), { type: 'append', meldTarget: target }); setSelectedCards([]);
               } else if (selectedCards.length > 0) {
-                moves.appendToMeld(p, index, selectedCardIds()); setSelectedCards([]);
+                moves.appendToMeld(target, selectedCardIds()); setSelectedCards([]);
               }
             }}
             style={{ position: 'relative', display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: hasNewCards ? '2px solid #50fa7b' : `2px solid ${borderColor}`, boxShadow: hasNewCards ? '0 0 10px rgba(80,250,123,0.5)' : 'none', cursor: (isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default' }}>
@@ -459,7 +472,7 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
       <div style={{ background: isMyTeam ? 'rgba(77, 166, 255, 0.1)' : 'rgba(255, 77, 77, 0.1)', padding: '15px', borderRadius: '10px', minHeight: '120px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <h3 style={{ margin: 0, color: isMyTeam ? '#4da6ff' : '#ff4d4d' }}>{title}</h3>
-          <span style={{ background: 'rgba(0,0,0,0.5)', padding: '5px 10px', borderRadius: '20px', fontWeight: 'bold', color: '#ffd700', flexShrink: 0, whiteSpace: 'nowrap', fontSize: '0.85em' }}>⭐ {calcTeamTablePoints(teamPlayers)} pts</span>
+          <span style={{ background: 'rgba(0,0,0,0.5)', padding: '5px 10px', borderRadius: '20px', fontWeight: 'bold', color: '#ffd700', flexShrink: 0, whiteSpace: 'nowrap', fontSize: '0.85em' }}>⭐ {calcTeamTablePoints(teamId)} pts</span>
         </div>
         {/* Runners float left; sequences wrap and fill space beside AND below (issue 4) */}
         <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
@@ -616,8 +629,8 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '25px', overflowY: 'auto', overflowX: 'hidden', paddingRight: '10px', paddingBottom: '20px' }}>
-        <div style={{ flexShrink: 0 }}>{renderTeamTable(oppTeamPlayers, "Mesa Deles", false)}</div>
-        <div style={{ flexShrink: 0 }}>{renderTeamTable(myTeamPlayers, "Nossa Mesa", true)}</div>
+        <div style={{ flexShrink: 0 }}>{renderTeamTable(oppTeam, "Mesa Deles", false)}</div>
+        <div style={{ flexShrink: 0 }}>{renderTeamTable(myTeam, "Nossa Mesa", true)}</div>
         <div style={{ flexShrink: 0 }}>
           <h2 style={{ fontSize: '1.2em', margin: '0 0 10px 0' }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
