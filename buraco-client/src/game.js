@@ -114,7 +114,7 @@ const _checkGaps = (m) => {
     else { for (max = 13; max >= 2 && !m[max]; max--); }
     if (min > max) return 0;
     let gaps = 0;
-    for (let i = min; i <= max; i++) if (!_pos(m, i)) gaps++;
+    for (let i = min; i <= max; i++) if (i !== 1 && !_pos(m, i)) gaps++;
     return gaps;
 };
 
