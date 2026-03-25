@@ -1088,16 +1088,15 @@ export function planTurn(G, p, DNA) {
             const handCards = G.hands[p];
             for (let suit = 1; suit <= 4; suit++) {
                 (G.table[myTeam][0][suit] || []).forEach((meld, mIdx) => {
-                    // Try topCard alone, then topCard + each subset of hand cards
-                    const cardSets = [[topCard]];
+                    const cardSets = [[topDiscard]];
                     for (const hc of handCards) {
                         if (getSuit(hc) === suit || getRank(hc) === 2 || getSuit(hc) === 5)
-                            cardSets.push([hc, topCard], [topCard, hc]);
+                            cardSets.push([hc, topDiscard], [topDiscard, hc]);
                     }
                     for (const cards of cardSets) {
                         const parsed = appendCardsToMeld(meld, cards);
                         if (!parsed) continue;
-                        const handUsed = cards.filter(c => c !== topCard);
+                        const handUsed = cards.filter(c => c !== topDiscard);
                         const sig = `pickup-seq-${suit}-${mIdx}-${cards.map(c => c >= 104 ? 52 : c % 52).sort().join(',')}`;
                         if (seenSigs.has(sig)) continue;
                         seenSigs.add(sig);
@@ -1106,15 +1105,15 @@ export function planTurn(G, p, DNA) {
                 });
             }
             (G.table[myTeam][1] || []).forEach((meld, mIdx) => {
-                const cardSets = [[topCard]];
+                const cardSets = [[topDiscard]];
                 for (const hc of handCards) {
-                    if (getRank(hc) === getRank(topCard) || getRank(hc) === 2 || getSuit(hc) === 5)
-                        cardSets.push([hc, topCard]);
+                    if (getRank(hc) === getRank(topDiscard) || getRank(hc) === 2 || getSuit(hc) === 5)
+                        cardSets.push([hc, topDiscard]);
                 }
                 for (const cards of cardSets) {
                     const parsed = appendCardsToMeld(meld, cards);
                     if (!parsed) continue;
-                    const handUsed = cards.filter(c => c !== topCard);
+                    const handUsed = cards.filter(c => c !== topDiscard);
                     const sig = `pickup-runner-${mIdx}-${cards.map(c => c >= 104 ? 52 : c % 52).sort().join(',')}`;
                     if (seenSigs.has(sig)) continue;
                     seenSigs.add(sig);
