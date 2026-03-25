@@ -1,4 +1,4 @@
-﻿// Cards: 0-51 = normal (two copies each), 54 = Joker (two copies). Card 53 unused.
+// Cards: 0-51 = normal (two copies each), 54 = Joker (two copies). Card 53 unused.
 export const getSuit = c => c >= 104 ? 5 : Math.floor((c % 52) / 13) + 1; // 1:♠, 2:♥, 3:♦, 4:♣, 5:★
 export const getRank = c => c >= 104 ? 2 : (c % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:K
 
@@ -1144,6 +1144,8 @@ export function planTurn(G, p, DNA) {
         (G.table[myTeam][0][suit] || []).forEach((meld, mIdx) => {
             for (const card of postHand) {
                 const parsed = appendCardsToMeld(meld, [card], G.rules, suit);
+                if (!parsed) continue;
+                const sig = `seq-${suit}-${mIdx}-${card >= 104 ? 52 : card % 52}`;
                 if (appendSigs.has(sig)) continue;
                 appendSigs.add(sig);
                 appendCands.push({ move: 'appendToMeld', args: [{ type: 'seq', suit, index: mIdx }, [card]], cards: [card], parsedMeld: parsed, appendIdx: 0 });
@@ -1152,7 +1154,9 @@ export function planTurn(G, p, DNA) {
     }
     (G.table[myTeam][1] || []).forEach((meld, mIdx) => {
         for (const card of postHand) {
-            const parsed = appendCardsToMeld(meld, [card], G.rules, 0); // runner: no suit
+            const parsed = appendCardsToMeld(meld, [card], G.rules, 0);
+            if (!parsed) continue;
+            const sig = `runner-${mIdx}-${card >= 104 ? 52 : card % 52}`;
             if (appendSigs.has(sig)) continue;
             appendSigs.add(sig);
             appendCands.push({ move: 'appendToMeld', args: [{ type: 'runner', index: mIdx }, [card]], cards: [card], parsedMeld: parsed, appendIdx: 0 });
