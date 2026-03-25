@@ -1097,12 +1097,6 @@ export function planTurn(G, p, DNA) {
 
     // ── Phase 2: Melds & Appends ──────────────────────────────────────────────
     const postHand = G.hands[p];
-    myTeamSeqMelds.length = 0;
-    for (let suit = 1; suit <= 4; suit++) {
-        (G.table[myTeam][0][suit] || []).forEach((meld, mIdx) => {
-            myTeamSeqMelds.push({ suit, mIdx, meld });
-        });
-    }
 
     const appendCands = []; const appendSigs = new Set();
     for (let suit = 1; suit <= 4; suit++) {
@@ -1113,8 +1107,7 @@ export function planTurn(G, p, DNA) {
                 const sig = `seq-${suit}-${mIdx}-${card >= 104 ? 52 : card % 52}`;
                 if (appendSigs.has(sig)) continue;
                 appendSigs.add(sig);
-                const seqPos = myTeamSeqMelds.findIndex(e => e.suit === suit && e.mIdx === mIdx) + 1;
-                appendCands.push({ move: 'appendToMeld', args: [{ type: 'seq', suit, index: mIdx }, [card]], cards: [card], parsedMeld: parsed, appendIdx: seqPos });
+                appendCands.push({ move: 'appendToMeld', args: [{ type: 'seq', suit, index: mIdx }, [card]], cards: [card], parsedMeld: parsed, appendIdx: 0 });
             }
         });
     }
