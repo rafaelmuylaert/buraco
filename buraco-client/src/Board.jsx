@@ -93,36 +93,47 @@ function intToCardObj(c) {
 function meldToCards(m, suit) {
     let cards = [];
     if (m.length !== 6) { // Sequence
-        // suit is stored externally (from G.table[team][0][suit]); passed in as param
         const foreignWildSuit = m[14];
         const hasNat2Wild = m[15] > 0;
-        // Build positional array: pos 0=A-low, 1=A-high, 2=nat2, 3..13=3..K
-        // Find min/max occupied positions
-        let min = 15, max = -1;
-        for (let r = 0; r <= 13; r++) { if (m[r]) { if (r < min) min = r; if (r > max) max = r; } }
-        if (min > max) return cards;
+        // The seq array has two disjoint regions that can't be bridged by iteration:
+        // - pos 0 = A-low (sits before 3, not contiguous with pos 2 in rank terms)
+        // - pos 1 = A-high (sits after K, not contiguous with pos 2 either)
+        // - pos 2 = nat2, pos 3..13 = 3..K
+        // Build the card list in rank order: A-low, [wild gap?], 3..K run, [wild gap?], A-high
+        // Find the contiguous run in the 3..K region (pos 2-13)
+        let runMin = 14, runMax = -1;
+        for (let r = 2; r <= 13; r++) { if (m[r]) { if (r < runMin) runMin = r; if (r > runMax) runMax = r; } }
+
         let wildUsed = false;
-        for (let r = min; r <= max; r++) {
-            if (m[r]) {
-                // rank: 0→A(1), 1→A(1) high, 2→2, 3→3..13→K
-                const rank = r === 0 ? 1 : r === 1 ? 1 : r;
-                cards.push({ rank: getRankChar(rank), suit: getSuitChar(suit), id: `n-${r}` });
-            } else {
-                // gap filled by wild
-                const ws = foreignWildSuit !== 0 ? foreignWildSuit : (hasNat2Wild ? suit : 0);
-                cards.push({ rank: ws === 5 ? 'JOKER' : '2', suit: ws === 5 ? '★' : getSuitChar(ws || suit), id: `w-${r}` });
-                wildUsed = true;
+        const wildCard = () => {
+            const ws = foreignWildSuit !== 0 ? foreignWildSuit : suit;
+            return { rank: ws === 5 ? 'JOKER' : '2', suit: ws === 5 ? '★' : getSuitChar(ws), id: `w-${wildUsed ? 'b' : 'a'}` };
+        };
+
+        // A-low at the start
+        if (m[0]) cards.push({ rank: 'A', suit: getSuitChar(suit), id: 'n-0' });
+
+        // 3..K run with at most one gap
+        if (runMin <= runMax) {
+            for (let r = runMin; r <= runMax; r++) {
+                if (m[r]) {
+                    const rank = r === 2 ? 2 : r;
+                    cards.push({ rank: getRankChar(rank), suit: getSuitChar(suit), id: `n-${r}` });
+                } else {
+                    cards.push(wildCard());
+                    wildUsed = true;
+                }
             }
         }
-        // Append any wild not placed in a gap (edge wild)
+
+        // A-high at the end
+        if (m[1]) cards.push({ rank: 'A', suit: getSuitChar(suit), id: 'n-1' });
+
+        // Edge wild not consumed by a gap
         if (!wildUsed) {
-            if (foreignWildSuit !== 0) {
-                const ws = foreignWildSuit;
-                const wCard = { rank: ws === 5 ? 'JOKER' : '2', suit: ws === 5 ? '★' : getSuitChar(ws), id: 'w-edge' };
-                if (max < 13) cards.push(wCard); else cards.unshift(wCard);
-            } else if (hasNat2Wild) {
-                const wCard = { rank: '2', suit: getSuitChar(suit), id: 'w-edge' };
-                if (max < 13) cards.push(wCard); else cards.unshift(wCard);
+            const wc = wildCard();
+            if (foreignWildSuit !== 0 || hasNat2Wild) {
+                if (runMax === 13 || m[1]) cards.unshift(wc); else cards.push(wc);
             }
         }
     } else { // Runner: [rank, ♠cnt, ♥cnt, ♦cnt, ♣cnt, wildSuit]
