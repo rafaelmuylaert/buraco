@@ -78,7 +78,8 @@ function runMatch(genomes, rules, fixedDeck) {
         if (_diagCount < 2) {
             _diagCount++;
             const t0 = scores.team0, t1 = scores.team1;
-            const meldCount = Object.values(S.melds).reduce((s, m) => s + m.length, 0);
+            const meldCount = Object.values(S.table.team0[0]).flat().length + S.table.team0[1].length
+                           + Object.values(S.table.team1[0]).flat().length + S.table.team1[1].length;
             console.log(`[DIAG] reason=${gameover?.reason} moves=${moveCount} greedy=${rules.greedyMode} melds=${meldCount}`);
             console.log(`[DIAG] t0: table=${t0.table} hand=${t0.hand} morto=${t0.mortoPenalty} total=${t0.total}`);
             console.log(`[DIAG] t1: table=${t1.table} hand=${t1.hand} morto=${t1.mortoPenalty} total=${t1.total} diff=${diff}`);
