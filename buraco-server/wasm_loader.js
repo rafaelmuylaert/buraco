@@ -86,20 +86,29 @@ function wasmScoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
     configureNet(AI_CONFIG[layerKey + '_LAYER_SIZES'], weightOffset);
 
     const suits = suitsToEvaluate(topDiscard);
+    let numInputs = 0;
     for (let si = 0; si < suits.length; si++) {
         const suit = suits[si];
         const suitSeqMelds = (G.table[myTeam][0][suit] || []).map((meld, index) => ({ meld, index }));
-        const suitCands = candidates.map(cand => {
-            if (cand.move !== 'appendToMeld') return cand;
-            const t = cand.args[0];
-            if (!t || t.type !== 'seq' || t.suit !== suit) return { ...cand, appendIdx: 0 };
-            const suitIdx = suitSeqMelds.findIndex(e => e.index === t.index);
-            return { ...cand, appendIdx: suitIdx >= 0 ? suitIdx + 1 : 0 };
-        });
+        const suitCands = [];
+        for (const cand of candidates) {
+            const candSuit = cand.parsedMeld ? (cand.parsedMeld.length === 6 ? 0 : seqSuit(cand.cards)) : suit;
+            if (candSuit !== 0 && candSuit !== suit) continue;
+            if (cand.move === 'appendToMeld') {
+                const t = cand.args[0];
+                const suitIdx = (t && t.type === 'seq' && t.suit === suit)
+                    ? suitSeqMelds.findIndex(e => e.index === t.index)
+                    : -1;
+                suitCands.push({ ...cand, appendIdx: suitIdx >= 0 ? suitIdx + 1 : 0 });
+            } else {
+                suitCands.push(cand);
+            }
+        }
+        if (suitCands.length === 0) continue;
         const inp = buildStateVector(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, layerKey, suitCands, suit);
-        vInps[si].set(inp);
+        vInps[numInputs++].set(inp);
     }
-    wasmExports.set_num_inputs(suits.length);
+    wasmExports.set_num_inputs(numInputs);
     const _t0 = performance.now();
     wasmExports.evaluate();
     addForwardPassTime(performance.now() - _t0);
