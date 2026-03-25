@@ -448,11 +448,11 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
 
 export function movePlayMeld(G, p, cardIds) {
     ensureTable(G);
-    if (!G.hasDrawn) { console.log('[playMeld] REJECT: not drawn'); return false; }
+    if (!G.hasDrawn) return false;
     const hand = G.hands[p];
-    for (const c of cardIds) { if (hand.indexOf(c) === -1) { console.log('[playMeld] REJECT: card not in hand', c); return false; } }
+    for (const c of cardIds) { if (hand.indexOf(c) === -1) return false; }
     const parsed = buildMeld(cardIds, G.rules);
-    if (!parsed) { console.log('[playMeld] REJECT: buildMeld returned null for', cardIds); return false; }
+    if (!parsed) return false;
     const newHand = removeCards(hand, cardIds);
     const teamId = G.teams[p];
     const isRunner = parsed.length === 6;
@@ -465,15 +465,13 @@ export function movePlayMeld(G, p, cardIds) {
         : simTable.some(m => getMeldLength(m, true) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m, true)))
           || [1,2,3,4].some(s => s !== suit && (G.table[teamId][0][s] || []).some(m => getMeldLength(m, true) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m, true))))
           || G.table[teamId][1].some(m => getMeldLength(m, false) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m, false)));
-    if (newHand.length < 2 && !hasClean && (!G.pots.length || G.teamMortos[teamId])) { console.log('[playMeld] REJECT: hand too small', newHand.length, 'hasClean', hasClean); return false; }
+    if (newHand.length < 2 && !hasClean && (!G.pots.length || G.teamMortos[teamId])) return false;
     G.hands[p] = newHand;
     if (isRunner) {
         G.table[teamId][1].push(parsed);
-        console.log('[playMeld] stored runner, table[1] len=', G.table[teamId][1].length);
     } else {
         if (!G.table[teamId][0][suit]) G.table[teamId][0][suit] = [];
         G.table[teamId][0][suit].push(parsed);
-        console.log('[playMeld] stored seq suit=', suit, 'table[0][suit] len=', G.table[teamId][0][suit].length);
     }
     G.knownCards[p] = removeCards(G.knownCards[p], cardIds);
     if (G.teamMortos[teamId]) G.mortoUsed[teamId] = true;
