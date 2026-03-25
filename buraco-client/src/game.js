@@ -326,7 +326,7 @@ function buildDeck(rules) {
 export function teamHasClean(G, teamId) {
     ensureTable(G);
     let hasclean = false, hasclean2 = false;
-    for(suit =1; suit <=4; suit++){
+    for(let suit = 1; suit <= 4; suit++){
         (G.table[teamId][0][suit] || []).some(m => {
             hasclean =  getMeldLength(m, true) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m, true));
         })
