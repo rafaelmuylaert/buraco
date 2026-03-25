@@ -429,7 +429,6 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
   };
 
   const renderTeamTable = (teamId, title, isMyTeam) => {
-    console.log('[TABLE DEBUG]', teamId, JSON.stringify(G.table[teamId]));
     const teamTable = G.table[teamId];
     const runners = (teamTable[1] || []).map((meldGroup, index) => ({ key: `runner-${index}`, index, meldGroup, isRunner: true }));
     const sequences = [1,2,3,4].flatMap(suit =>

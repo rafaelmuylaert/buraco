@@ -118,6 +118,11 @@ const _checkGaps = (m) => {
     return gaps;
 };
 
+function seqSuit(cardIds) {
+    for (const c of cardIds) if (getRank(c) !== 2 && getSuit(c) !== 5) return getSuit(c);
+    return 0;
+}
+
 function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
     if (!existingMeld && cardIds.length < 3) return null;
     const m = existingMeld ? [...existingMeld] : new Array(16).fill(0);
@@ -245,7 +250,7 @@ export function buildMeld(cardIds, rules) {
     if (cardIds.length < 3) return null;
     let seq = cardsToSeqSlots(cardIds);
     if (seq) return seq;
-    return cardsToRunnerSlots(cardIds, rules);
+    return cardsToRunnerSlots(cardIds, null, rules);
 }
 
 export function appendCardsToMeld(meld, cards, rules) {
@@ -385,10 +390,11 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
         const newHand = removeCards(hand, selectedHandIds);
         const isRunner = parsedMeldObject.length === 6;
         let hasClean;
+        const newMeldSuit = isRunner ? 0 : seqSuit([...selectedHandIds, topCard]);
         if (target.type === 'new') {
             const simList = isRunner
                 ? [...G.table[teamId][1], parsedMeldObject]
-                : [...(G.table[teamId][0][parsedMeldObject[0]] || []), parsedMeldObject];
+                : [...(G.table[teamId][0][newMeldSuit] || []), parsedMeldObject];
             hasClean = isRunner
                 ? simList.some(m => getMeldLength(m, false) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m, false)))
                 : simList.some(m => getMeldLength(m, true) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m, true)))
@@ -410,9 +416,8 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
             if (isRunner) {
                 G.table[teamId][1].push(parsedMeldObject);
             } else {
-                const suit = parsedMeldObject[0];
-                if (!G.table[teamId][0][suit]) G.table[teamId][0][suit] = [];
-                G.table[teamId][0][suit].push(parsedMeldObject);
+                if (!G.table[teamId][0][newMeldSuit]) G.table[teamId][0][newMeldSuit] = [];
+                G.table[teamId][0][newMeldSuit].push(parsedMeldObject);
             }
         } else {
             const mt = target.meldTarget;
@@ -451,20 +456,20 @@ export function movePlayMeld(G, p, cardIds) {
     const newHand = removeCards(hand, cardIds);
     const teamId = G.teams[p];
     const isRunner = parsed.length === 6;
+    const suit = isRunner ? 0 : seqSuit(cardIds);
     const simTable = isRunner
         ? [...G.table[teamId][1], parsed]
-        : [...(G.table[teamId][0][parsed[0]] || []), parsed];
+        : [...(G.table[teamId][0][suit] || []), parsed];
     const hasClean = isRunner
         ? simTable.some(m => getMeldLength(m, false) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m, false)))
         : simTable.some(m => getMeldLength(m, true) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m, true)))
-          || [1,2,3,4].some(s => s !== parsed[0] && (G.table[teamId][0][s] || []).some(m => getMeldLength(m, true) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m, true))))
+          || [1,2,3,4].some(s => s !== suit && (G.table[teamId][0][s] || []).some(m => getMeldLength(m, true) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m, true))))
           || G.table[teamId][1].some(m => getMeldLength(m, false) >= 7 && (!G.rules.cleanCanastaToWin || isMeldClean(m, false)));
     if (newHand.length < 2 && !hasClean && (!G.pots.length || G.teamMortos[teamId])) return false;
     G.hands[p] = newHand;
     if (isRunner) {
         G.table[teamId][1].push(parsed);
     } else {
-        const suit = parsed[0];
         if (!G.table[teamId][0][suit]) G.table[teamId][0][suit] = [];
         G.table[teamId][0][suit].push(parsed);
     }
@@ -861,7 +866,7 @@ export function scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp
         const suitIndices = [];
         for (let i = 0; i < candidates.length && suitCands.length < maxSlots; i++) {
             const cand = candidates[i];
-            const candSuit = cand.parsedMeld ? (cand.parsedMeld.length === 6 ? 0 : cand.parsedMeld[0]) : suit;
+            const candSuit = cand.parsedMeld ? (cand.parsedMeld.length === 6 ? 0 : seqSuit(cand.cards)) : suit;
             if (candSuit !== 0 && candSuit !== suit) continue; // skip candidates of wrong suit
             let appendIdx = cand.appendIdx;
             if (cand.move === 'appendToMeld') {
