@@ -118,7 +118,7 @@ const _checkGaps = (m) => {
     return gaps;
 };
 
-function seqSuit(cardIds) {
+export function seqSuit(cardIds) {
     for (const c of cardIds) if (getRank(c) !== 2 && getSuit(c) !== 5) return getSuit(c);
     return 0;
 }

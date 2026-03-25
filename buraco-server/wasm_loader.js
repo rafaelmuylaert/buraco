@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { AI_CONFIG, buildStateVector, buildDiscardVector, suitsToEvaluate, suitsInCandidates, setScoreFunctions, addForwardPassTime } from './game.js';
+import { AI_CONFIG, buildStateVector, buildDiscardVector, suitsToEvaluate, suitsInCandidates, seqSuit, setScoreFunctions, addForwardPassTime } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
