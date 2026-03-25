@@ -1085,6 +1085,42 @@ export function planTurn(G, p, DNA) {
                 pickupCands.push({ move: 'pickUpDiscard', args: [handUsed, { type: 'new' }], cards: combo, parsedMeld: buildMeld(combo, G.rules), appendIdx: 0 });
             }
             // Also consider appending topDiscard (+ optional hand cards) to existing team melds
+            const handCards = G.hands[p];
+            for (let suit = 1; suit <= 4; suit++) {
+                (G.table[myTeam][0][suit] || []).forEach((meld, mIdx) => {
+                    // Try topCard alone, then topCard + each subset of hand cards
+                    const cardSets = [[topCard]];
+                    for (const hc of handCards) {
+                        if (getSuit(hc) === suit || getRank(hc) === 2 || getSuit(hc) === 5)
+                            cardSets.push([hc, topCard], [topCard, hc]);
+                    }
+                    for (const cards of cardSets) {
+                        const parsed = appendCardsToMeld(meld, cards);
+                        if (!parsed) continue;
+                        const handUsed = cards.filter(c => c !== topCard);
+                        const sig = `pickup-seq-${suit}-${mIdx}-${cards.map(c => c >= 104 ? 52 : c % 52).sort().join(',')}`;
+                        if (seenSigs.has(sig)) continue;
+                        seenSigs.add(sig);
+                        pickupCands.push({ move: 'pickUpDiscard', args: [handUsed, { type: 'append', meldTarget: { type: 'seq', suit, index: mIdx } }], cards, parsedMeld: parsed, appendIdx: 0 });
+                    }
+                });
+            }
+            (G.table[myTeam][1] || []).forEach((meld, mIdx) => {
+                const cardSets = [[topCard]];
+                for (const hc of handCards) {
+                    if (getRank(hc) === getRank(topCard) || getRank(hc) === 2 || getSuit(hc) === 5)
+                        cardSets.push([hc, topCard]);
+                }
+                for (const cards of cardSets) {
+                    const parsed = appendCardsToMeld(meld, cards);
+                    if (!parsed) continue;
+                    const handUsed = cards.filter(c => c !== topCard);
+                    const sig = `pickup-runner-${mIdx}-${cards.map(c => c >= 104 ? 52 : c % 52).sort().join(',')}`;
+                    if (seenSigs.has(sig)) continue;
+                    seenSigs.add(sig);
+                    pickupCands.push({ move: 'pickUpDiscard', args: [handUsed, { type: 'append', meldTarget: { type: 'runner', index: mIdx } }], cards, parsedMeld: parsed, appendIdx: 0 });
+                }
+            });
             
         } else {
             pickupCands.push({ move: 'pickUpDiscard', args: [], cards: G.discardPile, parsedMeld: null, appendIdx: 0 });
