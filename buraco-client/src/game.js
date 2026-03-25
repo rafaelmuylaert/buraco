@@ -198,13 +198,10 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
     if (len  > 14) return null;
 
     // ── 8. Natural-2 demotion ────────────────────────────────────────────────
-    // If the wild in m[1] is same-suit (natural 2 acting as wild) and a 3 is present,
-    // and the gap is zero or the only gap is at the 2-position (slot 3), demote it back.
-    if (m[15] === 1) {  // m[4] = slot for rank 3
-        if (m[3] === 1 && (gaps === 0 || m[0] === 1)) {
-            m[2] = 1; m[15] = 0;
-        }
-    }
+    // A same-suit nat-2 acting as wild should be demoted back to m[2] only when
+    // rank 3 is present (so the 2 naturally belongs next to it) and there are no
+    // other gaps that actually need filling.
+    if (m[15] === 1 && m[3] === 1 && gaps === 0) { m[2] = 1; m[15] = 0; }
     return m;
 }
 
@@ -253,9 +250,9 @@ export function buildMeld(cardIds, rules) {
     return cardsToRunnerSlots(cardIds, null, rules);
 }
 
-export function appendCardsToMeld(meld, cards, rules) {
+export function appendCardsToMeld(meld, cards, rules, suit = 0) {
     if (meld.length === 6) return cardsToRunnerSlots(cards, meld, rules);
-    return cardsToSeqSlots(cards, meld);
+    return cardsToSeqSlots(cards, meld, suit);
 }
 
 
@@ -384,7 +381,7 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
                 ? G.table[teamId][1][target.meldTarget.index]
                 : (G.table[teamId][0][target.meldTarget.suit] || [])[target.meldTarget.index];
             if (!existingMeld) return false;
-            parsedMeldObject = appendCardsToMeld(existingMeld, [...selectedHandIds, topCard]);
+            parsedMeldObject = appendCardsToMeld(existingMeld, [...selectedHandIds, topCard], G.rules, target.meldTarget.type === 'seq' ? target.meldTarget.suit : 0);
         }
         if (!parsedMeldObject) return false;
         const newHand = removeCards(hand, selectedHandIds);
@@ -490,7 +487,7 @@ export function moveAppendToMeld(G, p, target, cardIds) {
         ? G.table[teamId][1][target.index]
         : (G.table[teamId][0][target.suit] || [])[target.index];
     if (!existingMeld) return false;
-    const parsed = appendCardsToMeld(existingMeld, cardIds);
+    const parsed = appendCardsToMeld(existingMeld, cardIds, G.rules, target.type === 'seq' ? target.suit : 0);
     if (!parsed) return false;
     const newHand = removeCards(hand, cardIds);
     const isRunner = target.type === 'runner';
@@ -1094,9 +1091,7 @@ export function planTurn(G, p, DNA) {
                             cardSets.push([hc, topDiscard], [topDiscard, hc]);
                     }
                     for (const cards of cardSets) {
-                        const parsed = appendCardsToMeld(meld, cards);
-                        if (!parsed) continue;
-                        const handUsed = cards.filter(c => c !== topDiscard);
+                        const parsed = appendCardsToMeld(meld, cards, G.rules, suit);
                         const sig = `pickup-seq-${suit}-${mIdx}-${cards.map(c => c >= 104 ? 52 : c % 52).sort().join(',')}`;
                         if (seenSigs.has(sig)) continue;
                         seenSigs.add(sig);
@@ -1111,7 +1106,7 @@ export function planTurn(G, p, DNA) {
                         cardSets.push([hc, topDiscard]);
                 }
                 for (const cards of cardSets) {
-                    const parsed = appendCardsToMeld(meld, cards);
+                    const parsed = appendCardsToMeld(meld, cards, G.rules, 0); // runner: no suit
                     if (!parsed) continue;
                     const handUsed = cards.filter(c => c !== topDiscard);
                     const sig = `pickup-runner-${mIdx}-${cards.map(c => c >= 104 ? 52 : c % 52).sort().join(',')}`;
@@ -1148,9 +1143,7 @@ export function planTurn(G, p, DNA) {
     for (let suit = 1; suit <= 4; suit++) {
         (G.table[myTeam][0][suit] || []).forEach((meld, mIdx) => {
             for (const card of postHand) {
-                const parsed = appendCardsToMeld(meld, [card]);
-                if (!parsed) continue;
-                const sig = `seq-${suit}-${mIdx}-${card >= 104 ? 52 : card % 52}`;
+                const parsed = appendCardsToMeld(meld, [card], G.rules, suit);
                 if (appendSigs.has(sig)) continue;
                 appendSigs.add(sig);
                 appendCands.push({ move: 'appendToMeld', args: [{ type: 'seq', suit, index: mIdx }, [card]], cards: [card], parsedMeld: parsed, appendIdx: 0 });
@@ -1159,9 +1152,7 @@ export function planTurn(G, p, DNA) {
     }
     (G.table[myTeam][1] || []).forEach((meld, mIdx) => {
         for (const card of postHand) {
-            const parsed = appendCardsToMeld(meld, [card]);
-            if (!parsed) continue;
-            const sig = `runner-${mIdx}-${card >= 104 ? 52 : card % 52}`;
+            const parsed = appendCardsToMeld(meld, [card], G.rules, 0); // runner: no suit
             if (appendSigs.has(sig)) continue;
             appendSigs.add(sig);
             appendCands.push({ move: 'appendToMeld', args: [{ type: 'runner', index: mIdx }, [card]], cards: [card], parsedMeld: parsed, appendIdx: 0 });
