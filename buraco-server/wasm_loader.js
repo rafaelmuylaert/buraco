@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { AI_CONFIG, buildStateVector, buildDiscardVector, suitsToEvaluate, setScoreFunctions, addForwardPassTime } from './game.js';
+import { AI_CONFIG, buildStateVector, buildDiscardVector, suitsToEvaluate, suitsInCandidates, setScoreFunctions, addForwardPassTime } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -85,7 +85,7 @@ function wasmScoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
     vWeights.set(weights, weightOffset);
     configureNet(AI_CONFIG[layerKey + '_LAYER_SIZES'], weightOffset);
 
-    const suits = suitsToEvaluate(topDiscard);
+    const suits = layerKey === 'MELD' ? suitsInCandidates(candidates) : suitsToEvaluate(topDiscard);
     let numInputs = 0;
     for (let si = 0; si < suits.length; si++) {
         const suit = suits[si];

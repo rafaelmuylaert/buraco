@@ -829,13 +829,26 @@ function forwardPass(inp, weights, layerSizes) {
     return cur;
 }
 
-// Determine which suits to evaluate for a given top-discard card.
+// Determine which suits to evaluate for a given top-discard card (pickup phase only).
 // Returns array of suit ints (1-4). Wild or no discard → all 4 suits.
 export function suitsToEvaluate(topDiscard) {
     if (topDiscard === null) return [1, 2, 3, 4];
     const s = getSuit(topDiscard), r = getRank(topDiscard);
     if (s === 5 || r === 2) return [1, 2, 3, 4];
     return [s];
+}
+
+// Derive the set of suits present in a candidate list (for meld phase).
+// Runners (suit=0) are included in every suit pass, so only seq suits matter.
+export function suitsInCandidates(candidates) {
+    const seen = new Set();
+    for (const cand of candidates) {
+        if (!cand.parsedMeld || cand.parsedMeld.length === 6) continue; // runner: handled in every pass
+        const s = seqSuit(cand.cards);
+        if (s) seen.add(s);
+    }
+    // If only runners, still need one pass (any suit works — use suit 1 as the runner pass)
+    return seen.size > 0 ? [...seen] : [1];
 }
 
 // Scoring function overrides — worker.js replaces these with WASM versions
@@ -853,7 +866,7 @@ export function setScoreFunctions(scoreAll, scoreDisc) {
 export function scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
                                     candidates, weights, topDiscard, layerKey, meldIdx) {
     if (_scoreAllCandidates) return _scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, weights, topDiscard, layerKey);
-    const suits = suitsToEvaluate(topDiscard);
+    const suits = layerKey === 'MELD' ? suitsInCandidates(candidates) : suitsToEvaluate(topDiscard);
     const maxSlots = AI_CONFIG[layerKey + '_CANDIDATES'];
     const layerSizes = AI_CONFIG[layerKey + '_LAYER_SIZES'];
     const totals = new Float32Array(candidates.length);
