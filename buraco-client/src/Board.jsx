@@ -351,7 +351,7 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
 
   if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregando Mesa...</div>;
 
-  if (!G.hands || !G.teams || !G.teamPlayers) {
+  if (!G.hands || !G.teams || !G.teamPlayers || !G.table) {
     return (
       <div style={{ color: 'white', padding: '40px', backgroundColor: '#1b4332', minHeight: '100vh', fontFamily: 'sans-serif' }}>
         <h1 style={{ color: '#ffd700' }}>Fim de Jogo</h1>

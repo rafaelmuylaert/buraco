@@ -217,7 +217,7 @@ function cardsToRunnerSlots(cardIds, existingMeld = null, rules) {
             wildSuit = s;
         } else {
             if (rank === 0) {
-                if (!isRunnerAllowed(r)) return null;
+                if (!isRunnerAllowed(rules, r)) return null;
                 rank = r;
             }
             else if (r !== rank) return null;
@@ -319,6 +319,7 @@ function buildDeck(rules) {
 }
 
 export function teamHasClean(G, teamId) {
+    ensureTable(G);
     let hasclean = false, hasclean2 = false;
     for(suit =1; suit <=4; suit++){
         (G.table[teamId][0][suit] || []).some(m => {
@@ -343,6 +344,14 @@ export function tryPickupMorto(G, p) {
     }
 }
 
+function ensureTable(G) {
+    if (!G.table) G.table = { team0: [{ }, []], team1: [{ }, []] };
+    if (!G.table.team0) G.table.team0 = [{ }, []];
+    if (!G.table.team1) G.table.team1 = [{ }, []];
+    if (!Array.isArray(G.table.team0[1])) G.table.team0[1] = [];
+    if (!Array.isArray(G.table.team1[1])) G.table.team1[1] = [];
+}
+
 export function moveDrawCard(G, p) {
     if (G.hasDrawn) return false;
     if (G.deck.length === 0 && G.pots.length > 0) G.deck = G.pots.shift();
@@ -355,6 +364,7 @@ export function moveDrawCard(G, p) {
 }
 
 export function movePickUpDiscard(G, p, selectedHandIds, target) {
+    ensureTable(G);
     if (G.hasDrawn || G.discardPile.length === 0) return false;
     const hand = G.hands[p];
     const topCard = G.discardPile[G.discardPile.length - 1];
@@ -432,6 +442,7 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
 }
 
 export function movePlayMeld(G, p, cardIds) {
+    ensureTable(G);
     if (!G.hasDrawn) return false;
     const hand = G.hands[p];
     for (const c of cardIds) { if (hand.indexOf(c) === -1) return false; }
@@ -464,6 +475,7 @@ export function movePlayMeld(G, p, cardIds) {
 }
 
 export function moveAppendToMeld(G, p, target, cardIds) {
+    ensureTable(G);
     // target: { type: 'seq', suit, index } | { type: 'runner', index }
     if (!G.hasDrawn) return false;
     const teamId = G.teams[p];
@@ -1181,14 +1193,14 @@ export const BuracoGame = {
     const botGenomes = setupData?.botGenomes || {};
     let initialDeck = random.Shuffle(buildDeck(rules));
     const pots = [initialDeck.splice(0, 11), initialDeck.splice(0, 11)];
-    let hands = {}; let melds = {}; let knownCards = {};
-    for (let i = 0; i < numPlayers; i++) { hands[i.toString()] = initialDeck.splice(0, 11); melds[i.toString()] = []; knownCards[i.toString()] = []; }
+    let hands = {}; let knownCards = {};
+    for (let i = 0; i < numPlayers; i++) { hands[i.toString()] = initialDeck.splice(0, 11); knownCards[i.toString()] = []; }
     let teams = {}; let teamPlayers = {};
     if (numPlayers === 2) { teams = { '0': 'team0', '1': 'team1' }; teamPlayers = { team0: ['0'], team1: ['1'] }; } 
     else { teams = { '0': 'team0', '1': 'team1', '2': 'team0', '3': 'team1' }; teamPlayers = { team0: ['0', '2'], team1: ['1', '3'] }; }
 
     const table = { team0: [{ }, []], team1: [{ }, []] };
-    return { rules, deck: initialDeck, discardPile: [initialDeck.pop()], pots, hands, melds, knownCards, hasDrawn: false, lastDrawnCard: null, teams, teamPlayers, teamMortos: { team0: false, team1: false }, mortoUsed: { team0: false, team1: false }, isExhausted: false, botGenomes, table };
+    return { rules, deck: initialDeck, discardPile: [initialDeck.pop()], pots, hands, knownCards, hasDrawn: false, lastDrawnCard: null, teams, teamPlayers, teamMortos: { team0: false, team1: false }, mortoUsed: { team0: false, team1: false }, isExhausted: false, botGenomes, table };
   },
 
   moves: {
