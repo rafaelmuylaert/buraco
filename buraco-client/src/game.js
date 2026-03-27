@@ -17,6 +17,7 @@ export function getAndResetTimings() {
     return snap;
 }
 export function addForwardPassTime(ms) { _timings.forwardPass += ms; }
+export function addWasmDiag(evalCount, copyMs) { _timings._evalCount = (_timings._evalCount||0) + evalCount; _timings._copyMs = (_timings._copyMs||0) + copyMs; }
 
 // 🚀 CENTRALIZED AI ARCHITECTURE CONFIGURATION
 // 3 networks: pickup (per-suit, outputs MAX_CANDIDATES scores), meld (same), discard (all-suit, outputs DISCARD_CLASSES scores)

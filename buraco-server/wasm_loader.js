@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { AI_CONFIG, CARDS_ALL_OFF, CARDS_SUIT_STRIDE,
          encodeCandidateMeld, isMeldClean, seqSuit,
-         setScoreFunctions, addForwardPassTime } from './game.js';
+         setScoreFunctions, addForwardPassTime, addWasmDiag } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -20,6 +20,8 @@ const _sc         = new Float32Array(11);
 const _candBuf    = new Float32Array(Math.max(AI_CONFIG.PICKUP_CANDIDATES, AI_CONFIG.MELD_CANDIDATES) * 18);
 const _totalsPickup  = new Float32Array(AI_CONFIG.PICKUP_CANDIDATES);
 const _totalsMeld    = new Float32Array(AI_CONFIG.MELD_CANDIDATES);
+let _evalCount = 0;
+let _copyMs = 0;
 
 export async function initWasm() {
     const wasmPath = path.join(__dirname, 'nn_engine.wasm');
@@ -249,13 +251,16 @@ function wasmScoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
         }
         if (nCands === 0) continue;
 
+        const _tc = performance.now();
         writeInpNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
                     layerKey, suitCands, suit, idx);
+        _copyMs += performance.now() - _tc;
         wasmExports.set_num_inputs(1);
 
         const _t0 = performance.now();
         wasmExports.evaluate();
         addForwardPassTime(performance.now() - _t0);
+        _evalCount++;
 
         for (let i = 0; i < nCands; i++) totals[suitIndices[i]] += vOut[i];
     }
@@ -276,6 +281,9 @@ function wasmScoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, weig
     const _t0 = performance.now();
     wasmExports.evaluate();
     addForwardPassTime(performance.now() - _t0);
+    _evalCount++;
+    addWasmDiag(_evalCount, _copyMs);
+    _evalCount = 0; _copyMs = 0;
 
     return new Float32Array(vOut.buffer, vOut.byteOffset, AI_CONFIG.DISCARD_CLASSES);
 }
