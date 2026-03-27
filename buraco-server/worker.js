@@ -1,4 +1,4 @@
-import { workerData, parentPort } from 'worker_threads';
+﻿import { workerData, parentPort } from 'worker_threads';
 import {
     BuracoGame, AI_CONFIG, CARDS_ALL_OFF,
     moveDrawCard, moveDiscardCard, moveMeld, movePickUpDiscard,
@@ -8,7 +8,7 @@ import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers,
 
 await initWasm();
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
@@ -29,12 +29,12 @@ function prepareGenome(raw) {
     return dna;
 }
 
-// ── Match runner ───────────────────────────────────────────────────────
+// â”€â”€ Match runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function runMatch(genomes, rules, fixedDeck) {
     const numPlayers = rules.numPlayers || 4;
     const fakeRandom = { Shuffle: arr => fixedDeck ? [...fixedDeck] : shuffle(arr) };
 
-    // Build local state S — same shape as G but we own it entirely
+    // Build local state S â€” same shape as G but we own it entirely
     const S = BuracoGame.setup({ random: fakeRandom, ctx: { numPlayers } }, { ...rules, numPlayers });
         // Point cards2/knownCards2/discardPile2 at WASM memory for zero-copy forward pass
     if (isWasmReady()) {
@@ -78,17 +78,34 @@ function runMatch(genomes, rules, fixedDeck) {
             }
 
             const DNA = S.botGenomes[p];
-            // Point WASM at this player's team DNA (no copy — just offset switch)
+            // Point WASM at this player's team DNA (no copy â€” just offset switch)
             if (isWasmReady()) {
                 const teamBase = S.teams[p] === 'team0' ? 0 : AI_CONFIG.TOTAL_DNA_SIZE;
                 setActiveTeam(teamBase);
             }
-            // Call planTurnWasm in a loop — C++ returns one phase at a time
-            // (DRAW/PICKUP → then MELD/APPEND → then DISCARD)
+            // Call planTurnWasm in a loop â€” C++ returns one phase at a time
+            // (DRAW/PICKUP â†’ then MELD/APPEND â†’ then DISCARD)
             let phaseCount = 0;
             let turnDone = false;
-            const moves = planTurnWasm(S, p, S.teams[p]==='team0'?'team0':'team1',
-                            S.teams[p]==='team0'?'team1':'team0');
+            const _myTeam  = S.teams[p] === 'team0' ? 'team0' : 'team1';
+            const _oppTeam = _myTeam === 'team0' ? 'team1' : 'team0';
+            const moves = planTurnWasm(S, p, _myTeam, _oppTeam);
+            if (!_matchLogDone) {
+                const wb = getWasmCardBuffers();
+                const pInt = parseInt(p);
+                const hand = wb.cards2[pInt];
+                const handSum = hand ? hand.slice(72, 125).reduce((a,b)=>a+b,0) : -1;
+                console.log('[LOG] turn='+moveCount+' p='+p+' team='+_myTeam+' handSum='+handSum+' moves='+(moves?moves.length:'null'));
+                if (moves && moves.length > 0) {
+                    const PH = ['pickup','meld','discard'];
+                    const MT = ['draw','pickupDiscard','playMeld','appendMeld','discard','exhausted'];
+                    for (const m of moves) {
+                        const cc = Object.entries(m.cardCounts).map(([k,v])=>k+'x'+v).join(',');
+                        console.log('  [MOVE] phase='+(PH[m.phase]||m.phase)+' type='+(MT[m.moveType]||m.moveType)+' tSuit='+m.targetSuit+' tSlot='+m.targetSlot+' cards=['+cc+']');
+                    }
+                }
+                if (moveCount >= 3) _matchLogDone = true;
+            }
             if (!moves) {
                 try { planTurn(S, p, S.botGenomes[p]); } catch(e) {}
             } else {
@@ -99,11 +116,11 @@ function runMatch(genomes, rules, fixedDeck) {
                         if (m.moveType === 0) { moveDrawCard(S, p); pickupDone = true; }
                         else if (m.moveType === 1) { if (movePickUpDiscard(S, p, m.cardCounts, {type:'new'})) pickupDone = true; }
                         else if (m.moveType === 5) { S.isExhausted = true; pickupDone = true; }
-                    } else if (m.phase === 1) { // meld — fire all, ignore failures
+                    } else if (m.phase === 1) { // meld â€” fire all, ignore failures
                         if (m.moveType === 2) moveMeld(S, p, m.cardCounts);
                         else if (m.moveType === 3) moveMeld(S, p, m.cardCounts,
                             {type: m.targetType===1?'seq':'runner', suit: m.targetSuit, index: m.targetSlot});
-                    } else if (m.phase === 2) { // discard — try until success
+                    } else if (m.phase === 2) { // discard â€” try until success
                         if (moveDiscardCard(S, p, m.discardCard, true)) break;
                     }
                 }
@@ -148,8 +165,9 @@ function runMatch(genomes, rules, fixedDeck) {
 }
 
 let _diagCount = 0;
+let _matchLogDone = false;
 
-// ── Job processing ────────────────────────────────────────────────────────────
+// â”€â”€ Job processing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const _baseDeck = [];
 for (let i = 0; i < 52; i++) _baseDeck.push(i);

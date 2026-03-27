@@ -733,6 +733,10 @@ static int plan_turn() {
     find_valid_melds();
     find_valid_appends();
 
+    int handTotal=0;
+    for(int i=0;i<53;i++) handTotal+=g_cards2[player][CARDS_ALL_OFF+i];
+    (void)handTotal; // suppress unused warning
+
     float candScores[MAX_SEQ_CANDS*2 + MAX_RUN_CANDS];
     int   candType  [MAX_SEQ_CANDS*2 + MAX_RUN_CANDS];
     int   candIdx   [MAX_SEQ_CANDS*2 + MAX_RUN_CANDS];
@@ -921,7 +925,10 @@ WASM_EXPORT void configure_nets(
     for(int i=0;i<discard_nlayers;i++) g_discard_layers[i]=discard_layers[i];
 }
 
-WASM_EXPORT int      cpp_plan_turn()        { return plan_turn(); }
+WASM_EXPORT int get_hand_total(int player) {
+    int t=0; for(int i=0;i<53;i++) t+=g_cards2[player][CARDS_ALL_OFF+i]; return t;
+}
+
 WASM_EXPORT uint8_t* get_move_list()        { return &g_move_list[0][0]; }
 WASM_EXPORT int      get_move_count()       { return g_move_count; }
 WASM_EXPORT uint8_t* get_planned_move()     { return g_planned_move; } // kept for compat
