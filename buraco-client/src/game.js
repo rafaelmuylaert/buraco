@@ -162,12 +162,12 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
         if (s === 5 || r === 2) {
             // Determine suit context: same-suit 2 = natural wild candidate; everything else = foreign
             if (m[15] + (m[14] !== 0 ? 1 : 0) >= 2) {return null;}
-            const isSameSuit2 = (s === suit);
+            const isSameSuit2 = (s == suit);  // loose equality handles string/number mismatch
             if (isSameSuit2) { m[15]++; }
             else if (m[14]==0) { m[14] = s; }
             else {return null;}
         } 
-        else if (s !== suit){
+        else if (s != suit){  // loose equality
             return null;
         }
         else if (r === 1) {
@@ -506,7 +506,7 @@ export function moveMeld(G, p, cardCounts, target = null, addCards = 0, topDisca
     const allCounts = topDiscard !== null
         ? { ...counts, [topDiscard >= 104 ? 54 : topDiscard % 52]: (counts[topDiscard >= 104 ? 54 : topDiscard % 52] || 0) + 1 }
         : counts;
-    const parsed = parseMeld(allCounts, G.rules, existingMeld, target?.suit || 0);
+    const parsed = parseMeld(allCounts, G.rules, existingMeld, target?.suit ? parseInt(target.suit) : 0);
     if (!parsed) return false;
     const newHandSize = G.handSizes[p] - Object.values(counts).reduce((a, b) => a + b, 0) + addCards;
     const isRunner = parsed.length === 6;
