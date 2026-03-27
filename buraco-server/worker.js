@@ -1,6 +1,6 @@
 import { workerData, parentPort } from 'worker_threads';
 import {
-    BuracoGame, AI_CONFIG,
+    BuracoGame, AI_CONFIG, CARDS_ALL_OFF,
     moveDrawCard, moveDiscardCard,
     checkGameOver, planTurn, getAndResetTimings
 } from './game.js';
@@ -41,9 +41,6 @@ function runMatch(genomes, rules, fixedDeck) {
         return [k, prepareGenome(arr)];
     }));
 
-    if (rules.telepathy)
-        for (const p of Object.keys(S.hands)) S.knownCards[p] = [...S.hands[p]];
-
     const ctx = { currentPlayer: '0', numPlayers };
 
     try {
@@ -53,8 +50,8 @@ function runMatch(genomes, rules, fixedDeck) {
         while (!gameover && moveCount < 2000) {
             const p = ctx.currentPlayer;
 
-            // Safety: if hasDrawn is stuck true with no hand, force-clear it
-            if (S.hasDrawn && (S.hands[p]?.length ?? 0) === 0) {
+            // Safety: if hasDrawn stuck with empty hand
+            if (S.hasDrawn && (S.handSizes[p] ?? 0) === 0) {
                 S.hasDrawn = false;
                 S.lastDrawnCard = null;
             }
@@ -63,9 +60,15 @@ function runMatch(genomes, rules, fixedDeck) {
             let plan;
             try { plan = planTurn(S, p, DNA); } catch(e) {
                 console.error('[runMatch] planTurn threw:', e?.message);
-                // Force the turn to end
-                if (S.hasDrawn) { if (S.hands[p]?.length > 0) moveDiscardCard(S, p, S.hands[p][0], true); else S.hasDrawn = false; }
-                else { if (!moveDrawCard(S, p)) S.isExhausted = true; }
+                if (S.hasDrawn) {
+                    // Force discard any card
+                    let discarded = false;
+                    for (let i = 0; i < 53 && !discarded; i++) {
+                        const cnt = Math.round((S.cards2[p][CARDS_ALL_OFF + i] || 0) * 2);
+                        if (cnt > 0) { moveDiscardCard(S, p, i === 52 ? 54 : i, true); discarded = true; }
+                    }
+                    if (!discarded) S.hasDrawn = false;
+                } else { if (!moveDrawCard(S, p)) S.isExhausted = true; }
                 plan = [];
             }
 
@@ -76,12 +79,13 @@ function runMatch(genomes, rules, fixedDeck) {
 
             // If planTurn didn't end the turn (hasDrawn still true), force-discard
             if (S.hasDrawn) {
-                if (S.hands[p]?.length > 0) moveDiscardCard(S, p, S.hands[p][0], true);
-                else S.hasDrawn = false;
+                let discarded = false;
+                for (let i = 0; i < 53 && !discarded; i++) {
+                    const cnt = Math.round((S.cards2[p][CARDS_ALL_OFF + i] || 0) * 2);
+                    if (cnt > 0) { moveDiscardCard(S, p, i === 52 ? 54 : i, true); discarded = true; }
+                }
+                if (!discarded) S.hasDrawn = false;
             }
-
-            if (rules.telepathy)
-                for (const pl of Object.keys(S.hands)) S.knownCards[pl] = [...S.hands[pl]];
 
             ctx.currentPlayer = String((parseInt(p) + 1) % numPlayers);
             S.hasDrawn = false;

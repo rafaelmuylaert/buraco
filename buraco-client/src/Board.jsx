@@ -191,7 +191,7 @@ export function BuracoBoard(props) {
 }
 
 function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null, tournamentStandings = null }) {
-  const [selectedCards, setSelectedCards] = useState([]);
+  const [selectedCards, setSelectedCards] = useState({}); // { cardType: count }
   const isMyTurn = ctx.currentPlayer === playerID;
 
   // Persist the last seen gameover across remounts (ReconnectingClient resets key on reconnect)
@@ -362,7 +362,7 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
 
   if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregando Mesa...</div>;
 
-  if (!G.hands || !G.teams || !G.teamPlayers || !G.table) {
+  if (!G.cards2 || !G.teams || !G.teamPlayers || !G.table) {
     return (
       <div style={{ color: 'white', padding: '40px', backgroundColor: '#1b4332', minHeight: '100vh', fontFamily: 'sans-serif' }}>
         <h1 style={{ color: '#ffd700' }}>Fim de Jogo</h1>
@@ -372,28 +372,50 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
     );
   }
 
-  const rawHandObj = Object.values(G.hands[playerID] || []).map((c, i) => ({ ...intToCardObj(c), uid: `${c}_${i}` }));
-  const sortedHandObj = sortCards(rawHandObj);
-
-  // Build a set of UIDs for newly drawn cards, handling duplicates correctly.
-  // lastDrawnCard can be a single int or an array of ints (discard pickup).
-  const newlyDrawnUids = React.useMemo(() => {
-    if (ctx.currentPlayer !== playerID || G.lastDrawnCard == null) return new Set();
-    const drawnRaw = Array.isArray(G.lastDrawnCard) ? G.lastDrawnCard : [G.lastDrawnCard];
-    // Count how many of each card id were drawn
-    const drawnCounts = {};
-    drawnRaw.forEach(c => { drawnCounts[c] = (drawnCounts[c] || 0) + 1; });
-    // Walk rawHandObj (pre-sort, index-stable) from the END to find the drawn copies
-    // The drawn cards are always appended to the end of the hand array by the game engine
-    const uids = new Set();
-    const remaining = { ...drawnCounts };
-    for (let i = rawHandObj.length - 1; i >= 0; i--) {
-      const id = rawHandObj[i].id;
-      if (remaining[id] > 0) { uids.add(rawHandObj[i].uid); remaining[id]--; }
+  // Build hand display from cards2 flat buffer
+  const myFlat = G.cards2[playerID] || [];
+  const CARDS_ALL_OFF_B = 72; // 4*18
+  const handCardObjs = [];
+  // Natural cards
+  for (let s = 1; s <= 4; s++) {
+    for (let r = 1; r <= 13; r++) {
+      const count = Math.round((myFlat[(s-1)*18 + (r-1)] || 0) * 2);
+      const cardId = (s-1)*13 + (r-1);
+      for (let i = 0; i < count; i++) handCardObjs.push({ ...intToCardObj(cardId), uid: `${cardId}_${i}` });
     }
-    return uids;
-  }, [G.lastDrawnCard, G.hands[playerID]]);
-  const newlyDrawnUid = (card) => newlyDrawnUids.has(card.uid);
+  }
+  // Suited-2 wilds
+  const suited2Ids = [1, 14, 27, 40];
+  for (const cId of suited2Ids) {
+    const count = Math.round((myFlat[CARDS_ALL_OFF_B + cId] || 0) * 2);
+    for (let i = 0; i < count; i++) handCardObjs.push({ ...intToCardObj(cId), uid: `${cId}_w${i}` });
+  }
+  // Jokers
+  const jokerCount = Math.round((myFlat[CARDS_ALL_OFF_B + 52] || 0) * 2);
+  for (let i = 0; i < jokerCount; i++) handCardObjs.push({ ...intToCardObj(54), uid: `54_${i}` });
+
+  const sortedHandObj = sortCards(handCardObjs);
+
+  // lastDrawnCard: int or array of ints — track by card type for highlighting
+  const newlyDrawnTypes = React.useMemo(() => {
+    if (ctx.currentPlayer !== playerID || G.lastDrawnCard == null) return new Set();
+    const drawn = Array.isArray(G.lastDrawnCard) ? G.lastDrawnCard : [G.lastDrawnCard];
+    return new Set(drawn.map(c => c >= 104 ? 54 : c % 52));
+  }, [G.lastDrawnCard]);
+  // For each card in sorted hand, mark as newly drawn if its type was drawn
+  // Track per-type count to only highlight the right number of copies
+  const newlyDrawnCounts = React.useMemo(() => {
+    const counts = {};
+    if (ctx.currentPlayer !== playerID || G.lastDrawnCard == null) return counts;
+    const drawn = Array.isArray(G.lastDrawnCard) ? G.lastDrawnCard : [G.lastDrawnCard];
+    for (const c of drawn) { const k = c >= 104 ? 54 : c % 52; counts[k] = (counts[k] || 0) + 1; }
+    return counts;
+  }, [G.lastDrawnCard]);
+  const drawnRemaining = { ...newlyDrawnCounts };
+  const isNewlyDrawn = (cardObj) => {
+    const k = cardObj.id >= 104 ? 54 : cardObj.id % 52;
+    if (drawnRemaining[k] > 0) { drawnRemaining[k]--; return true; } return false;
+  };
   const topDiscard = G.discardPile.length > 0 ? intToCardObj(G.discardPile[G.discardPile.length - 1]) : null;
   
   const myTeam = G.teams[playerID];
@@ -419,20 +441,40 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
   };
 
   const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
-  const toggleCardSelection = (cardId) => setSelectedCards(prev => prev.includes(cardId) ? prev.filter(id => id !== cardId) : [...prev, cardId]);
+  const toggleCardSelection = (cardId) => {
+    const k = cardId >= 104 ? 54 : cardId % 52;
+    setSelectedCards(prev => {
+      const cur = prev[k] || 0;
+      if (cur > 0) { const next = { ...prev }; next[k]--; if (next[k] === 0) delete next[k]; return next; }
+      // Only select if we have that card type in hand
+      const flat = G.cards2[playerID] || [];
+      const CAOFF = 72;
+      const have = Math.round((flat[CAOFF + (k === 54 ? 52 : k)] || 0) * 2);
+      if (cur >= have) return prev;
+      return { ...prev, [k]: cur + 1 };
+    });
+  };
 
-  const selectedCardIds = () => selectedCards.map(uid => sortedHandObj.find(c => c.uid === uid)?.id).filter(id => id !== undefined && id !== null);
+  // Reconstruct array of card IDs from selectedCards count map
+  const selectedCardIds = () => {
+    const ids = [];
+    for (const [k, count] of Object.entries(selectedCards)) {
+      const cardId = +k === 54 ? 54 : +k;
+      for (let i = 0; i < count; i++) ids.push(cardId);
+    }
+    return ids;
+  };
+  const selectedCount = Object.values(selectedCards).reduce((a, b) => a + b, 0);
 
   const handleDiscardPileClick = () => {
-    if (!isMyTurn) return; 
-    
-    if (selectedCards.length === 1 && G.hasDrawn) {
+    if (!isMyTurn) return;
+    if (selectedCount === 1 && G.hasDrawn) {
       moves.discardCard(selectedCardIds()[0]);
-      setSelectedCards([]);
+      setSelectedCards({});
     } else if (!G.hasDrawn && G.discardPile.length > 0) {
       if (isClosedDiscard) {
         moves.pickUpDiscard(selectedCardIds(), { type: 'new' });
-        setSelectedCards([]);
+        setSelectedCards({});
       } else {
         moves.pickUpDiscard();
       }
@@ -462,12 +504,12 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
                   ? { type: 'runner', index }
                   : { type: 'seq', suit, index };
               if (!G.hasDrawn && isClosedDiscard && G.discardPile.length > 0) {
-                moves.pickUpDiscard(selectedCardIds(), { type: 'append', meldTarget: target }); setSelectedCards([]);
-              } else if (selectedCards.length > 0) {
-                moves.appendToMeld(target, selectedCardIds()); setSelectedCards([]);
+                moves.pickUpDiscard(selectedCardIds(), { type: 'append', meldTarget: target }); setSelectedCards({});
+              } else if (selectedCount > 0) {
+                moves.appendToMeld(target, selectedCardIds()); setSelectedCards({});
               }
             }}
-            style={{ position: 'relative', display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: hasNewCards ? '2px solid #50fa7b' : `2px solid ${borderColor}`, boxShadow: hasNewCards ? '0 0 10px rgba(80,250,123,0.5)' : 'none', cursor: (isMyTurn && isMyTeam && (selectedCards.length > 0 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default' }}>
+            style={{ position: 'relative', display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: hasNewCards ? '2px solid #50fa7b' : `2px solid ${borderColor}`, boxShadow: hasNewCards ? '0 0 10px rgba(80,250,123,0.5)' : 'none', cursor: (isMyTurn && isMyTeam && (selectedCount > 0 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default' }}>
             {renderedCards.map((card, i) => {
               const isNewCard = hasNewCards && i >= renderedCards.length - newCount;
               return (
@@ -503,12 +545,12 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
               <div onClick={() => {
                   if (!isMyTurn) return;
                   if (!G.hasDrawn && isClosedDiscard && G.discardPile.length > 0) {
-                    moves.pickUpDiscard(selectedCardIds(), { type: 'new' }); setSelectedCards([]);
-                  } else if (selectedCards.length >= 3) {
-                    moves.playMeld(selectedCardIds()); setSelectedCards([]);
+                    moves.pickUpDiscard(selectedCardIds(), { type: 'new' }); setSelectedCards({});
+                  } else if (selectedCount >= 3) {
+                    moves.playMeld(selectedCardIds()); setSelectedCards({});
                   }
                 }}
-                style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && (selectedCards.length >= 3 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default', color: '#888' }}>
+                style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && (selectedCount >= 3 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default', color: '#888' }}>
                 + Baixar Jogo
               </div>
             )}
@@ -551,7 +593,7 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
         
         <div style={{ textAlign: 'center', width: '100%' }}>
           <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Lixo ({G.discardPile.length})</h4>
-          <div onClick={handleDiscardPileClick} style={{ cursor: (isMyTurn && (!G.hasDrawn || (selectedCards.length === 1 && G.hasDrawn))) ? 'pointer' : 'not-allowed' }}>
+          <div onClick={handleDiscardPileClick} style={{ cursor: (isMyTurn && (!G.hasDrawn || (selectedCount === 1 && G.hasDrawn))) ? 'pointer' : 'not-allowed' }}>
             {G.discardPile.length > 0 ? (
               G.rules?.openDiscardView ? (
                 chunkedDiscard.map((row, rIdx) => (
@@ -596,7 +638,7 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
 
         <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '8px', boxSizing: 'border-box' }}>
           <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Jogadores</h4>
-          {Object.keys(G.hands).filter(p => G.hands[p]).map(p => {
+          {Object.keys(G.handSizes).map(p => {
             const isTurn = ctx.currentPlayer === p;
             const isMe = p === playerID;
             const name = G.rules?.assignments?.[p] || `P${p}`;
@@ -612,30 +654,38 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
                 overflow: 'hidden', minWidth: 0
               }}>
                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>{isTurn ? '👉 ' : ''}{name}</span>
-                <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.hands[p].length} 🃏</span>
+                <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.handSizes[p] ?? 0} 🃏</span>
               </div>
             );
           })}
         </div>
 
-        {G.rules?.showKnownCards && Object.keys(G.knownCards).some(p => G.knownCards[p].length > 0) && (
+        {G.rules?.showKnownCards && G.knownCards2 && Object.keys(G.knownCards2).some(p => {
+            const flat = G.knownCards2[p] || [];
+            return flat.some(v => v > 0);
+          }) && (
           <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '8px', boxSizing: 'border-box' }}>
             <h4 style={{ margin: '0 0 10px 0', fontSize: '0.8em', color: '#ccc' }}>Memorizadas</h4>
-            {Object.keys(G.knownCards).map(p => {
-              if (G.knownCards[p].length === 0) return null;
+            {Object.keys(G.knownCards2).map(p => {
+              const flat = G.knownCards2[p] || [];
+              const CAOFF = 72;
+              const knownCards = [];
+              for (let s = 1; s <= 4; s++) for (let r = 1; r <= 13; r++) {
+                const cnt = Math.round((flat[(s-1)*18+(r-1)]||0)*2);
+                const cId = (s-1)*13+(r-1);
+                for (let i = 0; i < cnt; i++) knownCards.push(cId);
+              }
+              [1,14,27,40].forEach(cId => { const cnt = Math.round((flat[CAOFF+cId]||0)*2); for (let i=0;i<cnt;i++) knownCards.push(cId); });
+              const jc = Math.round((flat[CAOFF+52]||0)*2); for (let i=0;i<jc;i++) knownCards.push(54);
+              if (knownCards.length === 0) return null;
               const name = G.rules?.assignments?.[p] || `P${p}`;
               return (
                 <div key={p} style={{ marginBottom: '8px' }}>
                   <div style={{ fontSize: '0.7em', color: '#888', marginBottom: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}:</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
-                    {G.knownCards[p].map((cId, i) => {
-                      const c = intToCardObj(cId);
-                      return (
-                        <div key={i} style={{ background: 'white', color: (c.suit==='♥'||c.suit==='♦')?'red':'black', padding: '1px 3px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold' }}>
-                          {c.rank}{c.suit}
-                        </div>
-                      );
-                    })}
+                    {knownCards.map((cId, i) => { const c = intToCardObj(cId); return (
+                      <div key={i} style={{ background: 'white', color: (c.suit==='♥'||c.suit==='♦')?'red':'black', padding: '1px 3px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold' }}>{c.rank}{c.suit}</div>
+                    ); })}
                   </div>
                 </div>
               );
@@ -650,7 +700,11 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
         <div style={{ flexShrink: 0 }}>
           <h2 style={{ fontSize: '1.2em', margin: '0 0 10px 0' }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-            {sortedHandObj.map(card => <Card key={card.uid} card={card} isSelected={selectedCards.includes(card.uid)} isNewlyDrawn={newlyDrawnUid(card)} onClick={() => toggleCardSelection(card.uid)} />)}
+            {sortedHandObj.map(card => {
+              const k = card.id >= 104 ? 54 : card.id % 52;
+              const isSelected = (selectedCards[k] || 0) > 0;
+              return <Card key={card.uid} card={card} isSelected={isSelected} isNewlyDrawn={isNewlyDrawn(card)} onClick={() => toggleCardSelection(card.id)} />;
+            })}
           </div>
         </div>
       </div>
