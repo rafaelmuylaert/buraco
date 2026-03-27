@@ -267,11 +267,12 @@ export const TrainerService = {
         });
 
         // Shared state for island coordination
-        const islandElites = new Array(NUM_ISLANDS).fill(null);  // latest champion per island
-        const islandBroadcastGen = new Array(NUM_ISLANDS).fill(0); // gen at which each island last broadcast
-        const islandLastInjectedGen = new Array(NUM_ISLANDS).fill(0); // gen at which each island last injected champion
-        let latestChampion = null;   // winner of last inter-island tournament
+        const islandElites = new Array(NUM_ISLANDS).fill(null);
+        const islandBroadcastGen = new Array(NUM_ISLANDS).fill(0);
+        const islandLastInjectedGen = new Array(NUM_ISLANDS).fill(0);
+        let latestChampion = null;
         let championTournamentRunning = false;
+        let lastChampionTournamentGen = 0; // milestone gen at which last tournament ran
 
         const runIslandGeneration = async (pop) => {
             const finalists = await runPlayoffTournament(pop, rules);
@@ -403,20 +404,14 @@ export const TrainerService = {
                         const t = getPool().getAndResetTimings();
                         console.log(`[${botName}] [TIMING/${SAVE_EVERY}gens] forwardPass=${t.forwardPass.toFixed(0)}ms copyToWasm=${(t._copyMs||0).toFixed(0)}ms evalCount=${(t._evalCount||0).toFixed(0)} getAllValidMelds=${t.getAllValidMelds.toFixed(0)}ms getAllValidAppends=${(t.getAllValidAppends||0).toFixed(0)}ms`);
 
-                        // Trigger champion tournament when all islands have broadcast at least once
-                        // and all have a new elite since the last tournament round.
-                        // Islands that are ahead just keep running; stragglers are skipped (we use
-                        // their last known elite). We only require every island has broadcast at
-                        // least once so we always have a full field.
+                        // Fire champion tournament only when ALL islands have completed
+                        // this milestone round — i.e. every island's broadcastGen is a
+                        // multiple of SAVE_EVERY strictly greater than the last tournament.
                         const minBroadcastGen = Math.min(...islandBroadcastGen);
-                        if (minBroadcastGen > 0 && islandElites.every(e => e !== null)) {
-                            // Check if all islands have broadcast in the same "round"
-                            // (within SAVE_EVERY gens of each other) — if so, run tournament.
-                            // If one island is far ahead, we still run with latest elites.
-                            const maxBroadcastGen = Math.max(...islandBroadcastGen);
-                            if (maxBroadcastGen - minBroadcastGen < SAVE_EVERY * 2) {
-                                runChampionTournament(); // fire-and-forget, guarded internally
-                            }
+                        const roundGen = Math.floor(minBroadcastGen / SAVE_EVERY) * SAVE_EVERY;
+                        if (roundGen > lastChampionTournamentGen && islandElites.every(e => e !== null)) {
+                            lastChampionTournamentGen = roundGen;
+                            runChampionTournament(); // fire-and-forget, guarded internally
                         }
                     }
                 }
