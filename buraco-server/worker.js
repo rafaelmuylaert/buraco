@@ -98,9 +98,17 @@ function runMatch(genomes, rules, fixedDeck) {
                 if (_diagCount < 3) console.log(`[WASM] p=${p} phase=${phaseCount} moveType=${result.moveType} hasDrawn=${S.hasDrawn} handSize=${S.handSizes[p]} deckLen=${S.deck.length} discardLen=${S.discardPile.length} topDiscard=${S.discardPile[S.discardPile.length-1]}`);
                 if (result.moveType === 0) { const ok = moveDrawCard(S, p); if (_diagCount < 3) console.log(`[WASM] moveDrawCard result=${ok} hasDrawn=${S.hasDrawn}`); }
                 else if (result.moveType === 1) { movePickUpDiscard(S, p, result.cardCounts, { type: 'new' }); }
-                else if (result.moveType === 2) { moveMeld(S, p, result.cardCounts); }
-                else if (result.moveType === 3) { moveMeld(S, p, result.cardCounts,
-                    { type: result.targetType===1?'seq':'runner', suit: result.targetSuit, index: result.targetSlot }); }
+                else if (result.moveType === 2) {
+                    const ok = moveMeld(S, p, result.cardCounts);
+                    if (_diagCount < 3) console.log(`[WASM] moveMeld ok=${ok} cc=${JSON.stringify(result.cardCounts)} hasDrawn=${S.hasDrawn}`);
+                    if (!ok) break; // meld failed, skip to discard
+                }
+                else if (result.moveType === 3) {
+                    const target = { type: result.targetType===1?'seq':'runner', suit: result.targetSuit, index: result.targetSlot };
+                    const ok = moveMeld(S, p, result.cardCounts, target);
+                    if (_diagCount < 3) console.log(`[WASM] appendMeld ok=${ok} cc=${JSON.stringify(result.cardCounts)} target=${JSON.stringify(target)}`);
+                    if (!ok) break; // append failed, skip to discard
+                }
                 else if (result.moveType === 4) { moveDiscardCard(S, p, result.discardCard, true); turnDone = true; break; }
                 else if (result.moveType === 5) { S.isExhausted = true; turnDone = true; break; }
             }
