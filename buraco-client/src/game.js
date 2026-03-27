@@ -950,7 +950,7 @@ export function planTurn(G, p, DNA) {
     const dnaDiscard = DNA.subarray(doff);
 
     // ── Phase 1: Pickup ───────────────────────────────────────────────────────
-    if (G.deck.length === 0 && G.pots.length === 0)
+    if (!G.hasDrawn && G.deck.length === 0 && G.pots.length === 0)
         return [{ move: 'declareExhausted', args: [] }];
 
     // Pre-compute meld index once per turn — shared across all scoreAllCandidates / scoreDiscard calls
@@ -1166,7 +1166,7 @@ export const BuracoGame = {
       if (!moveDiscardCard(G, ctx.currentPlayer, cardId)) return 'INVALID_MOVE';
       events.endTurn();
     },
-    declareExhausted: ({ G }) => { G.isExhausted = true; }
+    declareExhausted: ({ G, events }) => { G.isExhausted = true; events.endTurn(); }
   },
 
   endIf: ({ G }) => {

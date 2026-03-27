@@ -47,11 +47,10 @@ function safeDBMethod(target, fn) {
     } catch (e) {
       if (e.message && e.message.includes('does not look like a valid storage file')) {
         const id = args[0];
-        console.warn(`[DB] Deleting corrupted game file at runtime: ${id}`);
+        console.warn(`[DB] Corrupted game file at runtime: ${id} — deleting and returning undefined`);
         const fp = path.join(gamesPath, id);
         try { fs.unlinkSync(fp); } catch (_) {}
-        // Return a minimal valid response so boardgame.io can continue
-        return { state: undefined, metadata: undefined, initialState: undefined };
+        return undefined;
       }
       throw e;
     }

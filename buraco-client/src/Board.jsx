@@ -277,8 +277,8 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
   }, [gameover, matchID]);
 
   if (gameover) {
-    const s0 = gameover.scores.team0;
-    const s1 = gameover.scores.team1;
+    const s0 = gameover.scores?.team0 ?? { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 };
+    const s1 = gameover.scores?.team1 ?? { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 };
     const team0NamesArr = (G.teamPlayers.team0 || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`);
     const team1NamesArr = (G.teamPlayers.team1 || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`);
     const team0Names = team0NamesArr.join(' & ');
