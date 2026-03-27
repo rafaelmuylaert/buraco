@@ -565,7 +565,9 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
                   if (!G.hasDrawn && isClosedDiscard && G.discardPile.length > 0) {
                     moves.pickUpDiscard(selectedCardIds(), { type: 'new' }); setSelectedCards({});
                   } else if (G.hasDrawn && selectedCount >= 3) {
-                    moves.playMeld(selectedCardIds()); setSelectedCards({});
+                    const cc = selectedCardIds();
+                    console.log('[MELD] playing meld with cardCounts:', JSON.stringify(cc), 'hasDrawn:', G.hasDrawn);
+                    moves.playMeld(cc); setSelectedCards({});
                   }
                 }}
                 style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && ((G.hasDrawn && selectedCount >= 3) || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default', color: '#888' }}>

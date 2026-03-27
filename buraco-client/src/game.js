@@ -475,37 +475,44 @@ export function moveMeld(G, p, cardCounts, target = null, addCards = 0, topDisca
     if (!G.hasDrawn && topDiscard === null) return false;
     const teamId = G.teams[p];
     const flat = G.cards2[p];
+    // Normalize: boardgame.io may send array instead of object if client sends wrong type
+    let counts = cardCounts;
+    if (Array.isArray(cardCounts)) {
+        // Convert array of card IDs to count map
+        counts = {};
+        for (const c of cardCounts) { const k = c >= 104 ? 54 : c % 52; counts[k] = (counts[k] || 0) + 1; }
+    }
     // Validate counts available in hand
-    for (const [k, need] of Object.entries(cardCounts)) {
+    for (const [k, need] of Object.entries(counts)) {
         const key = +k === 54 ? 52 : +k;
         const have = Math.round((flat[CARDS_ALL_OFF + key] || 0) * 2);
         if (have < need) return false;
     }
     // Build card ID array for parseMeld
-    const cardIds = countsToIds(cardCounts);
+    const cardIds = countsToIds(counts);
     const allCardIds = topDiscard !== null ? [...cardIds, topDiscard] : cardIds;
     const existingMeld = target === null ? null
         : target.type === 'runner' ? G.table[teamId][1][target.index]
         : (G.table[teamId][0][target.suit] || [])[target.index];
     if (target !== null && !existingMeld) return false;
     const allCounts = topDiscard !== null
-        ? { ...cardCounts, [topDiscard >= 104 ? 54 : topDiscard % 52]: (cardCounts[topDiscard >= 104 ? 54 : topDiscard % 52] || 0) + 1 }
-        : cardCounts;
+        ? { ...counts, [topDiscard >= 104 ? 54 : topDiscard % 52]: (counts[topDiscard >= 104 ? 54 : topDiscard % 52] || 0) + 1 }
+        : counts;
     const parsed = parseMeld(allCounts, G.rules, existingMeld);
     if (!parsed) return false;
-    const newHandSize = G.handSizes[p] - Object.values(cardCounts).reduce((a, b) => a + b, 0) + addCards;
+    const newHandSize = G.handSizes[p] - Object.values(counts).reduce((a, b) => a + b, 0) + addCards;
     const isRunner = parsed.length === 6;
-    const suit = isRunner ? 0 : (target ? target.suit : parsed[0]); // parsed[0] is suit for seq melds
+    const suit = isRunner ? 0 : (target ? target.suit : parsed[0]);
     const wasClean = existingMeld ? isMeldClean(existingMeld) : false;
     const willBeClean = isMeldClean(parsed);
     const addCleancount = willBeClean !== wasClean ? (willBeClean ? 1 : -1) : 0;
     if (newHandSize < 2 && (G.cleanMelds[teamId] + addCleancount) < 0) return false;
     // Remove cards from hand bitmap
-    for (const [k, n] of Object.entries(cardCounts)) {
+    for (const [k, n] of Object.entries(counts)) {
         const c = +k;
         for (let i = 0; i < n; i++) { cards2Remove(flat, c); cards2Remove(G.knownCards2[p], c); }
     }
-    G.handSizes[p] -= Object.values(cardCounts).reduce((a, b) => a + b, 0);
+    G.handSizes[p] -= Object.values(counts).reduce((a, b) => a + b, 0);
     if (target === null) {
         if (isRunner) G.table[teamId][1].push(parsed);
         else { if (!G.table[teamId][0][suit]) G.table[teamId][0][suit] = []; G.table[teamId][0][suit].push(parsed); }
