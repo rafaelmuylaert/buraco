@@ -562,15 +562,10 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
             {isMyTeam && (
               <div onClick={() => {
                   if (!isMyTurn) return;
-                  console.log('[MELD BTN] clicked hasDrawn=', G.hasDrawn, 'selectedCount=', selectedCount, 'selectedCards=', JSON.stringify(selectedCards));
                   if (!G.hasDrawn && isClosedDiscard && G.discardPile.length > 0) {
                     moves.pickUpDiscard(selectedCardIds(), { type: 'new' }); setSelectedCards({});
                   } else if (G.hasDrawn && selectedCount >= 3) {
-                    const cc = selectedCardIds();
-                    console.log('[MELD] sending playMeld:', JSON.stringify(cc));
-                    moves.playMeld(cc); setSelectedCards({});
-                  } else {
-                    console.log('[MELD] conditions not met: hasDrawn=', G.hasDrawn, 'selectedCount=', selectedCount);
+                    moves.playMeld(selectedCardIds()); setSelectedCards({});
                   }
                 }}
                 style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && ((G.hasDrawn && selectedCount >= 3) || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default', color: '#888' }}>

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { AI_CONFIG, CARDS_ALL_OFF, CARDS_SUIT_STRIDE,
-         encodeCandidateMeld, isMeldClean,
+         encodeCandidateMeld, isMeldClean, seqSuit,
          setScoreFunctions, addForwardPassTime } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -162,7 +162,8 @@ function suitsInCandidates(candidates) {
     const seen = new Set();
     for (const cand of candidates) {
         if (!cand.parsedMeld || cand.parsedMeld.length === 6) continue;
-        const s = cand.parsedMeld[0];
+        const ids = cand.cardCounts ? Object.keys(cand.cardCounts).map(k => +k) : [];
+        const s = seqSuit(ids);
         if (s >= 1 && s <= 4) seen.add(s);
     }
     return seen.size > 0 ? [...seen] : [1];

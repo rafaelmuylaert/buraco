@@ -502,7 +502,7 @@ export function moveMeld(G, p, cardCounts, target = null, addCards = 0, topDisca
     if (!parsed) return false;
     const newHandSize = G.handSizes[p] - Object.values(counts).reduce((a, b) => a + b, 0) + addCards;
     const isRunner = parsed.length === 6;
-    const suit = isRunner ? 0 : (target ? target.suit : parsed[0]);
+    const suit = isRunner ? 0 : (target ? target.suit : seqSuit(allCardIds));
     const wasClean = existingMeld ? isMeldClean(existingMeld) : false;
     const willBeClean = isMeldClean(parsed);
     const addCleancount = willBeClean !== wasClean ? (willBeClean ? 1 : -1) : 0;
@@ -516,7 +516,6 @@ export function moveMeld(G, p, cardCounts, target = null, addCards = 0, topDisca
     if (target === null) {
         if (isRunner) G.table[teamId][1].push(parsed);
         else { if (!G.table[teamId][0][suit]) G.table[teamId][0][suit] = []; G.table[teamId][0][suit].push(parsed); }
-        console.log('[moveMeld] stored meld suit=', suit, 'isRunner=', isRunner, 'teamId=', teamId, 'parsed=', JSON.stringify(parsed));
     } else {
         if (isRunner) G.table[teamId][1][target.index] = parsed;
         else G.table[teamId][0][suit][target.index] = parsed;
@@ -884,8 +883,9 @@ export function suitsInCandidates(candidates) {
     const seen = new Set();
     for (const cand of candidates) {
         if (!cand.parsedMeld || cand.parsedMeld.length === 6) continue;
-        // Determine suit from parsedMeld directly (m[0] is suit for seq)
-        const s = cand.parsedMeld[0];
+        // Derive suit from the card types in cardCounts
+        const ids = cand.cardCounts ? Object.keys(cand.cardCounts).map(k => +k) : [];
+        const s = seqSuit(ids);
         if (s >= 1 && s <= 4) seen.add(s);
     }
     return seen.size > 0 ? [...seen] : [1];
@@ -917,7 +917,7 @@ export function scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp
         const suitIndices = [];
         for (let i = 0; i < candidates.length && suitCands.length < maxSlots; i++) {
             const cand = candidates[i];
-            const candSuit = cand.parsedMeld ? (cand.parsedMeld.length === 6 ? 0 : cand.parsedMeld[0]) : suit;
+            const candSuit = cand.parsedMeld ? (cand.parsedMeld.length === 6 ? 0 : seqSuit(cand.cardCounts ? Object.keys(cand.cardCounts).map(k => +k) : [])) : suit;
             if (candSuit !== 0 && candSuit !== suit) continue;
             let appendIdx = cand.appendIdx;
             if (cand.move === 'appendToMeld') {
