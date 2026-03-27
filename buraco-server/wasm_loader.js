@@ -78,11 +78,15 @@ export async function initWasm() {
         _mem = _ex.memory;
 
         const required = ['evaluate', 'configure', 'set_eval_context', 'set_inp_scale',
-                          'get_weights', 'get_out', 'get_layer_sizes_buf', 'get_max_weights',
-                          'get_cards2', 'get_knowncards2', 'get_discard2',
-                          'get_scalars', 'get_seq_meld', 'get_run_meld',
-                          'get_seq_cands', 'get_run_cands',
-                          'set_num_seq_cands', 'set_num_run_cands'];
+                  'get_weights', 'get_out', 'get_layer_sizes_buf', 'get_max_weights',
+                  'get_cards2', 'get_knowncards2', 'get_discard2',
+                  'get_scalars', 'get_seq_meld', 'get_run_meld',
+                  'get_seq_cands', 'get_run_cands',
+                  'set_num_seq_cands', 'set_num_run_cands',
+                  'set_match_state', 'cpp_plan_turn', 'get_planned_move',
+                  'configure_net_pickup', 'configure_net_meld',
+                  'configure_net_runner', 'configure_net_discard'];
+
         for (const fn of required) {
             if (!_ex[fn]) { console.warn(`[WASM] Missing: ${fn}`); _ex = null; return false; }
         }
@@ -107,9 +111,103 @@ export function loadMatchDNA(dnaTeam0, dnaTeam1) {
     if (_vWeights?.buffer !== _mem.buffer) _refreshViews();
     _vWeights.set(dnaTeam0, _team0DnaOffset);
     if (_team1DnaOffset > 0) _vWeights.set(dnaTeam1, _team1DnaOffset);
+
+    // Configure all 4 nets once — C++ plan_turn reads these directly
+    const C = AI_CONFIG;
+    const _setNet = (fn, layerSizes, woff) => {
+        for (let i = 0; i < layerSizes.length; i++) _vLayerSizesBuf[i] = layerSizes[i];
+        _ex[fn](layerSizes.length, woff);
+    };
+    _setNet('configure_net_pickup',  C.PICKUP_LAYER_SIZES,  0);
+    _setNet('configure_net_meld',    C.MELD_LAYER_SIZES,    C.DNA_PICKUP);
+    _setNet('configure_net_runner',  C.RUNNER_LAYER_SIZES,  C.DNA_PICKUP + C.DNA_MELD);
+    _setNet('configure_net_discard', C.DISCARD_LAYER_SIZES, C.DNA_PICKUP + C.DNA_MELD + C.DNA_RUNNER);
 }
 
+
 export function setActiveTeam(teamBase) { _activeTeamBase = teamBase; }
+export function setMatchState(G, player, myTeam, oppTeam) {
+    if (!_ex) return;
+    const numP = G.rules.numPlayers || 4;
+    const hs = (p) => G.handSizes[p.toString()] ?? 0;
+    const myTeamIdx  = myTeam  === 'team0' ? 0 : 1;
+    const oppTeamIdx = oppTeam === 'team0' ? 0 : 1;
+    const topDiscard = G.discardPile.length > 0
+        ? (G.discardPile[G.discardPile.length-1] === 54 ? 54 : G.discardPile[G.discardPile.length-1] % 52)
+        : 255;
+    const runnersAllowed = (() => {
+        const r = G.rules.runners;
+        if (!r || r === 'none') return 0;
+        if (r === 'any') return 0xFF;
+        if (r === 'aces_kings')  return (1<<1)|(1<<13);
+        if (r === 'aces_threes') return (1<<1)|(1<<3);
+        if (Array.isArray(r)) return r.reduce((a,v) => a|(1<<v), 0);
+        return 0;
+    })();
+
+    _ex.set_match_state(
+        hs('0'), hs('1'), hs('2'), hs('3'),
+        Math.min(G.deck.length, 65535),
+        Math.min(G.discardPile.length, 65535),
+        topDiscard,
+        G.pots.length,
+        G.hasDrawn ? 1 : 0,
+        G.teamMortos['team0'] ? 1 : 0,
+        G.teamMortos['team1'] ? 1 : 0,
+        G.cleanMelds['team0'] || 0,
+        G.cleanMelds['team1'] || 0,
+        numP,
+        (G.rules.discard === 'closed' || G.rules.discard === true) ? 1 : 0,
+        runnersAllowed
+    );
+
+    // Write scalars
+    const e = v => (v <= 0 ? 0 : v >= 1 ? 255 : (v * 255 + 0.5) | 0);
+    if (_wasmScalars) {
+        _wasmScalars[0] = e(hs(player.toString()) / 22);
+        _wasmScalars[1] = e(hs(((player+1)%numP).toString()) / 22);
+        _wasmScalars[2] = e(hs(((player+2)%numP).toString()) / 22);
+        _wasmScalars[3] = e(hs(((player+3)%numP).toString()) / 22);
+        _wasmScalars[4] = e(G.deck.length / 104);
+        _wasmScalars[5] = e(G.discardPile.length / 104);
+        _wasmScalars[6] = G.teamMortos[myTeam]  ? 255 : 0;
+        _wasmScalars[7] = G.teamMortos[oppTeam] ? 255 : 0;
+        _wasmScalars[8] = e(G.pots.length / 2);
+        _wasmScalars[9] = (G.cleanMelds[myTeam]  || 0) > 0 ? 255 : 0;
+        _wasmScalars[10]= (G.cleanMelds[oppTeam] || 0) > 0 ? 255 : 0;
+    }
+}
+// Returns { moveType, cardCounts, targetType, targetSuit, targetSlot }
+// moveType: 0=drawCard,1=pickUpDiscard,2=playMeld,3=appendToMeld,4=discardCard,5=declareExhausted
+export function planTurnWasm(G, player, myTeam, oppTeam) {
+    if (!_ex?.cpp_plan_turn) return null;
+
+    const numP = G.rules.numPlayers || 4;
+    const pInt = parseInt(player);
+    const myTeamIdx  = myTeam  === 'team0' ? 0 : 1;
+    const oppTeamIdx = oppTeam === 'team0' ? 0 : 1;
+
+    setActiveTeam(myTeamIdx === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
+    _ex.set_eval_context(pInt, myTeamIdx, oppTeamIdx, 0, 0);
+    setMatchState(G, pInt, myTeam, oppTeam);
+
+    const moveType = _ex.cpp_plan_turn();
+
+    const buf = new Uint8Array(_mem.buffer, _ex.get_planned_move(), 57);
+    const cardCounts = {};
+    for (let i = 0; i < 53; i++) {
+        if (buf[4+i] > 0) cardCounts[i === 52 ? 54 : i] = buf[4+i];
+    }
+
+    return {
+        moveType:   buf[0],
+        targetType: buf[1],
+        targetSuit: buf[2],
+        targetSlot: buf[3],
+        discardCard: buf[0] === 4 ? (buf[1] === 52 ? 54 : buf[1]) : -1,
+        cardCounts
+    };
+}
 
 // Called by planTurn once per turn to set player context and write scalars
 export function setTurnContext(player, myTeam, oppTeam, scalars) {

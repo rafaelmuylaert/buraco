@@ -1,10 +1,10 @@
 import { workerData, parentPort } from 'worker_threads';
 import {
     BuracoGame, AI_CONFIG, CARDS_ALL_OFF,
-    moveDrawCard, moveDiscardCard,
-    checkGameOver, planTurn, getAndResetTimings
+    moveDrawCard, moveDiscardCard, moveMeld, movePickUpDiscard,
+    checkGameOver, getAndResetTimings
 } from './game.js';
-import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers } from './wasm_loader.js';
+import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers, planTurnWasm } from './wasm_loader.js';
 
 await initWasm();
 
@@ -83,31 +83,27 @@ function runMatch(genomes, rules, fixedDeck) {
                 const teamBase = S.teams[p] === 'team0' ? 0 : AI_CONFIG.TOTAL_DNA_SIZE;
                 setActiveTeam(teamBase);
             }
-            let plan;
-            try { plan = planTurn(S, p, DNA); } catch(e) {
-                console.error('[runMatch] planTurn threw:', e?.message);
-                if (S.hasDrawn) {
-                    // Force discard any card
-                    let discarded = false;
-                    for (let i = 0; i < 53 && !discarded; i++) {
-                        const cnt = Math.round((S.cards2[p][CARDS_ALL_OFF + i] || 0) * 2);
-                        if (cnt > 0) { moveDiscardCard(S, p, i === 52 ? 54 : i, true); discarded = true; }
-                    }
-                    if (!discarded) S.hasDrawn = false;
-                } else { if (!moveDrawCard(S, p)) S.isExhausted = true; }
-                plan = [];
+            const result = planTurnWasm(S, p, S.teams[p] === 'team0' ? 'team0' : 'team1',
+                             S.teams[p] === 'team0' ? 'team1' : 'team0');
+            if (result) {
+                // Execute the move on S
+                if (result.moveType === 0) moveDrawCard(S, p);
+                else if (result.moveType === 1) movePickUpDiscard(S, p, result.cardCounts, { type: 'new' });
+                else if (result.moveType === 2) moveMeld(S, p, result.cardCounts);
+                else if (result.moveType === 3) moveMeld(S, p, result.cardCounts,
+                    { type: result.targetType===1?'seq':'runner', suit: result.targetSuit, index: result.targetSlot });
+                else if (result.moveType === 4) {
+                    moveDiscardCard(S, p, result.discardCard, true);
+                }
+                else if (result.moveType === 5) S.isExhausted = true;
             }
 
-            if (plan[0]?.move === 'declareExhausted') {
-                S.isExhausted = true;
-                S.hasDrawn = false;
-            }
 
             // If planTurn didn't end the turn (hasDrawn still true), force-discard
             if (S.hasDrawn) {
                 let discarded = false;
                 for (let i = 0; i < 53 && !discarded; i++) {
-                    const cnt = Math.round((S.cards2[p][CARDS_ALL_OFF + i] || 0) * 2);
+                    const cnt = S.cards2[p][CARDS_ALL_OFF + i] || 0;
                     if (cnt > 0) { moveDiscardCard(S, p, i === 52 ? 54 : i, true); discarded = true; }
                 }
                 if (!discarded) S.hasDrawn = false;

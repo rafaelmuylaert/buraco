@@ -693,7 +693,7 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
                 const cId = (s-1)*13+(r-1);
                 for (let i = 0; i < cnt; i++) knownCards.push(cId);
               }
-              [1,14,27,40].forEach(cId => { const cnt = Math.round((flat[CAOFF+cId]||0)*2); for (let i=0;i<cnt;i++) knownCards.push(cId); });
+              [1,14,27,40].forEach(cId => { const cnt = flat[CAOFF+cId] || 0; for (let i=0;i<cnt;i++) knownCards.push(cId); });
               const jc = flat[CAOFF+52]||0; for (let i=0;i<jc;i++) knownCards.push(54);
               if (knownCards.length === 0) return null;
               const name = G.rules?.assignments?.[p] || `P${p}`;

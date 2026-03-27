@@ -297,5 +297,483 @@ WASM_EXPORT void evaluate() {
 // Legacy: get_inp still available for compat but unused in new path
 static uint8_t g_inp_legacy[4][2048];
 WASM_EXPORT uint8_t* get_inp(int i) { return g_inp_legacy[i]; }
+// ── Game state (set by JS once per turn via set_match_state) ─────────────────
+static uint8_t g_hand_sizes[4];
+static uint16_t g_deck_len;
+static uint16_t g_discard_len;
+static uint8_t  g_top_discard;   // 255 = empty
+static uint8_t  g_pots_len;
+static uint8_t  g_has_drawn;
+static uint8_t  g_team_mortos[2];
+static uint8_t  g_clean_melds[2];
+static uint8_t  g_num_players;
+static uint8_t  g_is_closed_discard;
+static uint8_t  g_runners_allowed;  // bitmask: bit1=aces, bit13=kings, bit3=threes, 0xFF=any
+
+// ── Planned move output buffer ────────────────────────────────────────────────
+// [0]=moveType, [1]=targetType, [2]=targetSuit, [3]=targetSlot, [4..56]=cardCounts[53]
+#define MOVE_DRAW          0
+#define MOVE_PICKUP        1
+#define MOVE_PLAY_MELD     2
+#define MOVE_APPEND        3
+#define MOVE_DISCARD       4
+#define MOVE_EXHAUSTED     5
+static uint8_t g_planned_move[57];
+
+// ── Seq meld candidate storage (internal, richer than g_seq_cands) ────────────
+// Stores up to MAX_SEQ_CANDS full parsed melds + cardCounts for execution
+#define CAND_MELD_SIZE 16
+#define CAND_CC_SIZE   53
+static uint8_t g_cand_seq_meld[MAX_SEQ_CANDS][CAND_MELD_SIZE];  // parsed meld slots
+static uint8_t g_cand_seq_cc  [MAX_SEQ_CANDS][CAND_CC_SIZE];    // cardCounts
+static uint8_t g_cand_run_meld[MAX_RUN_CANDS][6];
+static uint8_t g_cand_run_cc  [MAX_RUN_CANDS][CAND_CC_SIZE];
+static uint8_t g_cand_append_meld[MAX_SEQ_CANDS][CAND_MELD_SIZE];
+static uint8_t g_cand_append_cc  [MAX_SEQ_CANDS][CAND_CC_SIZE];
+static uint8_t g_cand_append_suit[MAX_SEQ_CANDS];
+static uint8_t g_cand_append_slot[MAX_SEQ_CANDS];
+static int     g_num_append_cands;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+static inline int rank_count(int player, int suit, int rank) {
+    return g_cards2[player][(suit-1)*18 + (rank-1)];
+}
+static inline int all_count(int player, int cardType) {
+    return g_cards2[player][CARDS_ALL_OFF + (cardType == 54 ? 52 : cardType)];
+}
+static inline int is_runner_allowed(int rank) {
+    if (!g_runners_allowed) return 0;
+    if (g_runners_allowed == 0xFF) return 1;
+    return (g_runners_allowed >> rank) & 1;
+}
+
+// Check gaps in a seq meld [0..15]. Returns gap count.
+static int check_gaps(const uint8_t* m) {
+    // find min and max occupied positions
+    int mn = 15, mx = -1;
+    // positions: 0=A-low, 2..13=3..K, 14=A-high (pos 1 unused)
+    if (m[0]) { if (0  < mn) mn=0;  if (0  > mx) mx=0;  }
+    if (m[1]) { if (14 < mn) mn=14; if (14 > mx) mx=14; }
+    for (int r=2; r<=13; r++) if (m[r]) { if (r<mn) mn=r; if (r>mx) mx=r; }
+    if (mn > mx) return 0;
+    int gaps = 0;
+    for (int i=mn; i<=mx; i++) {
+        if (i==1) continue;  // pos 1 unused
+        int pos = (i==14) ? 1 : i;  // m[1]=A-high
+        if (!m[pos]) gaps++;
+    }
+    return gaps;
+}
+
+// Build a seq parsedMeld from a contiguous rank run [lo..hi] in suit.
+// withWild: add one wild card (wild0type). Returns 1 on success, 0 on fail.
+// Output written to dst[16], cardCounts to cc[53].
+static int build_seq_from_run(int player, int suit, int lo, int hi,
+                               int withWild, int wild0type,
+                               uint8_t* dst, uint8_t* cc, uint8_t* sc_out) {
+    // Write directly into dst — no intermediate buffer
+    for (int i=0;i<16;i++) dst[i]=0;
+    for (int i=0;i<53;i++) cc[i]=0;
+
+    int aces=0;
+    for (int r=lo; r<=hi; r++) {
+        int actual_rank = (r==14)?1:r;
+        int cnt = rank_count(player, suit, actual_rank);
+        if (!cnt) continue;
+        if (r==1 || r==14) { aces++; }
+        else { dst[r]=1; cc[(suit-1)*13+(r-1)]=cnt; }
+    }
+
+    if (withWild) {
+        int ws = (wild0type==54) ? 5 : (wild0type/13)+1;
+        if (ws==5 || ws!=suit) dst[14]=(uint8_t)ws;
+        else dst[15]=1;
+        cc[wild0type==54?52:wild0type]++;
+    }
+
+    // Ace placement
+    if (aces>=2)      { dst[0]=1; dst[1]=1; cc[(suit-1)*13+0]=2; }
+    else if (aces==1) {
+        if (dst[13]) dst[1]=1;
+        else if (dst[3]) dst[0]=1;
+        else dst[1]=1;
+        cc[(suit-1)*13+0]=1;
+    }
+
+    int gaps = check_gaps(dst);
+    int hasW = dst[14]!=0 || dst[15]!=0;
+    if (gaps > (hasW?1:0)) return 0;
+
+    int len = dst[15] + (dst[14]!=0?1:0);
+    for (int r=0;r<=13;r++) len+=dst[r];
+    if (len<3 || len>14) return 0;
+
+    // nat2 demotion
+    if (dst[15]==1 && dst[3]==1 && (gaps==0 || dst[0]==1)) { dst[2]=1; dst[15]=0; }
+
+    // Encode directly into sc_out — no separate loop at call site
+    if (sc_out) {
+        for (int i=0;i<14;i++) sc_out[i] = dst[i] ? 255 : 0;
+        sc_out[14] = dst[14] ? 255 : 0;
+        sc_out[15] = dst[15] ? 255 : 0;
+        sc_out[16] = 0;
+    }
+
+    return 1;
+}
+
+
+// ── find_valid_melds ──────────────────────────────────────────────────────────
+// Reads g_cards2[g_player], writes to g_cand_seq_meld/cc and g_cand_run_meld/cc.
+// Returns total seq+run candidate count.
+static int find_valid_melds() {
+    int player = g_player;
+    int nSeq=0, nRun=0;
+
+    // Find first available wild
+    int wild0type = -1;
+    if (g_cards2[player][CARDS_ALL_OFF+52] > 0) wild0type=54;
+    else {
+        int s2ids[4]={1,14,27,40};
+        for (int i=0;i<4;i++) if (g_cards2[player][CARDS_ALL_OFF+s2ids[i]]>0) { wild0type=s2ids[i]; break; }
+    }
+    int hasWild = (wild0type>=0);
+
+    // Seq melds: scan each suit for contiguous runs
+    for (int suit=1; suit<=4 && nSeq<MAX_SEQ_CANDS; suit++) {
+        // Build 14-slot bitmap (slot 14 = ace-high copy of slot 1)
+        int bm[15]={0};
+        for (int r=1;r<=13;r++) bm[r]=rank_count(player,suit,r);
+        bm[14]=bm[1];
+
+        int acc_lo=-1, acc_hi=-1;
+        int gap_lo=-1, gap_hi=-1;
+
+        for (int r=1; r<=15; r++) {
+            int cnt = (r<=14) ? bm[r] : 0;
+            if (cnt>0) {
+                if (acc_lo<0) acc_lo=r;
+                acc_hi=r;
+            } else {
+                if (acc_lo>=0) {
+                    int runLen = acc_hi-acc_lo+1;
+                    if (runLen>=3 && nSeq<MAX_SEQ_CANDS) {
+                        if (build_seq_from_run(player,suit,acc_lo,acc_hi,0,-1,
+                                g_cand_seq_meld[nSeq],g_cand_seq_cc[nSeq],g_seq_cands[nSeq])) {
+                            nSeq++;
+                        }
+                    }
+                    if (hasWild && runLen>=2 && nSeq<MAX_SEQ_CANDS) {
+                        if (gap_lo>=0) {
+                            // bridge gap: gap_run + wild + acc_run
+                            if (build_seq_from_run(player,suit,gap_lo,acc_hi,1,wild0type,
+                                    g_cand_seq_meld[nSeq],g_cand_seq_cc[nSeq],g_seq_cands[nSeq])) {
+                                nSeq++;
+                            }
+                        }
+                        gap_lo=acc_lo; gap_hi=acc_hi;
+                    } else { gap_lo=-1; gap_hi=-1; }
+                    acc_lo=-1; acc_hi=-1;
+                } else { gap_lo=-1; gap_hi=-1; }
+            }
+        }
+    }
+
+    // Runner melds
+    if (g_runners_allowed) {
+        for (int rank=1; rank<=13 && nRun<MAX_RUN_CANDS; rank++) {
+            if (!is_runner_allowed(rank)) continue;
+            int total=0;
+            uint8_t cc[53]={0};
+            for (int s=1;s<=4;s++) {
+                int cnt=rank_count(player,s,rank);
+                if (cnt>0) { cc[(s-1)*13+(rank-1)]=cnt; total+=cnt; }
+            }
+            if (total<2) continue;
+            // Natural runner
+            if (total>=3) {
+                for (int i=0;i<53;i++) g_cand_run_cc[nRun][i]=cc[i];
+                g_cand_run_meld[nRun][0]=(uint8_t)rank;
+                for (int s=1;s<=4;s++) g_cand_run_meld[nRun][s]=rank_count(player,s,rank);
+                g_cand_run_meld[nRun][5]=0;
+                // encode for NN
+                g_run_cands[nRun][0]=(int)(rank/13.0f*255+0.5f);
+                for (int s=1;s<=4;s++) g_run_cands[nRun][s]=(int)(g_cand_run_meld[nRun][s]/2.0f*255+0.5f);
+                g_run_cands[nRun][5]=0;
+                g_run_cands[nRun][6]=0;
+                nRun++;
+            }
+            // Wild runner
+            if (hasWild && total>=2 && nRun<MAX_RUN_CANDS) {
+                for (int i=0;i<53;i++) g_cand_run_cc[nRun][i]=cc[i];
+                g_cand_run_cc[nRun][wild0type==54?52:wild0type]++;
+                g_cand_run_meld[nRun][0]=(uint8_t)rank;
+                for (int s=1;s<=4;s++) g_cand_run_meld[nRun][s]=rank_count(player,s,rank);
+                int ws=(wild0type==54)?5:(wild0type/13+1);
+                g_cand_run_meld[nRun][5]=(uint8_t)ws;
+                g_run_cands[nRun][0]=(int)(rank/13.0f*255+0.5f);
+                for (int s=1;s<=4;s++) g_run_cands[nRun][s]=(int)(g_cand_run_meld[nRun][s]/2.0f*255+0.5f);
+                g_run_cands[nRun][5]=(uint8_t)(ws/5.0f*255+0.5f);
+                g_run_cands[nRun][6]=0;
+                nRun++;
+            }
+        }
+    }
+
+    g_num_seq_cands = nSeq;
+    g_num_run_cands = nRun;
+    return nSeq + nRun;
+}
+// ── find_valid_appends ────────────────────────────────────────────────────────
+// Reads g_cards2[g_player] + g_seq_melds/g_run_melds for the player's team.
+// Writes to g_cand_append_meld/cc/suit/slot and g_cand_run_meld/cc (appends to runners).
+// Returns number of append candidates found.
+static int find_valid_appends() {
+    int player = g_player;
+    int team   = g_my_team;
+    int nApp   = 0;
+
+    int wild0type = -1;
+    if (g_cards2[player][CARDS_ALL_OFF+52] > 0) wild0type = 54;
+    else {
+        int s2ids[4] = {1,14,27,40};
+        for (int i=0;i<4;i++)
+            if (g_cards2[player][CARDS_ALL_OFF+s2ids[i]]>0) { wild0type=s2ids[i]; break; }
+    }
+    int hasWild = (wild0type >= 0);
+
+    auto min_rank = [](const uint8_t* m) -> int {
+        if (m[0]) return 0;
+        for (int i=2;i<=13;i++) if (m[i]) return i;
+        return m[1] ? 14 : 15;
+    };
+    auto max_rank = [](const uint8_t* m) -> int {
+        if (m[1]) return 14;
+        for (int i=13;i>=2;i--) if (m[i]) return i;
+        return m[0] ? 0 : -1;
+    };
+
+    for (int suit=1; suit<=4; suit++) {
+        for (int slot=0; slot<MAX_SEQ_SLOTS; slot++) {
+            const uint8_t* meld = g_seq_melds[team][suit-1][slot];
+            int occupied = 0;
+            for (int i=0;i<16;i++) if (meld[i]) { occupied=1; break; }
+            if (!occupied) continue;
+
+            int meldHasWild = (meld[14]!=0 || meld[15]!=0);
+            int mn = min_rank(meld);
+            int mx = max_rank(meld);
+
+            // 1. Gap fill
+            if (meldHasWild && nApp < MAX_SEQ_CANDS) {
+                for (int i=mn+1; i<mx; i++) {
+                    if (i==1) continue;
+                    int pv = (i==14) ? meld[1] : meld[i];
+                    if (!pv) {
+                        int gapRank = (i==0)?1:i;
+                        if (rank_count(player,suit,gapRank)>0) {
+                            // Write directly into candidate slot
+                            uint8_t* dst = g_cand_append_meld[nApp];
+                            uint8_t* cc  = g_cand_append_cc[nApp];
+                            for(int j=0;j<16;j++) dst[j]=meld[j];
+                            for(int j=0;j<53;j++) cc[j]=0;
+                            // Remove wild, place natural
+                            if (dst[15]) dst[15]=0; else dst[14]=0;
+                            dst[gapRank==1?0:gapRank]=1;
+                            cc[(suit-1)*13+(gapRank-1)]=1;
+                            g_cand_append_suit[nApp]=(uint8_t)suit;
+                            g_cand_append_slot[nApp]=(uint8_t)slot;
+                            nApp++;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // 2. Lo edge — workMeld IS g_cand_append_meld[nApp], no separate tmpMeld
+            if (nApp < MAX_SEQ_CANDS) {
+                uint8_t* workMeld = g_cand_append_meld[nApp];
+                uint8_t  workCC[53] = {0};
+                for(int j=0;j<16;j++) workMeld[j]=meld[j];
+                int lo = mn;
+                while (nApp < MAX_SEQ_CANDS) {
+                    int next = (lo==14)?13 : (lo==0)?-1 : lo-1;
+                    if (next<0) break;
+                    int rank = (next==0)?1:next;
+                    if (next==0 && meld[0]) break;
+                    if (rank_count(player,suit,rank)==0) break;
+                    int t = (suit-1)*13+(rank-1);
+                    workCC[t]++;
+                    if (rank==1) { if (!workMeld[0]) workMeld[0]=1; else workMeld[1]=1; }
+                    else workMeld[rank]=1;
+                    int gaps = check_gaps(workMeld);
+                    int hw = workMeld[14]!=0||workMeld[15]!=0;
+                    if (gaps>(hw?1:0)) break;
+                    int len=workMeld[15]+(workMeld[14]?1:0);
+                    for(int j=0;j<=13;j++) len+=workMeld[j];
+                    if (len>14) break;
+                    // Commit: cc is already workCC, meld is already workMeld
+                    for(int j=0;j<53;j++) g_cand_append_cc[nApp][j]=workCC[j];
+                    g_cand_append_suit[nApp]=(uint8_t)suit;
+                    g_cand_append_slot[nApp]=(uint8_t)slot;
+                    nApp++;
+                    lo=next;
+                    // Advance workMeld pointer to next slot, copy current state
+                    if (nApp < MAX_SEQ_CANDS) {
+                        uint8_t* next_work = g_cand_append_meld[nApp];
+                        for(int j=0;j<16;j++) next_work[j]=workMeld[j];
+                        workMeld = next_work;
+                    }
+                }
+            }
+
+            // 3. Hi edge
+            if (nApp < MAX_SEQ_CANDS) {
+                uint8_t* workMeld = g_cand_append_meld[nApp];
+                uint8_t  workCC[53] = {0};
+                for(int j=0;j<16;j++) workMeld[j]=meld[j];
+                int hi = mx;
+                while (nApp < MAX_SEQ_CANDS) {
+                    int next = (hi==13)?14 : (hi==14)?-1 : hi+1;
+                    if (next<0) break;
+                    int rank = (next==14)?1:next;
+                    if (next==14 && meld[1]) break;
+                    if (rank_count(player,suit,rank)==0) break;
+                    int t = (suit-1)*13+(rank-1);
+                    workCC[t]++;
+                    if (rank==1) { if (!workMeld[1]) workMeld[1]=1; else workMeld[0]=1; }
+                    else workMeld[rank]=1;
+                    int gaps = check_gaps(workMeld);
+                    int hw = workMeld[14]!=0||workMeld[15]!=0;
+                    if (gaps>(hw?1:0)) break;
+                    int len=workMeld[15]+(workMeld[14]?1:0);
+                    for(int j=0;j<=13;j++) len+=workMeld[j];
+                    if (len>14) break;
+                    for(int j=0;j<53;j++) g_cand_append_cc[nApp][j]=workCC[j];
+                    g_cand_append_suit[nApp]=(uint8_t)suit;
+                    g_cand_append_slot[nApp]=(uint8_t)slot;
+                    nApp++;
+                    hi=next;
+                    if (nApp < MAX_SEQ_CANDS) {
+                        uint8_t* next_work = g_cand_append_meld[nApp];
+                        for(int j=0;j<16;j++) next_work[j]=workMeld[j];
+                        workMeld = next_work;
+                    }
+                }
+            }
+
+            // 4. Wild bridge
+            if (hasWild && !meldHasWild && nApp < MAX_SEQ_CANDS) {
+                int edges[2]={mn,mx}, dirs[2]={-1,1};
+                for (int e=0;e<2&&nApp<MAX_SEQ_CANDS;e++) {
+                    int edge=edges[e], dir=dirs[e];
+                    int gapPos = (edge==0||edge==14) ? -1 : edge+dir;
+                    if (gapPos<0||gapPos>14) continue;
+                    int beyondPos = gapPos+dir;
+                    if (beyondPos<0||beyondPos>14) continue;
+                    int beyondRank = (beyondPos==0||beyondPos==14)?1:beyondPos;
+                    if (rank_count(player,suit,beyondRank)==0) continue;
+                    uint8_t* dst = g_cand_append_meld[nApp];
+                    uint8_t* cc  = g_cand_append_cc[nApp];
+                    for(int j=0;j<16;j++) dst[j]=meld[j];
+                    for(int j=0;j<53;j++) cc[j]=0;
+                    int ws=(wild0type==54)?5:(wild0type/13+1);
+                    if (ws==5||ws!=suit) dst[14]=(uint8_t)ws;
+                    else dst[15]=1;
+                    if (beyondRank==1) { if (!dst[0]) dst[0]=1; else dst[1]=1; }
+                    else dst[beyondRank]=1;
+                    cc[wild0type==54?52:wild0type]=1;
+                    cc[(suit-1)*13+(beyondRank-1)]=1;
+                    g_cand_append_suit[nApp]=(uint8_t)suit;
+                    g_cand_append_slot[nApp]=(uint8_t)slot;
+                    nApp++;
+                }
+            }
+        }
+    }
+
+    g_num_append_cands = nApp;
+
+    // Runner appends
+    int nRunApp = 0;
+    for (int slot=0; slot<MAX_RUN_SLOTS && nRunApp<MAX_RUN_CANDS; slot++) {
+        const uint8_t* meld = g_run_melds[team][slot];
+        if (!meld[0]) continue;
+        int rank = meld[0];
+        int meldHasWild = (meld[5]!=0);
+        uint8_t* cc  = g_cand_run_cc[nRunApp];
+        uint8_t* dst = g_cand_run_meld[nRunApp];
+        for(int j=0;j<53;j++) cc[j]=0;
+        for(int j=0;j<6;j++)  dst[j]=meld[j];
+        int total=0;
+        for (int s=1;s<=4;s++) {
+            int cnt=rank_count(player,s,rank);
+            if (cnt>0) { cc[(s-1)*13+(rank-1)]=cnt; dst[s]+=cnt; total+=cnt; }
+        }
+        if (total>0) {
+            g_run_cands[nRunApp][0]=(uint8_t)(rank/13.0f*255+0.5f);
+            for (int s=1;s<=4;s++) g_run_cands[nRunApp][s]=(uint8_t)(dst[s]/2.0f*255+0.5f);
+            g_run_cands[nRunApp][5]=(uint8_t)(meld[5]/5.0f*255+0.5f);
+            g_run_cands[nRunApp][6]=0;
+            nRunApp++;
+        }
+        if (hasWild && !meldHasWild && nRunApp<MAX_RUN_CANDS) {
+            cc  = g_cand_run_cc[nRunApp];
+            dst = g_cand_run_meld[nRunApp];
+            for(int j=0;j<53;j++) cc[j]=0;
+            for(int j=0;j<6;j++)  dst[j]=meld[j];
+            int ws=(wild0type==54)?5:(wild0type/13+1);
+            dst[5]=(uint8_t)ws;
+            cc[wild0type==54?52:wild0type]=1;
+            g_run_cands[nRunApp][0]=(uint8_t)(rank/13.0f*255+0.5f);
+            for (int s=1;s<=4;s++) g_run_cands[nRunApp][s]=(uint8_t)(meld[s]/2.0f*255+0.5f);
+            g_run_cands[nRunApp][5]=(uint8_t)(ws/5.0f*255+0.5f);
+            g_run_cands[nRunApp][6]=0;
+            nRunApp++;
+        }
+    }
+    g_num_run_cands = nRunApp;
+
+    return nApp + nRunApp;
+}
+
+// Configure all 4 nets at once — called once per match
+WASM_EXPORT void configure_nets(
+    int pickup_nlayers, int* pickup_layers, int pickup_woff,
+    int meld_nlayers,   int* meld_layers,   int meld_woff,
+    int runner_nlayers, int* runner_layers,  int runner_woff,
+    int discard_nlayers,int* discard_layers, int discard_woff) {
+    g_pickup_nlayers=pickup_nlayers;   g_pickup_woff=pickup_woff;
+    g_meld_nlayers=meld_nlayers;       g_meld_woff=meld_woff;
+    g_runner_nlayers=runner_nlayers;   g_runner_woff=runner_woff;
+    g_discard_nlayers=discard_nlayers; g_discard_woff=discard_woff;
+    for(int i=0;i<pickup_nlayers;i++)  g_pickup_layers[i]=pickup_layers[i];
+    for(int i=0;i<meld_nlayers;i++)    g_meld_layers[i]=meld_layers[i];
+    for(int i=0;i<runner_nlayers;i++)  g_runner_layers[i]=runner_layers[i];
+    for(int i=0;i<discard_nlayers;i++) g_discard_layers[i]=discard_layers[i];
+}
+
+WASM_EXPORT int cpp_plan_turn() { return plan_turn(); }
+WASM_EXPORT uint8_t* get_planned_move() { return g_planned_move; }
+
+WASM_EXPORT int cpp_find_valid_appends() { return find_valid_appends(); }
+// Simpler: call configure_net_pickup/meld/runner/discard separately
+WASM_EXPORT void configure_net_pickup(int nlayers, int woff) {
+    g_pickup_nlayers=nlayers; g_pickup_woff=woff;
+    for(int i=0;i<nlayers;i++) g_pickup_layers[i]=g_layer_sizes_buf[i];
+}
+WASM_EXPORT void configure_net_meld(int nlayers, int woff) {
+    g_meld_nlayers=nlayers; g_meld_woff=woff;
+    for(int i=0;i<nlayers;i++) g_meld_layers[i]=g_layer_sizes_buf[i];
+}
+WASM_EXPORT void configure_net_runner(int nlayers, int woff) {
+    g_runner_nlayers=nlayers; g_runner_woff=woff;
+    for(int i=0;i<nlayers;i++) g_runner_layers[i]=g_layer_sizes_buf[i];
+}
+WASM_EXPORT void configure_net_discard(int nlayers, int woff) {
+    g_discard_nlayers=nlayers; g_discard_woff=woff;
+    for(int i=0;i<nlayers;i++) g_discard_layers[i]=g_layer_sizes_buf[i];
+}
 
 } // extern "C"
+
