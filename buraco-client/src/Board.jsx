@@ -379,7 +379,7 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
   // Natural cards
   for (let s = 1; s <= 4; s++) {
     for (let r = 1; r <= 13; r++) {
-      const count = Math.round((myFlat[(s-1)*18 + (r-1)] || 0) * 2);
+      const count = myFlat[(s-1)*18 + (r-1)] || 0;
       const cardId = (s-1)*13 + (r-1);
       for (let i = 0; i < count; i++) handCardObjs.push({ ...intToCardObj(cardId), uid: `${cardId}_${i}` });
     }
@@ -387,11 +387,11 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
   // Suited-2 wilds
   const suited2Ids = [1, 14, 27, 40];
   for (const cId of suited2Ids) {
-    const count = Math.round((myFlat[CARDS_ALL_OFF_B + cId] || 0) * 2);
+    const count = myFlat[CARDS_ALL_OFF_B + cId] || 0;
     for (let i = 0; i < count; i++) handCardObjs.push({ ...intToCardObj(cId), uid: `${cId}_w${i}` });
   }
   // Jokers
-  const jokerCount = Math.round((myFlat[CARDS_ALL_OFF_B + 52] || 0) * 2);
+  const jokerCount = myFlat[CARDS_ALL_OFF_B + 52] || 0;
   for (let i = 0; i < jokerCount; i++) handCardObjs.push({ ...intToCardObj(54), uid: `54_${i}` });
 
   const sortedHandObj = sortCards(handCardObjs);
@@ -445,7 +445,7 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
     const k = cardId >= 104 ? 54 : cardId % 52;
     const flat = G.cards2[playerID] || [];
     const CAOFF = 72;
-    const have = Math.round((flat[CAOFF + (k === 54 ? 52 : k)] || 0) * 2);
+    const have = flat[CAOFF + (k === 54 ? 52 : k)] || 0;
     setSelectedCards(prev => {
       const cur = prev[k] || 0;
       // Count how many of this type appear before this uid in the sorted hand
@@ -689,12 +689,12 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
               const CAOFF = 72;
               const knownCards = [];
               for (let s = 1; s <= 4; s++) for (let r = 1; r <= 13; r++) {
-                const cnt = Math.round((flat[(s-1)*18+(r-1)]||0)*2);
+                const cnt = flat[(s-1)*18+(r-1)]||0;
                 const cId = (s-1)*13+(r-1);
                 for (let i = 0; i < cnt; i++) knownCards.push(cId);
               }
               [1,14,27,40].forEach(cId => { const cnt = Math.round((flat[CAOFF+cId]||0)*2); for (let i=0;i<cnt;i++) knownCards.push(cId); });
-              const jc = Math.round((flat[CAOFF+52]||0)*2); for (let i=0;i<jc;i++) knownCards.push(54);
+              const jc = flat[CAOFF+52]||0; for (let i=0;i<jc;i++) knownCards.push(54);
               if (knownCards.length === 0) return null;
               const name = G.rules?.assignments?.[p] || `P${p}`;
               return (
