@@ -934,6 +934,7 @@ WASM_EXPORT int      get_move_count()       { return g_move_count; }
 WASM_EXPORT uint8_t* get_planned_move()     { return g_planned_move; } // kept for compat
 
 
+WASM_EXPORT int cpp_plan_turn()           { return plan_turn(); }
 WASM_EXPORT int cpp_find_valid_appends() { return find_valid_appends(); }
 // Simpler: call configure_net_pickup/meld/runner/discard separately
 WASM_EXPORT void configure_net_pickup(int nlayers, int woff) {
