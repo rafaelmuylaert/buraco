@@ -1327,9 +1327,14 @@ export function planTurn(G, p, DNA) {
         // Refresh meld index after pickup may have added melds
         turnMeldIdx.my  = _meldsByType(G, myTeam);
         turnMeldIdx.opp = _meldsByType(G, oppTeam);
-        const meldScores = scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, allMeldCands, dnaMeld, topDiscard, 'MELD', turnMeldIdx);
-        for (let i = 0; i < allMeldCands.length; i++) planMoves.push({ ...allMeldCands[i], score: meldScores[i] });
-        planMoves.sort((a, b) => b.score - a.score);
+        if (allMeldCands.length === 1) {
+            // Only one option — skip scoring, use it directly if score would be positive
+            planMoves.push({ ...allMeldCands[0], score: 1 });
+        } else {
+            const meldScores = scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, allMeldCands, dnaMeld, topDiscard, 'MELD', turnMeldIdx);
+            for (let i = 0; i < allMeldCands.length; i++) planMoves.push({ ...allMeldCands[i], score: meldScores[i] });
+            planMoves.sort((a, b) => b.score - a.score);
+        }
     }
 
     const selectedPlays = [];
@@ -1351,13 +1356,21 @@ export function planTurn(G, p, DNA) {
     const remainingFlat = G.cards2[p];
     let discardMove = null;
     if (G.handSizes[p] > 0) {
-        const discardScores = scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, dnaDiscard, turnMeldIdx);
-        let bestCard = -1, bestScore = -Infinity;
-        for (let i = 0; i < 53; i++) {
-            const cnt = Math.round((remainingFlat[CARDS_ALL_OFF + i] || 0) * 2);
-            if (cnt <= 0) continue;
-            const cardType = i === 52 ? 54 : i;
-            if (discardScores[i] > bestScore) { bestScore = discardScores[i]; bestCard = cardType; }
+        let bestCard = -1;
+        if (G.handSizes[p] === 1) {
+            // Only one card — skip scoring
+            for (let i = 0; i < 53; i++) {
+                if (Math.round((remainingFlat[CARDS_ALL_OFF + i] || 0) * 2) > 0) { bestCard = i === 52 ? 54 : i; break; }
+            }
+        } else {
+            const discardScores = scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, dnaDiscard, turnMeldIdx);
+            let bestScore = -Infinity;
+            for (let i = 0; i < 53; i++) {
+                const cnt = Math.round((remainingFlat[CARDS_ALL_OFF + i] || 0) * 2);
+                if (cnt <= 0) continue;
+                const cardType = i === 52 ? 54 : i;
+                if (discardScores[i] > bestScore) { bestScore = discardScores[i]; bestCard = cardType; }
+            }
         }
         if (bestCard >= 0) {
             discardMove = { move: 'discardCard', args: [bestCard] };
