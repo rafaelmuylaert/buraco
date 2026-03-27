@@ -16,6 +16,17 @@ const getRankChar = r => r===1?'A':r===11?'J':r===12?'Q':r===13?'K':r===14?'A':r
 const cardStr = c => c===54?'JOKER':getRankChar((c%13)+1)+getSuitChar(Math.floor(c/13)+1);
 const meldStr = m => m ? `[${m[0]===0?'Runner':'Seq'} ${JSON.stringify(m)}]` : '';
 
+const ccStr = (cc) => {
+  if (!cc || Object.keys(cc).length === 0) return '{}';
+  return '{' + Object.entries(cc).map(([k,v]) => {
+    const cid = +k;
+    const s = cid === 54 ? 5 : Math.floor(cid / 13) + 1;
+    const r = cid === 54 ? 2 : (cid % 13) + 1;
+    const name = getRankChar(r) + getSuitChar(s);
+    return v > 1 ? `${name}x${v}` : name;
+  }).join(' ') + '}';
+};
+
 async function pollLobby() {
   try {
     const res = await fetch(`${SERVER_URL}/games/buraco`);
@@ -199,10 +210,10 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
           const cstr = pickupLog.data.map(c => `${c.move}(${c.score != null ? c.score.toFixed(3) : 'only'})`).join(', ');
           console.log(`  pickup_cands: [${cstr}]`);
         }
-        if (pickupChosen) console.log(`  pickup_chosen: ${pickupChosen.data?.move} cards=${JSON.stringify(pickupChosen.data?.cardCounts || {})}`);
+        if (pickupChosen) console.log(`  pickup_chosen: ${pickupChosen.data?.move} cards=${ccStr(pickupChosen.data?.cardCounts || {})}`);
         const meldLog = logLines.find(l => l.event === 'melds');
         if (meldLog && meldLog.data.length > 0)
-          console.log(`  meld_cands(${meldLog.data.length}): ${meldLog.data.map(c => `${c.move}${JSON.stringify(c.cards)}`).join(' | ')}`);
+          console.log(`  meld_cands(${meldLog.data.length}): ${meldLog.data.map(c => `${c.move}${ccStr(c.cards)}`).join(' | ')}`);
         else
           console.log(`  meld_cands: none`);
       }
@@ -239,6 +250,14 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         const s = cid === 54 ? 5 : Math.floor((cid % 52) / 13) + 1;
         const r = cid === 54 ? 2 : (cid % 52) % 13 + 1;
         console.log(`[BOT] ${botName} dispatching: discardCard(${getRankChar(r)}${getSuitChar(s)})`);
+      } else if (nextMove.move === 'pickUpDiscard') {
+        console.log(`[BOT] ${botName} dispatching: pickUpDiscard cards=${ccStr(nextMove.args[0] || {})}`);
+      } else if (nextMove.move === 'meld' || nextMove.move === 'playMeld') {
+        console.log(`[BOT] ${botName} dispatching: playMeld${ccStr(nextMove.args[0] || {})}`);
+      } else if (nextMove.move === 'appendToMeld') {
+        const tgt = nextMove.args[0];
+        const tgtStr = tgt ? `${tgt.type}[${tgt.suit||''}${tgt.index}]` : '';
+        console.log(`[BOT] ${botName} dispatching: appendToMeld ${tgtStr} ${ccStr(nextMove.args[1] || {})}`);
       } else {
         console.log(`[BOT] ${botName} dispatching: ${serverMove}`);
       }
