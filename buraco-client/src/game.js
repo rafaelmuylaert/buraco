@@ -994,7 +994,7 @@ export function planTurn(G, p, DNA) {
         if (isClosedDiscard) {
             const myFlat = G.cards2[p];
             // Build a temporary flat with topDiscard added for candidate generation
-            const flatWithTop = new Uint8Array(myFlat);
+            const flatWithTop = Uint8Array.from(myFlat);
             cards2Add(flatWithTop, topDiscard);
             for (const { cardCounts: cc, parsedMeld: pm } of getAllValidMelds(flatWithTop, G.rules)) {
                 const topT = topDiscard >= 104 ? 54 : topDiscard % 52;
@@ -1034,6 +1034,7 @@ export function planTurn(G, p, DNA) {
     let pickupMove;
     if (pickupCands.length === 1 || topDiscard === null) {
         pickupMove = pickupCands[0];
+        if (loggerRef.fn) loggerRef.fn('pickup', pickupCands.map(c => ({ move: c.move, score: null })));
     } else {
         const n1 = Math.min(pickupCands.length, AI_CONFIG.MAX_PICKUP);
         const cands1 = pickupCands.slice(0, n1);
@@ -1087,9 +1088,8 @@ export function planTurn(G, p, DNA) {
 
     const selectedPlays = [];
     for (const m of planMoves) {
-        if (!G.rules.greedyMode && m.score <= 0) continue;
-        selectedPlays.push(m);
-        if (G.rules.greedyMode) break;
+        if (G.rules.greedyMode) { selectedPlays.push(m); break; }
+        if (m.score > 0) selectedPlays.push(m);
     }
 
     // ── Execute melds & appends ───────────────────────────────────────────────

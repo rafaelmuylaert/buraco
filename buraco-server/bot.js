@@ -178,46 +178,48 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
 
       // ── Human-game diagnostics ──────────────────────────────────────────
       const G = currentState.G;
-      const CAOFF = 72;
-      const flat = G.cards2?.[playerID] || [];
-      // Hand cards
-      const handCards = [];
-      for (let i = 0; i < 53; i++) {
-        const cnt = flat[CAOFF + i] || 0;
-        if (cnt > 0) {
-          const cid = i === 52 ? 54 : i;
-          const s = cid === 54 ? 5 : Math.floor(cid / 13) + 1;
-          const r = cid === 54 ? 2 : (cid % 13) + 1;
-          for (let n = 0; n < cnt; n++) handCards.push(getRankChar(r) + getSuitChar(s));
+      if (!G.hasDrawn) {
+        const CAOFF = 72;
+        const flat = G.cards2?.[playerID] || [];
+        const handCards = [];
+        for (let i = 0; i < 53; i++) {
+          const cnt = flat[CAOFF + i] || 0;
+          if (cnt > 0) {
+            const cid = i === 52 ? 54 : i;
+            const s = cid === 54 ? 5 : Math.floor(cid / 13) + 1;
+            const r = cid === 54 ? 2 : (cid % 13) + 1;
+            for (let n = 0; n < cnt; n++) handCards.push(getRankChar(r) + getSuitChar(s));
+          }
         }
+        const topDiscard = G.discardPile?.length > 0 ? (() => { const c = G.discardPile[G.discardPile.length-1]; const s = c===54?5:Math.floor((c%52)/13)+1; const r = c===54?2:(c%13)+1; return getRankChar(r)+getSuitChar(s); })() : 'empty';
+        console.log(`[BOT] ${botName} | hand=[${handCards.join(' ')}] | discard_top=${topDiscard}`);
+        const pickupLog = logLines.find(l => l.event === 'pickup');
+        const pickupChosen = logLines.find(l => l.event === 'pickupChosen');
+        if (pickupLog) {
+          const cstr = pickupLog.data.map(c => `${c.move}(${c.score != null ? c.score.toFixed(3) : 'only'})`).join(', ');
+          console.log(`  pickup_cands: [${cstr}]`);
+        }
+        if (pickupChosen) console.log(`  pickup_chosen: ${pickupChosen.data?.move} cards=${JSON.stringify(pickupChosen.data?.cardCounts || {})}`);
+        const meldLog = logLines.find(l => l.event === 'melds');
+        if (meldLog && meldLog.data.length > 0)
+          console.log(`  meld_cands(${meldLog.data.length}): ${meldLog.data.map(c => `${c.move}${JSON.stringify(c.cards)}`).join(' | ')}`);
+        else
+          console.log(`  meld_cands: none`);
       }
-      const topDiscard = G.discardPile?.length > 0 ? (() => { const c = G.discardPile[G.discardPile.length-1]; const s = c===54?5:Math.floor((c%52)/13)+1; const r = c===54?2:(c%13)+1; return getRankChar(r)+getSuitChar(s); })() : 'empty';
-      console.log(`[BOT] ${botName} | turn | hasDrawn=${G.hasDrawn} | hand=[${handCards.join(' ')}] | discard_top=${topDiscard}`);
-      // Pickup candidates
-      const pickupLog = logLines.find(l => l.event === 'pickup');
-      const pickupChosen = logLines.find(l => l.event === 'pickupChosen');
-      if (pickupLog) {
-        const cstr = pickupLog.data.map(c => `${c.move}(score=${c.score?.toFixed ? c.score.toFixed(3) : c.score})`).join(', ');
-        console.log(`  pickup_cands: [${cstr}]`);
-      }
-      if (pickupChosen) console.log(`  pickup_chosen: ${pickupChosen.data?.move} cards=${JSON.stringify(pickupChosen.data?.cardCounts || {})}`);
-      // Meld candidates
-      const meldLog = logLines.find(l => l.event === 'melds');
-      if (meldLog && meldLog.data.length > 0) {
-        console.log(`  meld_cands(${meldLog.data.length}): ${meldLog.data.map(c => `${c.move}${JSON.stringify(c.cards)}`).join(' | ')}`);
-      } else {
-        console.log(`  meld_cands: none`);
-      }
-      // Final moves
+      // Final move
       if (moves && moves.length > 0) {
         for (const m of moves) {
-          const argStr = (m.args || []).map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(', ');
-          console.log(`  -> ${m.move}(${argStr})`);
+          if (m.move === 'discardCard') {
+            const cid = m.args[0];
+            const s = cid === 54 ? 5 : Math.floor((cid % 52) / 13) + 1;
+            const r = cid === 54 ? 2 : (cid % 52) % 13 + 1;
+            console.log(`  -> discardCard(${getRankChar(r)}${getSuitChar(s)})`);
+          } else {
+            const argStr = (m.args || []).map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(', ');
+            console.log(`  -> ${m.move}(${argStr})`);
+          }
         }
-      } else {
-        console.log(`  -> (no moves returned)`);
       }
-      // ───────────────────────────────────────────────────────────────────
 
       aiQueue = moves || [];
     }
@@ -230,10 +232,16 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         return;
       }
 
-      // planTurn returns 'meld'/'appendToMeld' but server moves are 'playMeld'/'appendToMeld'
       const serverMove = nextMove.move === 'meld' ? 'playMeld' : nextMove.move;
 
-      console.log(`[BOT] ${botName} dispatching: ${serverMove}`);
+      if (nextMove.move === 'discardCard') {
+        const cid = nextMove.args[0];
+        const s = cid === 54 ? 5 : Math.floor((cid % 52) / 13) + 1;
+        const r = cid === 54 ? 2 : (cid % 52) % 13 + 1;
+        console.log(`[BOT] ${botName} dispatching: discardCard(${getRankChar(r)}${getSuitChar(s)})`);
+      } else {
+        console.log(`[BOT] ${botName} dispatching: ${serverMove}`);
+      }
       client.moves[serverMove](...(nextMove.args || []));
       lastDispatchedAt = Date.now();
     } else {
