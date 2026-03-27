@@ -347,12 +347,12 @@ export const CARDS_ALL_OFF = 4 * CARDS_SUIT_STRIDE; // 72
 export const CARDS_FLAT_SIZE = CARDS_ALL_OFF + 53;   // 125
 
 export function initCards2(cards) {
-    const flat = new Uint8Array(CARDS_FLAT_SIZE);
+    const flat = new Array(CARDS_FLAT_SIZE).fill(0);
     for (const c of cards) cards2Add(flat, c);
     return flat;
 }
 
-function makeCards2() { return new Uint8Array(CARDS_FLAT_SIZE); }
+function makeCards2() { return new Array(CARDS_FLAT_SIZE).fill(0); }
 
 function cards2Add(flat, c) {
     const s = getSuit(c), r = getRank(c);
