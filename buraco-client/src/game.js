@@ -1022,7 +1022,7 @@ export function planTurn(G, p, DNA) {
             }
             for (const { cardCounts: cc, parsedMeld: pm, args } of getAllValidAppends(flatWithTop, G.table[myTeam], G.rules)) {
                 const topT = topDiscard >= 104 ? 54 : topDiscard % 52;
-                if (!(topT in cc)) continue;
+                if (!(topT in cc)) { if (loggerRef.fn) loggerRef.fn('pickupAppendSkip', { reason: 'topT not in cc', topT, cc }); continue; }
                 const handNeed = { ...cc };
                 handNeed[topT]--;
                 if (handNeed[topT] === 0) delete handNeed[topT];
@@ -1030,7 +1030,7 @@ export function planTurn(G, p, DNA) {
                 for (const [k, n] of Object.entries(handNeed)) {
                     const key = +k === 54 ? 52 : +k;
                     const have = myFlat[CARDS_ALL_OFF + key] || 0;
-                    if (have < n) { ok = false; break; }
+                    if (have < n) { ok = false; if (loggerRef.fn) loggerRef.fn('pickupAppendSkip', { reason: 'not enough in hand', k, need: n, have }); break; }
                 }
                 if (!ok || !pm) continue;
                 pickupCands.push({ move: 'pickUpDiscard', args: [handNeed, { type: 'append', meldTarget: args[0] }], cardCounts: cc, parsedMeld: pm, appendIdx: 0 });
