@@ -8,11 +8,12 @@ export const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9
 const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15];
 
 // ── Timing accumulators ───────────────────────────────────────────────────────
-const _timings = { buildSegments: 0, forwardPass: 0, getAllValidMelds: 0 };
+const _timings = { buildSegments: 0, forwardPass: 0, getAllValidMelds: 0, getAllValidAppends: 0 };
 export function getAndResetTimings() {
     const snap = { ..._timings };
     _timings.buildSegments = 0;
-    _timings.forwardPass = 0; _timings.getAllValidMelds = 0;
+    _timings.forwardPass = 0; _timings.getAllValidMelds = 0; _timings.getAllValidAppends = 0;
+
     return snap;
 }
 export function addForwardPassTime(ms) { _timings.forwardPass += ms; }
@@ -945,78 +946,136 @@ export function scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, w
 }
 
 export function getAllValidAppends(cards2flat, teamTable, rules) {
+    const _t0 = performance.now();
     const results = [];
 
-    // Read wilds directly from cards2flat all-suit section
     const jokerCount = Math.round((cards2flat[CARDS_ALL_OFF + 52] || 0) * 2);
     const suited2Ids = [1, 14, 27, 40];
-    let wild0Type = null; // canonical card type of first available wild
+    let wild0Type = null;
     if (jokerCount > 0) wild0Type = 54;
     else { for (const cId of suited2Ids) { if (Math.round((cards2flat[CARDS_ALL_OFF + cId] || 0) * 2) > 0) { wild0Type = cId; break; } } }
     const hasWild = wild0Type !== null;
 
-    // Count helper: naturals from per-suit block
     const rankCount = (suit, rank) => Math.round((cards2flat[(suit - 1) * 18 + (rank - 1)] || 0) * 2);
-    // Pick canonical card type for a natural
-    const pickType = (suit, rank) => (suit - 1) * 13 + (rank - 1);
+    const pickType  = (suit, rank) => (suit - 1) * 13 + (rank - 1);
+
+    // Build parsedMeld by applying cardCounts to an existing seq meld — no parseMeld call.
+    // Returns null if the result is invalid.
+    const applyToSeq = (meld, suit, cc) => {
+        const m = [...meld];
+        if (m[2] === 1) { m[15]++; m[2] = 0; }
+        for (const [k, n] of Object.entries(cc)) {
+            const id = +k;
+            const s = id === 54 ? 5 : Math.floor((id % 52) / 13) + 1;
+            const r = id === 54 ? 2 : (id % 13) + 1;
+            if (s === 5 || r === 2) {
+                if (m[15] + (m[14] !== 0 ? 1 : 0) >= 2) return null;
+                const isSameSuit2 = (s === suit);
+                if (isSameSuit2) { m[15]++; }
+                else if (m[14] === 0) { m[14] = s === 5 ? 5 : s; }
+                else return null;
+            } else if (s !== suit) { return null; }
+            else if (r === 1) {
+                if (m[0] + m[1] < 2) { if (m[13]) m[1] = 1; else m[0] = 1; }
+                else return null;
+            } else {
+                if (m[r] !== 0) return null;
+                m[r] = 1;
+            }
+        }
+        if (m[15] === 2) { m[15] = 1; m[14] = suit; }
+        const gaps = _checkGaps(m);
+        const hasW = m[14] !== 0 || m[15] !== 0;
+        if (gaps > (hasW ? 1 : 0)) return null;
+        let len = m[15] + (m[14] !== 0 ? 1 : 0);
+        for (let r = 0; r <= 13; r++) len += m[r];
+        if (len > 14) return null;
+        if (m[15] === 1 && m[3] === 1 && (gaps === 0 || m[0] === 1)) { m[2] = 1; m[15] = 0; }
+        return m;
+    };
 
     for (let suit = 1; suit <= 4; suit++) {
         const suitMelds = teamTable[0][suit] || [];
-        suitMelds.forEach((meld, mIdx) => {
+        for (let mIdx = 0; mIdx < suitMelds.length; mIdx++) {
+            const meld = suitMelds[mIdx];
             const target = { type: 'seq', suit, index: mIdx };
             const meldHasWild = meld[14] !== 0 || meld[15] !== 0;
             const min = minSeqRank(meld), max = maxSeqRank(meld);
-            let gapPos = -1;
-            if (meldHasWild) { for (let i = min + 1; i < max; i++) if (!_pos(meld, i)) { gapPos = i; break; } }
 
-            if (meldHasWild && gapPos > 0 && gapPos <= 13 && rankCount(suit, gapPos) > 0) {
-                const t = pickType(suit, gapPos);
-                const pm = parseMeld([t], rules, meld);
-                if (pm) results.push({ move: 'appendToMeld', args: [target, {[t]:1}], cardCounts: {[t]:1}, parsedMeld: pm, appendIdx: 0 });
-            }
-            { let lo = min; const loTypes = [], loCounts = {};
-              while (true) {
-                const next = lo === 14 ? 13 : lo === 0 ? null : lo - 1;
-                if (next === null || next < 0) break;
-                if (next === gapPos) { lo = next; continue; }
-                const cnt = next === 0 ? (meld[0] ? 0 : rankCount(suit, 1)) : rankCount(suit, next);
-                if (cnt === 0) break;
-                const t = pickType(suit, next === 0 ? 1 : next);
-                loTypes.push(t); loCounts[t] = (loCounts[t] || 0) + 1; lo = next;
-              }
-              if (loTypes.length > 0) { const pm = parseMeld(loTypes, rules, meld); if (pm) results.push({ move: 'appendToMeld', args: [target, loCounts], cardCounts: loCounts, parsedMeld: pm, appendIdx: 0 }); }
-            }
-            { let hi = max; const hiTypes = [], hiCounts = {};
-              while (true) {
-                const next = hi === 13 ? 14 : hi === 14 ? null : hi + 1;
-                if (next === null) break;
-                if (next === gapPos) { hi = next; continue; }
-                const cnt = next === 14 ? (meld[1] ? 0 : rankCount(suit, 1)) : rankCount(suit, next);
-                if (cnt === 0) break;
-                const t = pickType(suit, next === 14 ? 1 : next);
-                hiTypes.push(t); hiCounts[t] = (hiCounts[t] || 0) + 1; hi = next;
-              }
-              if (hiTypes.length > 0) { const pm = parseMeld(hiTypes, rules, meld); if (pm) results.push({ move: 'appendToMeld', args: [target, hiCounts], cardCounts: hiCounts, parsedMeld: pm, appendIdx: 0 }); }
-            }
-            if (hasWild && !meldHasWild && getMeldLength(meld) < 14) {
-                for (const [edge, dir] of [[min, -1], [max, 1]]) {
-                    const gapNext = edge === 0 ? null : edge === 14 ? null : edge + dir;
-                    if (gapNext === null || gapNext < 0 || gapNext > 14) continue;
-                    const beyondNext = gapNext + dir;
-                    if (beyondNext < 0 || beyondNext > 14) continue;
-                    const beyondRank = beyondNext === 0 ? 1 : beyondNext === 14 ? 1 : beyondNext;
-                    if (rankCount(suit, beyondRank) === 0) continue;
-                    const bt = pickType(suit, beyondRank);
-                    const cc = {[wild0Type]: 1, [bt]: (bt === wild0Type ? 2 : 1)};
-                    if (bt === wild0Type) cc[bt] = 2; else { cc[wild0Type] = 1; cc[bt] = 1; }
-                    const ids = countsToIds(cc);
-                    const pm = parseMeld(ids, rules, meld);
-                    if (pm) results.push({ move: 'appendToMeld', args: [target, cc], cardCounts: cc, parsedMeld: pm, appendIdx: 0 });
+            // 1. Gap fill: if meld has a wild filling a gap, check if hand has the natural
+            if (meldHasWild) {
+                for (let i = min + 1; i < max; i++) {
+                    if (!_pos(meld, i)) {
+                        const gapRank = i === 0 ? 1 : i;
+                        if (rankCount(suit, gapRank) > 0) {
+                            const t = pickType(suit, gapRank);
+                            const cc = { [t]: 1 };
+                            const pm = applyToSeq(meld, suit, cc);
+                            if (pm) results.push({ move: 'appendToMeld', args: [target, cc], cardCounts: cc, parsedMeld: pm, appendIdx: 0 });
+                        }
+                        break; // only one gap possible
+                    }
                 }
             }
-        });
+
+            // 2. Lo edge: expand left from min, one card at a time
+            {
+                const loCounts = {};
+                let lo = min;
+                while (true) {
+                    const next = lo === 14 ? 13 : lo === 0 ? -1 : lo - 1;
+                    if (next < 0) break;
+                    const rank = next === 0 ? 1 : next;
+                    if (next === 0 && meld[0]) break; // ace-low already in meld
+                    const cnt = rankCount(suit, rank);
+                    if (cnt === 0) break;
+                    const t = pickType(suit, rank);
+                    loCounts[t] = (loCounts[t] || 0) + 1;
+                    const pm = applyToSeq(meld, suit, loCounts);
+                    if (pm) results.push({ move: 'appendToMeld', args: [target, { ...loCounts }], cardCounts: { ...loCounts }, parsedMeld: pm, appendIdx: 0 });
+                    lo = next;
+                }
+            }
+
+            // 3. Hi edge: expand right from max, one card at a time
+            {
+                const hiCounts = {};
+                let hi = max;
+                while (true) {
+                    const next = hi === 13 ? 14 : hi === 14 ? -1 : hi + 1;
+                    if (next < 0) break;
+                    const rank = next === 14 ? 1 : next;
+                    if (next === 14 && meld[1]) break; // ace-high already in meld
+                    const cnt = rankCount(suit, rank);
+                    if (cnt === 0) break;
+                    const t = pickType(suit, rank);
+                    hiCounts[t] = (hiCounts[t] || 0) + 1;
+                    const pm = applyToSeq(meld, suit, hiCounts);
+                    if (pm) results.push({ move: 'appendToMeld', args: [target, { ...hiCounts }], cardCounts: { ...hiCounts }, parsedMeld: pm, appendIdx: 0 });
+                    hi = next;
+                }
+            }
+
+            // 4. Wild bridge: if no gap and wild available, try wild + one card beyond each edge
+            if (hasWild && !meldHasWild && getMeldLength(meld) < 14) {
+                for (const [edge, dir] of [[min, -1], [max, 1]]) {
+                    const gapPos = edge === 0 ? -1 : edge === 14 ? -1 : edge + dir;
+                    if (gapPos < 0 || gapPos > 14) continue;
+                    const beyondPos = gapPos + dir;
+                    if (beyondPos < 0 || beyondPos > 14) continue;
+                    const beyondRank = beyondPos === 0 ? 1 : beyondPos === 14 ? 1 : beyondPos;
+                    if (rankCount(suit, beyondRank) === 0) continue;
+                    const bt = pickType(suit, beyondRank);
+                    const cc = { [wild0Type]: 1, [bt]: 1 };
+                    if (bt === wild0Type) cc[bt] = 2;
+                    const pm = applyToSeq(meld, suit, cc);
+                    if (pm) results.push({ move: 'appendToMeld', args: [target, { ...cc }], cardCounts: { ...cc }, parsedMeld: pm, appendIdx: 0 });
+                }
+            }
+        }
     }
 
+    // Runners
     (teamTable[1] || []).forEach((meld, mIdx) => {
         const target = { type: 'runner', index: mIdx };
         const rank = meld[0], meldHasWild = meld[5] !== 0;
@@ -1027,14 +1086,16 @@ export function getAllValidAppends(cards2flat, teamTable, rules) {
             if (pm) results.push({ move: 'appendToMeld', args: [target, cc], cardCounts: cc, parsedMeld: pm, appendIdx: 0 });
         }
         if (hasWild && !meldHasWild) {
-            const wcc = {[wild0Type]: 1};
+            const wcc = { [wild0Type]: 1 };
             const pm = parseMeld([wild0Type], rules, meld);
             if (pm) results.push({ move: 'appendToMeld', args: [target, wcc], cardCounts: wcc, parsedMeld: pm, appendIdx: 0 });
         }
     });
 
+    _timings.getAllValidAppends += performance.now() - _t0;
     return results;
 }
+
 
 export function getAllValidMelds(cards2flat, rules) {
     const _t0 = performance.now();

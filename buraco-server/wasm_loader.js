@@ -233,7 +233,7 @@ function wasmScoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
         let nCands = 0;
         for (let i = 0; i < candidates.length && nCands < maxSlots; i++) {
             const cand = candidates[i];
-            const candSuit = cand.parsedMeld ? (cand.parsedMeld.length === 6 ? 0 : seqSuit(Object.keys(cand.cardCounts).map(k => +k))) : suit;
+            const candSuit = cand.parsedMeld ? (cand.parsedMeld.length === 6 ? 0 : seqSuit(cand.cardCounts ? Object.keys(cand.cardCounts).map(k => +k) : [])) : suit;
             if (candSuit !== 0 && candSuit !== suit) continue;
             let appendIdx = cand.appendIdx;
             if (cand.move === 'appendToMeld') {

@@ -401,7 +401,7 @@ export const TrainerService = {
                         });
                         console.log(`[${botName}] Island ${islandIdx} Gen ${gen}/${GENERATIONS} | MaxDiff: ${result.bestDiff.toFixed(0)} | AvgDiff: ${result.avgDiff.toFixed(0)}`);
                         const t = getPool().getAndResetTimings();
-                        console.log(`[${botName}] [TIMING] buildStateVector=${t.buildStateVector.toFixed(0)}ms buildDiscardVector=${t.buildDiscardVector.toFixed(0)}ms forwardPass=${t.forwardPass.toFixed(0)}ms getAllValidMelds=${t.getAllValidMelds.toFixed(0)}ms`);
+                        console.log(`[${botName}] [TIMING/${SAVE_EVERY}gens] forwardPass=${t.forwardPass.toFixed(0)}ms getAllValidMelds=${t.getAllValidMelds.toFixed(0)}ms getAllValidAppends=${t.getAllValidAppends.toFixed(0)}ms`);
 
                         // Trigger champion tournament when all islands have broadcast at least once
                         // and all have a new elite since the last tournament round.
