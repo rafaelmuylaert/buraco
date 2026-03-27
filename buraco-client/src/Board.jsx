@@ -443,14 +443,28 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
   const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
   const toggleCardSelection = (cardId, cardUid) => {
     const k = cardId >= 104 ? 54 : cardId % 52;
+    const flat = G.cards2[playerID] || [];
+    const CAOFF = 72;
+    const have = Math.round((flat[CAOFF + (k === 54 ? 52 : k)] || 0) * 2);
     setSelectedCards(prev => {
       const cur = prev[k] || 0;
-      if (cur > 0) { const next = { ...prev }; next[k]--; if (next[k] === 0) delete next[k]; return next; }
-      const flat = G.cards2[playerID] || [];
-      const CAOFF = 72;
-      const have = Math.round((flat[CAOFF + (k === 54 ? 52 : k)] || 0) * 2);
-      if (cur >= have) return prev;
-      return { ...prev, [k]: cur + 1 };
+      // Count how many of this type appear before this uid in the sorted hand
+      // to determine if this specific card instance is currently selected
+      let instanceIdx = 0;
+      for (const c of sortedHandObj) {
+        if (c.uid === cardUid) break;
+        if ((c.id >= 104 ? 54 : c.id % 52) === k) instanceIdx++;
+      }
+      // This card instance is selected if instanceIdx < cur
+      const thisIsSelected = instanceIdx < cur;
+      if (thisIsSelected) {
+        // Deselect: decrement
+        const next = { ...prev }; next[k]--; if (next[k] === 0) delete next[k]; return next;
+      } else {
+        // Select: increment if we have more available
+        if (cur >= have) return prev;
+        return { ...prev, [k]: cur + 1 };
+      }
     });
   };
 
@@ -550,11 +564,11 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
                   if (!isMyTurn) return;
                   if (!G.hasDrawn && isClosedDiscard && G.discardPile.length > 0) {
                     moves.pickUpDiscard(selectedCardIds(), { type: 'new' }); setSelectedCards({});
-                  } else if (selectedCount >= 3) {
+                  } else if (G.hasDrawn && selectedCount >= 3) {
                     moves.playMeld(selectedCardIds()); setSelectedCards({});
                   }
                 }}
-                style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && (selectedCount >= 3 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default', color: '#888' }}>
+                style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && ((G.hasDrawn && selectedCount >= 3) || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default', color: '#888' }}>
                 + Baixar Jogo
               </div>
             )}
