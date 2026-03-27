@@ -469,7 +469,7 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
     }
     G.handSizes[p] += G.discardPile.length;
     G.discardPile = [];
-    G.discardPile2 = makeCards2();
+    G.discardPile2.fill(0);
     G.hasDrawn = true;
     G.lastDrawnCard = pickedUp;
     tryPickupMorto(G, p);
@@ -531,6 +531,17 @@ export function moveMeld(G, p, cardCounts, target = null, addCards = 0, topDisca
     G.cleanMelds[teamId] += addCleancount;
     if (G.teamMortos[teamId]) G.mortoUsed[teamId] = true;
     if (!topDiscard) tryPickupMorto(G, p);
+    // Sync updated meld into WASM meld table buffers
+    if (_updateMeld) {
+        const teamIdx = teamId === 'team0' ? 0 : 1;
+        if (isRunner) {
+            const slot = target !== null ? target.index : G.table[teamId][1].length - 1;
+            _updateMeld(false, teamIdx, 0, slot, parsed);
+        } else {
+            const slot = target !== null ? target.index : G.table[teamId][0][suit].length - 1;
+            _updateMeld(true, teamIdx, suit - 1, slot, parsed);
+        }
+    }
     return true;
 }
 
@@ -637,41 +648,21 @@ function _meldsByType(G, teamId) {
     return { seqBySuit, runners };
 }
 
-// ── Input encoding ────────────────────────────────────────────────────────────
-
-
-
-// Encode seq candidate into SEQ_CANDIDATE_FEATURES=17 uint8 at inp[off]:
-// [0..13]=rank slots 0/255, [14]=foreignWild 0/255, [15]=nat2Wild 0/255, [16]=appendIdx*51
-// Encode runner candidate into RUN_CANDIDATE_FEATURES=8 uint8 at inp[off]:
-// [0]=rank*19 (rank/13*255), [1..4]=suit counts*127, [5]=wildSuit*51, [6]=appendIdx*51
-export function encodeCandidateMeld(inp, off, parsedMeld, appendIdx, isRunnerNet) {
-    if (isRunnerNet) {
-        inp.fill(0, off, off + 8);
-        if (!parsedMeld) return;
-        inp[off]     = (parsedMeld[0] / 13 * 255 + 0.5) | 0;
-        inp[off + 1] = (parsedMeld[1] / 2 * 255 + 0.5) | 0;
-        inp[off + 2] = (parsedMeld[2] / 2 * 255 + 0.5) | 0;
-        inp[off + 3] = (parsedMeld[3] / 2 * 255 + 0.5) | 0;
-        inp[off + 4] = (parsedMeld[4] / 2 * 255 + 0.5) | 0;
-        inp[off + 5] = (parsedMeld[5] / 5 * 255 + 0.5) | 0;
-        inp[off + 6] = (appendIdx    / 5 * 255 + 0.5) | 0;
-    } else {
-        inp.fill(0, off, off + 17);
-        if (!parsedMeld) return;
-        for (let i = 0; i < 14; i++) inp[off + i] = parsedMeld[i] ? 255 : 0;
-        inp[off + 14] = parsedMeld[14] !== 0 ? 255 : 0;
-        inp[off + 15] = parsedMeld[15] !== 0 ? 255 : 0;
-        inp[off + 16] = (appendIdx / 5 * 255 + 0.5) | 0;
-    }
-}
-
 
 
 // WASM-only scoring — implementations in wasm_loader.js via setScoreFunctions()
 let _scoreAllCandidates = null;
 let _scoreDiscard = null;
-export function setScoreFunctions(scoreAll, scoreDisc) { _scoreAllCandidates = scoreAll; _scoreDiscard = scoreDisc; }
+let _setTurnContext = null;
+let _updateMeld = null;
+let _syncCards = null;
+export function setScoreFunctions(scoreAll, scoreDisc, setCtx, updateMeld, syncCards) {
+    _scoreAllCandidates = scoreAll;
+    _scoreDiscard = scoreDisc;
+    _setTurnContext = setCtx;
+    _updateMeld = updateMeld;
+    _syncCards = syncCards;
+}
 export function scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, weights, topDiscard, layerKey, meldIdx) {
     return _scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, weights, topDiscard, layerKey, meldIdx);
 }
@@ -977,6 +968,26 @@ export function planTurn(G, p, DNA) {
     // Pre-compute meld index once per turn — shared across all scoreAllCandidates / scoreDiscard calls
     const turnMeldIdx = { my: _meldsByType(G, myTeam), opp: _meldsByType(G, oppTeam) };
 
+    // Write scalars into WASM memory once per turn
+    if (_setTurnContext) {
+        const e = v => (v <= 0 ? 0 : v >= 1 ? 255 : (v * 255 + 0.5) | 0);
+        const hs = pid => pid !== null ? (G.handSizes[pid] ?? 0) : 0;
+        const hasClean = teamId => (G.cleanMelds?.[teamId] ?? 0) > 0;
+        const sc = new Uint8Array(11);
+        sc[0]  = e(hs(p)          / 22);
+        sc[1]  = e(hs(opp1Id)     / 22);
+        sc[2]  = e(hs(partnerId)  / 22);
+        sc[3]  = e(hs(opp2Id)     / 22);
+        sc[4]  = e(G.deck.length  / 104);
+        sc[5]  = e(G.discardPile.length / 104);
+        sc[6]  = G.teamMortos[myTeam]  ? 255 : 0;
+        sc[7]  = G.teamMortos[oppTeam] ? 255 : 0;
+        sc[8]  = e(G.pots.length  / 2);
+        sc[9]  = hasClean(myTeam)  ? 255 : 0;
+        sc[10] = hasClean(oppTeam) ? 255 : 0;
+        _setTurnContext(parseInt(p), myTeam, oppTeam, sc);
+    }
+
     const drawFakeMeld = topDiscard !== null ? (() => {
         const r = getRank(topDiscard), s = getSuit(topDiscard);
         const fm = new Array(16).fill(0);
@@ -1194,6 +1205,7 @@ export const BuracoGame = {
       Gcopy.cards2      = _r(Gcopy.cards2);
       Gcopy.knownCards2 = _r(Gcopy.knownCards2);
       Gcopy.discardPile2 = Gcopy.discardPile2 ? Uint8Array.from(Gcopy.discardPile2) : null;
+      if (_syncCards) _syncCards(Gcopy, Gcopy.rules?.numPlayers || 4);
       const fullPlan = planTurn(Gcopy, p, DNA);
       return fullPlan.length > 0 ? [{ move: fullPlan[0].move, args: fullPlan[0].args }] : [];
     }
