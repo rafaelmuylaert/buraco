@@ -57,6 +57,12 @@ static float g_inp_scale = 1.0f / 255.0f;
 static float g_buf0[MAX_LAYER_SIZE];
 static float g_buf1[MAX_LAYER_SIZE];
 
+// Per-net layer config — set once per match by configure_net_* exports
+static int g_pickup_layers[MAX_LAYERS], g_pickup_nlayers, g_pickup_woff;
+static int g_meld_layers  [MAX_LAYERS], g_meld_nlayers,   g_meld_woff;
+static int g_runner_layers[MAX_LAYERS], g_runner_nlayers,  g_runner_woff;
+static int g_discard_layers[MAX_LAYERS],g_discard_nlayers, g_discard_woff;
+
 // ── Network configuration ─────────────────────────────────────────────────────
 // Describes which input segments to read and in what order.
 // Set by configure() based on layerKey.
@@ -76,6 +82,49 @@ static int g_my_team;      // 0 or 1
 static int g_opp_team;     // 0 or 1
 static int g_suit;         // 1-4 (0 = all-suit / runner pass)
 static int g_layerkey;     // 0=PICKUP, 1=MELD, 2=RUNNER, 3=DISCARD
+
+
+// Legacy: get_inp still available for compat but unused in new path
+static uint8_t g_inp_legacy[4][2048];
+WASM_EXPORT uint8_t* get_inp(int i) { return g_inp_legacy[i]; }
+// ── Game state (set by JS once per turn via set_match_state) ─────────────────
+static uint8_t g_hand_sizes[4];
+static uint16_t g_deck_len;
+static uint16_t g_discard_len;
+static uint8_t  g_top_discard;   // 255 = empty
+static uint8_t  g_pots_len;
+static uint8_t  g_has_drawn;
+static uint8_t  g_team_mortos[2];
+static uint8_t  g_clean_melds[2];
+static uint8_t  g_num_players;
+static uint8_t  g_is_closed_discard;
+static uint8_t  g_runners_allowed;  // bitmask: bit1=aces, bit13=kings, bit3=threes, 0xFF=any
+
+// ── Planned move output buffer ────────────────────────────────────────────────
+// [0]=moveType, [1]=targetType, [2]=targetSuit, [3]=targetSlot, [4..56]=cardCounts[53]
+#define MOVE_DRAW          0
+#define MOVE_PICKUP        1
+#define MOVE_PLAY_MELD     2
+#define MOVE_APPEND        3
+#define MOVE_DISCARD       4
+#define MOVE_EXHAUSTED     5
+static uint8_t g_planned_move[57];
+
+// ── Seq meld candidate storage (internal, richer than g_seq_cands) ────────────
+// Stores up to MAX_SEQ_CANDS full parsed melds + cardCounts for execution
+#define CAND_MELD_SIZE 16
+#define CAND_CC_SIZE   53
+static uint8_t g_cand_seq_meld[MAX_SEQ_CANDS][CAND_MELD_SIZE];  // parsed meld slots
+static uint8_t g_cand_seq_cc  [MAX_SEQ_CANDS][CAND_CC_SIZE];    // cardCounts
+static uint8_t g_cand_run_meld[MAX_RUN_CANDS][6];
+static uint8_t g_cand_run_cc  [MAX_RUN_CANDS][CAND_CC_SIZE];
+static uint8_t g_cand_append_meld[MAX_SEQ_CANDS][CAND_MELD_SIZE];
+static uint8_t g_cand_append_cc  [MAX_SEQ_CANDS][CAND_CC_SIZE];
+static uint8_t g_cand_append_suit[MAX_SEQ_CANDS];
+static uint8_t g_cand_append_slot[MAX_SEQ_CANDS];
+static int     g_num_append_cands;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 static inline float relu(float x) { return x > 0.0f ? x : 0.0f; }
 
@@ -245,96 +294,6 @@ static void forward_pass(float* out_acc) {
     }
 }
 
-extern "C" {
-
-// Card bitmap accessors
-WASM_EXPORT uint8_t* get_cards2(int p)      { return g_cards2[p]; }
-WASM_EXPORT uint8_t* get_knowncards2(int p) { return g_knowncards2[p]; }
-WASM_EXPORT uint8_t* get_discard2()         { return g_discard2; }
-
-// Scalar and meld table accessors
-WASM_EXPORT uint8_t* get_scalars()                        { return g_scalars; }
-WASM_EXPORT uint8_t* get_seq_meld(int team, int suit, int slot) { return g_seq_melds[team][suit][slot]; }
-WASM_EXPORT uint8_t* get_run_meld(int team, int slot)     { return g_run_melds[team][slot]; }
-
-// Candidate buffer accessors — getAllValid* writes here directly
-WASM_EXPORT uint8_t* get_seq_cands()   { return &g_seq_cands[0][0]; }
-WASM_EXPORT uint8_t* get_run_cands()   { return &g_run_cands[0][0]; }
-WASM_EXPORT void set_num_seq_cands(int n) { g_num_seq_cands = n; }
-WASM_EXPORT void set_num_run_cands(int n) { g_num_run_cands = n; }
-
-// Weight buffer
-WASM_EXPORT float* get_weights()         { return g_weights; }
-WASM_EXPORT float* get_out()             { return g_out; }
-WASM_EXPORT int*   get_layer_sizes_buf() { return g_layer_sizes_buf; }
-WASM_EXPORT int    get_max_weights()     { return MAX_WEIGHTS; }
-WASM_EXPORT void   set_inp_scale(float s){ g_inp_scale = s; }
-
-// Set evaluation context before evaluate()
-WASM_EXPORT void set_eval_context(int player, int my_team, int opp_team, int suit, int layerkey) {
-    g_player   = player;
-    g_my_team  = my_team;
-    g_opp_team = opp_team;
-    g_suit     = suit;
-    g_layerkey = layerkey;
-}
-
-WASM_EXPORT void configure(int num_layers, int weight_offset) {
-    for (int i = 0; i < num_layers && i < MAX_LAYERS; i++)
-        g_layer_sizes[i] = g_layer_sizes_buf[i];
-    g_num_layers    = num_layers;
-    g_weight_offset = weight_offset;
-}
-
-WASM_EXPORT void set_num_inputs(int n) { g_num_inputs = n; }
-
-WASM_EXPORT void evaluate() {
-    const int outSz = g_layer_sizes[g_num_layers - 1];
-    for (int o = 0; o < outSz; o++) g_out[o] = 0.0f;
-    forward_pass(g_out);
-}
-
-// Legacy: get_inp still available for compat but unused in new path
-static uint8_t g_inp_legacy[4][2048];
-WASM_EXPORT uint8_t* get_inp(int i) { return g_inp_legacy[i]; }
-// ── Game state (set by JS once per turn via set_match_state) ─────────────────
-static uint8_t g_hand_sizes[4];
-static uint16_t g_deck_len;
-static uint16_t g_discard_len;
-static uint8_t  g_top_discard;   // 255 = empty
-static uint8_t  g_pots_len;
-static uint8_t  g_has_drawn;
-static uint8_t  g_team_mortos[2];
-static uint8_t  g_clean_melds[2];
-static uint8_t  g_num_players;
-static uint8_t  g_is_closed_discard;
-static uint8_t  g_runners_allowed;  // bitmask: bit1=aces, bit13=kings, bit3=threes, 0xFF=any
-
-// ── Planned move output buffer ────────────────────────────────────────────────
-// [0]=moveType, [1]=targetType, [2]=targetSuit, [3]=targetSlot, [4..56]=cardCounts[53]
-#define MOVE_DRAW          0
-#define MOVE_PICKUP        1
-#define MOVE_PLAY_MELD     2
-#define MOVE_APPEND        3
-#define MOVE_DISCARD       4
-#define MOVE_EXHAUSTED     5
-static uint8_t g_planned_move[57];
-
-// ── Seq meld candidate storage (internal, richer than g_seq_cands) ────────────
-// Stores up to MAX_SEQ_CANDS full parsed melds + cardCounts for execution
-#define CAND_MELD_SIZE 16
-#define CAND_CC_SIZE   53
-static uint8_t g_cand_seq_meld[MAX_SEQ_CANDS][CAND_MELD_SIZE];  // parsed meld slots
-static uint8_t g_cand_seq_cc  [MAX_SEQ_CANDS][CAND_CC_SIZE];    // cardCounts
-static uint8_t g_cand_run_meld[MAX_RUN_CANDS][6];
-static uint8_t g_cand_run_cc  [MAX_RUN_CANDS][CAND_CC_SIZE];
-static uint8_t g_cand_append_meld[MAX_SEQ_CANDS][CAND_MELD_SIZE];
-static uint8_t g_cand_append_cc  [MAX_SEQ_CANDS][CAND_CC_SIZE];
-static uint8_t g_cand_append_suit[MAX_SEQ_CANDS];
-static uint8_t g_cand_append_slot[MAX_SEQ_CANDS];
-static int     g_num_append_cands;
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 static inline int rank_count(int player, int suit, int rank) {
     return g_cards2[player][(suit-1)*18 + (rank-1)];
 }
@@ -736,6 +695,268 @@ static int find_valid_appends() {
 
     return nApp + nRunApp;
 }
+
+static int plan_turn() {
+    int player  = g_player;
+    int myTeam  = g_my_team;
+    int oppTeam = g_opp_team;
+
+    if (g_deck_len == 0 && g_pots_len == 0) {
+        g_planned_move[0] = MOVE_EXHAUSTED;
+        return MOVE_EXHAUSTED;
+    }
+
+    float scores[MAX_SEQ_CANDS > MAX_RUN_CANDS ? MAX_SEQ_CANDS : MAX_RUN_CANDS];
+
+    // ── Phase 1: Pickup ───────────────────────────────────────────────────────
+    if (!g_has_drawn) {
+        int doPickup = 0;
+        uint8_t pickupCC[53] = {0};
+        uint8_t pickupTargetType = 0, pickupTargetSuit = 0, pickupTargetSlot = 0;
+
+        if (g_top_discard != 255 && g_is_closed_discard) {
+            int td     = g_top_discard;
+            int td_idx = (td == 54) ? 52 : td;
+            int td_suit = (td == 54) ? 5 : (td / 13) + 1;
+            int td_rank = (td == 54) ? 2 : (td % 13) + 1;
+
+            // Temporarily add top discard to player's cards
+            g_cards2[player][CARDS_ALL_OFF + td_idx]++;
+            if (td_suit == 5)      { for (int i=0;i<4;i++) g_cards2[player][i*18+17]++; }
+            else if (td_rank == 2) { for (int i=0;i<4;i++) g_cards2[player][i*18+13+(td_suit-1)]++; }
+            else                   { g_cards2[player][(td_suit-1)*18+(td_rank-1)]++; }
+
+            int nMelds = find_valid_melds();
+            int nApps  = find_valid_appends();
+
+            // Restore
+            g_cards2[player][CARDS_ALL_OFF + td_idx]--;
+            if (td_suit == 5)      { for (int i=0;i<4;i++) g_cards2[player][i*18+17]--; }
+            else if (td_rank == 2) { for (int i=0;i<4;i++) g_cards2[player][i*18+13+(td_suit-1)]--; }
+            else                   { g_cards2[player][(td_suit-1)*18+(td_rank-1)]--; }
+
+            if (nMelds > 0 || nApps > 0) {
+                // Score: slot 0 = drawCard (zeros), slot 1 = best pickup meld
+                uint8_t saved[MAX_SEQ_CANDS][SEQ_CAND_FEATS];
+                for (int i=0;i<MAX_SEQ_CANDS;i++)
+                    for (int j=0;j<SEQ_CAND_FEATS;j++) saved[i][j] = g_seq_cands[i][j];
+
+                for (int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[0][j] = 0;
+                if (g_num_seq_cands > 0)
+                    for (int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[1][j] = g_seq_cands[0][j];
+
+                int tdSuit = (td_suit >= 1 && td_suit <= 4) ? td_suit : 1;
+                int pickN  = 2;
+                use_net(g_pickup_layers, g_pickup_nlayers, g_pickup_woff);
+                g_layerkey = 0; g_suit = tdSuit;
+                g_num_seq_cands = pickN;
+                for (int o=0;o<g_layer_sizes[g_pickup_nlayers-1];o++) g_out[o]=0.0f;
+                forward_pass(g_out);
+
+                for (int i=0;i<MAX_SEQ_CANDS;i++)
+                    for (int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[i][j] = saved[i][j];
+
+                if (g_out[1] > g_out[0] && g_num_seq_cands > 0) {
+                    doPickup = 1;
+                    for (int i=0;i<g_num_seq_cands;i++) {
+                        if (g_cand_seq_cc[i][td_idx] > 0) {
+                            for (int j=0;j<53;j++) pickupCC[j] = g_cand_seq_cc[i][j];
+                            if (pickupCC[td_idx] > 0) pickupCC[td_idx]--;
+                            pickupTargetType = 1;
+                            break;
+                        }
+                    }
+                    if (!doPickup) doPickup = 0;
+                }
+            }
+        } else if (!g_is_closed_discard && g_top_discard != 255) {
+            doPickup = 1;
+        }
+
+        if (doPickup) {
+            g_planned_move[0] = MOVE_PICKUP;
+            g_planned_move[1] = pickupTargetType;
+            g_planned_move[2] = pickupTargetSuit;
+            g_planned_move[3] = pickupTargetSlot;
+            for (int i=0;i<53;i++) g_planned_move[4+i] = pickupCC[i];
+        } else {
+            g_planned_move[0] = MOVE_DRAW;
+            for (int i=1;i<57;i++) g_planned_move[i] = 0;
+        }
+        return g_planned_move[0];
+    }
+
+    // ── Phase 2: Melds & Appends ──────────────────────────────────────────────
+    find_valid_melds();
+    find_valid_appends();
+
+    float bestSeqScore = -1e30f; int bestSeqIdx = -1; int bestIsAppend = 0;
+    float bestRunScore = -1e30f; int bestRunIdx  = -1;
+
+    // Score seq melds per suit
+    if (g_num_seq_cands > 0) {
+        for (int suit=1; suit<=4; suit++) {
+            int suitN = 0;
+            uint8_t suitCands[MAX_SEQ_CANDS][SEQ_CAND_FEATS];
+            int suitIdx[MAX_SEQ_CANDS];
+            for (int i=0;i<g_num_seq_cands;i++) {
+                int cs = 0;
+                for (int s=1;s<=4&&!cs;s++)
+                    for (int r=1;r<=13;r++)
+                        if (g_cand_seq_cc[i][(s-1)*13+(r-1)]>0) { cs=s; break; }
+                if (cs == suit && suitN < MAX_SEQ_CANDS) {
+                    for (int j=0;j<SEQ_CAND_FEATS;j++) suitCands[suitN][j] = g_seq_cands[i][j];
+                    suitIdx[suitN] = i; suitN++;
+                }
+            }
+            if (!suitN) continue;
+            for (int i=0;i<suitN;i++)
+                for (int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[i][j] = suitCands[i][j];
+            use_net(g_meld_layers, g_meld_nlayers, g_meld_woff);
+            g_layerkey = 1; g_suit = suit; g_num_seq_cands = suitN;
+            for (int o=0;o<g_layer_sizes[g_meld_nlayers-1];o++) g_out[o]=0.0f;
+            forward_pass(g_out);
+            for (int i=0;i<suitN;i++)
+                if (g_out[i] > bestSeqScore) { bestSeqScore = g_out[i]; bestSeqIdx = suitIdx[i]; bestIsAppend = 0; }
+        }
+    }
+
+    // Score append candidates per suit
+    if (g_num_append_cands > 0) {
+        for (int suit=1; suit<=4; suit++) {
+            int suitN = 0;
+            uint8_t suitCands[MAX_SEQ_CANDS][SEQ_CAND_FEATS];
+            int suitIdx[MAX_SEQ_CANDS];
+            for (int i=0;i<g_num_append_cands;i++) {
+                if (g_cand_append_suit[i] == suit && suitN < MAX_SEQ_CANDS) {
+                    for (int j=0;j<14;j++) suitCands[suitN][j] = g_cand_append_meld[i][j] ? 255 : 0;
+                    suitCands[suitN][14] = g_cand_append_meld[i][14] ? 255 : 0;
+                    suitCands[suitN][15] = g_cand_append_meld[i][15] ? 255 : 0;
+                    suitCands[suitN][16] = (uint8_t)((g_cand_append_slot[i]+1)/5.0f*255+0.5f);
+                    suitIdx[suitN] = i; suitN++;
+                }
+            }
+            if (!suitN) continue;
+            for (int i=0;i<suitN;i++)
+                for (int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[i][j] = suitCands[i][j];
+            use_net(g_meld_layers, g_meld_nlayers, g_meld_woff);
+            g_layerkey = 1; g_suit = suit; g_num_seq_cands = suitN;
+            for (int o=0;o<g_layer_sizes[g_meld_nlayers-1];o++) g_out[o]=0.0f;
+            forward_pass(g_out);
+            for (int i=0;i<suitN;i++)
+                if (g_out[i] > bestSeqScore) { bestSeqScore = g_out[i]; bestSeqIdx = suitIdx[i]; bestIsAppend = 1; }
+        }
+    }
+
+    // Score runner candidates
+    if (g_num_run_cands > 0) {
+        use_net(g_runner_layers, g_runner_nlayers, g_runner_woff);
+        g_layerkey = 2; g_suit = 0;
+        for (int o=0;o<g_layer_sizes[g_runner_nlayers-1];o++) g_out[o]=0.0f;
+        forward_pass(g_out);
+        for (int i=0;i<g_num_run_cands;i++)
+            if (g_out[i] > bestRunScore) { bestRunScore = g_out[i]; bestRunIdx = i; }
+    }
+
+    // Pick best
+    if (bestSeqScore > 0.0f || bestRunScore > 0.0f) {
+        if (bestSeqScore >= bestRunScore && bestSeqIdx >= 0) {
+            if (bestIsAppend) {
+                g_planned_move[0] = MOVE_APPEND;
+                g_planned_move[1] = 1;
+                g_planned_move[2] = g_cand_append_suit[bestSeqIdx];
+                g_planned_move[3] = g_cand_append_slot[bestSeqIdx];
+                for (int i=0;i<53;i++) g_planned_move[4+i] = g_cand_append_cc[bestSeqIdx][i];
+            } else {
+                g_planned_move[0] = MOVE_PLAY_MELD;
+                g_planned_move[1] = 0; g_planned_move[2] = 0; g_planned_move[3] = 0;
+                for (int i=0;i<53;i++) g_planned_move[4+i] = g_cand_seq_cc[bestSeqIdx][i];
+            }
+            return g_planned_move[0];
+        } else if (bestRunIdx >= 0) {
+            int isApp = 0, appSlot = 0;
+            for (int s=0;s<MAX_RUN_SLOTS;s++)
+                if (g_run_melds[myTeam][s][0] == g_cand_run_meld[bestRunIdx][0]) { isApp=1; appSlot=s; break; }
+            g_planned_move[0] = isApp ? MOVE_APPEND : MOVE_PLAY_MELD;
+            g_planned_move[1] = 2;
+            g_planned_move[2] = 0;
+            g_planned_move[3] = (uint8_t)appSlot;
+            for (int i=0;i<53;i++) g_planned_move[4+i] = g_cand_run_cc[bestRunIdx][i];
+            return g_planned_move[0];
+        }
+    }
+
+    // ── Phase 3: Discard ──────────────────────────────────────────────────────
+    use_net(g_discard_layers, g_discard_nlayers, g_discard_woff);
+    g_layerkey = 3; g_suit = 0;
+    for (int o=0;o<g_layer_sizes[g_discard_nlayers-1];o++) g_out[o]=0.0f;
+    forward_pass(g_out);
+
+    int bestCard = -1; float bestScore2 = -1e30f;
+    for (int i=0;i<53;i++) {
+        if (!g_cards2[player][CARDS_ALL_OFF+i]) continue;
+        if (g_out[i] > bestScore2) { bestScore2 = g_out[i]; bestCard = i; }
+    }
+    if (bestCard < 0)
+        for (int i=0;i<53;i++) if (g_cards2[player][CARDS_ALL_OFF+i]) { bestCard=i; break; }
+
+    g_planned_move[0] = MOVE_DISCARD;
+    g_planned_move[1] = (uint8_t)(bestCard == 52 ? 54 : bestCard);
+    for (int i=2;i<57;i++) g_planned_move[i] = 0;
+    return MOVE_DISCARD;
+}
+
+extern "C" {
+
+// Card bitmap accessors
+WASM_EXPORT uint8_t* get_cards2(int p)      { return g_cards2[p]; }
+WASM_EXPORT uint8_t* get_knowncards2(int p) { return g_knowncards2[p]; }
+WASM_EXPORT uint8_t* get_discard2()         { return g_discard2; }
+
+// Scalar and meld table accessors
+WASM_EXPORT uint8_t* get_scalars()                        { return g_scalars; }
+WASM_EXPORT uint8_t* get_seq_meld(int team, int suit, int slot) { return g_seq_melds[team][suit][slot]; }
+WASM_EXPORT uint8_t* get_run_meld(int team, int slot)     { return g_run_melds[team][slot]; }
+
+// Candidate buffer accessors — getAllValid* writes here directly
+WASM_EXPORT uint8_t* get_seq_cands()   { return &g_seq_cands[0][0]; }
+WASM_EXPORT uint8_t* get_run_cands()   { return &g_run_cands[0][0]; }
+WASM_EXPORT void set_num_seq_cands(int n) { g_num_seq_cands = n; }
+WASM_EXPORT void set_num_run_cands(int n) { g_num_run_cands = n; }
+
+// Weight buffer
+WASM_EXPORT float* get_weights()         { return g_weights; }
+WASM_EXPORT float* get_out()             { return g_out; }
+WASM_EXPORT int*   get_layer_sizes_buf() { return g_layer_sizes_buf; }
+WASM_EXPORT int    get_max_weights()     { return MAX_WEIGHTS; }
+WASM_EXPORT void   set_inp_scale(float s){ g_inp_scale = s; }
+
+// Set evaluation context before evaluate()
+WASM_EXPORT void set_eval_context(int player, int my_team, int opp_team, int suit, int layerkey) {
+    g_player   = player;
+    g_my_team  = my_team;
+    g_opp_team = opp_team;
+    g_suit     = suit;
+    g_layerkey = layerkey;
+}
+
+WASM_EXPORT void configure(int num_layers, int weight_offset) {
+    for (int i = 0; i < num_layers && i < MAX_LAYERS; i++)
+        g_layer_sizes[i] = g_layer_sizes_buf[i];
+    g_num_layers    = num_layers;
+    g_weight_offset = weight_offset;
+}
+
+WASM_EXPORT void set_num_inputs(int n) { g_num_inputs = n; }
+
+WASM_EXPORT void evaluate() {
+    const int outSz = g_layer_sizes[g_num_layers - 1];
+    for (int o = 0; o < outSz; o++) g_out[o] = 0.0f;
+    forward_pass(g_out);
+}
+
+
+
 
 // Configure all 4 nets at once — called once per match
 WASM_EXPORT void configure_nets(
