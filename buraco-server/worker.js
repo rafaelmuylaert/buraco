@@ -1,7 +1,7 @@
 import { workerData, parentPort } from 'worker_threads';
 import {
     BuracoGame, AI_CONFIG,
-    movePlayMeld, moveAppendToMeld, moveDiscardCard,
+    moveDiscardCard,
     checkGameOver, planTurn, getAndResetTimings
 } from './game.js';
 import { initWasm } from './wasm_loader.js';
