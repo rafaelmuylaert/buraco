@@ -36,6 +36,10 @@ function runMatch(genomes, rules, fixedDeck) {
 
     // Build local state S — same shape as G but we own it entirely
     const S = BuracoGame.setup({ random: fakeRandom, ctx: { numPlayers } }, { ...rules, numPlayers });
+    // Convert cards2 bitmaps to Float32Array for fast typed-array access in forwardPassSegmented
+    for (const k of Object.keys(S.cards2))      S.cards2[k]      = Float32Array.from(S.cards2[k]);
+    for (const k of Object.keys(S.knownCards2)) S.knownCards2[k] = Float32Array.from(S.knownCards2[k]);
+    S.discardPile2 = Float32Array.from(S.discardPile2);
     S.botGenomes = Object.fromEntries(Object.entries(genomes).map(([k, v]) => {
         const arr = v instanceof SharedArrayBuffer ? new Float32Array(v) : new Float32Array(v);
         return [k, prepareGenome(arr)];

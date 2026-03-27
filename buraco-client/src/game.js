@@ -461,7 +461,7 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
     }
     G.handSizes[p] += G.discardPile.length;
     G.discardPile = [];
-    G.discardPile2 = makeCards2();
+    G.discardPile2 = G.discardPile2 instanceof Float32Array ? new Float32Array(CARDS_FLAT_SIZE) : makeCards2();
     G.hasDrawn = true;
     G.lastDrawnCard = pickedUp;
     tryPickupMorto(G, p);
