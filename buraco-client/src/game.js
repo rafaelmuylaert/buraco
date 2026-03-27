@@ -1232,7 +1232,15 @@ export const BuracoGame = {
     else { teams = { '0': 'team0', '1': 'team1', '2': 'team0', '3': 'team1' }; teamPlayers = { team0: ['0', '2'], team1: ['1', '3'] }; }
 
     const table = { team0: [{ }, []], team1: [{ }, []] };
-    return { rules, deck: initialDeck, discardPile: [firstDiscard], pots, hands, knownCards, hands2, knownCards2, discardPile2, hasDrawn: false, lastDrawnCard: null, teams, teamPlayers, teamMortos: { team0: false, team1: false }, mortoUsed: { team0: false, team1: false }, isExhausted: false, botGenomes, table, cleanMelds: { team0: 0, team1: 0 } };
+    // Convert Float32Array bitmaps to plain Arrays for JSON serialization
+    const hands2Serial = {}; const knownCards2Serial = {};
+    for (let i = 0; i < numPlayers; i++) {
+        const p = i.toString();
+        hands2Serial[p] = { 1: Array.from(hands2[p][1]), 2: Array.from(hands2[p][2]), 3: Array.from(hands2[p][3]), 4: Array.from(hands2[p][4]), 5: Array.from(hands2[p][5]), all: Array.from(hands2[p].all) };
+        knownCards2Serial[p] = { 1: Array.from(knownCards2[p][1]), 2: Array.from(knownCards2[p][2]), 3: Array.from(knownCards2[p][3]), 4: Array.from(knownCards2[p][4]), 5: Array.from(knownCards2[p][5]), all: Array.from(knownCards2[p].all) };
+    }
+    const discardPile2Serial = { 1: Array.from(discardPile2[1]), 2: Array.from(discardPile2[2]), 3: Array.from(discardPile2[3]), 4: Array.from(discardPile2[4]), 5: Array.from(discardPile2[5]), all: Array.from(discardPile2.all) };
+    return { rules, deck: initialDeck, discardPile: [firstDiscard], pots, hands, knownCards, hands2: hands2Serial, knownCards2: knownCards2Serial, discardPile2: discardPile2Serial, hasDrawn: false, lastDrawnCard: null, teams, teamPlayers, teamMortos: { team0: false, team1: false }, mortoUsed: { team0: false, team1: false }, isExhausted: false, table, cleanMelds: { team0: 0, team1: 0 } };
   },
 
   moves: {
