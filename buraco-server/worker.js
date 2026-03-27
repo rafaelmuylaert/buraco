@@ -2,7 +2,7 @@ import { workerData, parentPort } from 'worker_threads';
 import {
     BuracoGame, AI_CONFIG, CARDS_ALL_OFF,
     moveDrawCard, moveDiscardCard, moveMeld, movePickUpDiscard,
-    checkGameOver, planTurn, getAndResetTimings
+    checkGameOver, getAndResetTimings
 } from './game.js';
 import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers, planTurnWasm } from './wasm_loader.js';
 
@@ -84,9 +84,7 @@ function runMatch(genomes, rules, fixedDeck) {
             const _myTeam  = S.teams[p] === 'team0' ? 'team0' : 'team1';
             const _oppTeam = _myTeam === 'team0' ? 'team1' : 'team0';
             const moves = planTurnWasm(S, p, _myTeam, _oppTeam);
-            if (!moves) {
-                try { planTurn(S, p, S.botGenomes[p]); } catch(e) {}
-            } else {
+            if (moves && moves.length > 0) {
                 let pickupDone = false;
                 for (const m of moves) {
                     if (m.phase === 0) { // pickup
