@@ -440,7 +440,11 @@ export function moveMeld(G, p, cardIds, target = null, addCards = 0, topDiscard 
     const teamId = G.teams[p];
     const hand = G.hands[p];
     const allCardIds = topDiscard !== null ? [...cardIds, topDiscard] : cardIds;
-    for (const c of cardIds) { if (hand.indexOf(c) === -1) return false; }
+    // Validate all cards are available (hand + topDiscard pool)
+    const available = {};
+    for (const c of hand) available[c] = (available[c] || 0) + 1;
+    if (topDiscard !== null) available[topDiscard] = (available[topDiscard] || 0) + 1;
+    for (const c of allCardIds) { if (!available[c]) return false; available[c]--; }
     const existingMeld = target === null ? null
         : target.type === 'runner' ? G.table[teamId][1][target.index]
         : (G.table[teamId][0][target.suit] || [])[target.index];
@@ -1038,24 +1042,24 @@ export function getAllValidMelds(hand, hands2, rules) {
                 if (hasgaps) for (const c of cards) hasgaps.push(c);
             } else {
                 if (nogaps) {
-                    if (nogaps.length >= 3) validCombos.push({ cards: nogaps, parsedMeld: parseMeld(nogaps, rules) });
+                    if (nogaps.length >= 3) { const pm = parseMeld(nogaps, rules); if (pm) validCombos.push({ cards: nogaps, parsedMeld: pm }); }
                     if (hasWild) {
                         if (hasgaps !== null) {
                             const withWild = [...hasgaps, wild0];
-                            if (withWild.length >= 3) validCombos.push({ cards: withWild, parsedMeld: parseMeld(withWild, rules) });
+                            if (withWild.length >= 3) { const pm = parseMeld(withWild, rules); if (pm) validCombos.push({ cards: withWild, parsedMeld: pm }); }
                             hasgaps = null;
                         }
                         if (nogaps.length >= 2) hasgaps = [...nogaps, wild0];
                     }
                     nogaps = null;
                 } else if (hasgaps) {
-                    if (hasgaps.length >= 3) validCombos.push({ cards: hasgaps, parsedMeld: parseMeld(hasgaps, rules) });
+                    if (hasgaps.length >= 3) { const pm = parseMeld(hasgaps, rules); if (pm) validCombos.push({ cards: hasgaps, parsedMeld: pm }); }
                     hasgaps = null;
                 }
             }
         }
-        if (nogaps && nogaps.length >= 3) validCombos.push({ cards: nogaps, parsedMeld: parseMeld(nogaps, rules) });
-        if (hasgaps && hasgaps.length >= 3) validCombos.push({ cards: hasgaps, parsedMeld: parseMeld(hasgaps, rules) });
+        if (nogaps && nogaps.length >= 3) { const pm = parseMeld(nogaps, rules); if (pm) validCombos.push({ cards: nogaps, parsedMeld: pm }); }
+        if (hasgaps && hasgaps.length >= 3) { const pm = parseMeld(hasgaps, rules); if (pm) validCombos.push({ cards: hasgaps, parsedMeld: pm }); }
     }
 
     // ── Runners ───────────────────────────────────────────────────────────────
@@ -1063,10 +1067,11 @@ export function getAllValidMelds(hand, hands2, rules) {
         for (const r in natsByRank) {
             if (!isRunnerAllowed(rules, +r)) continue;
             const combo = natsByRank[r];
-            if (combo.length >= 3) validCombos.push({ cards: combo, parsedMeld: parseMeld(combo, rules) });
+            if (combo.length >= 3) { const pm = parseMeld(combo, rules); if (pm) validCombos.push({ cards: combo, parsedMeld: pm }); }
             if (combo.length >= 2 && hasWild) {
                 const withWild = [...combo, wild0];
-                validCombos.push({ cards: withWild, parsedMeld: parseMeld(withWild, rules) });
+                const pm = parseMeld(withWild, rules);
+                if (pm) validCombos.push({ cards: withWild, parsedMeld: pm });
             }
         }
     }
@@ -1125,15 +1130,27 @@ export function planTurn(G, p, DNA) {
             const handWithTop = [...G.hands[p], topDiscard];
             const hands2WithTop = initHands2(handWithTop);
             for (const { cards: combo, parsedMeld: pm } of getAllValidMelds(handWithTop, hands2WithTop, G.rules)) {
+                // Find the last occurrence of topDiscard in combo — that's the discard pile copy
                 let topIdx = -1;
                 for (let i = combo.length - 1; i >= 0; i--) { if (combo[i] === topDiscard) { topIdx = i; break; } }
                 if (topIdx === -1) continue;
+                // Verify the remaining hand cards are actually available (excluding the discard copy)
                 const handUsed = [...combo]; handUsed.splice(topIdx, 1);
+                const handCounts = {};
+                for (const c of G.hands[p]) handCounts[c] = (handCounts[c] || 0) + 1;
+                const handOk = handUsed.every(c => { if (handCounts[c] > 0) { handCounts[c]--; return true; } return false; });
+                if (!handOk || !pm) continue;
                 pickupCands.push({ move: 'pickUpDiscard', args: [handUsed, { type: 'new' }], cards: combo, parsedMeld: pm, appendIdx: 0 });
             }
             for (const { cards, parsedMeld: pm, args } of getAllValidAppends(handWithTop, hands2WithTop, G.table[myTeam], G.rules)) {
-                if (!cards.includes(topDiscard)) continue;
-                const handUsed = cards.filter(c => c !== topDiscard);
+                let topIdx = -1;
+                for (let i = cards.length - 1; i >= 0; i--) { if (cards[i] === topDiscard) { topIdx = i; break; } }
+                if (topIdx === -1) continue;
+                const handUsed = [...cards]; handUsed.splice(topIdx, 1);
+                const handCounts = {};
+                for (const c of G.hands[p]) handCounts[c] = (handCounts[c] || 0) + 1;
+                const handOk = handUsed.every(c => { if (handCounts[c] > 0) { handCounts[c]--; return true; } return false; });
+                if (!handOk || !pm) continue;
                 pickupCands.push({ move: 'pickUpDiscard', args: [handUsed, { type: 'append', meldTarget: args[0] }], cards, parsedMeld: pm, appendIdx: 0 });
             }
             
