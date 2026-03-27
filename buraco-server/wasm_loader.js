@@ -50,9 +50,9 @@ export async function initWasm() {
         refreshViews();
 
         setScoreFunctions(
-            (G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, weights, topDiscard, layerKey) =>
+            (G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, weights, topDiscard, layerKey, meldIdx) =>
                 wasmScoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
-                             candidates, weights, topDiscard, layerKey),
+                             candidates, weights, topDiscard, layerKey, meldIdx),
             (G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, weights, meldIdx) =>
                 wasmScoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, weights, meldIdx)
         );
@@ -181,9 +181,9 @@ function writeInpDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, meldI
 
 function _meldsByType(G, teamId) {
     const seqBySuit = { 1: [], 2: [], 3: [], 4: [] };
-    const runners = (G.table[teamId][1] || []).map(m => Float32Array.from(m));
+    const runners = (G.table[teamId][1] || []);
     for (let suit = 1; suit <= 4; suit++)
-        seqBySuit[suit] = (G.table[teamId][0][suit] || []).map((meld, index) => ({meld: Float32Array.from(meld), index}));
+        seqBySuit[suit] = (G.table[teamId][0][suit] || []).map((meld, index) => ({ meld, index }));
     return { seqBySuit, runners };
 }
 
@@ -207,7 +207,7 @@ function suitsInCandidates(candidates) {
 }
 
 function wasmScoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
-                      candidates, weights, topDiscard, layerKey) {
+                      candidates, weights, topDiscard, layerKey, meldIdx) {
     if (vWeights.buffer !== wasmMemory.buffer) refreshViews();
 
     const weightOffset = layerKey === 'PICKUP' ? 0
@@ -222,7 +222,7 @@ function wasmScoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
     const totals = layerKey === 'PICKUP' ? _totalsPickup : _totalsMeld;
     totals.fill(0, 0, candidates.length);
 
-    const idx = { my: _meldsByType(G, myTeam), opp: _meldsByType(G, oppTeam) };
+    const idx = meldIdx || { my: _meldsByType(G, myTeam), opp: _meldsByType(G, oppTeam) };
 
     // Reuse a fixed-size candidate slot array — no per-call allocation
     const suitCands = new Array(maxSlots);
