@@ -1381,6 +1381,7 @@ export function planTurn(G, p, DNA) {
 
     // Score all appends + melds together (slicing to MAX_MELD per suit happens inside scoreAllCandidates)
     // Split candidates: seq → meld net, runners → runner net
+    const allMeldCands    = [...appendCands, ...meldCands];
     const seqMeldCands    = allMeldCands.filter(c => !c.parsedMeld || c.parsedMeld.length !== 6);
     const runnerMeldCands = allMeldCands.filter(c => c.parsedMeld?.length === 6);
     const planMoves = [];
