@@ -318,9 +318,9 @@ export function removeCards(hand, cardIds) {
 // hands2[p][1..4][r] = count of rank r (1-13) in suit s, /8
 // hands2[p][5][s]    = count of wilds of suit s (1-4=suited-2, 5=joker), /2
 function makeHands2() {
-    return { 1: new Float32Array(14), 2: new Float32Array(14),
-             3: new Float32Array(14), 4: new Float32Array(14),
-             5: new Float32Array(6), all: new Float32Array(54) };
+    return { 1: new Array(14).fill(0), 2: new Array(14).fill(0),
+             3: new Array(14).fill(0), 4: new Array(14).fill(0),
+             5: new Array(6).fill(0),  all: new Array(54).fill(0) };
 }
 
 export function initHands2(cards) {
@@ -1243,15 +1243,7 @@ export const BuracoGame = {
     else { teams = { '0': 'team0', '1': 'team1', '2': 'team0', '3': 'team1' }; teamPlayers = { team0: ['0', '2'], team1: ['1', '3'] }; }
 
     const table = { team0: [{ }, []], team1: [{ }, []] };
-    // Convert Float32Array bitmaps to plain Arrays for JSON serialization
-    const hands2Serial = {}; const knownCards2Serial = {};
-    for (let i = 0; i < numPlayers; i++) {
-        const p = i.toString();
-        hands2Serial[p] = { 1: Array.from(hands2[p][1]), 2: Array.from(hands2[p][2]), 3: Array.from(hands2[p][3]), 4: Array.from(hands2[p][4]), 5: Array.from(hands2[p][5]), all: Array.from(hands2[p].all) };
-        knownCards2Serial[p] = { 1: Array.from(knownCards2[p][1]), 2: Array.from(knownCards2[p][2]), 3: Array.from(knownCards2[p][3]), 4: Array.from(knownCards2[p][4]), 5: Array.from(knownCards2[p][5]), all: Array.from(knownCards2[p].all) };
-    }
-    const discardPile2Serial = { 1: Array.from(discardPile2[1]), 2: Array.from(discardPile2[2]), 3: Array.from(discardPile2[3]), 4: Array.from(discardPile2[4]), 5: Array.from(discardPile2[5]), all: Array.from(discardPile2.all) };
-    return { rules, deck: initialDeck, discardPile: [firstDiscard], pots, hands, knownCards, hands2: hands2Serial, knownCards2: knownCards2Serial, discardPile2: discardPile2Serial, hasDrawn: false, lastDrawnCard: null, teams, teamPlayers, teamMortos: { team0: false, team1: false }, mortoUsed: { team0: false, team1: false }, isExhausted: false, table, cleanMelds: { team0: 0, team1: 0 } };
+    return { rules, deck: initialDeck, discardPile: [firstDiscard], pots, hands, knownCards, hands2, knownCards2, discardPile2, hasDrawn: false, lastDrawnCard: null, teams, teamPlayers, teamMortos: { team0: false, team1: false }, mortoUsed: { team0: false, team1: false }, isExhausted: false, table, cleanMelds: { team0: 0, team1: 0 } };
   },
 
   moves: {
@@ -1291,7 +1283,9 @@ export const BuracoGame = {
       if (!DNA || DNA.length !== AI_CONFIG.TOTAL_DNA_SIZE) DNA = new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE).fill(0);
       else if (!(DNA instanceof Float32Array)) DNA = new Float32Array(DNA);
 
-      const fullPlan = planTurn(G, p, DNA);
+      // planTurn mutates G internally — work on a deep copy so the live state is untouched
+      const Gcopy = JSON.parse(JSON.stringify(G));
+      const fullPlan = planTurn(Gcopy, p, DNA);
       return fullPlan.length > 0 ? [{ move: fullPlan[0].move, args: fullPlan[0].args }] : [];
     }
   }
