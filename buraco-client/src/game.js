@@ -148,10 +148,8 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
         }
     }
 
-    if (m[2] == 1) {
-        m[15]++;
-        m[2] = 0;
-    }
+    // Promote m[2] to wild only if it's gap-filling (no rank-3 present), not if it's a natural 2 next to rank-3
+    if (m[2] == 1 && m[0] == 0) { m[15]++; m[2] = 0; }
 
     // ── 1. Classify incoming cards ────────────────────────────────────────────
     let aces = m[0] + m[1];
@@ -691,7 +689,8 @@ export function getAllValidAppends(cards2flat, teamTable, rules) {
     // Returns null if the result is invalid.
     const applyToSeq = (meld, suit, cc) => {
         const m = [...meld];
-        if (m[2] === 1) { m[15]++; m[2] = 0; }
+        // Promote m[2] to wild only if it's gap-filling (no rank-3 present), not if it's a natural 2 next to rank-3
+        if (m[2] === 1 && m[3] === 0) { m[15]++; m[2] = 0; }
         for (const [k, n] of Object.entries(cc)) {
             const id = +k;
             const s = id === 54 ? 5 : Math.floor((id % 52) / 13) + 1;
