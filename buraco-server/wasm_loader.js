@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { AI_CONFIG, CARDS_ALL_OFF, CARDS_SUIT_STRIDE,
          encodeCandidateMeld, isMeldClean, seqSuit,
-         setScoreFunctions, addForwardPassTime } from './game.js';
+         setScoreFunctions, addForwardPassTime, addWasmDiag } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -245,6 +245,7 @@ function _scoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
         const t0 = performance.now();
         _ex.evaluate();
         addForwardPassTime(performance.now() - t0);
+        addWasmDiag(1, 0);
 
         for (let i = 0; i < nCands; i++) totals[_suitIndices[i]] += _vOut[i];
     }
@@ -259,6 +260,7 @@ function _scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, weights
     const t0 = performance.now();
     _ex.evaluate();
     addForwardPassTime(performance.now() - t0);
+    addWasmDiag(1, 0);
     return new Float32Array(_vOut.buffer, _vOut.byteOffset, AI_CONFIG.DISCARD_CLASSES);
 }
 

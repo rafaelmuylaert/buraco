@@ -72,7 +72,7 @@ function toBuffer(genome) {
 class WorkerPool {
     constructor(size, path) {
         this.queue = [];
-        this._timings = { buildStateVector: 0, buildDiscardVector: 0, forwardPass: 0, getAllValidMelds: 0, getAllValidAppends: 0 };
+        this._timings = { buildStateVector: 0, buildDiscardVector: 0, forwardPass: 0, getAllValidMelds: 0, getAllValidAppends: 0, _evalCount: 0, _copyMs: 0 };
         this.workers = Array.from({ length: size }, () => {
             const w = new Worker(path, { workerData: { matches: [], rules: {} } });
             w.idle = true;
