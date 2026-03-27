@@ -18,10 +18,10 @@ class ErrorBoundary extends React.Component {
 }
 
 // Inlined dependencies from game.js to resolve preview environment import errors
-const suitValues = { 'â™ ': 1, 'â™¥': 2, 'â™¦': 3, 'â™£': 4, 'â˜…': 5 };
+const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
 const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
 // Seq format: [A-low, A-high, nat2, 3, 4..K, foreignWildSuit, nat2-wild-count]  (16 elements, indices 0-15)
-// Runner format: [rank, â™ cnt, â™¥cnt, â™¦cnt, â™£cnt, wildSuit]  (6 elements)
+// Runner format: [rank, ♠cnt, ♥cnt, ♦cnt, ♣cnt, wildSuit]  (6 elements)
 const SEQ_POINTS_NEW = [15, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10]; // indices 0-13 â†’ A-low,A-high,nat2,3..K
 
 function sortCards(cards) {
@@ -79,7 +79,7 @@ function calculateMeldPoints(meld, rules) {
     return pts;
 }
 
-const getSuitChar = s => ['â™ ', 'â™¥', 'â™¦', 'â™£', 'â˜…'][s - 1];
+const getSuitChar = s => ['♠', '♥', '♦', '♣', '★'][s - 1];
 const getRankChar = r => r === 1 ? 'A' : r === 11 ? 'J' : r === 12 ? 'Q' : r === 13 ? 'K' : r === 14 ? 'A' : r.toString();
 
 function intToCardObj(c) {
@@ -89,7 +89,7 @@ function intToCardObj(c) {
 }
 
 // Seq format: [A-low, A-high, nat2, 3..K, foreignWildSuit, nat2-wild-count] (16 elements)
-// Runner format: [rank, â™ cnt, â™¥cnt, â™¦cnt, â™£cnt, wildSuit] (6 elements)
+// Runner format: [rank, ♠cnt, ♥cnt, ♦cnt, ♣cnt, wildSuit] (6 elements)
 function meldToCards(m, suit) {
     let cards = [];
     if (m.length !== 6) { // Sequence
@@ -107,7 +107,7 @@ function meldToCards(m, suit) {
         let wildUsed = false;
         const wildCard = () => {
             const ws = foreignWildSuit !== 0 ? foreignWildSuit : suit;
-            return { rank: ws === 5 ? 'JOKER' : '2', suit: ws === 5 ? 'â˜…' : getSuitChar(ws), id: `w-${wildUsed ? 'b' : 'a'}` };
+            return { rank: ws === 5 ? 'JOKER' : '2', suit: getSuitChar(ws === 5 ? 5 : ws), id: `w-${wildUsed ? 'b' : 'a'}` };
         };
 
         // A-low at the start
@@ -136,13 +136,13 @@ function meldToCards(m, suit) {
                 if (runMax === 13 || m[1]) cards.unshift(wc); else cards.push(wc);
             }
         }
-    } else { // Runner: [rank, â™ cnt, â™¥cnt, â™¦cnt, â™£cnt, wildSuit]
+    } else { // Runner: [rank, ♠cnt, ♥cnt, ♦cnt, ♣cnt, wildSuit]
         const rank = m[0], wildSuit = m[5];
         for (let s = 1; s <= 4; s++)
             for (let i = 0; i < m[s]; i++)
                 cards.push({ rank: getRankChar(rank), suit: getSuitChar(s), id: `r-${s}-${i}` });
         if (wildSuit !== 0)
-            cards.push({ rank: wildSuit === 5 ? 'JOKER' : '2', suit: wildSuit === 5 ? 'â˜…' : getSuitChar(wildSuit), id: 'w-run' });
+            cards.push({ rank: wildSuit === 5 ? 'JOKER' : '2', suit: getSuitChar(wildSuit === 5 ? 5 : wildSuit), id: 'w-run' });
     }
     return cards;
 }
@@ -151,7 +151,7 @@ function meldToCards(m, suit) {
 const CARD_W = 46, CARD_H = 60;
 
 const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle }) => {
-  const isRed = card.suit === 'â™¥' || card.suit === 'â™¦';
+  const isRed = card.suit === getSuitChar(2) || card.suit === getSuitChar(3);
   return (
     <div onClick={onClick} style={{
       position: 'relative',
@@ -689,7 +689,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                   <div style={{ fontSize: '0.7em', color: '#888', marginBottom: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}:</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
                     {knownCards.map((cId, i) => { const c = intToCardObj(cId); return (
-                      <div key={i} style={{ background: 'white', color: (c.suit==='â™¥'||c.suit==='â™¦')?'red':'black', padding: '1px 3px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold' }}>{c.rank}{c.suit}</div>
+                      <div key={i} style={{ background: 'white', color: (c.suit==='♥'||c.suit==='♦')?'red':'black', padding: '1px 3px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold' }}>{c.rank}{c.suit}</div>
                     ); })}
                   </div>
                 </div>
@@ -712,6 +712,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
         </div>
       </div>
 
+      {gameOverPopup}
     </div>
   );
 }
