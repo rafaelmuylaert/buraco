@@ -114,7 +114,7 @@ function runMatch(genomes, rules, fixedDeck) {
                     if (m.phase === 0) { // pickup
                         if (pickupDone) continue;
                         if (m.moveType === 0) { moveDrawCard(S, p); pickupDone = true; }
-                        else if (m.moveType === 1) { if (movePickUpDiscard(S, p, m.cardCounts, {type:'new'})) pickupDone = true; }
+                        else if (m.moveType === 1) { if (movePickUpDiscard(S, p, m.cardCounts, {type: Object.keys(m.cardCounts).length > 0 ? 'new' : 'new'})) pickupDone = true; }
                         else if (m.moveType === 5) { S.isExhausted = true; pickupDone = true; }
                     } else if (m.phase === 1) { // meld â€” fire all, ignore failures
                         if (m.moveType === 2) moveMeld(S, p, m.cardCounts);

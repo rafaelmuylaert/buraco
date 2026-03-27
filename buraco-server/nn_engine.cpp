@@ -345,7 +345,7 @@ static int build_seq_from_run(int player, int suit, int lo, int hi,
         int cnt = rank_count(player, suit, actual_rank);
         if (!cnt) continue;
         if (r==1 || r==14) { aces++; }
-        else { dst[r]=1; cc[(suit-1)*13+(r-1)]=cnt; }
+        else { dst[r]=1; cc[(suit-1)*13+(r-1)]=1; }  // cap at 1 per rank slot
     }
 
     if (withWild) {
@@ -724,8 +724,97 @@ static int plan_turn() {
         return g_move_count;
     }
 
-    // Phase 0: always emit draw (JS picks it up only if !hasDrawn)
-    add_move(0, MOVE_DRAW, 0,0,0, nullptr);
+    // Phase 0: score draw vs pickup using pickup net
+    // Build pickup candidates: [0]=draw, [1..]=pickup melds using top discard
+    // For open discard: pickup is always valid (no meld required)
+    // For closed discard: pickup only valid if top discard enables a meld/append
+    int pickupCandType[MAX_SEQ_CANDS+1]; // 0=draw, 1=seq meld, 2=append, 3=open pickup
+    uint8_t pickupCC[MAX_SEQ_CANDS+1][CAND_CC_SIZE];
+    int nPickup = 0;
+
+    // Candidate 0: always draw
+    pickupCandType[0] = 0;
+    for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[0][i]=0;
+    nPickup = 1;
+
+    if (g_top_discard != 255 && g_discard_len > 0) {
+        int td = g_top_discard; // 0-51 or 54
+        int td_suit = (td==54) ? 5 : td/13+1;
+        int td_rank = (td==54) ? 2 : td%13+1;
+
+        if (!g_is_closed_discard) {
+            // Open discard: pickup always valid
+            pickupCandType[nPickup] = 3;
+            for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[nPickup][i]=0;
+            nPickup++;
+        } else {
+            // Closed discard: temporarily add top card to hand, find melds
+            int td_alloff = (td==54) ? 52 : td;
+            g_cards2[g_player][CARDS_ALL_OFF + td_alloff]++;
+            if (td_suit>=1 && td_suit<=4 && td_rank!=2)
+                g_cards2[g_player][(td_suit-1)*18 + (td_rank-1)]++;
+            else if (td_rank==2 && td_suit>=1 && td_suit<=4)
+                for(int i=0;i<4;i++) g_cards2[g_player][i*18+13+(td_suit-1)]++;
+            else if (td==54)
+                for(int i=0;i<4;i++) g_cards2[g_player][i*18+17]++;
+
+            int prevSeqCands = g_num_seq_cands;
+            int prevRunCands = g_num_run_cands;
+            find_valid_melds();
+            // Check if top discard is used in any candidate
+            for(int ci=0; ci<g_num_seq_cands && nPickup<MAX_SEQ_CANDS+1; ci++) {
+                int usesTop = (td_alloff<53) ? g_cand_seq_cc[ci][td_alloff] : 0;
+                if (!usesTop) continue;
+                pickupCandType[nPickup] = 1;
+                for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[nPickup][i]=g_cand_seq_cc[ci][i];
+                // Remove top discard from cc (hand contribution only)
+                if (td_alloff<53 && pickupCC[nPickup][td_alloff]>0) pickupCC[nPickup][td_alloff]--;
+                nPickup++;
+            }
+
+            // Restore hand
+            g_cards2[g_player][CARDS_ALL_OFF + td_alloff]--;
+            if (td_suit>=1 && td_suit<=4 && td_rank!=2)
+                g_cards2[g_player][(td_suit-1)*18 + (td_rank-1)]--;
+            else if (td_rank==2 && td_suit>=1 && td_suit<=4)
+                for(int i=0;i<4;i++) g_cards2[g_player][i*18+13+(td_suit-1)]--;
+            else if (td==54)
+                for(int i=0;i<4;i++) g_cards2[g_player][i*18+17]--;
+            g_num_seq_cands = prevSeqCands;
+            g_num_run_cands = prevRunCands;
+        }
+    }
+
+    // Score pickup candidates with pickup net
+    int bestPickup = 0;
+    if (nPickup > 1) {
+        // Write seq cands for pickup net (use draw fake meld for draw cand, real for others)
+        uint8_t pickupSeqCands[MAX_SEQ_CANDS+1][SEQ_CAND_FEATS];
+        for(int i=0;i<nPickup;i++) {
+            for(int j=0;j<SEQ_CAND_FEATS;j++) pickupSeqCands[i][j]=0;
+            if (pickupCandType[i]==1) {
+                // encode the meld candidate
+                for(int j=0;j<CAND_CC_SIZE && j<SEQ_CAND_FEATS;j++)
+                    pickupSeqCands[i][j] = pickupCC[i][j] ? 255 : 0;
+            }
+            for(int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[i][j]=pickupSeqCands[i][j];
+        }
+        use_net(g_pickup_layers, g_pickup_nlayers, g_pickup_woff);
+        g_layerkey=0;
+        int td_suit = (g_top_discard==54||g_top_discard==255) ? 1 : g_top_discard/13+1;
+        g_suit = (td_suit>=1&&td_suit<=4) ? td_suit : 1;
+        g_num_seq_cands = nPickup;
+        for(int o=0;o<g_layer_sizes[g_pickup_nlayers-1];o++) g_out[o]=0.0f;
+        forward_pass(g_out);
+        float bestScore = g_out[0];
+        for(int i=1;i<nPickup;i++) if(g_out[i]>bestScore) { bestScore=g_out[i]; bestPickup=i; }
+    }
+
+    if (bestPickup == 0) {
+        add_move(0, MOVE_DRAW, 0,0,0, nullptr);
+    } else {
+        add_move(0, MOVE_PICKUP, 0,0,0, pickupCC[bestPickup]);
+    }
 
     // Phase 1: Melds & Appends
     find_valid_melds();
@@ -834,7 +923,8 @@ static int plan_turn() {
     }
     for(int i=0;i<nd;i++) {
         uint8_t cc[53]={0};
-        cc[0]=(uint8_t)(dcards[i]==52?54:dcards[i]);
+        int cardId = (dcards[i]==52) ? 54 : dcards[i];
+        cc[0] = (uint8_t)cardId;  // card ID stored in cc[0] for JS planTurnWasm to read as discardCard
         add_move(2, MOVE_DISCARD, 0,0,0, cc);
     }
 
