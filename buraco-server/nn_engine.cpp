@@ -718,6 +718,7 @@ static void add_move(uint8_t phase, uint8_t moveType, uint8_t tType, uint8_t tSu
 static int plan_turn() {
     int player = g_player;
     g_move_count = 0;
+    for(int i=0;i<MAX_PLANNED_MOVES;i++) for(int j=0;j<58;j++) g_move_list[i][j]=0;
 
     if (g_deck_len==0 && g_pots_len==0) {
         add_move(0, MOVE_EXHAUSTED, 0,0,0, nullptr);
@@ -808,6 +809,7 @@ static int plan_turn() {
         forward_pass(g_out);
         float bestScore = g_out[0];
         for(int i=1;i<nPickup;i++) if(g_out[i]>bestScore) { bestScore=g_out[i]; bestPickup=i; }
+        g_num_seq_cands = 0;  // reset after pickup net pass
     }
 
     if (bestPickup == 0) {

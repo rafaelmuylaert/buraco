@@ -77,35 +77,13 @@ function runMatch(genomes, rules, fixedDeck) {
                 S.lastDrawnCard = null;
             }
 
-            const DNA = S.botGenomes[p];
-            // Point WASM at this player's team DNA (no copy â€” just offset switch)
             if (isWasmReady()) {
                 const teamBase = S.teams[p] === 'team0' ? 0 : AI_CONFIG.TOTAL_DNA_SIZE;
                 setActiveTeam(teamBase);
             }
-            // Call planTurnWasm in a loop â€” C++ returns one phase at a time
-            // (DRAW/PICKUP â†’ then MELD/APPEND â†’ then DISCARD)
-            let phaseCount = 0;
-            let turnDone = false;
             const _myTeam  = S.teams[p] === 'team0' ? 'team0' : 'team1';
             const _oppTeam = _myTeam === 'team0' ? 'team1' : 'team0';
             const moves = planTurnWasm(S, p, _myTeam, _oppTeam);
-            if (!_matchLogDone) {
-                const wb = getWasmCardBuffers();
-                const pInt = parseInt(p);
-                const hand = wb.cards2[pInt];
-                const handSum = hand ? hand.slice(72, 125).reduce((a,b)=>a+b,0) : -1;
-                console.log('[LOG] turn='+moveCount+' p='+p+' team='+_myTeam+' handSum='+handSum+' moves='+(moves?moves.length:'null'));
-                if (moves && moves.length > 0) {
-                    const PH = ['pickup','meld','discard'];
-                    const MT = ['draw','pickupDiscard','playMeld','appendMeld','discard','exhausted'];
-                    for (const m of moves) {
-                        const cc = Object.entries(m.cardCounts).map(([k,v])=>k+'x'+v).join(',');
-                        console.log('  [MOVE] phase='+(PH[m.phase]||m.phase)+' type='+(MT[m.moveType]||m.moveType)+' tSuit='+m.targetSuit+' tSlot='+m.targetSlot+' cards=['+cc+']');
-                    }
-                }
-                if (moveCount >= 3) _matchLogDone = true;
-            }
             if (!moves) {
                 try { planTurn(S, p, S.botGenomes[p]); } catch(e) {}
             } else {
@@ -165,7 +143,6 @@ function runMatch(genomes, rules, fixedDeck) {
 }
 
 let _diagCount = 0;
-let _matchLogDone = false;
 
 // â”€â”€ Job processing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
