@@ -1,7 +1,10 @@
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
-import { BuracoGame, AI_CONFIG, getAndResetTimings } from './game.js';
+import { BuracoGame, AI_CONFIG, getAndResetTimings, planTurnLogger as _ptl } from './game.js';
 import { initWasm, syncCardsToWasm } from './wasm_loader.js';
+
+// We can't assign to a named export directly, so we use a wrapper object
+import * as GameModule from './game.js';
 
 await initWasm();
 
@@ -167,9 +170,57 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
     if (aiQueue.length === 0) {
       const myDNA = dnaCache[targetBotName];
       getAndResetTimings();
+
+      // Attach logger to capture planTurn internals
+      const logLines = [];
+      GameModule.planTurnLogger = (event, data) => logLines.push({ event, data });
       const moves = BuracoGame.ai.enumerate(currentState.G, currentState.ctx, myDNA || undefined);
-      const t = getAndResetTimings();
-      console.log(`[BOT] ${botName} enumerated ${aiQueue.length} moves | hasDrawn=${currentState.G.hasDrawn} handSize=${currentState.G.handSizes?.[playerID]} | buildSegments=${t.buildSegments.toFixed(1)}ms forwardPass=${t.forwardPass.toFixed(1)}ms getAllValidMelds=${t.getAllValidMelds.toFixed(1)}ms`);
+      GameModule.planTurnLogger = null;
+      getAndResetTimings();
+
+      // ── Human-game diagnostics ──────────────────────────────────────────
+      const G = currentState.G;
+      const CAOFF = 72;
+      const flat = G.cards2?.[playerID] || [];
+      // Hand cards
+      const handCards = [];
+      for (let i = 0; i < 53; i++) {
+        const cnt = flat[CAOFF + i] || 0;
+        if (cnt > 0) {
+          const cid = i === 52 ? 54 : i;
+          const s = cid === 54 ? 5 : Math.floor(cid / 13) + 1;
+          const r = cid === 54 ? 2 : (cid % 13) + 1;
+          for (let n = 0; n < cnt; n++) handCards.push(getRankChar(r) + getSuitChar(s));
+        }
+      }
+      const topDiscard = G.discardPile?.length > 0 ? (() => { const c = G.discardPile[G.discardPile.length-1]; const s = c===54?5:Math.floor((c%52)/13)+1; const r = c===54?2:(c%13)+1; return getRankChar(r)+getSuitChar(s); })() : 'empty';
+      console.log(`[BOT] ${botName} | turn | hasDrawn=${G.hasDrawn} | hand=[${handCards.join(' ')}] | discard_top=${topDiscard}`);
+      // Pickup candidates
+      const pickupLog = logLines.find(l => l.event === 'pickup');
+      const pickupChosen = logLines.find(l => l.event === 'pickupChosen');
+      if (pickupLog) {
+        const cstr = pickupLog.data.map(c => `${c.move}(score=${c.score?.toFixed ? c.score.toFixed(3) : c.score})`).join(', ');
+        console.log(`  pickup_cands: [${cstr}]`);
+      }
+      if (pickupChosen) console.log(`  pickup_chosen: ${pickupChosen.data?.move} cards=${JSON.stringify(pickupChosen.data?.cardCounts || {})}`);
+      // Meld candidates
+      const meldLog = logLines.find(l => l.event === 'melds');
+      if (meldLog && meldLog.data.length > 0) {
+        console.log(`  meld_cands(${meldLog.data.length}): ${meldLog.data.map(c => `${c.move}${JSON.stringify(c.cards)}`).join(' | ')}`);
+      } else {
+        console.log(`  meld_cands: none`);
+      }
+      // Final moves
+      if (moves && moves.length > 0) {
+        for (const m of moves) {
+          const argStr = (m.args || []).map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(', ');
+          console.log(`  -> ${m.move}(${argStr})`);
+        }
+      } else {
+        console.log(`  -> (no moves returned)`);
+      }
+      // ───────────────────────────────────────────────────────────────────
+
       aiQueue = moves || [];
     }
 
