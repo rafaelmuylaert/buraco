@@ -124,11 +124,14 @@ const minSeqRank = m => m[0] ? 0 : (() => { let i = 2; while (i <= 13 && !m[i]) 
 const maxSeqRank = m => m[1] ? 14 : (() => { let i = 13; while (i >= 2 && !m[i]) i--; return i; })();
 
 const _checkGaps = (m) => {
+    const maxgap = (m[14] !== 0 || m[15] !== 0)?1:0;
     const min = minSeqRank(m), max = maxSeqRank(m);
     if (min > max) return 0;
     let gaps = 0;
     for (let i = min; i <= max; i++) if (!_pos(m, i)) gaps++;
-    return gaps;
+    if (gaps===0) return min;
+    else if (gaps<=maxgap) return i;
+    else return -1;
 };
 
 export function seqSuit(cardIds) {
@@ -195,10 +198,10 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
     }
 
     // ── 6. Gap check ─────────────────────────────────────────────────────────
+    
+    
     const gaps = _checkGaps(m);
-    const hasWild = m[14] + m[15] > 0;
-    const maxGap = hasWild ? 1 : 0;
-    if (gaps > maxGap) return null;
+    if (gaps === -1) return null;
 
     // ── 7. Length check ──────────────────────────────────────────────────────
     let len = 0;
@@ -212,10 +215,8 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
     // A same-suit nat-2 acting as wild should be demoted back to m[2] only when
     // rank 3 is present (so the 2 naturally belongs next to it) and there are no
     // other gaps that actually need filling.
-    if (m[15] === 1) {
-        if (m[3] === 1 && (gaps === 0 || m[0] === 1)) {
+    if (gaps === 2 && m[15] === 1) {
             m[2] = 1; m[15] = 0;
-        }
     }
     return m;
 }
@@ -715,8 +716,7 @@ export function getAllValidAppends(cards2flat, teamTable, rules) {
         }
         if (m[15] === 2) { m[15] = 1; m[14] = suit; }
         const gaps = _checkGaps(m);
-        const hasW = m[14] !== 0 || m[15] !== 0;
-        if (gaps > (hasW ? 1 : 0)) return null;
+        if (gaps === -1) return null;
         let len = m[15] + (m[14] !== 0 ? 1 : 0);
         for (let r = 0; r <= 13; r++) len += m[r];
         if (len > 14) return null;
@@ -867,8 +867,7 @@ export function getAllValidMelds(cards2flat, rules) {
             cc[wild0Type] = (cc[wild0Type] || 0) + 1;
         }
         const gaps = _checkGaps(_m);
-        const hasW = _m[14] !== 0 || _m[15] !== 0;
-        if (gaps > (hasW ? 1 : 0)) return null;
+        if (gaps === -1) return null;
         let len = _m[15] + (_m[14] !== 0 ? 1 : 0);
         for (let r = 0; r <= 13; r++) len += _m[r];
         if (len < 3 || len > 14) return null;
