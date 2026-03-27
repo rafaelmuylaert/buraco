@@ -1092,6 +1092,15 @@ export function planTurn(G, p, DNA) {
     const opp2Id    = numP === 4 ? ((pInt + 3) % numP).toString() : null;
     const topDiscard = G.discardPile.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
 
+    // If called mid-turn (hasDrawn already true), skip straight to meld+discard phase
+    if (G.hasDrawn) {
+        const hand = G.hands[p] || [];
+        if (hand.length === 0) { G.hasDrawn = false; return []; }
+        const card = hand[0];
+        moveDiscardCard(G, p, card, true);
+        return [{ move: 'discardCard', args: [card], cards: [] }];
+    }
+
     let doff = 0;
     const dnaPickup  = DNA.subarray(doff, doff += AI_CONFIG.DNA_PICKUP);
     const dnaMeld    = DNA.subarray(doff, doff += AI_CONFIG.DNA_MELD);

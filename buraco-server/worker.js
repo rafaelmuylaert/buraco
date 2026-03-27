@@ -1,7 +1,7 @@
 import { workerData, parentPort } from 'worker_threads';
 import {
     BuracoGame, AI_CONFIG,
-    moveDiscardCard,
+    moveDrawCard, moveDiscardCard,
     checkGameOver, planTurn, getAndResetTimings
 } from './game.js';
 import { initWasm } from './wasm_loader.js';
@@ -52,18 +52,33 @@ function runMatch(genomes, rules, fixedDeck) {
 
         while (!gameover && moveCount < 2000) {
             const p = ctx.currentPlayer;
+
+            // Safety: if hasDrawn is stuck true with no hand, force-clear it
+            if (S.hasDrawn && (S.hands[p]?.length ?? 0) === 0) {
+                S.hasDrawn = false;
+                S.lastDrawnCard = null;
+            }
+
             const DNA = S.botGenomes[p];
-            const plan = planTurn(S, p, DNA);
-            // planTurn executes all moves on S internally; just check for exhaustion
+            let plan;
+            try { plan = planTurn(S, p, DNA); } catch(e) {
+                console.error('[runMatch] planTurn threw:', e?.message);
+                // Force the turn to end
+                if (S.hasDrawn) { if (S.hands[p]?.length > 0) moveDiscardCard(S, p, S.hands[p][0], true); else S.hasDrawn = false; }
+                else { if (!moveDrawCard(S, p)) S.isExhausted = true; }
+                plan = [];
+            }
+
             if (plan[0]?.move === 'declareExhausted') S.isExhausted = true;
+
+            // If planTurn didn't end the turn (no discard emitted and hasDrawn still true), force it
+            if (S.hasDrawn) {
+                if (S.hands[p]?.length > 0) moveDiscardCard(S, p, S.hands[p][0], true);
+                else S.hasDrawn = false;
+            }
 
             if (rules.telepathy)
                 for (const pl of Object.keys(S.hands)) S.knownCards[pl] = [...S.hands[pl]];
-
-            // If planTurn didn't end the turn (no discard), force-discard first card
-            const didDiscard = plan.some(m => m.move === 'discardCard');
-            if (!didDiscard && S.hasDrawn && S.hands[p]?.length > 0)
-                moveDiscardCard(S, p, S.hands[p][0], true);
 
             ctx.currentPlayer = String((parseInt(p) + 1) % numPlayers);
             S.hasDrawn = false;
