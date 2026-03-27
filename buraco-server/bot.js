@@ -235,12 +235,11 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         const discard = moves.find(m => m.move === 'discardCard');
         // Show simulated post-pickup hand for meld verification
         if (Glog.hasDrawn && melds.length > 0) {
-          // hand already includes drawn card
           console.log(`  post-draw hand=[${handCards.join(' ')}]`);
         } else if (!Glog.hasDrawn && pickup?.move === 'drawCard' && melds.length > 0) {
-          // WASM planned melds against simulated draw — show what card would be drawn
-          const topDeck = Glog.deck?.length > 0 ? (() => { const c = Glog.deck[Glog.deck.length-1]; const s = c===54?5:Math.floor((c%52)/13)+1; const r = c===54?2:(c%13)+1; return getRankChar(r)+getSuitChar(s); })() : '?';
-          console.log(`  top_deck=${topDeck} (WASM planned melds against simulated post-draw hand)`);
+          const deck = Glog.deck;
+          const topDeck = deck?.length > 0 ? (() => { const c = deck[deck.length-1]; const s = c===54?5:Math.floor((c%52)/13)+1; const r = c===54?2:(c%13)+1; return getRankChar(r)+getSuitChar(s); })() : `unknown(deckLen=${deck?.length})`;
+          console.log(`  top_deck=${topDeck} deckLen=${deck?.length} lastDrawn=${JSON.stringify(Glog.lastDrawnCard)}`);
         }
         if (pickup) console.log(`  pickup: ${pickup.move} ${ccStr(pickup.args?.[0] || {})}`);
         if (melds.length > 0) console.log(`  melds(${melds.length}): ${melds.map(m => `${m.move}${ccStr(m.args?.[0] || {})}`).join(' | ')}`);

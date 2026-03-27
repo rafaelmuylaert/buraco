@@ -261,14 +261,14 @@ function isRunnerAllowed(rules, rank) {
 }
 
 // parseMeld accepts either an array of card IDs or a cardCounts map {cardType: count}
-export function parseMeld(cardIdsOrCounts, rules, existingMeld = null) {
+export function parseMeld(cardIdsOrCounts, rules, existingMeld = null, meldSuit = 0) {
     // Normalize to array of card IDs
     const cardIds = Array.isArray(cardIdsOrCounts)
         ? cardIdsOrCounts
         : countsToIds(cardIdsOrCounts);
     if (!existingMeld && cardIds.length < 3) return null;
     if (existingMeld && !isSeq(existingMeld)) return cardsToRunnerSlots(cardIds, existingMeld, rules);
-    const seq = cardsToSeqSlots(cardIds, existingMeld);
+    const seq = cardsToSeqSlots(cardIds, existingMeld, meldSuit);
     if (seq) return seq;
     if (!existingMeld) return cardsToRunnerSlots(cardIds, null, rules);
     return null;
@@ -506,7 +506,7 @@ export function moveMeld(G, p, cardCounts, target = null, addCards = 0, topDisca
     const allCounts = topDiscard !== null
         ? { ...counts, [topDiscard >= 104 ? 54 : topDiscard % 52]: (counts[topDiscard >= 104 ? 54 : topDiscard % 52] || 0) + 1 }
         : counts;
-    const parsed = parseMeld(allCounts, G.rules, existingMeld);
+    const parsed = parseMeld(allCounts, G.rules, existingMeld, target?.suit || 0);
     if (!parsed) return false;
     const newHandSize = G.handSizes[p] - Object.values(counts).reduce((a, b) => a + b, 0) + addCards;
     const isRunner = parsed.length === 6;
