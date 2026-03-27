@@ -508,6 +508,12 @@ export function moveMeld(G, p, cardCounts, target = null, addCards = 0, topDisca
         : counts;
     const parsed = parseMeld(allCounts, G.rules, existingMeld, target?.suit ? parseInt(target.suit) : 0);
     if (!parsed) return false;
+    // Debug: log when appending wilds to check suit context
+    if (target && existingMeld && process?.env?.NODE_ENV !== 'production') {
+        const ids = countsToIds(allCounts);
+        const hasWild = ids.some(c => getRank(c) === 2 || getSuit(c) === 5);
+        if (hasWild) console.log(`[moveMeld] append wild: target.suit=${target?.suit} parsed[14]=${parsed[14]} parsed[15]=${parsed[15]} clean=${isMeldClean(parsed)}`);
+    }
     const newHandSize = G.handSizes[p] - Object.values(counts).reduce((a, b) => a + b, 0) + addCards;
     const isRunner = parsed.length === 6;
     const suit = isRunner ? 0 : (target ? target.suit : seqSuit(allCardIds));

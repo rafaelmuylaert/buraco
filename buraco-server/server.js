@@ -61,7 +61,19 @@ const gameDB = new Proxy(_rawDB, {
   get(target, prop) {
     const val = target[prop];
     if (typeof val !== 'function') return val;
-    // Wrap all async db methods
+    if (prop === 'listMatches') {
+      return async (...args) => {
+        try {
+          const result = await val.apply(target, args);
+          // Filter out any undefined/null entries that cause endsWith crash
+          if (Array.isArray(result)) return result.filter(Boolean);
+          return result;
+        } catch (e) {
+          console.warn('[DB] listMatches error, returning empty:', e.message);
+          return [];
+        }
+      };
+    }
     if (['fetch', 'setState', 'setMetadata', 'setInitialState'].includes(prop))
       return safeDBMethod(target, val);
     return val.bind(target);
