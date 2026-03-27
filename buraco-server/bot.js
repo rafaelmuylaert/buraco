@@ -139,22 +139,20 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
     // Waiting for server to confirm a dispatched move
     if (lastDispatchedAt > 0) {
       if (currentStateId !== lastStateId) {
-        // Server confirmed — state changed
-        console.log(`[BOT] ${botName} move confirmed (stateID ${lastStateId} -> ${currentStateId})`);
+        // Move confirmed
         lastDispatchedAt = 0;
         lastStateId = currentStateId;
         failStreak = 0;
       } else if (now - lastDispatchedAt >= 3000) {
-        // Timed out — move was rejected
-        console.warn(`[BOT] ${botName} INVALID MOVE (no state change after 3s) | hasDrawn=${currentState.G.hasDrawn} handSize=${currentState.G.handSizes?.[playerID]}`);
-        aiQueue = [];
-        failStreak++;
+        // Move rejected — skip it and continue queue
+        console.warn(`[BOT] ${botName} move rejected, skipping | hasDrawn=${currentState.G.hasDrawn}`);
         lastDispatchedAt = 0;
-        if (failStreak >= 3) {
-          console.warn(`[BOT] ${botName} failStreak=${failStreak}, forcing discard`);
+        failStreak++;
+        if (failStreak >= 5) {
+          aiQueue = [];
+          failStreak = 0;
           const handSize = currentState.G.handSizes?.[playerID] ?? 0;
           if (currentState.G.hasDrawn && handSize > 0) {
-            // Find any card in cards2 all-suit section
             const flat = currentState.G.cards2?.[playerID] || [];
             const CAOFF = 72;
             for (let i = 0; i < 53; i++) {
@@ -168,7 +166,6 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
             client.moves.drawCard();
             lastDispatchedAt = Date.now();
           }
-          failStreak = 0;
         }
       }
       return;
@@ -200,7 +197,6 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
               else if (m.moveType === 1) { pickupMove = { move: 'pickUpDiscard', args: [m.cardCounts, { type: 'new' }] }; moves.push(pickupMove); }
               else if (m.moveType === 5) { moves.push({ move: 'declareExhausted', args: [] }); }
             } else if (m.phase === 1) {
-              // Skip meld moves after pickUpDiscard — server handles meld internally for closed discard
               if (pickupMove?.move === 'pickUpDiscard') continue;
               if (m.moveType === 2) moves.push({ move: 'playMeld', args: [m.cardCounts] });
               else if (m.moveType === 3) moves.push({ move: 'appendToMeld', args: [{ type: m.targetType === 1 ? 'seq' : 'runner', suit: m.targetSuit, index: m.targetSlot }, m.cardCounts] });
