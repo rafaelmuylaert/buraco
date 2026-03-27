@@ -1187,11 +1187,7 @@ export const BuracoGame = {
 
       if (G.hasDrawn) {
           if (G.handSizes[p] === 0) return [];
-          for (let i = 0; i < 53; i++) {
-              const cnt = G.cards2[p][CARDS_ALL_OFF + i] || 0;
-              if (cnt > 0) return [{ move: 'discardCard', args: [i === 52 ? 54 : i] }];
-          }
-          return [];
+          // Fall through to planTurn which handles post-draw meld+discard
       }
 
       let DNA = customDNA || G.botGenomes?.[p];

@@ -146,7 +146,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
             const flat = currentState.G.cards2?.[playerID] || [];
             const CAOFF = 72;
             for (let i = 0; i < 53; i++) {
-              if (Math.round((flat[CAOFF + i] || 0) * 2) > 0) {
+              if ((flat[CAOFF + i] || 0) > 0) {
                 client.moves.discardCard(i === 52 ? 54 : i);
                 lastDispatchedAt = Date.now();
                 break;
@@ -194,7 +194,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       const CAOFF = 72;
       if (currentState.G.hasDrawn && handSize > 0) {
         for (let i = 0; i < 53; i++) {
-          if (Math.round((flat[CAOFF + i] || 0) * 2) > 0) {
+          if ((flat[CAOFF + i] || 0) > 0) {
             client.moves.discardCard(i === 52 ? 54 : i);
             lastDispatchedAt = Date.now();
             break;
