@@ -2,9 +2,10 @@ import { workerData, parentPort } from 'worker_threads';
 import {
     BuracoGame, AI_CONFIG, CARDS_ALL_OFF,
     moveDrawCard, moveDiscardCard,
-    checkGameOver, planTurn, getAndResetTimings
+    checkGameOver, planTurn, getAndResetTimings,
+    setScoreFunctions
 } from './game.js';
-import { initWasm } from './wasm_loader.js';
+import { initWasm, createMatchEngines, isWasmReady } from './wasm_loader.js';
 
 await initWasm();
 
@@ -30,7 +31,7 @@ function prepareGenome(raw) {
 }
 
 // ── Match runner ───────────────────────────────────────────────────────
-function runMatch(genomes, rules, fixedDeck) {
+async function runMatch(genomes, rules, fixedDeck) {
     const numPlayers = rules.numPlayers || 4;
     const fakeRandom = { Shuffle: arr => fixedDeck ? [...fixedDeck] : shuffle(arr) };
 
@@ -44,6 +45,14 @@ function runMatch(genomes, rules, fixedDeck) {
         const arr = v instanceof SharedArrayBuffer ? new Float32Array(v) : new Float32Array(v);
         return [k, prepareGenome(arr)];
     }));
+
+    // Create per-team WASM engines with DNA pre-loaded (async, resolved before game loop)
+    S.engines = null; // filled below if WASM available
+    if (isWasmReady()) {
+        const dna0 = S.botGenomes['0'];
+        const dna1 = S.botGenomes['1'];
+        S.engines = await createMatchEngines(dna0, dna1);
+    }
 
     const ctx = { currentPlayer: '0', numPlayers };
 
@@ -61,6 +70,11 @@ function runMatch(genomes, rules, fixedDeck) {
             }
 
             const DNA = S.botGenomes[p];
+            // Install per-player WASM engine for this turn (zero weight copies)
+            if (S.engines) {
+                const eng = S.teams[p] === 'team0' ? S.engines.team0 : S.engines.team1;
+                setScoreFunctions(eng.scoreNet, eng.scoreDiscard);
+            }
             let plan;
             try { plan = planTurn(S, p, DNA); } catch(e) {
                 console.error('[runMatch] planTurn threw:', e?.message);
@@ -126,21 +140,22 @@ for (let i = 0; i < 52; i++) _baseDeck.push(i);
 for (let i = 0; i < 52; i++) _baseDeck.push(i);
 let _fixedDeck = null;
 
-function processJob(matches, rules) {
-    const results = matches.map(({ dnaA, dnaB }) => {
+async function processJob(matches, rules) {
+    const results = [];
+    for (const { dnaA, dnaB } of matches) {
         const pairDeck = rules.fixedDeck ? _fixedDeck : shuffle([..._baseDeck]);
-        const g1 = runMatch({ '0': dnaA, '1': dnaB, '2': dnaA, '3': dnaB }, rules, pairDeck);
-        const g2 = runMatch({ '0': dnaB, '1': dnaA, '2': dnaB, '3': dnaA }, rules, pairDeck);
-        return [g1 - g2, g2 - g1, Math.abs(g1), Math.abs(g2)];
-    });
+        const g1 = await runMatch({ '0': dnaA, '1': dnaB, '2': dnaA, '3': dnaB }, rules, pairDeck);
+        const g2 = await runMatch({ '0': dnaB, '1': dnaA, '2': dnaB, '3': dnaA }, rules, pairDeck);
+        results.push([g1 - g2, g2 - g1, Math.abs(g1), Math.abs(g2)]);
+    }
     return { results, timings: getAndResetTimings() };
 }
 
 if (workerData.matches.length === 0) {
-    parentPort.on('message', ({ type, matches, rules, deck }) => {
+    parentPort.on('message', async ({ type, matches, rules, deck }) => {
         if (type === 'shuffleDeck') { _fixedDeck = deck; return; }
-        parentPort.postMessage(processJob(matches, rules));
+        parentPort.postMessage(await processJob(matches, rules));
     });
 } else {
-    parentPort.postMessage(processJob(workerData.matches, workerData.rules));
+    parentPort.postMessage(await processJob(workerData.matches, workerData.rules));
 }
