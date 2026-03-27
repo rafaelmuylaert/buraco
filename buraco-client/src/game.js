@@ -1048,42 +1048,77 @@ export function getAllValidMelds(cards2flat, rules) {
     else { for (const cId of suited2Ids) { if (Math.round((cards2flat[CARDS_ALL_OFF + cId] || 0) * 2) > 0) { wild0Type = cId; break; } } }
     const hasWild = wild0Type !== null;
 
-    const rankCount = (suit, rank) => Math.round((cards2flat[(suit - 1) * 18 + (rank - 1)] || 0) * 2);
     const pickType = (suit, rank) => (suit - 1) * 13 + (rank - 1);
 
+    // 14-slot bitmap per suit: slots 1-13 = ranks, slot 14 = ace-high copy
+    const bitmap = new Int8Array(15);
+    const _m = new Array(16);
+
+    // Build { cardCounts, parsedMeld } directly from bitmap[lo..hi], no parseMeld call.
+    const buildFromBitmap = (suit, lo, hi, withWild) => {
+        _m.fill(0);
+        const cc = {};
+        let aces = 0;
+        for (let r = lo; r <= hi; r++) {
+            const cnt = bitmap[r];
+            if (!cnt) continue;
+            if (r === 1 || r === 14) { aces++; }
+            else { _m[r] = 1; cc[pickType(suit, r)] = cnt; }
+        }
+        if (aces === 2) { _m[0] = 1; _m[1] = 1; cc[pickType(suit, 1)] = 2; }
+        else if (aces === 1) {
+            if (_m[13]) { _m[1] = 1; } else if (_m[3]) { _m[0] = 1; } else { _m[1] = 1; }
+            cc[pickType(suit, 1)] = 1;
+        }
+        if (withWild) {
+            const ws = wild0Type === 54 ? 5 : getSuit(wild0Type);
+            if (ws === 5 || ws !== suit) _m[14] = ws; else _m[15] = 1;
+            cc[wild0Type] = (cc[wild0Type] || 0) + 1;
+        }
+        const gaps = _checkGaps(_m);
+        const hasW = _m[14] !== 0 || _m[15] !== 0;
+        if (gaps > (hasW ? 1 : 0)) return null;
+        let len = _m[15] + (_m[14] !== 0 ? 1 : 0);
+        for (let r = 0; r <= 13; r++) len += _m[r];
+        if (len < 3 || len > 14) return null;
+        if (_m[15] === 1 && _m[3] === 1 && (gaps === 0 || _m[0] === 1)) { _m[2] = 1; _m[15] = 0; }
+        return { cardCounts: cc, parsedMeld: [..._m] };
+    };
+
     for (let suit = 1; suit <= 4; suit++) {
-        let runTypes = null, runCounts = null;
-        let gapTypes = null, gapCounts = null;
-        for (let rank = 1; rank <= 13; rank++) {
-            const cnt = rankCount(suit, rank);
+        const suitOff = (suit - 1) * 18;
+        for (let r = 1; r <= 13; r++) bitmap[r] = Math.round((cards2flat[suitOff + r - 1] || 0) * 2);
+        bitmap[14] = bitmap[1]; // ace-high copy
+
+        let acc = null; // [lo, hi] of current contiguous run
+        let gap = null; // saved run before last gap, for wild bridging
+
+        for (let r = 1; r <= 15; r++) {
+            const cnt = r <= 14 ? bitmap[r] : 0;
             if (cnt > 0) {
-                const t = pickType(suit, rank);
-                if (!runTypes) { runTypes = []; runCounts = {}; }
-                for (let i = 0; i < cnt; i++) runTypes.push(t);
-                runCounts[t] = (runCounts[t] || 0) + cnt;
-                if (gapTypes) { for (let i = 0; i < cnt; i++) gapTypes.push(t); gapCounts[t] = (gapCounts[t] || 0) + cnt; }
+                if (!acc) acc = [r, r]; else acc[1] = r;
             } else {
-                if (runTypes) {
-                    if (runTypes.length >= 3) { const pm = parseMeld(runTypes, rules); if (pm) validCombos.push({ cardCounts: runCounts, parsedMeld: pm }); }
-                    if (hasWild) {
-                        if (gapTypes) {
-                            const wt = [...gapTypes, wild0Type]; if (wt.length >= 3) { const pm = parseMeld(wt, rules); if (pm) { const wc = {...gapCounts, [wild0Type]: (gapCounts[wild0Type]||0)+1}; validCombos.push({ cardCounts: wc, parsedMeld: pm }); } }
-                            gapTypes = null; gapCounts = null;
-                        }
-                        if (runTypes.length >= 2) { gapTypes = [...runTypes, wild0Type]; gapCounts = {...runCounts, [wild0Type]: (runCounts[wild0Type]||0)+1}; }
+                if (acc) {
+                    const runLen = acc[1] - acc[0] + 1;
+                    if (runLen >= 3) {
+                        const res = buildFromBitmap(suit, acc[0], acc[1], false);
+                        if (res) validCombos.push(res);
                     }
-                    runTypes = null; runCounts = null;
-                } else if (gapTypes) {
-                    if (gapTypes.length >= 3) { const pm = parseMeld(gapTypes, rules); if (pm) validCombos.push({ cardCounts: gapCounts, parsedMeld: pm }); }
-                    gapTypes = null; gapCounts = null;
-                }
+                    if (hasWild) {
+                        if (gap) {
+                            const res = buildFromBitmap(suit, gap[0], acc[1], true);
+                            if (res) validCombos.push(res);
+                        }
+                        gap = runLen >= 2 ? [acc[0], acc[1]] : null;
+                    }
+                    acc = null;
+                } else { gap = null; }
             }
         }
-        if (runTypes  && runTypes.length  >= 3) { const pm = parseMeld(runTypes,  rules); if (pm) validCombos.push({ cardCounts: runCounts,  parsedMeld: pm }); }
-        if (gapTypes  && gapTypes.length  >= 3) { const pm = parseMeld(gapTypes,  rules); if (pm) validCombos.push({ cardCounts: gapCounts,  parsedMeld: pm }); }
     }
 
     if (runnersAllowed) {
+        const rankCount = (suit, rank) => Math.round((cards2flat[(suit - 1) * 18 + (rank - 1)] || 0) * 2);
         for (let rank = 1; rank <= 13; rank++) {
             if (!isRunnerAllowed(rules, rank)) continue;
             const cc = {}; let total = 0;
@@ -1102,6 +1137,7 @@ export function getAllValidMelds(cards2flat, rules) {
     _timings.getAllValidMelds += performance.now() - _t0;
     return validCombos;
 }
+
 
 // ── Per-turn NN planner ───────────────────────────────────────────────────────
 // Scores all 3 phases, executes all moves on G, and returns the full move list.
