@@ -9,7 +9,7 @@ class ErrorBoundary extends React.Component {
         <div style={{ color: 'white', padding: '40px', backgroundColor: '#1b4332', minHeight: '100vh', fontFamily: 'sans-serif' }}>
           <h1 style={{ color: '#ffd700' }}>Fim de Jogo</h1>
           <p style={{ color: '#ccc' }}>A partida terminou. Por favor, volte ao salão.</p>
-          <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>�. Voltar ao Salão</button>
+          <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>Voltar ao Salão</button>
         </div>
       );
     }
@@ -22,7 +22,7 @@ const suitValues = { '?': 1, '?': 2, '?': 3, '?': 4, '?': 5 };
 const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
 // Seq format: [A-low, A-high, nat2, 3, 4..K, foreignWildSuit, nat2-wild-count]  (16 elements, indices 0-15)
 // Runner format: [rank, ?cnt, ?cnt, ?cnt, ?cnt, wildSuit]  (6 elements)
-const SEQ_POINTS_NEW = [15, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10]; // indices 0-13 �?' A-low,A-high,nat2,3..K
+const SEQ_POINTS_NEW = [15, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10]; // indices 0-13 ?' A-low,A-high,nat2,3..K
 
 function sortCards(cards) {
   const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
@@ -320,7 +320,7 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
             </div>
             {tournamentStandings && (
               <div style={{ background: '#222', padding: '16px', borderRadius: '12px', border: '2px solid #ffd700', minWidth: '220px' }}>
-                <h3 style={{ textAlign: 'center', color: '#ffd700', margin: '0 0 12px 0' }}>�Y�? Classificação</h3>
+                <h3 style={{ textAlign: 'center', color: '#ffd700', margin: '0 0 12px 0' }}>Classificação</h3>
                 <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '0.85em' }}>
                   <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Jogador</th><th>Pts</th><th>V-E-D</th></tr></thead>
                   <tbody>{tournamentStandings.map(([pName, st]) => {
@@ -339,7 +339,7 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
             <button onClick={handleReturnLobby} style={{ padding: '12px 24px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer' }}>Voltar ao Salão</button>
             {showNextButton && (
               <button onClick={handleNextMatch} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 12px rgba(77,166,255,0.6)' }}>
-                {isTournament ? "Próxima Mesa �z�️" : "Jogar Novamente �YZ�"}
+                {isTournament ? "Próxima Mesa" : "Jogar Novamente"}
               </button>
             )}
           </div>
@@ -354,7 +354,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       <div style={{ color: 'white', padding: '40px', backgroundColor: '#1b4332', minHeight: '100vh', fontFamily: 'sans-serif' }}>
         <h1 style={{ color: '#ffd700' }}>Fim de Jogo</h1>
         <p style={{ color: '#ccc' }}>A partida terminou. Por favor, volte ao salão.</p>
-        <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>�. Voltar ao Salão</button>
+        <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>Voltar ao Salão</button>
       </div>
     );
   }
@@ -383,7 +383,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
 
   const sortedHandObj = sortCards(handCardObjs);
 
-  // lastDrawnCard: int or array of ints �?" track by card type for highlighting
+  // lastDrawnCard: int or array of ints ?" track by card type for highlighting
   const newlyDrawnTypes = React.useMemo(() => {
     if (ctx.currentPlayer !== playerID || G.lastDrawnCard == null) return new Set();
     const drawn = Array.isArray(G.lastDrawnCard) ? G.lastDrawnCard : [G.lastDrawnCard];
@@ -455,7 +455,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
     });
   };
 
-  // selectedCards is already a {cardType: count} map �?" use it directly as move arg
+  // selectedCards is already a {cardType: count} map ?" use it directly as move arg
   const selectedCardIds = () => ({ ...selectedCards });
   const selectedCount = Object.values(selectedCards).reduce((a, b) => a + b, 0);
 
@@ -535,7 +535,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       <div style={{ background: isMyTeam ? 'rgba(77, 166, 255, 0.1)' : 'rgba(255, 77, 77, 0.1)', padding: '15px', borderRadius: '10px', minHeight: '120px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <h3 style={{ margin: 0, color: isMyTeam ? '#4da6ff' : '#ff4d4d' }}>{title}</h3>
-          <span style={{ background: 'rgba(0,0,0,0.5)', padding: '5px 10px', borderRadius: '20px', fontWeight: 'bold', color: '#ffd700', flexShrink: 0, whiteSpace: 'nowrap', fontSize: '0.85em' }}>⭐ {calcTeamTablePoints(teamId)} pts</span>
+          <span style={{ background: 'rgba(0,0,0,0.5)', padding: '5px 10px', borderRadius: '20px', fontWeight: 'bold', color: '#ffd700', flexShrink: 0, whiteSpace: 'nowrap', fontSize: '0.85em' }}>{calcTeamTablePoints(teamId)} pts</span>
         </div>
         {/* Runners float left; sequences wrap and fill space beside AND below (issue 4) */}
         <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
@@ -574,7 +574,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: `${LEFT_COL_W}px`, minWidth: `${LEFT_COL_W}px`, flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
         
         <button onClick={() => window.location.reload()} style={{ width: '100%', background: '#4da6ff', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.8em', boxSizing: 'border-box' }}>
-          �. Salão
+          Salão
         </button>
 
         <div style={{ textAlign: 'center' }}>
@@ -625,7 +625,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
               const mortoAvailable = !hasMorto && G.pots.length > ti;
               return (
                 <div key={team} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span style={{ fontSize: '0.7em', color: hasMorto ? '#ffd700' : '#888', fontWeight: 'bold' }}>{label}: {hasMorto ? '�o"️' : '�O'}</span>
+                  <span style={{ fontSize: '0.7em', color: hasMorto ? '#ffd700' : '#888', fontWeight: 'bold' }}>{label}: {hasMorto ? 'Sim' : 'Sim'}</span>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
                     {mortoAvailable && (
                       <div style={{
@@ -658,8 +658,8 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                 padding: '4px', borderRadius: '4px',
                 overflow: 'hidden', minWidth: 0
               }}>
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>{isTurn ? '�Y'? ' : ''}{name}</span>
-                <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.handSizes[p] ?? 0} �Yf�</span>
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>{isTurn ? ''> ' : ''}{name}</span>
+                <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.handSizes[p] ?? 0}</span>
               </div>
             );
           })}
@@ -689,7 +689,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                   <div style={{ fontSize: '0.7em', color: '#888', marginBottom: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}:</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
                     {knownCards.map((cId, i) => { const c = intToCardObj(cId); return (
-                      <div key={i} style={{ background: 'white', color: (c.suit==='?'||c.suit==='?')?'red':'black', padding: '1px 3px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold' }}>{c.rank}{c.suit}</div>
+                      <div key={i} style={{ background: 'white', color: ((c.suit===getSuitChar(2)||c.suit===getSuitChar(3))?'red':'black', padding: '1px 3px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold' }}>{c.rank}{c.suit}</div>
                     ); })}
                   </div>
                 </div>

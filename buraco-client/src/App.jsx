@@ -613,9 +613,9 @@ const App = () => {
     return (
       <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #ff4d4d', paddingBottom: '20px' }}>
-          <h1 style={{ color: '#ff4d4d', margin: 0, flex: '1 1 100%' }}>�Y>�️ Painel de Administração</h1>
+          <h1 style={{ color: '#ff4d4d', margin: 0, flex: '1 1 100%' }}>> Painel de Administração</h1>
           <button onClick={() => { setTrainBotIsNew(availableBots.length === 0); setTrainBotConfig(prev => ({ ...prev, name: availableBots[0] || 'BotPrometheus' })); setShowTrainBotPopup(true); }} style={{ padding: '15px 30px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer', marginTop: '20px', boxShadow: '0 0 15px rgba(138, 43, 226, 0.5)' }}>
-            �Y�� Laboratório de IA (Treinar Bot)
+             Laboratório de IA (Treinar Bot)
           </button>
           <button onClick={() => setView('lounge')} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Sair do Modo Admin</button>
         </div>
@@ -623,7 +623,7 @@ const App = () => {
         {trainingStatus && trainingStatus.isTraining && trainingStatus.sessions.map(session => (
           <div key={session.botName} style={{ width: '100%', background: '#2b1055', padding: '20px', borderRadius: '10px', border: '1px solid #8a2be2', marginBottom: '30px', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-              <h3 style={{ margin: 0, color: '#ffb86c' }}>�sT️ Treinamento em Andamento: {session.botName}</h3>
+              <h3 style={{ margin: 0, color: '#ffb86c' }}> Treinamento em Andamento: {session.botName}</h3>
               <button onClick={async () => {
                 if (!confirm(`Parar o treinamento de "${session.botName}"? O progresso atual será salvo.`)) return;
                 await fetch(`${API_ADDRESS}/api/bots/stop`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botName: session.botName }) });
@@ -640,16 +640,16 @@ const App = () => {
             <div style={{ marginTop: '15px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px' }}>
               {(session.progress.islands || []).map((island, k) => island && (
                 <div key={k} style={{ background: '#1a0a33', border: '1px solid #5a2a9a', borderRadius: '8px', padding: '10px', fontSize: '0.85em' }}>
-                  <div style={{ color: '#b088f9', fontWeight: 'bold', marginBottom: '6px' }}>�Y��️ Ilha {k + 1} �?" Gen {island.gen}</div>
-                  <div>�Y�? MaxDiff: <strong style={{color:'#ffd700'}}>{island.bestDiff?.toFixed(0)}</strong></div>
-                  <div>�Y"S AvgDiff: <strong style={{color:'#4da6ff'}}>{island.avgDiff?.toFixed(0)}</strong></div>
+                  <div style={{ color: '#b088f9', fontWeight: 'bold', marginBottom: '6px' }}> Ilha {k + 1} " Gen {island.gen}</div>
+                  <div> MaxDiff: <strong style={{color:'#ffd700'}}>{island.bestDiff?.toFixed(0)}</strong></div>
+                  <div>"S AvgDiff: <strong style={{color:'#4da6ff'}}>{island.avgDiff?.toFixed(0)}</strong></div>
                 </div>
               ))}
             </div>
 
             {session.progress.benchmarkDiff != null && (
               <div style={{ marginTop: '15px', textAlign: 'center', fontSize: '1.1em', fontWeight: 'bold', color: session.progress.benchmarkDiff >= 0 ? '#50fa7b' : '#ff5555' }}>
-                �s"️ Evolução vs Bot Original (Bench): {session.progress.benchmarkDiff > 0 ? '+' : ''}{session.progress.benchmarkDiff?.toFixed(0)} pts
+                "️ Evolução vs Bot Original (Bench): {session.progress.benchmarkDiff > 0 ? '+' : ''}{session.progress.benchmarkDiff?.toFixed(0)} pts
               </div>
             )}
           </div>
@@ -685,7 +685,7 @@ const App = () => {
               {botInfoList.map(bot => (
                 <div key={bot.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px', gap: '10px' }}>
                   <div>
-                    <div style={{ fontWeight: 'bold', color: bot.isTraining ? '#ffb86c' : 'white' }}>{bot.name} {bot.isTraining ? '�sT️' : ''}</div>
+                    <div style={{ fontWeight: 'bold', color: bot.isTraining ? '#ffb86c' : 'white' }}>{bot.name} {bot.isTraining ? '' : ''}</div>
                     <div style={{ fontSize: '0.75em', color: '#888' }}>
                       {bot.isTraining
                         ? `Sessão: Gen ${bot.currentGen}/${bot.totalGen}${bot.meta?.lifetimeGenerations ? ` · Total: ${bot.meta.lifetimeGenerations} ger.` : ''}`
@@ -716,7 +716,7 @@ const App = () => {
                         rules: bot.meta?.rules || prev.rules
                       }));
                       setShowTrainBotPopup(true);
-                    }} style={{ background: '#8a2be2', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>�-� Treinar</button>
+                    }} style={{ background: '#8a2be2', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}> Treinar</button>
                     <button onClick={async () => { if (!confirm(`Apagar bot "${bot.name}"?`)) return; await fetch(`${API_ADDRESS}/api/bots/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botName: bot.name }) }); setBotInfoList(prev => prev.filter(b => b.name !== bot.name)); setAvailableBots(prev => prev.filter(b => b !== bot.name)); }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Apagar</button>
                   </div>
                 </div>
@@ -727,7 +727,7 @@ const App = () => {
           <div style={{ flex: '2 1 300px', background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <h2 style={{ color: '#4da6ff', margin: 0 }}>Mesas Ativas (Liberar Assentos)</h2>
-              <button onClick={handleCleanOrphans} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold' }}>�Y�� Limpar Mesas �"rfãs</button>
+              <button onClick={handleCleanOrphans} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold' }}> Limpar Mesas "rfãs</button>
             </div>
             {matches.length === 0 ? <p style={{ color: '#888' }}>Nenhuma mesa ativa.</p> : null}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
@@ -738,7 +738,7 @@ const App = () => {
                 return (
                   <div key={m.matchID} style={{ background: '#111', border: `1px solid ${isOrphan ? '#ff4d4d' : '#333'}`, borderRadius: '8px', padding: '15px', width: '300px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                      <h4 style={{ margin: 0, color: isOrphan ? '#ff4d4d' : '#ccc' }}>{tableLabel} {isOrphan && '(�"rfã)'}</h4>
+                      <h4 style={{ margin: 0, color: isOrphan ? '#ff4d4d' : '#ccc' }}>{tableLabel} {isOrphan && '("rfã)'}</h4>
                       <button onClick={async () => {
                         await fetch(`${API_ADDRESS}/api/admin/delete-match`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matchID: m.matchID }) });
                         window.location.reload();
@@ -762,7 +762,7 @@ const App = () => {
         {showTrainBotPopup && (
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
             <div style={{ background: '#2b1055', padding: '30px', borderRadius: '15px', border: '2px solid #8a2be2', width: '500px', maxWidth: '90%', color: 'white' }}>
-              <h2 style={{ color: '#b088f9', marginTop: 0 }}>�Y�� Treinar Nova IA</h2>
+              <h2 style={{ color: '#b088f9', marginTop: 0 }}> Treinar Nova IA</h2>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
                 <label>Bot: 
@@ -777,7 +777,7 @@ const App = () => {
                   ) : (
                     <span>
                       <input type="text" placeholder="Nome do novo bot" value={trainBotConfig.name} onChange={e => setTrainBotConfig({...trainBotConfig, name: e.target.value})} style={{ padding: '5px', width: '140px', marginLeft: '10px' }} />
-                      <button onClick={() => { setTrainBotIsNew(false); setTrainBotConfig({...trainBotConfig, name: availableBots[0] || ''}); }} style={{ marginLeft: '6px', padding: '4px 8px', cursor: 'pointer', background: '#555', color: 'white', border: 'none', borderRadius: '4px' }}>�?�</button>
+                      <button onClick={() => { setTrainBotIsNew(false); setTrainBotConfig({...trainBotConfig, name: availableBots[0] || ''}); }} style={{ marginLeft: '6px', padding: '4px 8px', cursor: 'pointer', background: '#555', color: 'white', border: 'none', borderRadius: '4px' }}></button>
                     </span>
                   )}
                 </label>
@@ -809,7 +809,7 @@ const App = () => {
                     <label><input type="checkbox" checked={trainBotConfig.rules.showKnownCards} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, showKnownCards: e.target.checked}})} /> Memorizadas</label>
                     <label style={{color: '#ffb86c'}}><input type="checkbox" checked={trainBotConfig.telepathy} onChange={e => setTrainBotConfig({...trainBotConfig, telepathy: e.target.checked})} /> Telepatia Parça</label>
                     <label style={{color: '#ff5555'}}><input type="checkbox" checked={trainBotConfig.fixedDeck} onChange={e => setTrainBotConfig({...trainBotConfig, fixedDeck: e.target.checked})} /> Baralho Fixo (Teste)</label>
-                    <label style={{color: '#50fa7b', gridColumn:'1/-1'}}><input type="checkbox" checked={trainBotConfig.greedyMode} onChange={e => setTrainBotConfig({...trainBotConfig, greedyMode: e.target.checked})} /> �Y�' Modo Ganancioso (sempre joga a melhor jogada)</label>
+                    <label style={{color: '#50fa7b', gridColumn:'1/-1'}}><input type="checkbox" checked={trainBotConfig.greedyMode} onChange={e => setTrainBotConfig({...trainBotConfig, greedyMode: e.target.checked})} /> ' Modo Ganancioso (sempre joga a melhor jogada)</label>
                 </div>
 
                 <h4 style={{ margin: '10px 0 0 0', color: '#ff79c6' }}>Pressão Evolutiva (Pontuação)</h4>
@@ -848,7 +848,7 @@ const App = () => {
     return (
       <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
-          <h1 style={{ color: '#ffd700', margin: 0 }}>�Y�? Criador de Torneios</h1>
+          <h1 style={{ color: '#ffd700', margin: 0 }}> Criador de Torneios</h1>
           <button onClick={() => setView('lounge')} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Voltar ao Salão</button>
         </div>
 
@@ -923,10 +923,10 @@ const App = () => {
     <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
         <h1 style={{ color: '#ffd700', margin: 0, flex: '1 1 100%' }}>
-          <span onClick={() => setView('admin')} style={{ cursor: 'pointer', opacity: 0.2, marginRight: '15px' }} title="Modo Admin">�sT️</span>
-          �T��T� Salão Principal �T��T�
+          <span onClick={() => setView('admin')} style={{ cursor: 'pointer', opacity: 0.2, marginRight: '15px' }} title="Modo Admin"></span>
+           Salão Principal 
         </h1>
-        <button onClick={() => setShowQuickGamePopup(true)} style={{ padding: '12px 16px', background: '#e63946', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>�s� Jogo Rápido</button>
+        <button onClick={() => setShowQuickGamePopup(true)} style={{ padding: '12px 16px', background: '#e63946', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}> Jogo Rápido</button>
         <button onClick={() => setView('tournaments')} style={{ padding: '12px 20px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer' }}>+ Novo Torneio</button>
       </div>
       
@@ -1067,7 +1067,7 @@ const App = () => {
                 return (
                   <div key={t.id} style={{ background: '#222', border: '1px solid #444', borderRadius: '10px', padding: '20px', width: '300px' }}>
                     <h3 style={{ margin: '0 0 10px 0', color: '#888' }}>{t.name}</h3>
-                    <div style={{ fontSize: '1.2em', color: '#ffd700', fontWeight: 'bold', marginBottom: '15px' }}>�Y'' Vencedor: {winner?.[0]} ({winner?.[1]?.points} pts)</div>
+                    <div style={{ fontSize: '1.2em', color: '#ffd700', fontWeight: 'bold', marginBottom: '15px' }}>'' Vencedor: {winner?.[0]} ({winner?.[1]?.points} pts)</div>
                     <div style={{ fontSize: '0.9em', color: '#aaa' }}>
                       Formato: {t.format} <br/> Rodadas Totais: {t.rounds.length}
                     </div>
