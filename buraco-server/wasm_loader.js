@@ -9,22 +9,34 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let _ex   = null;
 let _mem  = null;
-let _vInp = null;
+let _vInp = null;   // Uint8Array — inputs encoded as round(v*255)
 let _vOut = null;
 let _vLayerSizesBuf = null;
 let _vWeights       = null;
 
-// Pre-allocated JS-side buffers
-const _emptySeq16 = new Float32Array(16);
-const _emptyRun6  = new Float32Array(6);
-const _zero18     = new Float32Array(18);
-const _zero53     = new Float32Array(53);
-const _sc         = new Float32Array(11);
-const _candBuf    = new Float32Array(Math.max(AI_CONFIG.PICKUP_CANDIDATES, AI_CONFIG.MELD_CANDIDATES) * 18);
+// Pre-allocated buffers
+const _emptyU8_16 = new Uint8Array(16);
+const _emptyU8_6  = new Uint8Array(6);
+const _zero18     = new Uint8Array(18);
+const _zero53     = new Uint8Array(53);
+const _sc         = new Uint8Array(11);
+const _candBuf    = new Uint8Array(Math.max(AI_CONFIG.PICKUP_CANDIDATES, AI_CONFIG.MELD_CANDIDATES) * AI_CONFIG.SEQ_CANDIDATE_FEATURES);
+const _candBufRun = new Uint8Array(AI_CONFIG.RUNNER_CANDIDATES * AI_CONFIG.RUN_CANDIDATE_FEATURES);
 const _totalsPickup  = new Float32Array(AI_CONFIG.PICKUP_CANDIDATES);
 const _totalsMeld    = new Float32Array(AI_CONFIG.MELD_CANDIDATES);
 const _suitCands     = new Array(Math.max(AI_CONFIG.PICKUP_CANDIDATES, AI_CONFIG.MELD_CANDIDATES));
 const _suitIndices   = new Int8Array(Math.max(AI_CONFIG.PICKUP_CANDIDATES, AI_CONFIG.MELD_CANDIDATES));
+
+// f32 → uint8: round(v * 255), clamped [0,255]
+const _e = v => (v <= 0 ? 0 : v >= 1 ? 255 : (v * 255 + 0.5) | 0);
+
+// Copy f32 array slice into Uint8Array, encoding each value
+function _f32toU8(dst, dstOff, src, srcOff, len) {
+    for (let i = 0; i < len; i++) {
+        const v = src[srcOff + i];
+        dst[dstOff + i] = v <= 0 ? 0 : v >= 1 ? 255 : (v * 255 + 0.5) | 0;
+    }
+}
 
 let _team0DnaOffset = 0;
 let _team1DnaOffset = 0;
@@ -33,7 +45,7 @@ let _activeTeamBase = 0;
 function _refreshViews() {
     const buf = _mem.buffer;
     _vWeights       = new Float32Array(buf, _ex.get_weights(), AI_CONFIG.TOTAL_DNA_SIZE * 2);
-    _vInp           = new Float32Array(buf, _ex.get_inp(0),   2048);
+    _vInp           = new Uint8Array  (buf, _ex.get_inp(0),   2048);
     _vOut           = new Float32Array(buf, _ex.get_out(),    64);
     _vLayerSizesBuf = new Int32Array  (buf, _ex.get_layer_sizes_buf(), 8);
 }
@@ -47,21 +59,19 @@ export async function initWasm() {
         _ex  = instance.exports;
         _mem = _ex.memory;
 
-        const required = ['evaluate', 'configure', 'set_num_inputs',
+        const required = ['evaluate', 'configure', 'set_num_inputs', 'set_inp_scale',
                           'get_weights', 'get_inp', 'get_out',
                           'get_layer_sizes_buf', 'get_max_weights'];
         for (const fn of required) {
             if (!_ex[fn]) { console.warn(`[WASM] Missing: ${fn}`); _ex = null; return false; }
         }
-        if (_ex.get_max_weights() < AI_CONFIG.TOTAL_DNA_SIZE * 2) {
-            _team1DnaOffset = 0;
-        } else {
-            _team1DnaOffset = AI_CONFIG.TOTAL_DNA_SIZE;
-        }
+        _team1DnaOffset = _ex.get_max_weights() >= AI_CONFIG.TOTAL_DNA_SIZE * 2
+            ? AI_CONFIG.TOTAL_DNA_SIZE : 0;
 
         _refreshViews();
+        _ex.set_inp_scale(1.0 / 255.0);
         setScoreFunctions(_scoreNet, _scoreDiscard);
-        console.log('🚀 WASM Neural Network Engine Online! (int16 weights)');
+        console.log('🚀 WASM Neural Network Engine Online! (uint8 inputs)');
         return true;
     } catch (e) {
         console.warn('[WASM] Failed:', e.message);
@@ -77,14 +87,30 @@ export function loadMatchDNA(dnaTeam0, dnaTeam1) {
     if (_team1DnaOffset > 0) _vWeights.set(dnaTeam1, _team1DnaOffset);
 }
 
-export function setActiveTeam(teamBase) {
-    _activeTeamBase = teamBase;
-}
+export function setActiveTeam(teamBase) { _activeTeamBase = teamBase; }
 
 function _configureNet(layerSizes, netOffset) {
     if (_vLayerSizesBuf.buffer !== _mem.buffer) _refreshViews();
     for (let i = 0; i < layerSizes.length; i++) _vLayerSizesBuf[i] = layerSizes[i];
     _ex.configure(layerSizes.length, _activeTeamBase + netOffset);
+}
+
+function _writeScalars(G, myTeam, oppTeam, opp1Id, partnerId, opp2Id, myIdx, oppIdx, off) {
+    const hs = pid => pid !== null ? (G.handSizes[pid] ?? 0) : 0;
+    const hasClean = idx => idx.runners.some(m => isMeldClean(m)) ||
+        [1,2,3,4].some(s => idx.seqBySuit[s].some(e => isMeldClean(e.meld)));
+    _sc[0]  = _e(hs(opp1Id)/22);    // note: p's own size not needed — it's implicit
+    _sc[1]  = _e(hs(opp1Id)/22);
+    _sc[2]  = _e(hs(partnerId)/22);
+    _sc[3]  = _e(hs(opp2Id)/22);
+    _sc[4]  = _e(G.deck.length/104);
+    _sc[5]  = _e(G.discardPile.length/104);
+    _sc[6]  = G.teamMortos[myTeam]  ? 255 : 0;
+    _sc[7]  = G.teamMortos[oppTeam] ? 255 : 0;
+    _sc[8]  = _e(G.pots.length/2);
+    _sc[9]  = hasClean(myIdx)  ? 255 : 0;
+    _sc[10] = hasClean(oppIdx) ? 255 : 0;
+    _vInp.set(_sc, off);
 }
 
 function _writeInpNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
@@ -98,38 +124,31 @@ function _writeInpNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
     const mySlots = seqSlots >> 1, oppSlots = seqSlots - mySlots;
     let off = 0;
 
+    // Seq melds — values are 0/1 floats, encode as 0/255
     const mySeq = myIdx.seqBySuit[suit], oppSeq = oppIdx.seqBySuit[suit];
-    for (let i = 0; i < mySlots;  i++) { _vInp.set(mySeq[i]  ? mySeq[i].meld  : _emptySeq16, off); off += 16; }
-    for (let i = 0; i < oppSlots; i++) { _vInp.set(oppSeq[i] ? oppSeq[i].meld : _emptySeq16, off); off += 16; }
+    for (let i = 0; i < mySlots;  i++) { _f32toU8(_vInp, off, mySeq[i]  ? mySeq[i].meld  : _emptyU8_16, 0, 16); off += 16; }
+    for (let i = 0; i < oppSlots; i++) { _f32toU8(_vInp, off, oppSeq[i] ? oppSeq[i].meld : _emptyU8_16, 0, 16); off += 16; }
 
     const myRSlots = runnerSlots >> 1, oppRSlots = runnerSlots - myRSlots;
-    for (let i = 0; i < myRSlots;  i++) { _vInp.set(myIdx.runners[i]  || _emptyRun6, off); off += 6; }
-    for (let i = 0; i < oppRSlots; i++) { _vInp.set(oppIdx.runners[i] || _emptyRun6, off); off += 6; }
+    for (let i = 0; i < myRSlots;  i++) { _f32toU8(_vInp, off, myIdx.runners[i]  || _emptyU8_6, 0, 6); off += 6; }
+    for (let i = 0; i < oppRSlots; i++) { _f32toU8(_vInp, off, oppIdx.runners[i] || _emptyU8_6, 0, 6); off += 6; }
 
-    const candLen = candSlots * C.SEQ_CANDIDATE_FEATURES;
+    // Candidates — encodeCandidateMeld writes into _candBuf (Uint8Array)
+    const candFeats = C.SEQ_CANDIDATE_FEATURES;
+    const candLen = candSlots * candFeats;
     _candBuf.fill(0, 0, candLen);
     for (let i = 0; i < candSlots; i++) {
         const cand = candidates[i];
-        if (cand) encodeCandidateMeld(_candBuf, i * C.SEQ_CANDIDATE_FEATURES, cand.parsedMeld, cand.appendIdx, false);
+        if (cand) encodeCandidateMeld(_candBuf, i * candFeats, cand.parsedMeld, cand.appendIdx, false);
     }
     _vInp.set(_candBuf.subarray(0, candLen), off); off += candLen;
 
-    const partnerId2 = partnerId || p;
+    // Card groups: own hand + discard pile (per-suit, 18 floats each → uint8)
     const suitOff = (suit - 1) * CARDS_SUIT_STRIDE;
-    const copyCard = (flat) => { _vInp.set(flat?.subarray ? flat.subarray(suitOff, suitOff + 18) : _zero18, off); off += 18; };
-    copyCard(G.cards2[p]);
-    copyCard(G.discardPile2);
+    _f32toU8(_vInp, off, G.cards2[p]     || _zero18, suitOff, 18); off += 18;
+    _f32toU8(_vInp, off, G.discardPile2  || _zero18, suitOff, 18); off += 18;
 
-    const hs = pid => pid !== null ? (G.handSizes[pid] ?? 0) : 0;
-    const hasCleanIdx = idx => idx.runners.some(m => isMeldClean(m)) ||
-        [1,2,3,4].some(s => idx.seqBySuit[s].some(e => isMeldClean(e.meld)));
-    _sc[0] = hs(p)/22;         _sc[1] = hs(opp1Id)/22;
-    _sc[2] = hs(partnerId)/22; _sc[3] = hs(opp2Id)/22;
-    _sc[4] = G.deck.length/104; _sc[5] = G.discardPile.length/104;
-    _sc[6] = G.teamMortos[myTeam] ? 1 : 0; _sc[7] = G.teamMortos[oppTeam] ? 1 : 0;
-    _sc[8] = G.pots.length/2;
-    _sc[9] = hasCleanIdx(myIdx) ? 1 : 0; _sc[10] = hasCleanIdx(oppIdx) ? 1 : 0;
-    _vInp.set(_sc, off);
+    _writeScalars(G, myTeam, oppTeam, opp1Id, partnerId, opp2Id, myIdx, oppIdx, off);
 }
 
 function _writeInpRunner(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, meldIdx) {
@@ -142,55 +161,38 @@ function _writeInpRunner(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candi
 
     const myAllSeq  = [1,2,3,4].flatMap(s => myIdx.seqBySuit[s]);
     const oppAllSeq = [1,2,3,4].flatMap(s => oppIdx.seqBySuit[s]);
-    for (let i = 0; i < mySeqSlots;  i++) { _vInp.set(myAllSeq[i]  ? myAllSeq[i].meld  : _emptySeq16, off); off += 16; }
-    for (let i = 0; i < oppSeqSlots; i++) { _vInp.set(oppAllSeq[i] ? oppAllSeq[i].meld : _emptySeq16, off); off += 16; }
-    for (let i = 0; i < myRSlots;  i++) { _vInp.set(myIdx.runners[i]  || _emptyRun6, off); off += 6; }
-    for (let i = 0; i < oppRSlots; i++) { _vInp.set(oppIdx.runners[i] || _emptyRun6, off); off += 6; }
+    for (let i = 0; i < mySeqSlots;  i++) { _f32toU8(_vInp, off, myAllSeq[i]  ? myAllSeq[i].meld  : _emptyU8_16, 0, 16); off += 16; }
+    for (let i = 0; i < oppSeqSlots; i++) { _f32toU8(_vInp, off, oppAllSeq[i] ? oppAllSeq[i].meld : _emptyU8_16, 0, 16); off += 16; }
+    for (let i = 0; i < myRSlots;  i++) { _f32toU8(_vInp, off, myIdx.runners[i]  || _emptyU8_6, 0, 6); off += 6; }
+    for (let i = 0; i < oppRSlots; i++) { _f32toU8(_vInp, off, oppIdx.runners[i] || _emptyU8_6, 0, 6); off += 6; }
 
-    const candSlots = C.RUNNER_CANDIDATES;
     const candFeats = C.RUN_CANDIDATE_FEATURES;
-    const candLen = candSlots * candFeats;
-    _candBuf.fill(0, 0, candLen);
-    for (let i = 0; i < candSlots; i++) {
+    const candLen = C.RUNNER_CANDIDATES * candFeats;
+    _candBufRun.fill(0, 0, candLen);
+    for (let i = 0; i < C.RUNNER_CANDIDATES; i++) {
         const cand = candidates[i];
-        if (cand) encodeCandidateMeld(_candBuf, i * candFeats, cand.parsedMeld, cand.appendIdx, true);
+        if (cand) encodeCandidateMeld(_candBufRun, i * candFeats, cand.parsedMeld, cand.appendIdx, true);
     }
-    _vInp.set(_candBuf.subarray(0, candLen), off); off += candLen;
+    _vInp.set(_candBufRun.subarray(0, candLen), off); off += candLen;
 
-    _vInp.set(G.cards2[p]?.subarray ? G.cards2[p].subarray(CARDS_ALL_OFF, CARDS_ALL_OFF + 53) : _zero53, off); off += 53;
-    _vInp.set(G.discardPile2?.subarray ? G.discardPile2.subarray(CARDS_ALL_OFF, CARDS_ALL_OFF + 53) : _zero53, off); off += 53;
+    // All-suit card groups
+    _f32toU8(_vInp, off, G.cards2[p]    || _zero53, CARDS_ALL_OFF, 53); off += 53;
+    _f32toU8(_vInp, off, G.discardPile2 || _zero53, CARDS_ALL_OFF, 53); off += 53;
 
-    const hs = pid => pid !== null ? (G.handSizes[pid] ?? 0) : 0;
-    const hasCleanIdx = idx => idx.runners.some(m => isMeldClean(m)) || [1,2,3,4].some(s => idx.seqBySuit[s].some(e => isMeldClean(e.meld)));
-    _sc[0] = hs(p)/22; _sc[1] = hs(opp1Id)/22; _sc[2] = hs(partnerId)/22; _sc[3] = hs(opp2Id)/22;
-    _sc[4] = G.deck.length/104; _sc[5] = G.discardPile.length/104;
-    _sc[6] = G.teamMortos[myTeam] ? 1 : 0; _sc[7] = G.teamMortos[oppTeam] ? 1 : 0;
-    _sc[8] = G.pots.length/2;
-    _sc[9] = hasCleanIdx(myIdx) ? 1 : 0; _sc[10] = hasCleanIdx(oppIdx) ? 1 : 0;
-    _vInp.set(_sc, off);
+    _writeScalars(G, myTeam, oppTeam, opp1Id, partnerId, opp2Id, myIdx, oppIdx, off);
 }
 
 function _writeInpDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, meldIdx) {
     if (_vInp.buffer !== _mem.buffer) _refreshViews();
     const partnerId2 = partnerId || p;
     let off = 0;
-    const copyAll = (flat) => { _vInp.set(flat?.subarray ? flat.subarray(CARDS_ALL_OFF, CARDS_ALL_OFF + 53) : _zero53, off); off += 53; };
+    const copyAll = (flat) => { _f32toU8(_vInp, off, flat || _zero53, CARDS_ALL_OFF, 53); off += 53; };
     copyAll(G.cards2[p]);
     copyAll(G.discardPile2);
     copyAll(G.knownCards2[partnerId2]);
     copyAll(G.knownCards2[opp1Id]);
     copyAll(opp2Id ? G.knownCards2[opp2Id] : null);
-
-    const hs = pid => pid !== null ? (G.handSizes[pid] ?? 0) : 0;
-    const hasCleanIdx = i => i.runners.some(m => isMeldClean(m)) ||
-        [1,2,3,4].some(s => i.seqBySuit[s].some(e => isMeldClean(e.meld)));
-    _sc[0] = hs(p)/22;         _sc[1] = hs(opp1Id)/22;
-    _sc[2] = hs(partnerId)/22; _sc[3] = hs(opp2Id)/22;
-    _sc[4] = G.deck.length/104; _sc[5] = G.discardPile.length/104;
-    _sc[6] = G.teamMortos[myTeam] ? 1 : 0; _sc[7] = G.teamMortos[oppTeam] ? 1 : 0;
-    _sc[8] = G.pots.length/2;
-    _sc[9] = hasCleanIdx(meldIdx.my) ? 1 : 0; _sc[10] = hasCleanIdx(meldIdx.opp) ? 1 : 0;
-    _vInp.set(_sc, off);
+    _writeScalars(G, myTeam, oppTeam, opp1Id, partnerId, opp2Id, meldIdx.my, meldIdx.opp, off);
 }
 
 function _meldsByType(G, teamId) {
@@ -244,7 +246,6 @@ function _scoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
     const totals = layerKey === 'PICKUP' ? _totalsPickup : _totalsMeld;
     totals.fill(0, 0, candidates.length);
 
-    // Pre-classify runners vs seq candidates
     const runnerIndices = [];
     const seqBySuit = { 1: [], 2: [], 3: [], 4: [] };
     for (let i = 0; i < candidates.length; i++) {
