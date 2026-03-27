@@ -436,6 +436,20 @@ static int find_valid_melds() {
                                 nSeq++;
                             }
                         }
+                        // extend lo edge with wild
+                        if (nSeq<MAX_SEQ_CANDS && acc_lo>1) {
+                            if (build_seq_from_run(player,suit,acc_lo-1,acc_hi,1,wild0type,
+                                    g_cand_seq_meld[nSeq],g_cand_seq_cc[nSeq],g_seq_cands[nSeq])) {
+                                nSeq++;
+                            }
+                        }
+                        // extend hi edge with wild
+                        if (nSeq<MAX_SEQ_CANDS && acc_hi<14) {
+                            if (build_seq_from_run(player,suit,acc_lo,acc_hi+1,1,wild0type,
+                                    g_cand_seq_meld[nSeq],g_cand_seq_cc[nSeq],g_seq_cands[nSeq])) {
+                                nSeq++;
+                            }
+                        }
                         gap_lo=acc_lo; gap_hi=acc_hi;
                     } else { gap_lo=-1; gap_hi=-1; }
                     acc_lo=-1; acc_hi=-1;
@@ -787,13 +801,22 @@ static int plan_turn() {
             int prevSeqCands = g_num_seq_cands;
             int prevRunCands = g_num_run_cands;
             find_valid_melds();
-            // Check if top discard is used in any candidate
+            // Check if top discard is used in any new meld candidate
             for(int ci=0; ci<g_num_seq_cands && nPickup<MAX_SEQ_CANDS+1; ci++) {
                 int usesTop = (td_alloff<53) ? g_cand_seq_cc[ci][td_alloff] : 0;
                 if (!usesTop) continue;
                 pickupCandType[nPickup] = 1;
                 for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[nPickup][i]=g_cand_seq_cc[ci][i];
-                // Remove top discard from cc (hand contribution only)
+                if (td_alloff<53 && pickupCC[nPickup][td_alloff]>0) pickupCC[nPickup][td_alloff]--;
+                nPickup++;
+            }
+            // Check if top discard can extend an existing meld (append)
+            find_valid_appends();
+            for(int ci=0; ci<g_num_append_cands && nPickup<MAX_SEQ_CANDS+1; ci++) {
+                int usesTop = (td_alloff<53) ? g_cand_append_cc[ci][td_alloff] : 0;
+                if (!usesTop) continue;
+                pickupCandType[nPickup] = 2;
+                for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[nPickup][i]=g_cand_append_cc[ci][i];
                 if (td_alloff<53 && pickupCC[nPickup][td_alloff]>0) pickupCC[nPickup][td_alloff]--;
                 nPickup++;
             }
@@ -808,6 +831,7 @@ static int plan_turn() {
                 for(int i=0;i<4;i++) g_cards2[g_player][i*18+17]--;
             g_num_seq_cands = prevSeqCands;
             g_num_run_cands = prevRunCands;
+            g_num_append_cands = 0;
         }
     }
 

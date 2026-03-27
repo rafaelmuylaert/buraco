@@ -1,7 +1,7 @@
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
-import { BuracoGame, AI_CONFIG, getAndResetTimings, loggerRef } from './game.js';
-import { initWasm, syncCardsToWasm } from './wasm_loader.js';
+import { BuracoGame, AI_CONFIG, getAndResetTimings, loggerRef, CARDS_ALL_OFF } from './game.js';
+import { initWasm, syncCardsToWasm, planTurnWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers } from './wasm_loader.js';
 
 
 await initWasm();
@@ -180,21 +180,64 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       const myDNA = dnaCache[targetBotName];
       getAndResetTimings();
 
-      // Attach logger to capture planTurn internals
-      const logLines = [];
-      loggerRef.fn = (event, data) => logLines.push({ event, data });
-      const moves = BuracoGame.ai.enumerate(currentState.G, currentState.ctx, myDNA || undefined);
-      loggerRef.fn = null;
+      // Use WASM planner directly — same path as training workers
+      let moves = null;
+      if (isWasmReady() && myDNA) {
+        const G = currentState.G;
+        const myTeam = G.teams[playerID];
+        const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
+        // Sync cards into WASM buffers
+        syncCardsToWasm(G, G.rules?.numPlayers || 4);
+        // Load DNA and set active team
+        loadMatchDNA(myTeam === 'team0' ? myDNA : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE),
+                     myTeam === 'team1' ? myDNA : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE));
+        setActiveTeam(myTeam === 'team0' ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
+        const wasmMoves = planTurnWasm(G, playerID, myTeam, oppTeam);
+        if (wasmMoves && wasmMoves.length > 0) {
+          // Convert WASM move format to boardgame.io move format
+          moves = [];
+          for (const m of wasmMoves) {
+            if (m.phase === 0) {
+              if (m.moveType === 0) moves.push({ move: 'drawCard', args: [] });
+              else if (m.moveType === 1) moves.push({ move: 'pickUpDiscard', args: [m.cardCounts, { type: 'new' }] });
+              else if (m.moveType === 5) moves.push({ move: 'declareExhausted', args: [] });
+            } else if (m.phase === 1) {
+              if (m.moveType === 2) moves.push({ move: 'playMeld', args: [m.cardCounts] });
+              else if (m.moveType === 3) moves.push({ move: 'appendToMeld', args: [{ type: m.targetType === 1 ? 'seq' : 'runner', suit: m.targetSuit, index: m.targetSlot }, m.cardCounts] });
+            } else if (m.phase === 2) {
+              moves.push({ move: 'discardCard', args: [m.discardCard] });
+              break; // only first discard
+            }
+          }
+        }
+      }
+      // Fallback to JS enumerate if WASM unavailable
+      if (!moves) {
+        const logLines = [];
+        loggerRef.fn = (event, data) => logLines.push({ event, data });
+        moves = BuracoGame.ai.enumerate(currentState.G, currentState.ctx, myDNA || undefined) || [];
+        loggerRef.fn = null;
+        // Log from JS path
+        const G = currentState.G;
+        if (!G.hasDrawn) {
+          const pickupLog = logLines.find(l => l.event === 'pickup');
+          const pickupChosen = logLines.find(l => l.event === 'pickupChosen');
+          const meldLog = logLines.find(l => l.event === 'melds');
+          if (pickupLog) console.log(`  pickup_cands(JS): [${pickupLog.data.map(c => `${c.move}(${c.score != null ? c.score.toFixed(3) : 'only'}) ${ccStr(c.cardCounts||{})}`).join(', ')}]`);
+          if (pickupChosen) console.log(`  pickup_chosen(JS): ${pickupChosen.data?.move} ${ccStr(pickupChosen.data?.cardCounts||{})}`);
+          if (meldLog && meldLog.data.length > 0) console.log(`  meld_cands(JS,${meldLog.data.length}): ${meldLog.data.map(c => `${c.move}${ccStr(c.cards)}`).join(' | ')}`);
+        }
+      }
       getAndResetTimings();
 
       // ── Human-game diagnostics ──────────────────────────────────────────
       const G = currentState.G;
       if (!G.hasDrawn) {
-        const CAOFF = 72;
+        const CAOFF_B = 72;
         const flat = G.cards2?.[playerID] || [];
         const handCards = [];
         for (let i = 0; i < 53; i++) {
-          const cnt = flat[CAOFF + i] || 0;
+          const cnt = flat[CAOFF_B + i] || 0;
           if (cnt > 0) {
             const cid = i === 52 ? 54 : i;
             const s = cid === 54 ? 5 : Math.floor(cid / 13) + 1;
@@ -204,35 +247,14 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         }
         const topDiscard = G.discardPile?.length > 0 ? (() => { const c = G.discardPile[G.discardPile.length-1]; const s = c===54?5:Math.floor((c%52)/13)+1; const r = c===54?2:(c%13)+1; return getRankChar(r)+getSuitChar(s); })() : 'empty';
         console.log(`[BOT] ${botName} | hand=[${handCards.join(' ')}] | discard_top=${topDiscard}`);
-        const pickupLog = logLines.find(l => l.event === 'pickup');
-        const pickupChosen = logLines.find(l => l.event === 'pickupChosen');
-        if (pickupLog) {
-          const cstr = pickupLog.data.map(c => {
-            const tgt = c.args?.[1];
-            const tgtStr = tgt?.type === 'append' ? `->append[${tgt.meldTarget?.suit||''}${tgt.meldTarget?.index}]` : '';
-            return `${c.move}${tgtStr}(${c.score != null ? c.score.toFixed(3) : 'only'}) ${ccStr(c.cardCounts||{})}`;
-          }).join(', ');
-          console.log(`  pickup_cands: [${cstr}]`);
-        }
-        if (pickupChosen) console.log(`  pickup_chosen: ${pickupChosen.data?.move} cards=${ccStr(pickupChosen.data?.cardCounts || {})} target=${JSON.stringify(pickupChosen.data?.args?.[1] || {})}`);
-        const meldLog = logLines.find(l => l.event === 'melds');
-        if (meldLog && meldLog.data.length > 0)
-          console.log(`  meld_cands(${meldLog.data.length}): ${meldLog.data.map(c => `${c.move}${ccStr(c.cards)}`).join(' | ')}`);
-        else
-          console.log(`  meld_cands: none`);
-      }
-      // Final move
-      if (moves && moves.length > 0) {
-        for (const m of moves) {
-          if (m.move === 'discardCard') {
-            const cid = m.args[0];
-            const s = cid === 54 ? 5 : Math.floor((cid % 52) / 13) + 1;
-            const r = cid === 54 ? 2 : (cid % 52) % 13 + 1;
-            console.log(`  -> discardCard(${getRankChar(r)}${getSuitChar(s)})`);
-          } else {
-            const argStr = (m.args || []).map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(', ');
-            console.log(`  -> ${m.move}(${argStr})`);
-          }
+        if (moves && moves.length > 0) {
+          const pickup = moves.find(m => m.move === 'drawCard' || m.move === 'pickUpDiscard' || m.move === 'declareExhausted');
+          const melds = moves.filter(m => m.move === 'playMeld' || m.move === 'appendToMeld');
+          const discard = moves.find(m => m.move === 'discardCard');
+          if (pickup) console.log(`  pickup: ${pickup.move} ${ccStr(pickup.args?.[0] || {})}`);
+          if (melds.length > 0) console.log(`  melds(${melds.length}): ${melds.map(m => `${m.move}${ccStr(m.args?.[0] || {})}`).join(' | ')}`);
+          else console.log(`  melds: none`);
+          if (discard) { const cid = discard.args[0]; const s = cid===54?5:Math.floor((cid%52)/13)+1; const r = cid===54?2:(cid%52)%13+1; console.log(`  discard: ${getRankChar(r)}${getSuitChar(s)}`); }
         }
       }
 
@@ -255,13 +277,12 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         const r = cid === 54 ? 2 : (cid % 52) % 13 + 1;
         console.log(`[BOT] ${botName} dispatching: discardCard(${getRankChar(r)}${getSuitChar(s)})`);
       } else if (nextMove.move === 'pickUpDiscard') {
-        console.log(`[BOT] ${botName} dispatching: pickUpDiscard cards=${ccStr(nextMove.args[0] || {})}`);
-      } else if (nextMove.move === 'meld' || nextMove.move === 'playMeld') {
+        console.log(`[BOT] ${botName} dispatching: pickUpDiscard ${ccStr(nextMove.args[0] || {})}`);
+      } else if (nextMove.move === 'playMeld') {
         console.log(`[BOT] ${botName} dispatching: playMeld${ccStr(nextMove.args[0] || {})}`);
       } else if (nextMove.move === 'appendToMeld') {
         const tgt = nextMove.args[0];
-        const tgtStr = tgt ? `${tgt.type}[${tgt.suit||''}${tgt.index}]` : '';
-        console.log(`[BOT] ${botName} dispatching: appendToMeld ${tgtStr} ${ccStr(nextMove.args[1] || {})}`);
+        console.log(`[BOT] ${botName} dispatching: appendToMeld ${tgt?.type}[${tgt?.suit||''}${tgt?.index}] ${ccStr(nextMove.args[1] || {})}`);
       } else {
         console.log(`[BOT] ${botName} dispatching: ${serverMove}`);
       }
