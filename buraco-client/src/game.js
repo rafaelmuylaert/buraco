@@ -851,7 +851,7 @@ export function getAllValidMelds(cards2flat, rules) {
             const cnt = bitmap[r];
             if (!cnt) continue;
             if (r === 1 || r === 14) { aces++; }
-            else { _m[r] = 1; cc[pickType(suit, r)] = cnt; }
+            else { _m[r] = 1; cc[pickType(suit, r)] = 1; }  // cap at 1 per rank slot in a seq
         }
         if (aces === 2) { _m[0] = 1; _m[1] = 1; cc[pickType(suit, 1)] = 2; }
         else if (aces === 1) {
