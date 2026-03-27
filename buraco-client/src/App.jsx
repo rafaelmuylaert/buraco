@@ -923,7 +923,7 @@ const App = () => {
     <div style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
         <h1 style={{ color: '#ffd700', margin: 0, flex: '1 1 100%' }}>
-          <span onClick={() => setView('admin')} style={{ cursor: 'pointer', opacity: 0.2, marginRight: '15px' }} title="Modo Admin"></span>
+          <span onClick={() => setView('admin')} style={{ cursor: 'pointer', opacity: 0.2, marginRight: '15px' }} title="Modo Admin">⚙️</span>
            Salão Principal 
         </h1>
         <button onClick={() => setShowQuickGamePopup(true)} style={{ padding: '12px 16px', background: '#e63946', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}> Jogo Rápido</button>
