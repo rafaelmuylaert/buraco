@@ -299,6 +299,7 @@ static void forward_pass(float* out_acc) {
 }
 
 static inline int rank_count(int player, int suit, int rank) {
+    if (rank == 2) return g_cards2[player][(suit-1)*18 + 13 + (suit-1)]; // wild 2s stored at offset 13-16
     return g_cards2[player][(suit-1)*18 + (rank-1)];
 }
 static inline int all_count(int player, int cardType) {
