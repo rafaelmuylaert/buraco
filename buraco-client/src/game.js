@@ -1284,11 +1284,11 @@ export const BuracoGame = {
     pickUpDiscard: ({ G, ctx }, selectedHandIds = [], target = { type: 'new' }) => {
       if (!movePickUpDiscard(G, ctx.currentPlayer, selectedHandIds, target)) return 'INVALID_MOVE';
     },
-    playMeld: ({ G, ctx }, cardIds) => {
-      if (!moveMeld(G, ctx.currentPlayer, cardIds)) return 'INVALID_MOVE';
+    playMeld: ({ G, ctx }, cardCounts) => {
+      if (!moveMeld(G, ctx.currentPlayer, cardCounts)) return 'INVALID_MOVE';
     },
-    appendToMeld: ({ G, ctx }, target, cardIds) => {
-      if (!moveMeld(G, ctx.currentPlayer, cardIds, target)) return 'INVALID_MOVE';
+    appendToMeld: ({ G, ctx }, target, cardCounts) => {
+      if (!moveMeld(G, ctx.currentPlayer, cardCounts, target)) return 'INVALID_MOVE';
     },
     discardCard: ({ G, ctx, events }, cardId) => {
       if (!moveDiscardCard(G, ctx.currentPlayer, cardId)) return 'INVALID_MOVE';

@@ -455,21 +455,16 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
     });
   };
 
-  // Reconstruct array of card IDs from selectedCards count map
-  const selectedCardIds = () => {
-    const ids = [];
-    for (const [k, count] of Object.entries(selectedCards)) {
-      const cardId = +k === 54 ? 54 : +k;
-      for (let i = 0; i < count; i++) ids.push(cardId);
-    }
-    return ids;
-  };
+  // selectedCards is already a {cardType: count} map — use it directly as move arg
+  const selectedCardIds = () => ({ ...selectedCards });
   const selectedCount = Object.values(selectedCards).reduce((a, b) => a + b, 0);
 
   const handleDiscardPileClick = () => {
     if (!isMyTurn) return;
     if (selectedCount === 1 && G.hasDrawn) {
-      moves.discardCard(selectedCardIds()[0]);
+      // Get the single selected card type
+      const cardType = +Object.keys(selectedCards)[0];
+      moves.discardCard(cardType);
       setSelectedCards({});
     } else if (!G.hasDrawn && G.discardPile.length > 0) {
       if (isClosedDiscard) {
