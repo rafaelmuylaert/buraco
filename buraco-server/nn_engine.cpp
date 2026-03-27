@@ -723,11 +723,8 @@ static int plan_turn() {
         return g_move_count;
     }
 
-    // Phase 0: Pickup
-    if (!g_has_drawn) {
-        add_move(0, MOVE_DRAW, 0,0,0, nullptr);
-        return g_move_count;
-    }
+    // Phase 0: always emit draw (JS picks it up only if !hasDrawn)
+    add_move(0, MOVE_DRAW, 0,0,0, nullptr);
 
     // Phase 1: Melds & Appends
     find_valid_melds();
