@@ -216,7 +216,7 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
     // A same-suit nat-2 acting as wild should be demoted back to m[2] only when
     // rank 3 is present (so the 2 naturally belongs next to it) and there are no
     // other gaps that actually need filling.
-    if (gaps === 2 && m[15] === 1) {
+    if (m[15] === 1 && (gaps === 2 || gaps === 0 && m[3]===1)) {
             m[2] = 1; m[15] = 0;
     }
     return m;
