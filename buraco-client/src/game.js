@@ -31,7 +31,8 @@ export const AI_CONFIG = {
     CARDS_FEATURES_SUIT:   18,  // per-suit: 13 rank counts/8 + 5 wild counts/4
     CARDS_FEATURES_ALL:    53,  // all-suit: 13×4 rank counts/8 + 4 suited-2 counts/4 + joker/4
     HIDDEN_LAYERS:          2,
-    HIDDEN_WIDTH:          32,  // fixed hidden layer width (null = use linear interpolation)
+    HIDDEN_WIDTH:          24,  // pickup/meld hidden width
+    HIDDEN_WIDTH_DISCARD:  48,  // discard net needs more capacity (53 outputs)
 
     // Pickup net (per-suit)
     PICKUP_SEQ_SLOTS:      10,  // 5 my team + 5 opp
@@ -53,8 +54,9 @@ export const AI_CONFIG = {
 // Compute weights count for one network given its architecture.
 // Hidden layer sizes are linearly interpolated from inputSize down to outputs.
 // Returns { layerSizes, dnaSize } and stores them on AI_CONFIG under the given key.
-function nn_size(key, seqSlots, runnerSlots, candidateSlots, cardGroups, perSuit, outputs) {
+function nn_size(key, seqSlots, runnerSlots, candidateSlots, cardGroups, perSuit, outputs, hiddenWidth) {
     const C = AI_CONFIG;
+    const width = hiddenWidth ?? C.HIDDEN_WIDTH;
     const inputSize = seqSlots * C.SEQ_FEATURES
                     + runnerSlots * C.RUNNER_FEATURES
                     + candidateSlots * C.CANDIDATE_FEATURES
@@ -62,11 +64,11 @@ function nn_size(key, seqSlots, runnerSlots, candidateSlots, cardGroups, perSuit
                     + C.SCALARS_FEATURES;
     const layerSizes = [inputSize];
     for (let l = 1; l <= C.HIDDEN_LAYERS; l++)
-        layerSizes.push(C.HIDDEN_WIDTH ?? Math.round(inputSize + l * (outputs - inputSize) / (C.HIDDEN_LAYERS + 1)));
+        layerSizes.push(width);
     layerSizes.push(outputs);
     let dnaSize = 0;
     for (let l = 0; l < layerSizes.length - 1; l++)
-        dnaSize += layerSizes[l] * layerSizes[l + 1] + layerSizes[l + 1]; // weights + biases
+        dnaSize += layerSizes[l] * layerSizes[l + 1] + layerSizes[l + 1];
     C[key + '_LAYER_SIZES'] = layerSizes;
     C[key + '_INPUT_SIZE']  = inputSize;
     return dnaSize;
@@ -76,7 +78,7 @@ AI_CONFIG.MAX_PICKUP        = AI_CONFIG.PICKUP_CANDIDATES;
 AI_CONFIG.MAX_MELD          = AI_CONFIG.MELD_CANDIDATES;
 AI_CONFIG.DNA_PICKUP        = nn_size('PICKUP',  AI_CONFIG.PICKUP_SEQ_SLOTS,  AI_CONFIG.PICKUP_RUNNER_SLOTS,  AI_CONFIG.PICKUP_CANDIDATES,  AI_CONFIG.PICKUP_CARD_GROUPS,  true,  AI_CONFIG.PICKUP_CANDIDATES);
 AI_CONFIG.DNA_MELD          = nn_size('MELD',    AI_CONFIG.MELD_SEQ_SLOTS,    AI_CONFIG.MELD_RUNNER_SLOTS,    AI_CONFIG.MELD_CANDIDATES,    AI_CONFIG.MELD_CARD_GROUPS,    true,  AI_CONFIG.MELD_CANDIDATES);
-AI_CONFIG.DNA_DISCARD       = nn_size('DISCARD', 0,                           0,                              0,                            AI_CONFIG.DISCARD_CARD_GROUPS, false, AI_CONFIG.DISCARD_CLASSES);
+AI_CONFIG.DNA_DISCARD       = nn_size('DISCARD', 0,                           0,                              0,                            AI_CONFIG.DISCARD_CARD_GROUPS, false, AI_CONFIG.DISCARD_CLASSES,    AI_CONFIG.HIDDEN_WIDTH_DISCARD);
 AI_CONFIG.TOTAL_DNA_SIZE    = AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD + AI_CONFIG.DNA_DISCARD;
 
 export function sortCards(cards) {
@@ -903,7 +905,7 @@ export function setScoreFunctions(scoreAll, scoreDisc) {
 // Returns Float32Array[n] of summed scores across suits.
 export function scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
                                     candidates, weights, topDiscard, layerKey, meldIdx) {
-    if (_scoreAllCandidates) return _scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, weights, topDiscard, layerKey);
+    if (_scoreAllCandidates) return _scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, weights, topDiscard, layerKey, meldIdx);
     const suits = layerKey === 'MELD' ? suitsInCandidates(candidates) : suitsToEvaluate(topDiscard);
     const maxSlots = AI_CONFIG[layerKey + '_CANDIDATES'];
     const layerSizes = AI_CONFIG[layerKey + '_LAYER_SIZES'];
