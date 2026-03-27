@@ -720,7 +720,7 @@ static int plan_turn() {
         uint8_t pickupCC[53] = {0};
         uint8_t pickupTargetType = 0, pickupTargetSuit = 0, pickupTargetSlot = 0;
 
-        if (g_top_discard != 255 && g_is_closed_discard) {
+        if (g_top_discard != 255 && g_is_closed_discard && g_discard_len > 0) {
             int td     = g_top_discard;
             int td_idx = (td == 54) ? 52 : td;
             int td_suit = (td == 54) ? 5 : (td / 13) + 1;
@@ -772,7 +772,10 @@ static int plan_turn() {
                             break;
                         }
                     }
-                    if (!doPickup) doPickup = 0;
+                    // Verify pickupCC is non-empty (a meld using td was found)
+                    int hasCards = 0;
+                    for (int j=0;j<53;j++) if (pickupCC[j]) { hasCards=1; break; }
+                    if (!hasCards) doPickup = 0;
                 }
             }
         } else if (!g_is_closed_discard && g_top_discard != 255) {
