@@ -83,19 +83,20 @@ function runMatch(genomes, rules, fixedDeck) {
                 const teamBase = S.teams[p] === 'team0' ? 0 : AI_CONFIG.TOTAL_DNA_SIZE;
                 setActiveTeam(teamBase);
             }
-            const result = planTurnWasm(S, p, S.teams[p] === 'team0' ? 'team0' : 'team1',
-                             S.teams[p] === 'team0' ? 'team1' : 'team0');
-            if (result) {
-                // Execute the move on S
-                if (result.moveType === 0) moveDrawCard(S, p);
-                else if (result.moveType === 1) movePickUpDiscard(S, p, result.cardCounts, { type: 'new' });
-                else if (result.moveType === 2) moveMeld(S, p, result.cardCounts);
-                else if (result.moveType === 3) moveMeld(S, p, result.cardCounts,
-                    { type: result.targetType===1?'seq':'runner', suit: result.targetSuit, index: result.targetSlot });
-                else if (result.moveType === 4) {
-                    moveDiscardCard(S, p, result.discardCard, true);
-                }
-                else if (result.moveType === 5) S.isExhausted = true;
+            // Call planTurnWasm in a loop — C++ returns one phase at a time
+            // (DRAW/PICKUP → then MELD/APPEND → then DISCARD)
+            let phaseCount = 0;
+            while (phaseCount++ < 20) {
+                const result = planTurnWasm(S, p, S.teams[p] === 'team0' ? 'team0' : 'team1',
+                                 S.teams[p] === 'team0' ? 'team1' : 'team0');
+                if (!result) break;
+                if (result.moveType === 0) { moveDrawCard(S, p); }
+                else if (result.moveType === 1) { movePickUpDiscard(S, p, result.cardCounts, { type: 'new' }); }
+                else if (result.moveType === 2) { moveMeld(S, p, result.cardCounts); }
+                else if (result.moveType === 3) { moveMeld(S, p, result.cardCounts,
+                    { type: result.targetType===1?'seq':'runner', suit: result.targetSuit, index: result.targetSlot }); }
+                else if (result.moveType === 4) { moveDiscardCard(S, p, result.discardCard, true); break; }
+                else if (result.moveType === 5) { S.isExhausted = true; break; }
             }
 
 
