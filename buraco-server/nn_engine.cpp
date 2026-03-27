@@ -919,6 +919,19 @@ WASM_EXPORT uint8_t* get_cards2(int p)      { return g_cards2[p]; }
 WASM_EXPORT uint8_t* get_knowncards2(int p) { return g_knowncards2[p]; }
 WASM_EXPORT uint8_t* get_discard2()         { return g_discard2; }
 
+WASM_EXPORT void set_match_state(uint8_t hs0, uint8_t hs1, uint8_t hs2, uint8_t hs3,
+                                  uint16_t deckLen, uint16_t discardLen, uint8_t topDiscard,
+                                  uint8_t potsLen, uint8_t hasDrawn,
+                                  uint8_t tm0, uint8_t tm1, uint8_t cm0, uint8_t cm1,
+                                  uint8_t numPlayers, uint8_t closedDiscard, uint8_t runners) {
+    g_hand_sizes[0]=hs0; g_hand_sizes[1]=hs1; g_hand_sizes[2]=hs2; g_hand_sizes[3]=hs3;
+    g_deck_len=deckLen; g_discard_len=discardLen; g_top_discard=topDiscard;
+    g_pots_len=potsLen; g_has_drawn=hasDrawn;
+    g_team_mortos[0]=tm0; g_team_mortos[1]=tm1;
+    g_clean_melds[0]=cm0; g_clean_melds[1]=cm1;
+    g_num_players=numPlayers; g_is_closed_discard=closedDiscard; g_runners_allowed=runners;
+}
+
 // Scalar and meld table accessors
 WASM_EXPORT uint8_t* get_scalars()                        { return g_scalars; }
 WASM_EXPORT uint8_t* get_seq_meld(int team, int suit, int slot) { return g_seq_melds[team][suit][slot]; }
