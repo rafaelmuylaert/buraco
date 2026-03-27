@@ -683,6 +683,18 @@ export function encodeCandidateMeld(inp, off, parsedMeld, appendIdx) {
 
 // Pre-allocated accumulators for the first hidden layer (max HIDDEN_WIDTH=32)
 const _h1Acc = new Float32Array(256);
+const _fpBufA = new Float32Array(256);
+const _fpBufB = new Float32Array(256);
+const _fpOutPickup  = new Float32Array(AI_CONFIG.PICKUP_CANDIDATES);
+const _fpOutMeld    = new Float32Array(AI_CONFIG.MELD_CANDIDATES);
+const _fpOutDiscard = new Float32Array(AI_CONFIG.DISCARD_CLASSES);
+function _fpOutBuf(outLen) {
+    if (outLen === AI_CONFIG.PICKUP_CANDIDATES) return _fpOutPickup;
+    if (outLen === AI_CONFIG.MELD_CANDIDATES)   return _fpOutMeld;
+    if (outLen === AI_CONFIG.DISCARD_CLASSES)   return _fpOutDiscard;
+    return new Float32Array(outLen);
+}
+const relu = x => x > 0 ? x : 0;
 
 function forwardPassSegmented(segments, weights, layerSizes) {
     const _t0 = performance.now();

@@ -441,12 +441,11 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
   };
 
   const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
-  const toggleCardSelection = (cardId) => {
+  const toggleCardSelection = (cardId, cardUid) => {
     const k = cardId >= 104 ? 54 : cardId % 52;
     setSelectedCards(prev => {
       const cur = prev[k] || 0;
       if (cur > 0) { const next = { ...prev }; next[k]--; if (next[k] === 0) delete next[k]; return next; }
-      // Only select if we have that card type in hand
       const flat = G.cards2[playerID] || [];
       const CAOFF = 72;
       const have = Math.round((flat[CAOFF + (k === 54 ? 52 : k)] || 0) * 2);
@@ -458,6 +457,16 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
   // selectedCards is already a {cardType: count} map — use it directly as move arg
   const selectedCardIds = () => ({ ...selectedCards });
   const selectedCount = Object.values(selectedCards).reduce((a, b) => a + b, 0);
+
+  // Per-card selection: track how many of each type are selected, highlight in order
+  const selectionCounters = {};
+  const isCardSelected = (cardObj) => {
+    const k = cardObj.id >= 104 ? 54 : cardObj.id % 52;
+    const selected = selectedCards[k] || 0;
+    if (selected <= 0) return false;
+    selectionCounters[k] = (selectionCounters[k] || 0) + 1;
+    return selectionCounters[k] <= selected;
+  };
 
   const handleDiscardPileClick = () => {
     if (!isMyTurn) return;
@@ -696,9 +705,7 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
           <h2 style={{ fontSize: '1.2em', margin: '0 0 10px 0' }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
             {sortedHandObj.map(card => {
-              const k = card.id >= 104 ? 54 : card.id % 52;
-              const isSelected = (selectedCards[k] || 0) > 0;
-              return <Card key={card.uid} card={card} isSelected={isSelected} isNewlyDrawn={isNewlyDrawn(card)} onClick={() => toggleCardSelection(card.id)} />;
+              return <Card key={card.uid} card={card} isSelected={isCardSelected(card)} isNewlyDrawn={isNewlyDrawn(card)} onClick={() => toggleCardSelection(card.id, card.uid)} />;
             })}
           </div>
         </div>

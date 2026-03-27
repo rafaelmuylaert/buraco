@@ -134,16 +134,24 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         failStreak = 0;
       } else if (now - lastDispatchedAt >= 3000) {
         // Timed out — move was rejected
-        console.warn(`[BOT] ${botName} INVALID MOVE (no state change after 3s) | hasDrawn=${currentState.G.hasDrawn} hand=[${(currentState.G.hands[playerID]||[]).map(cardStr).join(',')}]`);
+        console.warn(`[BOT] ${botName} INVALID MOVE (no state change after 3s) | hasDrawn=${currentState.G.hasDrawn} handSize=${currentState.G.handSizes?.[playerID]}`);
         aiQueue = [];
         failStreak++;
         lastDispatchedAt = 0;
         if (failStreak >= 3) {
           console.warn(`[BOT] ${botName} failStreak=${failStreak}, forcing discard`);
-          const hand = currentState.G.hands[playerID] || [];
-          if (currentState.G.hasDrawn && hand.length > 0) {
-            client.moves.discardCard(hand[0]);
-            lastDispatchedAt = Date.now();
+          const handSize = currentState.G.handSizes?.[playerID] ?? 0;
+          if (currentState.G.hasDrawn && handSize > 0) {
+            // Find any card in cards2 all-suit section
+            const flat = currentState.G.cards2?.[playerID] || [];
+            const CAOFF = 72;
+            for (let i = 0; i < 53; i++) {
+              if (Math.round((flat[CAOFF + i] || 0) * 2) > 0) {
+                client.moves.discardCard(i === 52 ? 54 : i);
+                lastDispatchedAt = Date.now();
+                break;
+              }
+            }
           } else if (!currentState.G.hasDrawn) {
             client.moves.drawCard();
             lastDispatchedAt = Date.now();
@@ -160,7 +168,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       const myDNA = dnaCache[targetBotName];
       const moves = BuracoGame.ai.enumerate(currentState.G, currentState.ctx, myDNA || undefined);
       aiQueue = moves || [];
-      console.log(`[BOT] ${botName} enumerated ${aiQueue.length} moves | hasDrawn=${currentState.G.hasDrawn} hand=${currentState.G.hands[playerID]?.length}`);
+      console.log(`[BOT] ${botName} enumerated ${aiQueue.length} moves | hasDrawn=${currentState.G.hasDrawn} handSize=${currentState.G.handSizes?.[playerID]}`);
     }
 
     if (aiQueue.length > 0) {
@@ -171,29 +179,25 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         return;
       }
 
-      let moveDesc = nextMove.move;
-      if (nextMove.move === 'appendToMeld') {
-        const [tp, mIdx, cards] = nextMove.args;
-        const meld = currentState.G.melds[tp]?.[mIdx];
-        moveDesc += ` cards=[${cards.map(cardStr).join(',')}] onto ${meldStr(meld)}`;
-      } else if (nextMove.move === 'playMeld') {
-        moveDesc += ` cards=[${(nextMove.args[0]||[]).map(cardStr).join(',')}]`;
-      } else if (nextMove.move === 'discardCard') {
-        moveDesc += ` card=${cardStr(nextMove.args[0])}`;
-      } else if (nextMove.move === 'pickUpDiscard') {
-        const top = currentState.G.discardPile.slice(-1)[0];
-        moveDesc += ` top=${top!=null?cardStr(top):'none'}`;
-      }
+      // planTurn returns 'meld'/'appendToMeld' but server moves are 'playMeld'/'appendToMeld'
+      const serverMove = nextMove.move === 'meld' ? 'playMeld' : nextMove.move;
 
-      console.log(`[BOT] ${botName} dispatching: ${moveDesc}`);
-      client.moves[nextMove.move](...(nextMove.args || []));
+      console.log(`[BOT] ${botName} dispatching: ${serverMove}`);
+      client.moves[serverMove](...(nextMove.args || []));
       lastDispatchedAt = Date.now();
     } else {
-      console.warn(`[BOT] ${botName} enumerate returned empty | hasDrawn=${currentState.G.hasDrawn} hand=${currentState.G.hands[playerID]?.length}`);
-      const hand = currentState.G.hands[playerID] || [];
-      if (currentState.G.hasDrawn && hand.length > 0) {
-        client.moves.discardCard(hand[0]);
-        lastDispatchedAt = Date.now();
+      console.warn(`[BOT] ${botName} enumerate returned empty | hasDrawn=${currentState.G.hasDrawn} handSize=${currentState.G.handSizes?.[playerID]}`);
+      const handSize = currentState.G.handSizes?.[playerID] ?? 0;
+      const flat = currentState.G.cards2?.[playerID] || [];
+      const CAOFF = 72;
+      if (currentState.G.hasDrawn && handSize > 0) {
+        for (let i = 0; i < 53; i++) {
+          if (Math.round((flat[CAOFF + i] || 0) * 2) > 0) {
+            client.moves.discardCard(i === 52 ? 54 : i);
+            lastDispatchedAt = Date.now();
+            break;
+          }
+        }
       } else if (!currentState.G.hasDrawn) {
         client.moves.drawCard();
         lastDispatchedAt = Date.now();
