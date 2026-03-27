@@ -1,10 +1,8 @@
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
-import { BuracoGame, AI_CONFIG, getAndResetTimings, planTurnLogger as _ptl } from './game.js';
+import { BuracoGame, AI_CONFIG, getAndResetTimings, loggerRef } from './game.js';
 import { initWasm, syncCardsToWasm } from './wasm_loader.js';
 
-// We can't assign to a named export directly, so we use a wrapper object
-import * as GameModule from './game.js';
 
 await initWasm();
 
@@ -173,9 +171,9 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
 
       // Attach logger to capture planTurn internals
       const logLines = [];
-      GameModule.planTurnLogger = (event, data) => logLines.push({ event, data });
+      loggerRef.fn = (event, data) => logLines.push({ event, data });
       const moves = BuracoGame.ai.enumerate(currentState.G, currentState.ctx, myDNA || undefined);
-      GameModule.planTurnLogger = null;
+      loggerRef.fn = null;
       getAndResetTimings();
 
       // ── Human-game diagnostics ──────────────────────────────────────────

@@ -930,7 +930,7 @@ export function getAllValidMelds(cards2flat, rules) {
 // ── Per-turn NN planner ───────────────────────────────────────────────────────
 // Scores all 3 phases, executes all moves on G, and returns the full move list.
 // Optional turn logger — set by bot.js for human games, null during training
-export let planTurnLogger = null;
+export const loggerRef = { fn: null };
 
 export function planTurn(G, p, DNA) {
     const myTeam  = G.teams[p];
@@ -1041,9 +1041,9 @@ export function planTurn(G, p, DNA) {
         let bestPickup = 0;
         for (let i = 1; i < n1; i++) if (pickupScores[i] > pickupScores[bestPickup]) bestPickup = i;
         pickupMove = cands1[bestPickup];
-        if (planTurnLogger) planTurnLogger('pickup', pickupCands.map((c,i) => ({ move: c.move, score: pickupScores[i] ?? null })));
+        if (loggerRef.fn) loggerRef.fn('pickup', pickupCands.map((c,i) => ({ move: c.move, score: pickupScores[i] ?? null })));
     }
-    if (planTurnLogger) planTurnLogger('pickupChosen', pickupMove);
+    if (loggerRef.fn) loggerRef.fn('pickupChosen', pickupMove);
 
     const _wasDrawn = G.hasDrawn;
     // ── Execute pickup so phase 2 sees the real post-pickup hand ───────────────
@@ -1066,7 +1066,7 @@ export function planTurn(G, p, DNA) {
     const seqMeldCands    = allMeldCands.filter(c => !c.parsedMeld || c.parsedMeld.length !== 6);
     const runnerMeldCands = allMeldCands.filter(c => c.parsedMeld?.length === 6);
     const planMoves = [];
-    if (planTurnLogger) planTurnLogger('melds', allMeldCands.map(c => ({ move: c.move, cards: c.cardCounts })));
+    if (loggerRef.fn) loggerRef.fn('melds', allMeldCands.map(c => ({ move: c.move, cards: c.cardCounts })));
     if (allMeldCands.length > 0) {
         turnMeldIdx.my  = _meldsByType(G, myTeam);
         turnMeldIdx.opp = _meldsByType(G, oppTeam);
