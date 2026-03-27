@@ -181,33 +181,33 @@ export function setMatchState(G, player, myTeam, oppTeam) {
 // moveType: 0=drawCard,1=pickUpDiscard,2=playMeld,3=appendToMeld,4=discardCard,5=declareExhausted
 export function planTurnWasm(G, player, myTeam, oppTeam) {
     if (!_ex?.cpp_plan_turn) return null;
-
-    const numP = G.rules.numPlayers || 4;
     const pInt = parseInt(player);
     const myTeamIdx  = myTeam  === 'team0' ? 0 : 1;
-    const oppTeamIdx = oppTeam === 'team0' ? 0 : 1;
-
     setActiveTeam(myTeamIdx === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
-    _ex.set_eval_context(pInt, myTeamIdx, oppTeamIdx, 0, 0);
+    _ex.set_eval_context(pInt, myTeamIdx, myTeamIdx===0?1:0, 0, 0);
     setMatchState(G, pInt, myTeam, oppTeam);
-
-    const moveType = _ex.cpp_plan_turn();
-
-    const buf = new Uint8Array(_mem.buffer, _ex.get_planned_move(), 57);
-    const cardCounts = {};
-    for (let i = 0; i < 53; i++) {
-        if (buf[4+i] > 0) cardCounts[i === 52 ? 54 : i] = buf[4+i];
+    const count = _ex.cpp_plan_turn();
+    if (count === 0) return [];
+    const listPtr = _ex.get_move_list();
+    const buf = new Uint8Array(_mem.buffer, listPtr, count * 58);
+    const moves = [];
+    for (let i = 0; i < count; i++) {
+        const off = i * 58;
+        const cc = {};
+        for (let j = 0; j < 53; j++) if (buf[off+5+j] > 0) cc[j===52?54:j] = buf[off+5+j];
+        moves.push({
+            phase:      buf[off],
+            moveType:   buf[off+1],
+            targetType: buf[off+2],
+            targetSuit: buf[off+3],
+            targetSlot: buf[off+4],
+            discardCard: buf[off+1]===4 ? (buf[off+5]===54?54:buf[off+5]) : -1,
+            cardCounts: cc
+        });
     }
-
-    return {
-        moveType:   buf[0],
-        targetType: buf[1],
-        targetSuit: buf[2],
-        targetSlot: buf[3],
-        discardCard: buf[0] === 4 ? (buf[1] === 52 ? 54 : buf[1]) : -1,
-        cardCounts
-    };
+    return moves;
 }
+
 
 // Called by planTurn once per turn to set player context and write scalars
 export function setTurnContext(player, myTeam, oppTeam, scalars) {

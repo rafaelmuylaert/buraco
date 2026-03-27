@@ -87,31 +87,28 @@ function runMatch(genomes, rules, fixedDeck) {
             // (DRAW/PICKUP → then MELD/APPEND → then DISCARD)
             let phaseCount = 0;
             let turnDone = false;
-            while (phaseCount++ < 20 && !turnDone) {
-                const result = planTurnWasm(S, p, S.teams[p] === 'team0' ? 'team0' : 'team1',
-                                 S.teams[p] === 'team0' ? 'team1' : 'team0');
-                if (!result) {
-                    // WASM not available — fall back to JS planTurn
-                    try { planTurn(S, p, S.botGenomes[p]); } catch(e) {}
-                    turnDone = true; break;
+            const moves = planTurnWasm(S, p, S.teams[p]==='team0'?'team0':'team1',
+                            S.teams[p]==='team0'?'team1':'team0');
+            if (!moves) {
+                try { planTurn(S, p, S.botGenomes[p]); } catch(e) {}
+            } else {
+                let pickupDone = false;
+                for (const m of moves) {
+                    if (m.phase === 0) { // pickup
+                        if (pickupDone) continue;
+                        if (m.moveType === 0) { moveDrawCard(S, p); pickupDone = true; }
+                        else if (m.moveType === 1) { if (movePickUpDiscard(S, p, m.cardCounts, {type:'new'})) pickupDone = true; }
+                        else if (m.moveType === 5) { S.isExhausted = true; pickupDone = true; }
+                    } else if (m.phase === 1) { // meld — fire all, ignore failures
+                        if (m.moveType === 2) moveMeld(S, p, m.cardCounts);
+                        else if (m.moveType === 3) moveMeld(S, p, m.cardCounts,
+                            {type: m.targetType===1?'seq':'runner', suit: m.targetSuit, index: m.targetSlot});
+                    } else if (m.phase === 2) { // discard — try until success
+                        if (moveDiscardCard(S, p, m.discardCard, true)) break;
+                    }
                 }
-                if (_diagCount < 3) console.log(`[WASM] p=${p} phase=${phaseCount} moveType=${result.moveType} hasDrawn=${S.hasDrawn} handSize=${S.handSizes[p]} deckLen=${S.deck.length} discardLen=${S.discardPile.length} topDiscard=${S.discardPile[S.discardPile.length-1]}`);
-                if (result.moveType === 0) { const ok = moveDrawCard(S, p); if (_diagCount < 3) console.log(`[WASM] moveDrawCard result=${ok} hasDrawn=${S.hasDrawn}`); }
-                else if (result.moveType === 1) { movePickUpDiscard(S, p, result.cardCounts, { type: 'new' }); }
-                else if (result.moveType === 2) {
-                    const ok = moveMeld(S, p, result.cardCounts);
-                    if (_diagCount < 3) console.log(`[WASM] moveMeld ok=${ok} cc=${JSON.stringify(result.cardCounts)} hasDrawn=${S.hasDrawn}`);
-                    if (!ok) break; // meld failed, skip to discard
-                }
-                else if (result.moveType === 3) {
-                    const target = { type: result.targetType===1?'seq':'runner', suit: result.targetSuit, index: result.targetSlot };
-                    const ok = moveMeld(S, p, result.cardCounts, target);
-                    if (_diagCount < 3) console.log(`[WASM] appendMeld ok=${ok} cc=${JSON.stringify(result.cardCounts)} target=${JSON.stringify(target)}`);
-                    if (!ok) break; // append failed, skip to discard
-                }
-                else if (result.moveType === 4) { moveDiscardCard(S, p, result.discardCard, true); turnDone = true; break; }
-                else if (result.moveType === 5) { S.isExhausted = true; turnDone = true; break; }
             }
+
 
 
             // If planTurn didn't end the turn (hasDrawn still true), force-discard

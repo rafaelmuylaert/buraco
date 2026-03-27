@@ -702,144 +702,139 @@ static void use_net(int* layers, int nlayers, int woff) {
     g_weight_offset = woff;
 }
 
+static void add_move(uint8_t phase, uint8_t moveType, uint8_t tType, uint8_t tSuit, uint8_t tSlot, uint8_t* cc) {
+    if (g_move_count >= MAX_PLANNED_MOVES) return;
+    uint8_t* m = g_move_list[g_move_count++];
+    m[0]=phase; m[1]=moveType; m[2]=tType; m[3]=tSuit; m[4]=tSlot;
+    if (cc) for(int i=0;i<53;i++) m[5+i]=cc[i];
+    else    for(int i=0;i<53;i++) m[5+i]=0;
+}
+
 static int plan_turn() {
-    int player  = g_player;
-    int myTeam  = g_my_team;
-    int oppTeam = g_opp_team;
+    int player = g_player;
+    g_move_count = 0;
 
-    if (g_deck_len == 0 && g_pots_len == 0) {
-        g_planned_move[0] = MOVE_EXHAUSTED;
-        return MOVE_EXHAUSTED;
+    if (g_deck_len==0 && g_pots_len==0) {
+        add_move(0, MOVE_EXHAUSTED, 0,0,0, nullptr);
+        return g_move_count;
     }
 
-    float scores[MAX_SEQ_CANDS > MAX_RUN_CANDS ? MAX_SEQ_CANDS : MAX_RUN_CANDS];
-
-    // Phase 1: always draw for now (pickup scoring TODO)
+    // Phase 0: Pickup
     if (!g_has_drawn) {
-        g_planned_move[0] = MOVE_DRAW;
-        for (int i=1;i<57;i++) g_planned_move[i] = 0;
-        return MOVE_DRAW;
+        add_move(0, MOVE_DRAW, 0,0,0, nullptr);
+        return g_move_count;
     }
 
-    // ── Phase 2: Melds & Appends ──────────────────────────────────────────────
+    // Phase 1: Melds & Appends
     find_valid_melds();
     find_valid_appends();
 
-    float bestSeqScore = -1e30f; int bestSeqIdx = -1; int bestIsAppend = 0;
-    float bestRunScore = -1e30f; int bestRunIdx  = -1;
+    float candScores[MAX_SEQ_CANDS*2 + MAX_RUN_CANDS];
+    int   candType  [MAX_SEQ_CANDS*2 + MAX_RUN_CANDS];
+    int   candIdx   [MAX_SEQ_CANDS*2 + MAX_RUN_CANDS];
+    int   nCands = 0;
 
-    // Score seq melds per suit
-    if (g_num_seq_cands > 0) {
-        for (int suit=1; suit<=4; suit++) {
-            int suitN = 0;
-            uint8_t suitCands[MAX_SEQ_CANDS][SEQ_CAND_FEATS];
-            int suitIdx[MAX_SEQ_CANDS];
-            for (int i=0;i<g_num_seq_cands;i++) {
-                int cs = 0;
-                for (int s=1;s<=4&&!cs;s++)
-                    for (int r=1;r<=13;r++)
-                        if (g_cand_seq_cc[i][(s-1)*13+(r-1)]>0) { cs=s; break; }
-                if (cs == suit && suitN < MAX_SEQ_CANDS) {
-                    for (int j=0;j<SEQ_CAND_FEATS;j++) suitCands[suitN][j] = g_seq_cands[i][j];
-                    suitIdx[suitN] = i; suitN++;
-                }
+    for (int suit=1; suit<=4; suit++) {
+        int suitN=0;
+        uint8_t suitCands[MAX_SEQ_CANDS][SEQ_CAND_FEATS];
+        int suitIdx[MAX_SEQ_CANDS];
+        for (int i=0;i<g_num_seq_cands;i++) {
+            int cs=0;
+            for (int s=1;s<=4&&!cs;s++)
+                for (int r=1;r<=13;r++)
+                    if (g_cand_seq_cc[i][(s-1)*13+(r-1)]>0) { cs=s; break; }
+            if (cs==suit && suitN<MAX_SEQ_CANDS) {
+                for(int j=0;j<SEQ_CAND_FEATS;j++) suitCands[suitN][j]=g_seq_cands[i][j];
+                suitIdx[suitN]=i; suitN++;
             }
-            if (!suitN) continue;
-            for (int i=0;i<suitN;i++)
-                for (int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[i][j] = suitCands[i][j];
+        }
+        if (suitN>0) {
+            for(int i=0;i<suitN;i++) for(int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[i][j]=suitCands[i][j];
             use_net(g_meld_layers, g_meld_nlayers, g_meld_woff);
-            g_layerkey = 1; g_suit = suit; g_num_seq_cands = suitN;
-            for (int o=0;o<g_layer_sizes[g_meld_nlayers-1];o++) g_out[o]=0.0f;
+            g_layerkey=1; g_suit=suit; g_num_seq_cands=suitN;
+            for(int o=0;o<g_layer_sizes[g_meld_nlayers-1];o++) g_out[o]=0.0f;
             forward_pass(g_out);
-            for (int i=0;i<suitN;i++)
-                if (g_out[i] > bestSeqScore) { bestSeqScore = g_out[i]; bestSeqIdx = suitIdx[i]; bestIsAppend = 0; }
+            for(int i=0;i<suitN;i++) { candScores[nCands]=g_out[i]; candType[nCands]=0; candIdx[nCands]=suitIdx[i]; nCands++; }
         }
     }
 
-    // Score append candidates per suit
-    if (g_num_append_cands > 0) {
-        for (int suit=1; suit<=4; suit++) {
-            int suitN = 0;
-            uint8_t suitCands[MAX_SEQ_CANDS][SEQ_CAND_FEATS];
-            int suitIdx[MAX_SEQ_CANDS];
-            for (int i=0;i<g_num_append_cands;i++) {
-                if (g_cand_append_suit[i] == suit && suitN < MAX_SEQ_CANDS) {
-                    for (int j=0;j<14;j++) suitCands[suitN][j] = g_cand_append_meld[i][j] ? 255 : 0;
-                    suitCands[suitN][14] = g_cand_append_meld[i][14] ? 255 : 0;
-                    suitCands[suitN][15] = g_cand_append_meld[i][15] ? 255 : 0;
-                    suitCands[suitN][16] = (uint8_t)((g_cand_append_slot[i]+1)/5.0f*255+0.5f);
-                    suitIdx[suitN] = i; suitN++;
-                }
+    for (int suit=1; suit<=4; suit++) {
+        int suitN=0;
+        uint8_t suitCands[MAX_SEQ_CANDS][SEQ_CAND_FEATS];
+        int suitIdx[MAX_SEQ_CANDS];
+        for (int i=0;i<g_num_append_cands;i++) {
+            if (g_cand_append_suit[i]==suit && suitN<MAX_SEQ_CANDS) {
+                for(int j=0;j<14;j++) suitCands[suitN][j]=g_cand_append_meld[i][j]?255:0;
+                suitCands[suitN][14]=g_cand_append_meld[i][14]?255:0;
+                suitCands[suitN][15]=g_cand_append_meld[i][15]?255:0;
+                suitCands[suitN][16]=(uint8_t)((g_cand_append_slot[i]+1)/5.0f*255+0.5f);
+                suitIdx[suitN]=i; suitN++;
             }
-            if (!suitN) continue;
-            for (int i=0;i<suitN;i++)
-                for (int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[i][j] = suitCands[i][j];
+        }
+        if (suitN>0) {
+            for(int i=0;i<suitN;i++) for(int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[i][j]=suitCands[i][j];
             use_net(g_meld_layers, g_meld_nlayers, g_meld_woff);
-            g_layerkey = 1; g_suit = suit; g_num_seq_cands = suitN;
-            for (int o=0;o<g_layer_sizes[g_meld_nlayers-1];o++) g_out[o]=0.0f;
+            g_layerkey=1; g_suit=suit; g_num_seq_cands=suitN;
+            for(int o=0;o<g_layer_sizes[g_meld_nlayers-1];o++) g_out[o]=0.0f;
             forward_pass(g_out);
-            for (int i=0;i<suitN;i++)
-                if (g_out[i] > bestSeqScore) { bestSeqScore = g_out[i]; bestSeqIdx = suitIdx[i]; bestIsAppend = 1; }
+            for(int i=0;i<suitN;i++) { candScores[nCands]=g_out[i]; candType[nCands]=1; candIdx[nCands]=suitIdx[i]; nCands++; }
         }
     }
 
-    // Score runner candidates
-    if (g_num_run_cands > 0) {
+    if (g_num_run_cands>0) {
         use_net(g_runner_layers, g_runner_nlayers, g_runner_woff);
-        g_layerkey = 2; g_suit = 0;
-        for (int o=0;o<g_layer_sizes[g_runner_nlayers-1];o++) g_out[o]=0.0f;
+        g_layerkey=2; g_suit=0;
+        for(int o=0;o<g_layer_sizes[g_runner_nlayers-1];o++) g_out[o]=0.0f;
         forward_pass(g_out);
-        for (int i=0;i<g_num_run_cands;i++)
-            if (g_out[i] > bestRunScore) { bestRunScore = g_out[i]; bestRunIdx = i; }
+        for(int i=0;i<g_num_run_cands;i++) { candScores[nCands]=g_out[i]; candType[nCands]=2; candIdx[nCands]=i; nCands++; }
     }
 
-    // Pick best
-    if (bestSeqScore > 0.0f || bestRunScore > 0.0f) {
-        if (bestSeqScore >= bestRunScore && bestSeqIdx >= 0) {
-            if (bestIsAppend) {
-                g_planned_move[0] = MOVE_APPEND;
-                g_planned_move[1] = 1;
-                g_planned_move[2] = g_cand_append_suit[bestSeqIdx];
-                g_planned_move[3] = g_cand_append_slot[bestSeqIdx];
-                for (int i=0;i<53;i++) g_planned_move[4+i] = g_cand_append_cc[bestSeqIdx][i];
-            } else {
-                g_planned_move[0] = MOVE_PLAY_MELD;
-                g_planned_move[1] = 0; g_planned_move[2] = 0; g_planned_move[3] = 0;
-                for (int i=0;i<53;i++) g_planned_move[4+i] = g_cand_seq_cc[bestSeqIdx][i];
-            }
-            return g_planned_move[0];
-        } else if (bestRunIdx >= 0) {
-            int isApp = 0, appSlot = 0;
-            for (int s=0;s<MAX_RUN_SLOTS;s++)
-                if (g_run_melds[myTeam][s][0] == g_cand_run_meld[bestRunIdx][0]) { isApp=1; appSlot=s; break; }
-            g_planned_move[0] = isApp ? MOVE_APPEND : MOVE_PLAY_MELD;
-            g_planned_move[1] = 2;
-            g_planned_move[2] = 0;
-            g_planned_move[3] = (uint8_t)appSlot;
-            for (int i=0;i<53;i++) g_planned_move[4+i] = g_cand_run_cc[bestRunIdx][i];
-            return g_planned_move[0];
+    // Sort by score descending
+    for (int i=1;i<nCands;i++) {
+        float s=candScores[i]; int t=candType[i], idx=candIdx[i]; int j=i-1;
+        while(j>=0 && candScores[j]<s) { candScores[j+1]=candScores[j]; candType[j+1]=candType[j]; candIdx[j+1]=candIdx[j]; j--; }
+        candScores[j+1]=s; candType[j+1]=t; candIdx[j+1]=idx;
+    }
+
+    for (int i=0;i<nCands;i++) {
+        int t=candType[i], idx=candIdx[i];
+        if (t==0) {
+            add_move(1, MOVE_PLAY_MELD, 0,0,0, g_cand_seq_cc[idx]);
+        } else if (t==1) {
+            add_move(1, MOVE_APPEND, 1, g_cand_append_suit[idx], g_cand_append_slot[idx], g_cand_append_cc[idx]);
+        } else {
+            int isApp=0, appSlot=0;
+            for(int s=0;s<MAX_RUN_SLOTS;s++)
+                if (g_run_melds[g_my_team][s][0]==g_cand_run_meld[idx][0]) { isApp=1; appSlot=s; break; }
+            add_move(1, isApp?MOVE_APPEND:MOVE_PLAY_MELD, 2, 0, (uint8_t)appSlot, g_cand_run_cc[idx]);
         }
     }
 
-    // ── Phase 3: Discard ──────────────────────────────────────────────────────
+    // Phase 2: Discard — score all cards, add sorted
     use_net(g_discard_layers, g_discard_nlayers, g_discard_woff);
-    g_layerkey = 3; g_suit = 0;
-    for (int o=0;o<g_layer_sizes[g_discard_nlayers-1];o++) g_out[o]=0.0f;
+    g_layerkey=3; g_suit=0;
+    for(int o=0;o<g_layer_sizes[g_discard_nlayers-1];o++) g_out[o]=0.0f;
     forward_pass(g_out);
 
-    int bestCard = -1; float bestScore2 = -1e30f;
-    for (int i=0;i<53;i++) {
+    float dscores[53]; int dcards[53]; int nd=0;
+    for(int i=0;i<53;i++) {
         if (!g_cards2[player][CARDS_ALL_OFF+i]) continue;
-        if (g_out[i] > bestScore2) { bestScore2 = g_out[i]; bestCard = i; }
+        dscores[nd]=g_out[i]; dcards[nd]=i; nd++;
     }
-    if (bestCard < 0)
-        for (int i=0;i<53;i++) if (g_cards2[player][CARDS_ALL_OFF+i]) { bestCard=i; break; }
+    for(int i=1;i<nd;i++) {
+        float s=dscores[i]; int c=dcards[i]; int j=i-1;
+        while(j>=0 && dscores[j]<s) { dscores[j+1]=dscores[j]; dcards[j+1]=dcards[j]; j--; }
+        dscores[j+1]=s; dcards[j+1]=c;
+    }
+    for(int i=0;i<nd;i++) {
+        uint8_t cc[53]={0};
+        cc[0]=(uint8_t)(dcards[i]==52?54:dcards[i]);
+        add_move(2, MOVE_DISCARD, 0,0,0, cc);
+    }
 
-    g_planned_move[0] = MOVE_DISCARD;
-    g_planned_move[1] = (uint8_t)(bestCard == 52 ? 54 : bestCard);
-    for (int i=2;i<57;i++) g_planned_move[i] = 0;
-    return MOVE_DISCARD;
+    return g_move_count;
 }
+
 
 extern "C" {
 
@@ -922,8 +917,11 @@ WASM_EXPORT void configure_nets(
     for(int i=0;i<discard_nlayers;i++) g_discard_layers[i]=discard_layers[i];
 }
 
-WASM_EXPORT int cpp_plan_turn() { return plan_turn(); }
-WASM_EXPORT uint8_t* get_planned_move() { return g_planned_move; }
+WASM_EXPORT int      cpp_plan_turn()        { return plan_turn(); }
+WASM_EXPORT uint8_t* get_move_list()        { return &g_move_list[0][0]; }
+WASM_EXPORT int      get_move_count()       { return g_move_count; }
+WASM_EXPORT uint8_t* get_planned_move()     { return g_planned_move; } // kept for compat
+
 
 WASM_EXPORT int cpp_find_valid_appends() { return find_valid_appends(); }
 // Simpler: call configure_net_pickup/meld/runner/discard separately
