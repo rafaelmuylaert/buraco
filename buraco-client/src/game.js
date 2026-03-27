@@ -415,14 +415,9 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
     const topCard = G.discardPile[G.discardPile.length - 1];
     const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
     if (isClosedDiscard) {
-        // Temporarily set hasDrawn so moveMeld passes its guard, then restore
-        G.hasDrawn = true;
         const meldTarget = target.type === 'append' ? target.meldTarget : null;
-        // addCards = rest of discard pile (excluding top) that will join hand
         const restCount = G.discardPile.length - 1;
-        const ok = moveMeld(G, p, selectedHandIds, meldTarget, restCount, topCard);
-        G.hasDrawn = false;
-        if (!ok) return false;
+        if (!moveMeld(G, p, selectedHandIds, meldTarget, restCount, topCard)) return false;
         G.discardPile.pop();
     }
     const pickedUp = [...G.discardPile];
@@ -441,7 +436,7 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
 // target: null (new meld) | { type: 'seq', suit, index } | { type: 'runner', index }
 export function moveMeld(G, p, cardIds, target = null, addCards = 0, topDiscard = null) {
     ensureTable(G);
-    if (!G.hasDrawn) return false;
+    if (!G.hasDrawn && topDiscard === null) return false;
     const teamId = G.teams[p];
     const hand = G.hands[p];
     const allCardIds = topDiscard !== null ? [...cardIds, topDiscard] : cardIds;

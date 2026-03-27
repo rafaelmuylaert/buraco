@@ -69,9 +69,12 @@ function runMatch(genomes, rules, fixedDeck) {
                 plan = [];
             }
 
-            if (plan[0]?.move === 'declareExhausted') S.isExhausted = true;
+            if (plan[0]?.move === 'declareExhausted') {
+                S.isExhausted = true;
+                S.hasDrawn = false;
+            }
 
-            // If planTurn didn't end the turn (no discard emitted and hasDrawn still true), force it
+            // If planTurn didn't end the turn (hasDrawn still true), force-discard
             if (S.hasDrawn) {
                 if (S.hands[p]?.length > 0) moveDiscardCard(S, p, S.hands[p][0], true);
                 else S.hasDrawn = false;
