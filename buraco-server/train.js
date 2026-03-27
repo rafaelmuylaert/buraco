@@ -273,6 +273,7 @@ export const TrainerService = {
         let latestChampion = null;
         let championTournamentRunning = false;
         let lastChampionTournamentGen = 0; // milestone gen at which last tournament ran
+        const roundStartTimes = new Map(); // roundGen -> Date.now() when first island hit it
 
         const runIslandGeneration = async (pop) => {
             const finalists = await runPlayoffTournament(pop, rules);
@@ -315,9 +316,11 @@ export const TrainerService = {
 
         // Run inter-island champion tournament and broadcast winner back to all islands.
         // Called by whichever island triggers the condition; guarded by championTournamentRunning.
-        const runChampionTournament = async () => {
+        const runChampionTournament = async (roundGen = 0) => {
             if (championTournamentRunning) return;
             championTournamentRunning = true;
+            const tournamentStart = Date.now();
+            const roundStart = roundStartTimes.get(roundGen) ?? tournamentStart;
             try {
                 const candidates = islandElites
                     .map((genome, k) => genome ? { k, genome } : null)
@@ -358,7 +361,11 @@ export const TrainerService = {
                 }
                 const prev = activeTrainings.get(botName);
                 if (prev) activeTrainings.set(botName, { ...prev, benchmarkDiff });
-                console.log(`[${botName}] 🏆 Champion: Island ${candidates[bestIdx].k} | Bench: ${benchmarkDiff ?? 'N/A'}`);
+                const tournamentMs = Date.now() - tournamentStart;
+                const roundMs = Date.now() - roundStart;
+                const fmt = ms => ms < 60000 ? `${(ms/1000).toFixed(1)}s` : `${Math.floor(ms/60000)}m${((ms%60000)/1000).toFixed(0)}s`;
+                console.log(`[${botName}] 🏆 Champion: Island ${candidates[bestIdx].k} | Bench: ${benchmarkDiff ?? 'N/A'} | Tournament: ${fmt(tournamentMs)} | Round total: ${fmt(roundMs)}`);
+                roundStartTimes.delete(roundGen);
             } finally {
                 championTournamentRunning = false;
             }
@@ -409,9 +416,10 @@ export const TrainerService = {
                         // multiple of SAVE_EVERY strictly greater than the last tournament.
                         const minBroadcastGen = Math.min(...islandBroadcastGen);
                         const roundGen = Math.floor(minBroadcastGen / SAVE_EVERY) * SAVE_EVERY;
+                        if (!roundStartTimes.has(roundGen)) roundStartTimes.set(roundGen, Date.now());
                         if (roundGen > lastChampionTournamentGen && islandElites.every(e => e !== null)) {
                             lastChampionTournamentGen = roundGen;
-                            runChampionTournament(); // fire-and-forget, guarded internally
+                            runChampionTournament(roundGen); // fire-and-forget, guarded internally
                         }
                     }
                 }
@@ -426,7 +434,7 @@ export const TrainerService = {
         try {
             await Promise.allSettled(Array.from({ length: NUM_ISLANDS }, (_, k) => runIsland(k)));
             // Final champion tournament after all islands finish
-            if (islandElites.some(e => e !== null)) await runChampionTournament();
+            if (islandElites.some(e => e !== null)) await runChampionTournament(lastChampionTournamentGen + SAVE_EVERY);
             if (islandErrors.length) console.error(`[TRAINER] ${islandErrors.length} island(s) failed for ${botName}`);
         } catch (error) {
             console.error(`[TRAINER] Error for ${botName}:`, error);
