@@ -415,12 +415,16 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
     const topCard = G.discardPile[G.discardPile.length - 1];
     const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
     if (isClosedDiscard) {
+        // Temporarily set hasDrawn so moveMeld passes its guard, then restore
+        G.hasDrawn = true;
         const meldTarget = target.type === 'append' ? target.meldTarget : null;
-        if (!moveMeld(G, p, selectedHandIds, meldTarget, G.discardPile.length - 1, topCard)) {
-            return false;
-        }
+        // addCards = rest of discard pile (excluding top) that will join hand
+        const restCount = G.discardPile.length - 1;
+        const ok = moveMeld(G, p, selectedHandIds, meldTarget, restCount, topCard);
+        G.hasDrawn = false;
+        if (!ok) return false;
         G.discardPile.pop();
-    } 
+    }
     const pickedUp = [...G.discardPile];
     G.knownCards[p].push(...G.discardPile);
     for (const c of G.discardPile) { hands2AddCard(G.knownCards2[p], c); discardPile2Remove(G, c); }
@@ -1192,7 +1196,6 @@ export function planTurn(G, p, DNA) {
 
     let discardMove = null;
     if (remainingHand.length > 0) {
-        // Discard net outputs DISCARD_CLASSES scores; map each hand card to its class index (card % 52, joker = 52)
         const discardScores = scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, dnaDiscard, turnMeldIdx);
         let bestCard = remainingHand[0], bestScore = -Infinity;
         for (const card of remainingHand) {
@@ -1200,7 +1203,15 @@ export function planTurn(G, p, DNA) {
             if (discardScores[cls] > bestScore) { bestScore = discardScores[cls]; bestCard = card; }
         }
         discardMove = { move: 'discardCard', args: [bestCard], cards: [] };
-        moveDiscardCard(G, p, bestCard);
+        moveDiscardCard(G, p, bestCard, true);
+    } else if (G.hands[p].length > 0) {
+        // Hand not empty but all cards were melded — must still discard one
+        const card = G.hands[p][0];
+        discardMove = { move: 'discardCard', args: [card], cards: [] };
+        moveDiscardCard(G, p, card, true);
+    } else {
+        // Hand is truly empty — discard is not needed, turn ends via game-over check
+        G.hasDrawn = false;
     }
 
     return [pickupMove, ...selectedPlays, ...(discardMove ? [discardMove] : [])];
