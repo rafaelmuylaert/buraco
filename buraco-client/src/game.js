@@ -682,7 +682,10 @@ export function getAllValidAppends(cards2flat, teamTable, rules) {
     else { for (const cId of suited2Ids) { if ((cards2flat[CARDS_ALL_OFF + cId] || 0) > 0) { wild0Type = cId; break; } } }
     const hasWild = wild0Type !== null;
 
-    const rankCount = (suit, rank) => cards2flat[(suit - 1) * 18 + (rank - 1)] || 0;
+    const rankCount = (suit, rank) => {
+        if (rank === 2) return cards2flat[(suit - 1) * 18 + 13 + (suit - 1)] || 0;
+        return cards2flat[(suit - 1) * 18 + (rank - 1)] || 0;
+    };
     const pickType  = (suit, rank) => (suit - 1) * 13 + (rank - 1);
 
     // Build parsedMeld by applying cardCounts to an existing seq meld — no parseMeld call.
@@ -875,7 +878,10 @@ export function getAllValidMelds(cards2flat, rules) {
 
     for (let suit = 1; suit <= 4; suit++) {
         const suitOff = (suit - 1) * 18;
-        for (let r = 1; r <= 13; r++) bitmap[r] = cards2flat[suitOff + r - 1] || 0;
+        for (let r = 1; r <= 13; r++) {
+            if (r === 2) bitmap[r] = cards2flat[(suit - 1) * 18 + 13 + (suit - 1)] || 0; // wilds
+            else bitmap[r] = cards2flat[suitOff + r - 1] || 0;
+        }
         bitmap[14] = bitmap[1]; // ace-high copy
 
         let acc = null; // [lo, hi] of current contiguous run
@@ -906,7 +912,10 @@ export function getAllValidMelds(cards2flat, rules) {
     }
 
     if (runnersAllowed) {
-        const rankCount = (suit, rank) => cards2flat[(suit - 1) * 18 + (rank - 1)] || 0;
+        const rankCount = (suit, rank) => {
+            if (rank === 2) return cards2flat[(suit - 1) * 18 + 13 + (suit - 1)] || 0;
+            return cards2flat[(suit - 1) * 18 + (rank - 1)] || 0;
+        };
         for (let rank = 1; rank <= 13; rank++) {
             if (!isRunnerAllowed(rules, rank)) continue;
             const cc = {}; let total = 0;
@@ -1034,7 +1043,7 @@ export function planTurn(G, p, DNA) {
     let pickupMove;
     if (pickupCands.length === 1 || topDiscard === null) {
         pickupMove = pickupCands[0];
-        if (loggerRef.fn) loggerRef.fn('pickup', pickupCands.map(c => ({ move: c.move, score: null })));
+        if (loggerRef.fn) loggerRef.fn('pickup', pickupCands.map(c => ({ move: c.move, score: null, cardCounts: c.cardCounts, args: c.args })));
     } else {
         const n1 = Math.min(pickupCands.length, AI_CONFIG.MAX_PICKUP);
         const cands1 = pickupCands.slice(0, n1);
@@ -1042,7 +1051,7 @@ export function planTurn(G, p, DNA) {
         let bestPickup = 0;
         for (let i = 1; i < n1; i++) if (pickupScores[i] > pickupScores[bestPickup]) bestPickup = i;
         pickupMove = cands1[bestPickup];
-        if (loggerRef.fn) loggerRef.fn('pickup', pickupCands.map((c,i) => ({ move: c.move, score: pickupScores[i] ?? null })));
+        if (loggerRef.fn) loggerRef.fn('pickup', pickupCands.map((c,i) => ({ move: c.move, score: pickupScores[i] ?? null, cardCounts: c.cardCounts, args: c.args })));
     }
     if (loggerRef.fn) loggerRef.fn('pickupChosen', pickupMove);
 

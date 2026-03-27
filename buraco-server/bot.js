@@ -207,10 +207,14 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         const pickupLog = logLines.find(l => l.event === 'pickup');
         const pickupChosen = logLines.find(l => l.event === 'pickupChosen');
         if (pickupLog) {
-          const cstr = pickupLog.data.map(c => `${c.move}(${c.score != null ? c.score.toFixed(3) : 'only'})`).join(', ');
+          const cstr = pickupLog.data.map(c => {
+            const tgt = c.args?.[1];
+            const tgtStr = tgt?.type === 'append' ? `->append[${tgt.meldTarget?.suit||''}${tgt.meldTarget?.index}]` : '';
+            return `${c.move}${tgtStr}(${c.score != null ? c.score.toFixed(3) : 'only'}) ${ccStr(c.cardCounts||{})}`;
+          }).join(', ');
           console.log(`  pickup_cands: [${cstr}]`);
         }
-        if (pickupChosen) console.log(`  pickup_chosen: ${pickupChosen.data?.move} cards=${ccStr(pickupChosen.data?.cardCounts || {})}`);
+        if (pickupChosen) console.log(`  pickup_chosen: ${pickupChosen.data?.move} cards=${ccStr(pickupChosen.data?.cardCounts || {})} target=${JSON.stringify(pickupChosen.data?.args?.[1] || {})}`);
         const meldLog = logLines.find(l => l.event === 'melds');
         if (meldLog && meldLog.data.length > 0)
           console.log(`  meld_cands(${meldLog.data.length}): ${meldLog.data.map(c => `${c.move}${ccStr(c.cards)}`).join(' | ')}`);
