@@ -20,51 +20,56 @@ export function addForwardPassTime(ms) { _timings.forwardPass += ms; }
 export function addWasmDiag(evalCount, copyMs) { _timings._evalCount = (_timings._evalCount||0) + evalCount; _timings._copyMs = (_timings._copyMs||0) + copyMs; }
 
 // 🚀 CENTRALIZED AI ARCHITECTURE CONFIGURATION
-// 3 networks: pickup (per-suit, outputs MAX_CANDIDATES scores), meld (same), discard (all-suit, outputs DISCARD_CLASSES scores)
-// Each network takes all candidates packed into input and outputs all scores in one forward pass.
 export const AI_CONFIG = {
     // Feature sizes
     SEQ_FEATURES:          16,  // 14 rank bits + wildForeign + wildNatural
-    RUNNER_FEATURES:        6,  // rank/13, ♠/8,♥/8,♦/8,♣/8, wild
-    CANDIDATE_FEATURES:    18,  // isRunner, 14 rank/suit slots, wildForeign, wildNatural, appendIdx/5
-    SCALARS_FEATURES:      11,  // hand sizes×4/22, deck/104, discardPile/104, mortos×2, mortosAvail/2, cleans×2
-    CARDS_FEATURES_SUIT:   18,  // per-suit: 13 rank counts/8 + 5 wild counts/4
-    CARDS_FEATURES_ALL:    53,  // all-suit: 13×4 rank counts/8 + 4 suited-2 counts/4 + joker/4
+    RUNNER_FEATURES:        6,  // rank/13, ♠/2,♥/2,♦/2,♣/2, wildSuit/5
+    SEQ_CANDIDATE_FEATURES:   17,  // 14 rank slots, wildForeign, wildNatural, appendIdx/5 (no isRunner)
+    RUN_CANDIDATE_FEATURES:    8,  // rank/13, suit counts×4/2, wildSuit/5, appendIdx/5 (no isRunner)
+    SCALARS_FEATURES:      11,
+    CARDS_FEATURES_SUIT:   18,  // per-suit: 13 rank counts + 5 wild counts
+    CARDS_FEATURES_ALL:    53,  // all-suit: 52 card types + joker
     HIDDEN_LAYERS:          2,
-    HIDDEN_WIDTH:          24,  // pickup/meld hidden width
-    HIDDEN_WIDTH_DISCARD:  48,  // discard net needs more capacity (53 outputs)
+    HIDDEN_WIDTH:          24,  // seq/pickup net hidden width
+    HIDDEN_WIDTH_RUNNER:   24,  // runner net hidden width
+    HIDDEN_WIDTH_DISCARD:  48,  // discard net hidden width
 
-    // Pickup net (per-suit)
-    PICKUP_SEQ_SLOTS:      10,  // 5 my team + 5 opp
-    PICKUP_RUNNER_SLOTS:    4,  // 2 my team + 2 opp
-    PICKUP_CARD_GROUPS:     5,  // hand, discard, teammate, opp1, opp2
-    PICKUP_CANDIDATES:      5,  // max pickup options scored in one pass
+    // Seq/Pickup net (per-suit pass, seq candidates only)
+    PICKUP_SEQ_SLOTS:      10,
+    PICKUP_RUNNER_SLOTS:    4,
+    PICKUP_CARD_GROUPS:     2,  // own hand (per-suit) + discard pile (per-suit)
+    PICKUP_CANDIDATES:      4,  // seq candidates only
 
-    // Meld net (per-suit, shared for appends and new melds)
+    // Seq/Meld net (per-suit pass, seq candidates only)
     MELD_SEQ_SLOTS:        10,
     MELD_RUNNER_SLOTS:      4,
-    MELD_CARD_GROUPS:       5,
-    MELD_CANDIDATES:        5,  // max meld/append options per suit pass
+    MELD_CARD_GROUPS:       2,  // own hand (per-suit) + discard pile (per-suit)
+    MELD_CANDIDATES:        4,  // seq candidates only
 
-    // Discard net (all-suit, no seq/runner/candidate context)
+    // Runner net (single pass, all-suit)
+    RUNNER_SEQ_SLOTS:      10,  // same context — runner may displace seq card
+    RUNNER_RUNNER_SLOTS:    2,  // max 2 runner melds on table (one per allowed rank)
+    RUNNER_CARD_GROUPS:     2,  // own hand (all-suit) + discard pile (all-suit)
+    RUNNER_CANDIDATES:      2,  // runner candidates only (natural + wild variant)
+
+    // Discard net (all-suit, full opponent awareness)
     DISCARD_CARD_GROUPS:    5,
-    DISCARD_CLASSES:       53,  // one output per possible discard (52 card types + 1 joker)
+    DISCARD_CLASSES:       53,
 };
 
 // Compute weights count for one network given its architecture.
 // Hidden layer sizes are linearly interpolated from inputSize down to outputs.
 // Returns { layerSizes, dnaSize } and stores them on AI_CONFIG under the given key.
-function nn_size(key, seqSlots, runnerSlots, candidateSlots, cardGroups, perSuit, outputs, hiddenWidth) {
+function nn_size(key, seqSlots, runnerSlots, candidateSlots, candFeatures, cardGroups, perSuit, outputs, hiddenWidth) {
     const C = AI_CONFIG;
     const width = hiddenWidth ?? C.HIDDEN_WIDTH;
     const inputSize = seqSlots * C.SEQ_FEATURES
                     + runnerSlots * C.RUNNER_FEATURES
-                    + candidateSlots * C.CANDIDATE_FEATURES
+                    + candidateSlots * candFeatures
                     + cardGroups * (perSuit ? C.CARDS_FEATURES_SUIT : C.CARDS_FEATURES_ALL)
                     + C.SCALARS_FEATURES;
     const layerSizes = [inputSize];
-    for (let l = 1; l <= C.HIDDEN_LAYERS; l++)
-        layerSizes.push(width);
+    for (let l = 1; l <= C.HIDDEN_LAYERS; l++) layerSizes.push(width);
     layerSizes.push(outputs);
     let dnaSize = 0;
     for (let l = 0; l < layerSizes.length - 1; l++)
@@ -74,12 +79,14 @@ function nn_size(key, seqSlots, runnerSlots, candidateSlots, cardGroups, perSuit
     return dnaSize;
 }
 
-AI_CONFIG.MAX_PICKUP        = AI_CONFIG.PICKUP_CANDIDATES;
-AI_CONFIG.MAX_MELD          = AI_CONFIG.MELD_CANDIDATES;
-AI_CONFIG.DNA_PICKUP        = nn_size('PICKUP',  AI_CONFIG.PICKUP_SEQ_SLOTS,  AI_CONFIG.PICKUP_RUNNER_SLOTS,  AI_CONFIG.PICKUP_CANDIDATES,  AI_CONFIG.PICKUP_CARD_GROUPS,  true,  AI_CONFIG.PICKUP_CANDIDATES);
-AI_CONFIG.DNA_MELD          = nn_size('MELD',    AI_CONFIG.MELD_SEQ_SLOTS,    AI_CONFIG.MELD_RUNNER_SLOTS,    AI_CONFIG.MELD_CANDIDATES,    AI_CONFIG.MELD_CARD_GROUPS,    true,  AI_CONFIG.MELD_CANDIDATES);
-AI_CONFIG.DNA_DISCARD       = nn_size('DISCARD', 0,                           0,                              0,                            AI_CONFIG.DISCARD_CARD_GROUPS, false, AI_CONFIG.DISCARD_CLASSES,    AI_CONFIG.HIDDEN_WIDTH_DISCARD);
-AI_CONFIG.TOTAL_DNA_SIZE    = AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD + AI_CONFIG.DNA_DISCARD;
+AI_CONFIG.MAX_PICKUP     = AI_CONFIG.PICKUP_CANDIDATES;
+AI_CONFIG.MAX_MELD       = AI_CONFIG.MELD_CANDIDATES;
+AI_CONFIG.MAX_RUNNER     = AI_CONFIG.RUNNER_CANDIDATES;
+AI_CONFIG.DNA_PICKUP     = nn_size('PICKUP',  AI_CONFIG.PICKUP_SEQ_SLOTS,  AI_CONFIG.PICKUP_RUNNER_SLOTS,  AI_CONFIG.PICKUP_CANDIDATES,  AI_CONFIG.SEQ_CANDIDATE_FEATURES, AI_CONFIG.PICKUP_CARD_GROUPS,  true,  AI_CONFIG.PICKUP_CANDIDATES);
+AI_CONFIG.DNA_MELD       = nn_size('MELD',    AI_CONFIG.MELD_SEQ_SLOTS,    AI_CONFIG.MELD_RUNNER_SLOTS,    AI_CONFIG.MELD_CANDIDATES,    AI_CONFIG.SEQ_CANDIDATE_FEATURES, AI_CONFIG.MELD_CARD_GROUPS,    true,  AI_CONFIG.MELD_CANDIDATES);
+AI_CONFIG.DNA_RUNNER     = nn_size('RUNNER',  AI_CONFIG.RUNNER_SEQ_SLOTS,  AI_CONFIG.RUNNER_RUNNER_SLOTS,  AI_CONFIG.RUNNER_CANDIDATES,  AI_CONFIG.RUN_CANDIDATE_FEATURES, AI_CONFIG.RUNNER_CARD_GROUPS,  false, AI_CONFIG.RUNNER_CANDIDATES,  AI_CONFIG.HIDDEN_WIDTH_RUNNER);
+AI_CONFIG.DNA_DISCARD    = nn_size('DISCARD', 0,                           0,                              0,                            0,                                AI_CONFIG.DISCARD_CARD_GROUPS, false, AI_CONFIG.DISCARD_CLASSES,    AI_CONFIG.HIDDEN_WIDTH_DISCARD);
+AI_CONFIG.TOTAL_DNA_SIZE = AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD + AI_CONFIG.DNA_RUNNER + AI_CONFIG.DNA_DISCARD;
 
 export function sortCards(cards) {
   const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
@@ -663,26 +670,28 @@ function encodeCardGroup(inp, off, h2, suit) {
     }
 }
 
-// Encode candidate meld into 18 floats at inp[off]: [0]=isRunner, [1..16]=meld data, [17]=appendIdx/5
-// seq:    [1..14]=rank slots 0/1 (m[0]..m[13]), [15]=foreignWild 0/1, [16]=nat2Wild 0/1
-// runner: [1]=rank/13, [2..5]=suit counts/2, [6]=wildSuit/5
-export function encodeCandidateMeld(inp, off, parsedMeld, appendIdx) {
-    inp.fill(0, off, off + 18);
-    inp[off + 17] = appendIdx / 5;
-    if (!parsedMeld) return;
-    if (isSeq(parsedMeld)) {
-        // seq: direct copy m[0..13] as 0/1, then wild flags
-        for (let i = 0; i < 14; i++) inp[off + 1 + i] = parsedMeld[i] ? 1 : 0;
-        inp[off + 15] = parsedMeld[14] !== 0 ? 1 : 0;
-        inp[off + 16] = parsedMeld[15] !== 0 ? 1 : 0;
+// Encode seq candidate into SEQ_CANDIDATE_FEATURES=17 floats at inp[off]:
+// [0..13]=rank slots 0/1, [14]=foreignWild 0/1, [15]=nat2Wild 0/1, [16]=appendIdx/5
+// Encode runner candidate into RUN_CANDIDATE_FEATURES=8 floats at inp[off]:
+// [0]=rank/13, [1..4]=suit counts/2, [5]=wildSuit/5, [6]=appendIdx/5, [7]=0 (pad)
+export function encodeCandidateMeld(inp, off, parsedMeld, appendIdx, isRunnerNet) {
+    if (isRunnerNet) {
+        inp.fill(0, off, off + 8);
+        if (!parsedMeld) return;
+        inp[off]     = parsedMeld[0] / 13;
+        inp[off + 1] = parsedMeld[1] / 2;
+        inp[off + 2] = parsedMeld[2] / 2;
+        inp[off + 3] = parsedMeld[3] / 2;
+        inp[off + 4] = parsedMeld[4] / 2;
+        inp[off + 5] = parsedMeld[5] / 5;
+        inp[off + 6] = appendIdx / 5;
     } else {
-        inp[off] = 1;
-        inp[off + 1] = parsedMeld[0] / 13;
-        inp[off + 2] = parsedMeld[1] / 2;
-        inp[off + 3] = parsedMeld[2] / 2;
-        inp[off + 4] = parsedMeld[3] / 2;
-        inp[off + 5] = parsedMeld[4] / 2;
-        inp[off + 6] = parsedMeld[5] / 5;
+        inp.fill(0, off, off + 17);
+        if (!parsedMeld) return;
+        for (let i = 0; i < 14; i++) inp[off + i] = parsedMeld[i] ? 1 : 0;
+        inp[off + 14] = parsedMeld[14] !== 0 ? 1 : 0;
+        inp[off + 15] = parsedMeld[15] !== 0 ? 1 : 0;
+        inp[off + 16] = appendIdx / 5;
     }
 }
 
@@ -751,14 +760,12 @@ function forwardPassSegmented(segments, weights, layerSizes) {
     return cur;
 }
 
-// Module-level zero sentinels — shared across all calls
-const _zeroSeg18 = { data: new Float32Array(18), offset: 0, length: 18 };
-const _zeroSeg53 = { data: new Float32Array(53), offset: 0, length: 53 };
+// Pre-allocated candidate buffer sized for max of all nets
+const _candBufSeq = new Float32Array(Math.max(AI_CONFIG.PICKUP_CANDIDATES, AI_CONFIG.MELD_CANDIDATES) * AI_CONFIG.SEQ_CANDIDATE_FEATURES);
+const _candBufRun = new Float32Array(AI_CONFIG.RUNNER_CANDIDATES * AI_CONFIG.RUN_CANDIDATE_FEATURES);
 const _emptySeq16 = new Float32Array(16);
 const _emptyRun6  = new Float32Array(6);
 
-// Build the segment list for one suit pass of the pickup/meld network.
-// Returns an array of segments that together form the full input vector.
 function buildSegments(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
                         layerKey, candidates, suit, meldIdx) {
     const _t0 = performance.now();
@@ -766,68 +773,87 @@ function buildSegments(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
     const seqSlots    = C[layerKey + '_SEQ_SLOTS'];
     const runnerSlots = C[layerKey + '_RUNNER_SLOTS'];
     const candSlots   = C[layerKey + '_CANDIDATES'];
+    const candFeats   = C.SEQ_CANDIDATE_FEATURES;
     const segs = [];
-
-    const myIdx  = meldIdx.my;
-    const oppIdx = meldIdx.opp;
+    const myIdx = meldIdx.my, oppIdx = meldIdx.opp;
     const mySlots = seqSlots >> 1, oppSlots = seqSlots - mySlots;
 
-    // Seq melds — point directly into the meld array (16 floats, matches SEQ_FEATURES exactly)
-    const pushSeqMeld = (entry) => {
-        const m = entry ? entry.meld : null;
-        segs.push(m ? { data: m, offset: 0, length: 16 } : { data: _emptySeq16, offset: 0, length: 16 });
-    };
-    const mySeq  = myIdx.seqBySuit[suit];
-    const oppSeq = oppIdx.seqBySuit[suit];
-    for (let i = 0; i < mySlots;  i++) pushSeqMeld(mySeq[i]  || null);
-    for (let i = 0; i < oppSlots; i++) pushSeqMeld(oppSeq[i] || null);
+    const mySeq = myIdx.seqBySuit[suit], oppSeq = oppIdx.seqBySuit[suit];
+    for (let i = 0; i < mySlots;  i++) segs.push((mySeq[i]  ? { data: mySeq[i].meld,  offset: 0, length: 16 } : { data: _emptySeq16, offset: 0, length: 16 }));
+    for (let i = 0; i < oppSlots; i++) segs.push((oppSeq[i] ? { data: oppSeq[i].meld, offset: 0, length: 16 } : { data: _emptySeq16, offset: 0, length: 16 }));
 
-    // Runner melds — point directly into the meld array (6 floats, matches RUNNER_FEATURES exactly)
-    const pushRunnerMeld = (m) => {
-        segs.push(m ? { data: m, offset: 0, length: 6 } : { data: _emptyRun6, offset: 0, length: 6 });
-    };
     const myRSlots = runnerSlots >> 1, oppRSlots = runnerSlots - myRSlots;
-    for (let i = 0; i < myRSlots;  i++) pushRunnerMeld(myIdx.runners[i]  || null);
-    for (let i = 0; i < oppRSlots; i++) pushRunnerMeld(oppIdx.runners[i] || null);
+    for (let i = 0; i < myRSlots;  i++) segs.push((myIdx.runners[i]  ? { data: myIdx.runners[i],  offset: 0, length: 6 } : { data: _emptyRun6, offset: 0, length: 6 }));
+    for (let i = 0; i < oppRSlots; i++) segs.push((oppIdx.runners[i] ? { data: oppIdx.runners[i], offset: 0, length: 6 } : { data: _emptyRun6, offset: 0, length: 6 }));
 
-    // Candidates — encode all into one flat buffer
-    const candBuf = new Float32Array(candSlots * 18);
+    const candLen = candSlots * candFeats;
+    _candBufSeq.fill(0, 0, candLen);
     for (let i = 0; i < candSlots; i++) {
         const cand = candidates && candidates[i];
-        encodeCandidateMeld(candBuf, i * 18, cand ? cand.parsedMeld : null, cand ? cand.appendIdx : 0);
+        if (cand) encodeCandidateMeld(_candBufSeq, i * candFeats, cand.parsedMeld, cand.appendIdx, false);
     }
-    segs.push({ data: candBuf, offset: 0, length: candSlots * 18 });
+    segs.push({ data: _candBufSeq, offset: 0, length: candLen });
 
-    // Card groups — direct subarray slice into flat cards2 buffer (zero copy)
-    const partnerId2 = partnerId || p;
-    const pushCardGroup = (flat) => {
-        if (!flat) { segs.push(_zeroSeg18); return; }
-        segs.push({ data: flat, offset: (suit - 1) * CARDS_SUIT_STRIDE, length: 18 });
-    };
-    pushCardGroup(G.cards2[p]);
-    pushCardGroup(G.discardPile2);
-    pushCardGroup(G.knownCards2[partnerId2]);
-    pushCardGroup(G.knownCards2[opp1Id]);
-    pushCardGroup(opp2Id ? G.knownCards2[opp2Id] : null);
+    // Card groups: own hand (per-suit) + discard pile (per-suit) only
+    const suitOff = (suit - 1) * CARDS_SUIT_STRIDE;
+    const pushCard = (flat) => segs.push(flat ? { data: flat, offset: suitOff, length: 18 } : { data: _emptySeq16, offset: 0, length: 18 });
+    pushCard(G.cards2[p]);
+    pushCard(G.discardPile2);
 
-    // Scalars
     const sc = new Float32Array(11);
     const hs = pid => pid !== null ? (G.handSizes[pid] ?? 0) : 0;
-    const hasCleanIdx = idx => idx.runners.some(m => isMeldClean(m)) ||
-        [1,2,3,4].some(s => idx.seqBySuit[s].some(e => isMeldClean(e.meld)));
-    sc[0] = hs(p)          / 22;
-    sc[1] = hs(opp1Id)     / 22;
-    sc[2] = hs(partnerId)  / 22;
-    sc[3] = hs(opp2Id)     / 22;
-    sc[4] = G.deck.length  / 104;
-    sc[5] = G.discardPile.length / 104;
-    sc[6] = G.teamMortos[myTeam]  ? 1 : 0;
-    sc[7] = G.teamMortos[oppTeam] ? 1 : 0;
-    sc[8] = G.pots.length / 2;
-    sc[9] = hasCleanIdx(myIdx)  ? 1 : 0;
-    sc[10]= hasCleanIdx(oppIdx) ? 1 : 0;
+    const hasCleanIdx = idx => idx.runners.some(m => isMeldClean(m)) || [1,2,3,4].some(s => idx.seqBySuit[s].some(e => isMeldClean(e.meld)));
+    sc[0] = hs(p)/22; sc[1] = hs(opp1Id)/22; sc[2] = hs(partnerId)/22; sc[3] = hs(opp2Id)/22;
+    sc[4] = G.deck.length/104; sc[5] = G.discardPile.length/104;
+    sc[6] = G.teamMortos[myTeam] ? 1 : 0; sc[7] = G.teamMortos[oppTeam] ? 1 : 0;
+    sc[8] = G.pots.length/2;
+    sc[9] = hasCleanIdx(myIdx) ? 1 : 0; sc[10] = hasCleanIdx(oppIdx) ? 1 : 0;
     segs.push({ data: sc, offset: 0, length: 11 });
     _timings.buildSegments += performance.now() - _t0;
+    return segs;
+}
+
+function buildRunnerSegments(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
+                              candidates, meldIdx) {
+    const C = AI_CONFIG;
+    const candFeats = C.RUN_CANDIDATE_FEATURES;
+    const candSlots = C.RUNNER_CANDIDATES;
+    const segs = [];
+    const myIdx = meldIdx.my, oppIdx = meldIdx.opp;
+    const mySeqSlots = C.RUNNER_SEQ_SLOTS >> 1, oppSeqSlots = C.RUNNER_SEQ_SLOTS - mySeqSlots;
+    const myRSlots   = C.RUNNER_RUNNER_SLOTS >> 1, oppRSlots = C.RUNNER_RUNNER_SLOTS - myRSlots;
+
+    // Seq melds across all suits (flatten all 4 suits into slots)
+    const myAllSeq  = [1,2,3,4].flatMap(s => myIdx.seqBySuit[s]);
+    const oppAllSeq = [1,2,3,4].flatMap(s => oppIdx.seqBySuit[s]);
+    for (let i = 0; i < mySeqSlots;  i++) segs.push(myAllSeq[i]  ? { data: myAllSeq[i].meld,  offset: 0, length: 16 } : { data: _emptySeq16, offset: 0, length: 16 });
+    for (let i = 0; i < oppSeqSlots; i++) segs.push(oppAllSeq[i] ? { data: oppAllSeq[i].meld, offset: 0, length: 16 } : { data: _emptySeq16, offset: 0, length: 16 });
+
+    for (let i = 0; i < myRSlots;  i++) segs.push(myIdx.runners[i]  ? { data: myIdx.runners[i],  offset: 0, length: 6 } : { data: _emptyRun6, offset: 0, length: 6 });
+    for (let i = 0; i < oppRSlots; i++) segs.push(oppIdx.runners[i] ? { data: oppIdx.runners[i], offset: 0, length: 6 } : { data: _emptyRun6, offset: 0, length: 6 });
+
+    const candLen = candSlots * candFeats;
+    _candBufRun.fill(0, 0, candLen);
+    for (let i = 0; i < candSlots; i++) {
+        const cand = candidates && candidates[i];
+        if (cand) encodeCandidateMeld(_candBufRun, i * candFeats, cand.parsedMeld, cand.appendIdx, true);
+    }
+    segs.push({ data: _candBufRun, offset: 0, length: candLen });
+
+    // Card groups: own hand (all-suit) + discard pile (all-suit)
+    const pushAll = (flat) => segs.push(flat ? { data: flat, offset: CARDS_ALL_OFF, length: 53 } : { data: new Float32Array(53), offset: 0, length: 53 });
+    pushAll(G.cards2[p]);
+    pushAll(G.discardPile2);
+
+    const sc = new Float32Array(11);
+    const hs = pid => pid !== null ? (G.handSizes[pid] ?? 0) : 0;
+    const hasCleanIdx = idx => idx.runners.some(m => isMeldClean(m)) || [1,2,3,4].some(s => idx.seqBySuit[s].some(e => isMeldClean(e.meld)));
+    sc[0] = hs(p)/22; sc[1] = hs(opp1Id)/22; sc[2] = hs(partnerId)/22; sc[3] = hs(opp2Id)/22;
+    sc[4] = G.deck.length/104; sc[5] = G.discardPile.length/104;
+    sc[6] = G.teamMortos[myTeam] ? 1 : 0; sc[7] = G.teamMortos[oppTeam] ? 1 : 0;
+    sc[8] = G.pots.length/2;
+    sc[9] = hasCleanIdx(myIdx) ? 1 : 0; sc[10] = hasCleanIdx(oppIdx) ? 1 : 0;
+    segs.push({ data: sc, offset: 0, length: 11 });
     return segs;
 }
 
@@ -911,28 +937,60 @@ export function scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp
     const layerSizes = AI_CONFIG[layerKey + '_LAYER_SIZES'];
     const totals = new Float32Array(candidates.length);
     const idx = meldIdx || { my: _meldsByType(G, myTeam), opp: _meldsByType(G, oppTeam) };
+
+    // Pre-classify runners vs seq candidates
+    const runnerIndices = [];
+    const seqBySuit = { 1: [], 2: [], 3: [], 4: [] };
+    for (let i = 0; i < candidates.length; i++) {
+        const cand = candidates[i];
+        const isRunner = cand.parsedMeld?.length === 6;
+        if (isRunner || !cand.parsedMeld) { runnerIndices.push(i); continue; }
+        const s = seqSuit(cand.cardCounts ? Object.keys(cand.cardCounts).map(k => +k) : []);
+        if (s >= 1 && s <= 4) seqBySuit[s].push(i); else runnerIndices.push(i);
+    }
+    const suitsWithSeq = suits.filter(s => seqBySuit[s].length > 0);
+    const runnerSuit = suitsWithSeq.length > 0 ? suitsWithSeq[0] : suits[0];
+
     for (const suit of suits) {
         const suitSeqMelds = idx.my.seqBySuit[suit];
         const suitCands = [];
         const suitIndices = [];
-        for (let i = 0; i < candidates.length && suitCands.length < maxSlots; i++) {
+        for (const i of seqBySuit[suit]) {
+            if (suitCands.length >= maxSlots) break;
             const cand = candidates[i];
-            const candSuit = cand.parsedMeld ? (cand.parsedMeld.length === 6 ? 0 : seqSuit(cand.cardCounts ? Object.keys(cand.cardCounts).map(k => +k) : [])) : suit;
-            if (candSuit !== 0 && candSuit !== suit) continue;
             let appendIdx = cand.appendIdx;
             if (cand.move === 'appendToMeld') {
                 const t = cand.args[0];
                 appendIdx = (t.type === 'seq' && t.suit === suit)
                     ? suitSeqMelds.findIndex(e => e.index === t.index) + 1 : 0;
             }
-            suitCands.push({ ...cand, appendIdx });
+            suitCands.push(appendIdx !== cand.appendIdx ? { ...cand, appendIdx } : cand);
             suitIndices.push(i);
+        }
+        if (suit === runnerSuit) {
+            for (const i of runnerIndices) {
+                if (suitCands.length >= maxSlots) break;
+                suitCands.push(candidates[i]);
+                suitIndices.push(i);
+            }
         }
         if (suitCands.length === 0) continue;
         const segs = buildSegments(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, layerKey, suitCands, suit, idx);
         const scores = forwardPassSegmented(segs, weights, layerSizes);
         for (let i = 0; i < suitCands.length; i++) totals[suitIndices[i]] += scores[i];
     }
+    return totals;
+}
+
+// Score runner candidates (all-suit, one pass).
+export function scoreRunnerCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
+                                       candidates, weights, meldIdx) {
+    if (_scoreAllCandidates) return _scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, weights, null, 'RUNNER', meldIdx);
+    const idx = meldIdx || { my: _meldsByType(G, myTeam), opp: _meldsByType(G, oppTeam) };
+    const totals = new Float32Array(candidates.length);
+    const segs = buildRunnerSegments(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, idx);
+    const scores = forwardPassSegmented(segs, weights, AI_CONFIG.RUNNER_LAYER_SIZES);
+    for (let i = 0; i < candidates.length; i++) totals[i] = scores[i];
     return totals;
 }
 
@@ -1229,6 +1287,7 @@ export function planTurn(G, p, DNA) {
     let doff = 0;
     const dnaPickup  = DNA.subarray(doff, doff += AI_CONFIG.DNA_PICKUP);
     const dnaMeld    = DNA.subarray(doff, doff += AI_CONFIG.DNA_MELD);
+    const dnaRunner  = DNA.subarray(doff, doff += AI_CONFIG.DNA_RUNNER);
     const dnaDiscard = DNA.subarray(doff);
 
     // ── Phase 1: Pickup ───────────────────────────────────────────────────────
@@ -1297,7 +1356,7 @@ export function planTurn(G, p, DNA) {
         }
     }
     let pickupMove;
-    if (pickupCands.length === 1) {
+    if (pickupCands.length === 1 || topDiscard === null) {
         pickupMove = pickupCands[0];
     } else {
         const n1 = Math.min(pickupCands.length, AI_CONFIG.MAX_PICKUP);
@@ -1321,18 +1380,24 @@ export function planTurn(G, p, DNA) {
     }
 
     // Score all appends + melds together (slicing to MAX_MELD per suit happens inside scoreAllCandidates)
-    const allMeldCands = [...appendCands, ...meldCands];
+    // Split candidates: seq → meld net, runners → runner net
+    const seqMeldCands    = allMeldCands.filter(c => !c.parsedMeld || c.parsedMeld.length !== 6);
+    const runnerMeldCands = allMeldCands.filter(c => c.parsedMeld?.length === 6);
     const planMoves = [];
     if (allMeldCands.length > 0) {
-        // Refresh meld index after pickup may have added melds
         turnMeldIdx.my  = _meldsByType(G, myTeam);
         turnMeldIdx.opp = _meldsByType(G, oppTeam);
         if (allMeldCands.length === 1) {
-            // Only one option — skip scoring, use it directly if score would be positive
             planMoves.push({ ...allMeldCands[0], score: 1 });
         } else {
-            const meldScores = scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, allMeldCands, dnaMeld, topDiscard, 'MELD', turnMeldIdx);
-            for (let i = 0; i < allMeldCands.length; i++) planMoves.push({ ...allMeldCands[i], score: meldScores[i] });
+            if (seqMeldCands.length > 0) {
+                const seqScores = scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, seqMeldCands, dnaMeld, topDiscard, 'MELD', turnMeldIdx);
+                for (let i = 0; i < seqMeldCands.length; i++) planMoves.push({ ...seqMeldCands[i], score: seqScores[i] });
+            }
+            if (runnerMeldCands.length > 0) {
+                const runScores = scoreRunnerCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, runnerMeldCands, dnaRunner, turnMeldIdx);
+                for (let i = 0; i < runnerMeldCands.length; i++) planMoves.push({ ...runnerMeldCands[i], score: runScores[i] });
+            }
             planMoves.sort((a, b) => b.score - a.score);
         }
     }
