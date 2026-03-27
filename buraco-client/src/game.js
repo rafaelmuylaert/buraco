@@ -940,20 +940,8 @@ export function planTurn(G, p, DNA) {
     const opp2Id    = numP === 4 ? ((pInt + 3) % numP).toString() : null;
     const topDiscard = G.discardPile.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
 
-    // If called mid-turn (hasDrawn already true), skip straight to discard
-    if (G.hasDrawn) {
-        if (G.handSizes[p] === 0) { G.hasDrawn = false; return []; }
-        // Pick any card to discard from cards2 all-suit section
-        for (let i = 0; i < 53; i++) {
-            const cnt = G.cards2[p][CARDS_ALL_OFF + i] || 0;
-            if (cnt > 0) {
-                const card = i === 52 ? 54 : i;
-                moveDiscardCard(G, p, card, true);
-                return [{ move: 'discardCard', args: [card] }];
-            }
-        }
-        G.hasDrawn = false; return [];
-    }
+    // If called mid-turn (hasDrawn already true), skip pickup phase only
+    if (G.hasDrawn && G.handSizes[p] === 0) { G.hasDrawn = false; return []; }
 
     let doff = 0;
     const dnaPickup  = DNA.subarray(doff, doff += AI_CONFIG.DNA_PICKUP);
@@ -1053,9 +1041,12 @@ export function planTurn(G, p, DNA) {
         pickupMove = cands1[bestPickup];
     }
 
+    const _wasDrawn = G.hasDrawn;
     // ── Execute pickup so phase 2 sees the real post-pickup hand ───────────────
-    if (pickupMove.move === 'drawCard') moveDrawCard(G, p);
-    else if (pickupMove.move === 'pickUpDiscard') movePickUpDiscard(G, p, pickupMove.args[0] || [], pickupMove.args[1] || { type: 'new' });
+    if (!G.hasDrawn) {
+        if (pickupMove.move === 'drawCard') moveDrawCard(G, p);
+        else if (pickupMove.move === 'pickUpDiscard') movePickUpDiscard(G, p, pickupMove.args[0] || [], pickupMove.args[1] || { type: 'new' });
+    }
 
     // ── Phase 2: Melds & Appends ──────────────────────────────────────────────
     const postFlat = G.cards2[p];
@@ -1129,7 +1120,8 @@ export function planTurn(G, p, DNA) {
         } else { G.hasDrawn = false; }
     } else { G.hasDrawn = false; }
 
-    return [pickupMove, ...selectedPlays, ...(discardMove ? [discardMove] : [])];
+    const pickupMoves = _wasDrawn ? [] : [pickupMove];
+    return [...pickupMoves, ...selectedPlays, ...(discardMove ? [discardMove] : [])];
 }
 
 export const BuracoGame = {
