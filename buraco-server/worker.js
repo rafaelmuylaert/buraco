@@ -1,4 +1,4 @@
-﻿import { workerData, parentPort } from 'worker_threads';
+import { workerData, parentPort } from 'worker_threads';
 import {
     BuracoGame, AI_CONFIG, CARDS_ALL_OFF,
     moveDrawCard, moveDiscardCard, moveMeld, movePickUpDiscard,
@@ -8,7 +8,7 @@ import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers,
 
 await initWasm();
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// �"?�"? Helpers �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
 
 function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
@@ -29,12 +29,12 @@ function prepareGenome(raw) {
     return dna;
 }
 
-// â”€â”€ Match runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// �"?�"? Match runner �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
 function runMatch(genomes, rules, fixedDeck) {
     const numPlayers = rules.numPlayers || 4;
     const fakeRandom = { Shuffle: arr => fixedDeck ? [...fixedDeck] : shuffle(arr) };
 
-    // Build local state S â€” same shape as G but we own it entirely
+    // Build local state S �?" same shape as G but we own it entirely
     const S = BuracoGame.setup({ random: fakeRandom, ctx: { numPlayers } }, { ...rules, numPlayers });
         // Point cards2/knownCards2/discardPile2 at WASM memory for zero-copy forward pass
     if (isWasmReady()) {
@@ -94,11 +94,11 @@ function runMatch(genomes, rules, fixedDeck) {
                         if (m.moveType === 0) { moveDrawCard(S, p); pickupDone = true; }
                         else if (m.moveType === 1) { if (movePickUpDiscard(S, p, m.cardCounts, {type: Object.keys(m.cardCounts).length > 0 ? 'new' : 'new'})) pickupDone = true; }
                         else if (m.moveType === 5) { S.isExhausted = true; pickupDone = true; }
-                    } else if (m.phase === 1) { // meld â€” fire all, ignore failures
+                    } else if (m.phase === 1) { // meld �?" fire all, ignore failures
                         if (m.moveType === 2) moveMeld(S, p, m.cardCounts);
                         else if (m.moveType === 3) moveMeld(S, p, m.cardCounts,
                             {type: m.targetType===1?'seq':'runner', suit: m.targetSuit, index: m.targetSlot});
-                    } else if (m.phase === 2) { // discard â€” try until success
+                    } else if (m.phase === 2) { // discard �?" try until success
                         if (moveDiscardCard(S, p, m.discardCard, true)) break;
                     }
                 }
@@ -144,7 +144,7 @@ function runMatch(genomes, rules, fixedDeck) {
 
 let _diagCount = 0;
 
-// â”€â”€ Job processing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// �"?�"? Job processing �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
 
 const _baseDeck = [];
 for (let i = 0; i < 52; i++) _baseDeck.push(i);

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
@@ -8,8 +8,8 @@ class ErrorBoundary extends React.Component {
       return (
         <div style={{ color: 'white', padding: '40px', backgroundColor: '#1b4332', minHeight: '100vh', fontFamily: 'sans-serif' }}>
           <h1 style={{ color: '#ffd700' }}>Fim de Jogo</h1>
-          <p style={{ color: '#ccc' }}>A partida terminou. Por favor, volte ao salÃ£o.</p>
-          <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>â¬… Voltar ao SalÃ£o</button>
+          <p style={{ color: '#ccc' }}>A partida terminou. Por favor, volte ao salão.</p>
+          <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>�. Voltar ao Salão</button>
         </div>
       );
     }
@@ -18,11 +18,11 @@ class ErrorBoundary extends React.Component {
 }
 
 // Inlined dependencies from game.js to resolve preview environment import errors
-const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
+const suitValues = { '?': 1, '?': 2, '?': 3, '?': 4, '?': 5 };
 const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
 // Seq format: [A-low, A-high, nat2, 3, 4..K, foreignWildSuit, nat2-wild-count]  (16 elements, indices 0-15)
-// Runner format: [rank, ♠cnt, ♥cnt, ♦cnt, ♣cnt, wildSuit]  (6 elements)
-const SEQ_POINTS_NEW = [15, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10]; // indices 0-13 â†’ A-low,A-high,nat2,3..K
+// Runner format: [rank, ?cnt, ?cnt, ?cnt, ?cnt, wildSuit]  (6 elements)
+const SEQ_POINTS_NEW = [15, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10]; // indices 0-13 �?' A-low,A-high,nat2,3..K
 
 function sortCards(cards) {
   const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
@@ -79,7 +79,7 @@ function calculateMeldPoints(meld, rules) {
     return pts;
 }
 
-const getSuitChar = s => ['♠', '♥', '♦', '♣', '★'][s - 1];
+const getSuitChar = s => ['?', '?', '?', '?', '?'][s - 1];
 const getRankChar = r => r === 1 ? 'A' : r === 11 ? 'J' : r === 12 ? 'Q' : r === 13 ? 'K' : r === 14 ? 'A' : r.toString();
 
 function intToCardObj(c) {
@@ -89,7 +89,7 @@ function intToCardObj(c) {
 }
 
 // Seq format: [A-low, A-high, nat2, 3..K, foreignWildSuit, nat2-wild-count] (16 elements)
-// Runner format: [rank, ♠cnt, ♥cnt, ♦cnt, ♣cnt, wildSuit] (6 elements)
+// Runner format: [rank, ?cnt, ?cnt, ?cnt, ?cnt, wildSuit] (6 elements)
 function meldToCards(m, suit) {
     let cards = [];
     if (m.length !== 6) { // Sequence
@@ -136,7 +136,7 @@ function meldToCards(m, suit) {
                 if (runMax === 13 || m[1]) cards.unshift(wc); else cards.push(wc);
             }
         }
-    } else { // Runner: [rank, ♠cnt, ♥cnt, ♦cnt, ♣cnt, wildSuit]
+    } else { // Runner: [rank, ?cnt, ?cnt, ?cnt, ?cnt, wildSuit]
         const rank = m[0], wildSuit = m[5];
         for (let s = 1; s <= 4; s++)
             for (let i = 0; i < m[s]; i++)
@@ -305,22 +305,22 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
             <div style={{ background: 'rgba(0,0,0,0.5)', padding: '16px', borderRadius: '12px', border: '2px solid #4da6ff', flex: '1', minWidth: '200px' }}>
               <h3 style={{ textAlign: 'center', color: '#4da6ff', margin: '0 0 12px 0' }}>{team0Names || 'Equipe 0'}</h3>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', fontSize: '0.9em' }}><span>Pontos na Mesa:</span><span>{s0.table}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>DeduÃ§Ã£o (MÃ£o):</span><span>{s0.hand}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>Dedução (Mão):</span><span>{s0.hand}</span></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>Multa do Morto:</span><span>{s0.mortoPenalty}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ffd700', fontSize: '0.9em' }}><span>BÃ´nus:</span><span>{s0.baterBonus}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ffd700', fontSize: '0.9em' }}><span>Bônus:</span><span>{s0.baterBonus}</span></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', fontSize: '1.2em', fontWeight: 'bold' }}><span>Total:</span><span>{s0.total}</span></div>
             </div>
             <div style={{ background: 'rgba(0,0,0,0.5)', padding: '16px', borderRadius: '12px', border: '2px solid #ff4d4d', flex: '1', minWidth: '200px' }}>
               <h3 style={{ textAlign: 'center', color: '#ff4d4d', margin: '0 0 12px 0' }}>{team1Names || 'Equipe 1'}</h3>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', fontSize: '0.9em' }}><span>Pontos na Mesa:</span><span>{s1.table}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>DeduÃ§Ã£o (MÃ£o):</span><span>{s1.hand}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>Dedução (Mão):</span><span>{s1.hand}</span></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>Multa do Morto:</span><span>{s1.mortoPenalty}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ffd700', fontSize: '0.9em' }}><span>BÃ´nus:</span><span>{s1.baterBonus}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ffd700', fontSize: '0.9em' }}><span>Bônus:</span><span>{s1.baterBonus}</span></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', fontSize: '1.2em', fontWeight: 'bold' }}><span>Total:</span><span>{s1.total}</span></div>
             </div>
             {tournamentStandings && (
               <div style={{ background: '#222', padding: '16px', borderRadius: '12px', border: '2px solid #ffd700', minWidth: '220px' }}>
-                <h3 style={{ textAlign: 'center', color: '#ffd700', margin: '0 0 12px 0' }}>ðŸ† ClassificaÃ§Ã£o</h3>
+                <h3 style={{ textAlign: 'center', color: '#ffd700', margin: '0 0 12px 0' }}>�Y�? Classificação</h3>
                 <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '0.85em' }}>
                   <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Jogador</th><th>Pts</th><th>V-E-D</th></tr></thead>
                   <tbody>{tournamentStandings.map(([pName, st]) => {
@@ -336,10 +336,10 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
             )}
           </div>
           <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
-            <button onClick={handleReturnLobby} style={{ padding: '12px 24px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer' }}>Voltar ao SalÃ£o</button>
+            <button onClick={handleReturnLobby} style={{ padding: '12px 24px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer' }}>Voltar ao Salão</button>
             {showNextButton && (
               <button onClick={handleNextMatch} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 12px rgba(77,166,255,0.6)' }}>
-                {isTournament ? "PrÃ³xima Mesa âž¡ï¸" : "Jogar Novamente ðŸŽ®"}
+                {isTournament ? "Próxima Mesa �z�️" : "Jogar Novamente �YZ�"}
               </button>
             )}
           </div>
@@ -353,8 +353,8 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
     return (
       <div style={{ color: 'white', padding: '40px', backgroundColor: '#1b4332', minHeight: '100vh', fontFamily: 'sans-serif' }}>
         <h1 style={{ color: '#ffd700' }}>Fim de Jogo</h1>
-        <p style={{ color: '#ccc' }}>A partida terminou. Por favor, volte ao salÃ£o.</p>
-        <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>â¬… Voltar ao SalÃ£o</button>
+        <p style={{ color: '#ccc' }}>A partida terminou. Por favor, volte ao salão.</p>
+        <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>�. Voltar ao Salão</button>
       </div>
     );
   }
@@ -383,7 +383,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
 
   const sortedHandObj = sortCards(handCardObjs);
 
-  // lastDrawnCard: int or array of ints â€” track by card type for highlighting
+  // lastDrawnCard: int or array of ints �?" track by card type for highlighting
   const newlyDrawnTypes = React.useMemo(() => {
     if (ctx.currentPlayer !== playerID || G.lastDrawnCard == null) return new Set();
     const drawn = Array.isArray(G.lastDrawnCard) ? G.lastDrawnCard : [G.lastDrawnCard];
@@ -455,7 +455,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
     });
   };
 
-  // selectedCards is already a {cardType: count} map â€” use it directly as move arg
+  // selectedCards is already a {cardType: count} map �?" use it directly as move arg
   const selectedCardIds = () => ({ ...selectedCards });
   const selectedCount = Object.values(selectedCards).reduce((a, b) => a + b, 0);
 
@@ -535,7 +535,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       <div style={{ background: isMyTeam ? 'rgba(77, 166, 255, 0.1)' : 'rgba(255, 77, 77, 0.1)', padding: '15px', borderRadius: '10px', minHeight: '120px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <h3 style={{ margin: 0, color: isMyTeam ? '#4da6ff' : '#ff4d4d' }}>{title}</h3>
-          <span style={{ background: 'rgba(0,0,0,0.5)', padding: '5px 10px', borderRadius: '20px', fontWeight: 'bold', color: '#ffd700', flexShrink: 0, whiteSpace: 'nowrap', fontSize: '0.85em' }}>â­ {calcTeamTablePoints(teamId)} pts</span>
+          <span style={{ background: 'rgba(0,0,0,0.5)', padding: '5px 10px', borderRadius: '20px', fontWeight: 'bold', color: '#ffd700', flexShrink: 0, whiteSpace: 'nowrap', fontSize: '0.85em' }}>⭐ {calcTeamTablePoints(teamId)} pts</span>
         </div>
         {/* Runners float left; sequences wrap and fill space beside AND below (issue 4) */}
         <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
@@ -574,7 +574,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: `${LEFT_COL_W}px`, minWidth: `${LEFT_COL_W}px`, flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
         
         <button onClick={() => window.location.reload()} style={{ width: '100%', background: '#4da6ff', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.8em', boxSizing: 'border-box' }}>
-          â¬… SalÃ£o
+          �. Salão
         </button>
 
         <div style={{ textAlign: 'center' }}>
@@ -619,13 +619,13 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
           <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Mortos</h4>
           {(() => {
             return [myTeam, oppTeam].map((team, ti) => {
-              const label = ti === 0 ? 'NÃ³s' : 'Eles';
+              const label = ti === 0 ? 'Nós' : 'Eles';
               const hasMorto = G.teamMortos[team];
               // Show icon only if this team's morto is still in the pot (not yet picked up)
               const mortoAvailable = !hasMorto && G.pots.length > ti;
               return (
                 <div key={team} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span style={{ fontSize: '0.7em', color: hasMorto ? '#ffd700' : '#888', fontWeight: 'bold' }}>{label}: {hasMorto ? 'âœ”ï¸' : 'âŒ'}</span>
+                  <span style={{ fontSize: '0.7em', color: hasMorto ? '#ffd700' : '#888', fontWeight: 'bold' }}>{label}: {hasMorto ? '�o"️' : '�O'}</span>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
                     {mortoAvailable && (
                       <div style={{
@@ -658,8 +658,8 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                 padding: '4px', borderRadius: '4px',
                 overflow: 'hidden', minWidth: 0
               }}>
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>{isTurn ? 'ðŸ‘‰ ' : ''}{name}</span>
-                <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.handSizes[p] ?? 0} ðŸƒ</span>
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>{isTurn ? '�Y'? ' : ''}{name}</span>
+                <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.handSizes[p] ?? 0} �Yf�</span>
               </div>
             );
           })}
@@ -689,7 +689,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                   <div style={{ fontSize: '0.7em', color: '#888', marginBottom: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}:</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
                     {knownCards.map((cId, i) => { const c = intToCardObj(cId); return (
-                      <div key={i} style={{ background: 'white', color: (c.suit==='♥'||c.suit==='♦')?'red':'black', padding: '1px 3px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold' }}>{c.rank}{c.suit}</div>
+                      <div key={i} style={{ background: 'white', color: (c.suit==='?'||c.suit==='?')?'red':'black', padding: '1px 3px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold' }}>{c.rank}{c.suit}</div>
                     ); })}
                   </div>
                 </div>
@@ -703,7 +703,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
         <div style={{ flexShrink: 0 }}>{renderTeamTable(oppTeam, "Mesa Deles", false)}</div>
         <div style={{ flexShrink: 0 }}>{renderTeamTable(myTeam, "Nossa Mesa", true)}</div>
         <div style={{ flexShrink: 0 }}>
-          <h2 style={{ fontSize: '1.2em', margin: '0 0 10px 0' }}>Minha MÃ£o {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
+          <h2 style={{ fontSize: '1.2em', margin: '0 0 10px 0' }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
             {sortedHandObj.map(card => {
               return <Card key={card.uid} card={card} isSelected={isCardSelected(card)} isNewlyDrawn={isNewlyDrawn(card)} onClick={() => toggleCardSelection(card.id, card.uid)} />;

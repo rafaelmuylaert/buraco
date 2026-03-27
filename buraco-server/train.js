@@ -225,9 +225,9 @@ export const TrainerService = {
 
         let population;
         if (seedDNA) {
-            console.log(`🧠 Resuming training for '${botName}'...`);
+            console.log(`�Y�� Resuming training for '${botName}'...`);
         } else {
-            console.log(`🧠 Starting fresh training for '${botName}'...`);
+            console.log(`�Y�� Starting fresh training for '${botName}'...`);
         }
 
         // Helper to load a saved island genome, falling back to seedDNA or random
@@ -364,7 +364,7 @@ export const TrainerService = {
                 const tournamentMs = Date.now() - tournamentStart;
                 const roundMs = Date.now() - roundStart;
                 const fmt = ms => ms < 60000 ? `${(ms/1000).toFixed(1)}s` : `${Math.floor(ms/60000)}m${((ms%60000)/1000).toFixed(0)}s`;
-                console.log(`[${botName}] 🏆 Champion: Island ${candidates[bestIdx].k} | Bench: ${benchmarkDiff ?? 'N/A'} | Tournament: ${fmt(tournamentMs)} | Round total: ${fmt(roundMs)}`);
+                console.log(`[${botName}] �Y�? Champion: Island ${candidates[bestIdx].k} | Bench: ${benchmarkDiff ?? 'N/A'} | Tournament: ${fmt(tournamentMs)} | Round total: ${fmt(roundMs)}`);
                 roundStartTimes.delete(roundGen);
             } finally {
                 championTournamentRunning = false;
@@ -412,7 +412,7 @@ export const TrainerService = {
                         console.log(`[${botName}] [TIMING/${SAVE_EVERY}gens] forwardPass=${t.forwardPass.toFixed(0)}ms copyToWasm=${(t._copyMs||0).toFixed(0)}ms evalCount=${(t._evalCount||0).toFixed(0)} getAllValidMelds=${t.getAllValidMelds.toFixed(0)}ms getAllValidAppends=${(t.getAllValidAppends||0).toFixed(0)}ms`);
 
                         // Fire champion tournament only when ALL islands have completed
-                        // this milestone round — i.e. every island's broadcastGen is a
+                        // this milestone round �?" i.e. every island's broadcastGen is a
                         // multiple of SAVE_EVERY strictly greater than the last tournament.
                         const minBroadcastGen = Math.min(...islandBroadcastGen);
                         const roundGen = Math.floor(minBroadcastGen / SAVE_EVERY) * SAVE_EVERY;
@@ -439,7 +439,7 @@ export const TrainerService = {
         } catch (error) {
             console.error(`[TRAINER] Error for ${botName}:`, error);
         } finally {
-            console.log(`✅ Training complete for '${botName}'!`);
+            console.log(`�o. Training complete for '${botName}'!`);
             if (_pool) { _pool.terminate(); _pool = null; }
             activeTrainings.delete(botName);
             stopFlags.delete(botName);
