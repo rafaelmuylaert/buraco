@@ -2,10 +2,9 @@ import { workerData, parentPort } from 'worker_threads';
 import {
     BuracoGame, AI_CONFIG, CARDS_ALL_OFF,
     moveDrawCard, moveDiscardCard,
-    checkGameOver, planTurn, getAndResetTimings,
-    setScoreFunctions
+    checkGameOver, planTurn, getAndResetTimings
 } from './game.js';
-import { initWasm, createMatchEngines, isWasmReady } from './wasm_loader.js';
+import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady } from './wasm_loader.js';
 
 await initWasm();
 
@@ -31,7 +30,7 @@ function prepareGenome(raw) {
 }
 
 // ── Match runner ───────────────────────────────────────────────────────
-async function runMatch(genomes, rules, fixedDeck) {
+function runMatch(genomes, rules, fixedDeck) {
     const numPlayers = rules.numPlayers || 4;
     const fakeRandom = { Shuffle: arr => fixedDeck ? [...fixedDeck] : shuffle(arr) };
 
@@ -46,12 +45,9 @@ async function runMatch(genomes, rules, fixedDeck) {
         return [k, prepareGenome(arr)];
     }));
 
-    // Create per-team WASM engines with DNA pre-loaded (async, resolved before game loop)
-    S.engines = null; // filled below if WASM available
+    // Load both teams' DNA into WASM once per match
     if (isWasmReady()) {
-        const dna0 = S.botGenomes['0'];
-        const dna1 = S.botGenomes['1'];
-        S.engines = await createMatchEngines(dna0, dna1);
+        loadMatchDNA(S.botGenomes['0'], S.botGenomes['1']);
     }
 
     const ctx = { currentPlayer: '0', numPlayers };
@@ -70,10 +66,10 @@ async function runMatch(genomes, rules, fixedDeck) {
             }
 
             const DNA = S.botGenomes[p];
-            // Install per-player WASM engine for this turn (zero weight copies)
-            if (S.engines) {
-                const eng = S.teams[p] === 'team0' ? S.engines.team0 : S.engines.team1;
-                setScoreFunctions(eng.scoreNet, eng.scoreDiscard);
+            // Point WASM at this player's team DNA (no copy — just offset switch)
+            if (isWasmReady()) {
+                const teamBase = S.teams[p] === 'team0' ? 0 : AI_CONFIG.TOTAL_DNA_SIZE;
+                setActiveTeam(teamBase);
             }
             let plan;
             try { plan = planTurn(S, p, DNA); } catch(e) {
@@ -144,8 +140,8 @@ async function processJob(matches, rules) {
     const results = [];
     for (const { dnaA, dnaB } of matches) {
         const pairDeck = rules.fixedDeck ? _fixedDeck : shuffle([..._baseDeck]);
-        const g1 = await runMatch({ '0': dnaA, '1': dnaB, '2': dnaA, '3': dnaB }, rules, pairDeck);
-        const g2 = await runMatch({ '0': dnaB, '1': dnaA, '2': dnaB, '3': dnaA }, rules, pairDeck);
+        const g1 = runMatch({ '0': dnaA, '1': dnaB, '2': dnaA, '3': dnaB }, rules, pairDeck);
+        const g2 = runMatch({ '0': dnaB, '1': dnaA, '2': dnaB, '3': dnaA }, rules, pairDeck);
         results.push([g1 - g2, g2 - g1, Math.abs(g1), Math.abs(g2)]);
     }
     return { results, timings: getAndResetTimings() };
