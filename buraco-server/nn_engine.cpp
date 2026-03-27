@@ -141,7 +141,6 @@ WASM_EXPORT void commit_weights(int offset, int num_layers,
 WASM_EXPORT float* get_inp(int i)        { return g_inp[i]; }
 WASM_EXPORT float* get_out()             { return g_out; }
 WASM_EXPORT int*   get_layer_sizes_buf() { return g_layer_sizes_buf; }
-WASM_EXPORT int    get_max_weights()     { return MAX_WEIGHTS; }
 
 WASM_EXPORT void configure(int num_layers, int weight_offset, int scale_base) {
     for (int i = 0; i < num_layers && i < MAX_LAYERS; i++)
