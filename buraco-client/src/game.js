@@ -516,6 +516,7 @@ export function moveMeld(G, p, cardCounts, target = null, addCards = 0, topDisca
     if (target === null) {
         if (isRunner) G.table[teamId][1].push(parsed);
         else { if (!G.table[teamId][0][suit]) G.table[teamId][0][suit] = []; G.table[teamId][0][suit].push(parsed); }
+        console.log('[moveMeld] stored meld suit=', suit, 'isRunner=', isRunner, 'teamId=', teamId, 'parsed=', JSON.stringify(parsed));
     } else {
         if (isRunner) G.table[teamId][1][target.index] = parsed;
         else G.table[teamId][0][suit][target.index] = parsed;
