@@ -12,7 +12,7 @@ let _mem  = null;
 let _vInp = null;
 let _vOut = null;
 let _vLayerSizesBuf = null;
-let _vWeightStage   = null;
+let _vWeights       = null;
 
 // Pre-allocated JS-side buffers
 const _emptySeq16 = new Float32Array(16);
@@ -26,25 +26,15 @@ const _totalsMeld    = new Float32Array(AI_CONFIG.MELD_CANDIDATES);
 const _suitCands     = new Array(Math.max(AI_CONFIG.PICKUP_CANDIDATES, AI_CONFIG.MELD_CANDIDATES));
 const _suitIndices   = new Int8Array(Math.max(AI_CONFIG.PICKUP_CANDIDATES, AI_CONFIG.MELD_CANDIDATES));
 
-// Per-net scale_base values — each net's layers occupy 2 scale slots per layer.
-// Pickup: layers=3 → 4 scale slots (2 per layer × 2 layers), starts at 0
-// Meld:   starts at 4, Runner: starts at 8, Discard: starts at 12
-const _NET_SCALE_BASE = {
-    PICKUP:  0,
-    MELD:    AI_CONFIG.PICKUP_LAYER_SIZES.length  * 2,
-    RUNNER:  (AI_CONFIG.PICKUP_LAYER_SIZES.length + AI_CONFIG.MELD_LAYER_SIZES.length) * 2,
-    DISCARD: (AI_CONFIG.PICKUP_LAYER_SIZES.length + AI_CONFIG.MELD_LAYER_SIZES.length + AI_CONFIG.RUNNER_LAYER_SIZES.length) * 2,
-};
-
 let _team0DnaOffset = 0;
 let _team1DnaOffset = 0;
 let _activeTeamBase = 0;
 
 function _refreshViews() {
     const buf = _mem.buffer;
-    _vWeightStage   = new Float32Array(buf, _ex.get_weight_stage(), AI_CONFIG.TOTAL_DNA_SIZE * 2);
-    _vInp           = new Float32Array(buf, _ex.get_inp(0),           2048);
-    _vOut           = new Float32Array(buf, _ex.get_out(),            64);
+    _vWeights       = new Float32Array(buf, _ex.get_weights(), AI_CONFIG.TOTAL_DNA_SIZE * 2);
+    _vInp           = new Float32Array(buf, _ex.get_inp(0),   2048);
+    _vOut           = new Float32Array(buf, _ex.get_out(),    64);
     _vLayerSizesBuf = new Int32Array  (buf, _ex.get_layer_sizes_buf(), 8);
 }
 
@@ -57,8 +47,8 @@ export async function initWasm() {
         _ex  = instance.exports;
         _mem = _ex.memory;
 
-        const required = ['evaluate', 'configure', 'set_num_inputs', 'commit_weights',
-                          'get_weight_stage', 'get_inp', 'get_out',
+        const required = ['evaluate', 'configure', 'set_num_inputs',
+                          'get_weights', 'get_inp', 'get_out',
                           'get_layer_sizes_buf', 'get_max_weights'];
         for (const fn of required) {
             if (!_ex[fn]) { console.warn(`[WASM] Missing: ${fn}`); _ex = null; return false; }
@@ -80,46 +70,21 @@ export async function initWasm() {
     }
 }
 
-// Commit one team's DNA: write f32 to staging buffer, then quantize to int16 per net.
-function _commitTeamDNA(dna, teamOffset) {
-    if (_vWeightStage.buffer !== _mem.buffer) _refreshViews();
-    // Write f32 DNA into staging buffer at teamOffset
-    _vWeightStage.set(dna, teamOffset);
-
-    // Quantize each net separately so per-layer scales are computed correctly
-    const nets = [
-        { key: 'PICKUP',  offset: teamOffset,                                                                    layerSizes: AI_CONFIG.PICKUP_LAYER_SIZES  },
-        { key: 'MELD',    offset: teamOffset + AI_CONFIG.DNA_PICKUP,                                             layerSizes: AI_CONFIG.MELD_LAYER_SIZES    },
-        { key: 'RUNNER',  offset: teamOffset + AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD,                        layerSizes: AI_CONFIG.RUNNER_LAYER_SIZES  },
-        { key: 'DISCARD', offset: teamOffset + AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD + AI_CONFIG.DNA_RUNNER, layerSizes: AI_CONFIG.DISCARD_LAYER_SIZES },
-    ];
-
-    // Write layer sizes into the shared layer_sizes_buf, call commit_weights for each net
-    for (const { key, offset, layerSizes } of nets) {
-        for (let i = 0; i < layerSizes.length; i++) _vLayerSizesBuf[i] = layerSizes[i];
-        // commit_weights(offset, num_layers, layer_sizes_ptr, scale_base)
-        // layer_sizes_ptr is the WASM address of g_layer_sizes_buf
-        _ex.commit_weights(offset, layerSizes.length,
-                           _ex.get_layer_sizes_buf(),
-                           _NET_SCALE_BASE[key] + (teamOffset > 0 ? 64 : 0)); // team1 uses offset +64
-    }
-}
-
 export function loadMatchDNA(dnaTeam0, dnaTeam1) {
     if (!_ex) return;
-    _commitTeamDNA(dnaTeam0, _team0DnaOffset);
-    if (_team1DnaOffset > 0) _commitTeamDNA(dnaTeam1, _team1DnaOffset);
+    if (_vWeights?.buffer !== _mem.buffer) _refreshViews();
+    _vWeights.set(dnaTeam0, _team0DnaOffset);
+    if (_team1DnaOffset > 0) _vWeights.set(dnaTeam1, _team1DnaOffset);
 }
 
 export function setActiveTeam(teamBase) {
     _activeTeamBase = teamBase;
 }
 
-function _configureNet(layerSizes, netOffset, netKey) {
+function _configureNet(layerSizes, netOffset) {
     if (_vLayerSizesBuf.buffer !== _mem.buffer) _refreshViews();
     for (let i = 0; i < layerSizes.length; i++) _vLayerSizesBuf[i] = layerSizes[i];
-    const scaleBase = _NET_SCALE_BASE[netKey] + (_activeTeamBase > 0 ? 64 : 0);
-    _ex.configure(layerSizes.length, _activeTeamBase + netOffset, scaleBase);
+    _ex.configure(layerSizes.length, _activeTeamBase + netOffset);
 }
 
 function _writeInpNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
@@ -261,7 +226,7 @@ function _scoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
                     : layerKey === 'MELD'   ? AI_CONFIG.DNA_PICKUP
                     : layerKey === 'RUNNER' ? AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD
                     :                         AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD + AI_CONFIG.DNA_RUNNER;
-    _configureNet(AI_CONFIG[layerKey + '_LAYER_SIZES'], netOffset, layerKey);
+    _configureNet(AI_CONFIG[layerKey + '_LAYER_SIZES'], netOffset);
 
     const idx = meldIdx || { my: _meldsByType(G, myTeam), opp: _meldsByType(G, oppTeam) };
 
@@ -327,7 +292,7 @@ function _scoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
 }
 
 function _scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, weights, meldIdx) {
-    _configureNet(AI_CONFIG.DISCARD_LAYER_SIZES, AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD + AI_CONFIG.DNA_RUNNER, 'DISCARD');
+    _configureNet(AI_CONFIG.DISCARD_LAYER_SIZES, AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD + AI_CONFIG.DNA_RUNNER);
     const idx = meldIdx || { my: _meldsByType(G, myTeam), opp: _meldsByType(G, oppTeam) };
     _writeInpDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, idx);
     _ex.set_num_inputs(1);
