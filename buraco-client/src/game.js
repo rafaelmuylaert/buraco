@@ -709,28 +709,24 @@ function forwardPassSegmented(segments, weights, layerSizes) {
     const _t0 = performance.now();
     const inSize  = layerSizes[0];
     const h1Size  = layerSizes[1];
-    const w1 = weights;          // W1 starts at 0
     const b1off = inSize * h1Size;
 
-    // Accumulate W1 * input segment by segment into _h1Acc
     _h1Acc.fill(0, 0, h1Size);
     let inOff = 0;
     for (const seg of segments) {
         const src = seg.data;
         const srcOff = seg.offset ?? 0;
         const len = seg.length;
-        for (let o = 0; o < h1Size; o++) {
-            const row = o * inSize + inOff;
-            let sum = 0;
-            for (let i = 0; i < len; i++) sum += src[srcOff + i] * w1[row + i];
-            _h1Acc[o] += sum;
+        for (let i = 0; i < len; i++) {
+            const v = src[srcOff + i];
+            if (v === 0) { inOff++; continue; }  // skip zero inputs (sparse bitmaps)
+            const wCol = inOff;                   // column index in W1 (row-major: w1[o*inSize + wCol])
+            for (let o = 0; o < h1Size; o++) _h1Acc[o] += v * weights[o * inSize + wCol];
+            inOff++;
         }
-        inOff += len;
     }
-    // Add biases and apply ReLU
     for (let o = 0; o < h1Size; o++) _h1Acc[o] = relu(_h1Acc[o] + weights[b1off + o]);
 
-    // Remaining layers use the normal flat path
     let woff = inSize * h1Size + h1Size;
     let cur = _h1Acc;
     const lastL = layerSizes.length - 2;
