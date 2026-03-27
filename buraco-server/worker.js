@@ -2,7 +2,7 @@ import { workerData, parentPort } from 'worker_threads';
 import {
     BuracoGame, AI_CONFIG, CARDS_ALL_OFF,
     moveDrawCard, moveDiscardCard, moveMeld, movePickUpDiscard,
-    checkGameOver, getAndResetTimings
+    checkGameOver, planTurn, getAndResetTimings
 } from './game.js';
 import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers, planTurnWasm } from './wasm_loader.js';
 
@@ -86,17 +86,23 @@ function runMatch(genomes, rules, fixedDeck) {
             // Call planTurnWasm in a loop — C++ returns one phase at a time
             // (DRAW/PICKUP → then MELD/APPEND → then DISCARD)
             let phaseCount = 0;
-            while (phaseCount++ < 20) {
+            let turnDone = false;
+            while (phaseCount++ < 20 && !turnDone) {
                 const result = planTurnWasm(S, p, S.teams[p] === 'team0' ? 'team0' : 'team1',
                                  S.teams[p] === 'team0' ? 'team1' : 'team0');
-                if (!result) break;
+                if (!result) {
+                    // WASM not available — fall back to JS planTurn
+                    try { planTurn(S, p, S.botGenomes[p]); } catch(e) {}
+                    turnDone = true; break;
+                }
+                if (_diagCount < 3) console.log(`[WASM] p=${p} phase=${phaseCount} moveType=${result.moveType} hasDrawn=${S.hasDrawn} handSize=${S.handSizes[p]}`);
                 if (result.moveType === 0) { moveDrawCard(S, p); }
                 else if (result.moveType === 1) { movePickUpDiscard(S, p, result.cardCounts, { type: 'new' }); }
                 else if (result.moveType === 2) { moveMeld(S, p, result.cardCounts); }
                 else if (result.moveType === 3) { moveMeld(S, p, result.cardCounts,
                     { type: result.targetType===1?'seq':'runner', suit: result.targetSuit, index: result.targetSlot }); }
-                else if (result.moveType === 4) { moveDiscardCard(S, p, result.discardCard, true); break; }
-                else if (result.moveType === 5) { S.isExhausted = true; break; }
+                else if (result.moveType === 4) { moveDiscardCard(S, p, result.discardCard, true); turnDone = true; break; }
+                else if (result.moveType === 5) { S.isExhausted = true; turnDone = true; break; }
             }
 
 
