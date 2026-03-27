@@ -109,6 +109,10 @@ static uint8_t  g_runners_allowed;  // bitmask: bit1=aces, bit13=kings, bit3=thr
 #define MOVE_DISCARD       4
 #define MOVE_EXHAUSTED     5
 static uint8_t g_planned_move[57];
+#define MAX_PLANNED_MOVES 12
+static uint8_t g_move_list[MAX_PLANNED_MOVES][58];
+static int     g_move_count = 0;
+
 
 // ── Seq meld candidate storage (internal, richer than g_seq_cands) ────────────
 // Stores up to MAX_SEQ_CANDS full parsed melds + cardCounts for execution
