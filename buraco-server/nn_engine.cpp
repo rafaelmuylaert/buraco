@@ -714,85 +714,11 @@ static int plan_turn() {
 
     float scores[MAX_SEQ_CANDS > MAX_RUN_CANDS ? MAX_SEQ_CANDS : MAX_RUN_CANDS];
 
-    // ── Phase 1: Pickup ───────────────────────────────────────────────────────
+    // Phase 1: always draw for now (pickup scoring TODO)
     if (!g_has_drawn) {
-        int doPickup = 0;
-        uint8_t pickupCC[53] = {0};
-        uint8_t pickupTargetType = 0, pickupTargetSuit = 0, pickupTargetSlot = 0;
-
-        if (g_top_discard != 255 && g_is_closed_discard && g_discard_len > 0) {
-            int td     = g_top_discard;
-            int td_idx = (td == 54) ? 52 : td;
-            int td_suit = (td == 54) ? 5 : (td / 13) + 1;
-            int td_rank = (td == 54) ? 2 : (td % 13) + 1;
-
-            // Temporarily add top discard to player's cards
-            g_cards2[player][CARDS_ALL_OFF + td_idx]++;
-            if (td_suit == 5)      { for (int i=0;i<4;i++) g_cards2[player][i*18+17]++; }
-            else if (td_rank == 2) { for (int i=0;i<4;i++) g_cards2[player][i*18+13+(td_suit-1)]++; }
-            else                   { g_cards2[player][(td_suit-1)*18+(td_rank-1)]++; }
-
-            int nMelds = find_valid_melds();
-            int nApps  = find_valid_appends();
-
-            // Restore
-            g_cards2[player][CARDS_ALL_OFF + td_idx]--;
-            if (td_suit == 5)      { for (int i=0;i<4;i++) g_cards2[player][i*18+17]--; }
-            else if (td_rank == 2) { for (int i=0;i<4;i++) g_cards2[player][i*18+13+(td_suit-1)]--; }
-            else                   { g_cards2[player][(td_suit-1)*18+(td_rank-1)]--; }
-
-            if (nMelds > 0 || nApps > 0) {
-                // Score: slot 0 = drawCard (zeros), slot 1 = best pickup meld
-                uint8_t saved[MAX_SEQ_CANDS][SEQ_CAND_FEATS];
-                for (int i=0;i<MAX_SEQ_CANDS;i++)
-                    for (int j=0;j<SEQ_CAND_FEATS;j++) saved[i][j] = g_seq_cands[i][j];
-
-                for (int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[0][j] = 0;
-                if (g_num_seq_cands > 0)
-                    for (int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[1][j] = g_seq_cands[0][j];
-
-                int tdSuit = (td_suit >= 1 && td_suit <= 4) ? td_suit : 1;
-                int pickN  = 2;
-                use_net(g_pickup_layers, g_pickup_nlayers, g_pickup_woff);
-                g_layerkey = 0; g_suit = tdSuit;
-                g_num_seq_cands = pickN;
-                for (int o=0;o<g_layer_sizes[g_pickup_nlayers-1];o++) g_out[o]=0.0f;
-                forward_pass(g_out);
-
-                for (int i=0;i<MAX_SEQ_CANDS;i++)
-                    for (int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[i][j] = saved[i][j];
-
-                if (g_out[1] > g_out[0] && g_num_seq_cands > 0) {
-                    doPickup = 1;
-                    for (int i=0;i<g_num_seq_cands;i++) {
-                        if (g_cand_seq_cc[i][td_idx] > 0) {
-                            for (int j=0;j<53;j++) pickupCC[j] = g_cand_seq_cc[i][j];
-                            if (pickupCC[td_idx] > 0) pickupCC[td_idx]--;
-                            pickupTargetType = 1;
-                            break;
-                        }
-                    }
-                    // Verify pickupCC is non-empty (a meld using td was found)
-                    int hasCards = 0;
-                    for (int j=0;j<53;j++) if (pickupCC[j]) { hasCards=1; break; }
-                    if (!hasCards) doPickup = 0;
-                }
-            }
-        } else if (!g_is_closed_discard && g_top_discard != 255) {
-            doPickup = 1;
-        }
-
-        if (doPickup) {
-            g_planned_move[0] = MOVE_PICKUP;
-            g_planned_move[1] = pickupTargetType;
-            g_planned_move[2] = pickupTargetSuit;
-            g_planned_move[3] = pickupTargetSlot;
-            for (int i=0;i<53;i++) g_planned_move[4+i] = pickupCC[i];
-        } else {
-            g_planned_move[0] = MOVE_DRAW;
-            for (int i=1;i<57;i++) g_planned_move[i] = 0;
-        }
-        return g_planned_move[0];
+        g_planned_move[0] = MOVE_DRAW;
+        for (int i=1;i<57;i++) g_planned_move[i] = 0;
+        return MOVE_DRAW;
     }
 
     // ── Phase 2: Melds & Appends ──────────────────────────────────────────────
