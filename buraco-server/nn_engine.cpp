@@ -696,6 +696,12 @@ static int find_valid_appends() {
     return nApp + nRunApp;
 }
 
+static void use_net(int* layers, int nlayers, int woff) {
+    for (int i=0;i<nlayers;i++) g_layer_sizes[i]=layers[i];
+    g_num_layers    = nlayers;
+    g_weight_offset = woff;
+}
+
 static int plan_turn() {
     int player  = g_player;
     int myTeam  = g_my_team;
