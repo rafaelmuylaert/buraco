@@ -1,6 +1,6 @@
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
-import { BuracoGame, AI_CONFIG, getAndResetTimings, loggerRef, CARDS_ALL_OFF } from './game.js';
+import { BuracoGame, AI_CONFIG, getAndResetTimings, CARDS_ALL_OFF } from './game.js';
 import { initWasm, syncCardsToWasm, planTurnWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers } from './wasm_loader.js';
 
 
@@ -211,22 +211,9 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
           }
         }
       }
-      // Fallback to JS enumerate if WASM unavailable
+      // Fallback: force draw if WASM unavailable
       if (!moves) {
-        const logLines = [];
-        loggerRef.fn = (event, data) => logLines.push({ event, data });
-        moves = BuracoGame.ai.enumerate(currentState.G, currentState.ctx, myDNA || undefined) || [];
-        loggerRef.fn = null;
-        // Log from JS path
-        const G = currentState.G;
-        if (!G.hasDrawn) {
-          const pickupLog = logLines.find(l => l.event === 'pickup');
-          const pickupChosen = logLines.find(l => l.event === 'pickupChosen');
-          const meldLog = logLines.find(l => l.event === 'melds');
-          if (pickupLog) console.log(`  pickup_cands(JS): [${pickupLog.data.map(c => `${c.move}(${c.score != null ? c.score.toFixed(3) : 'only'}) ${ccStr(c.cardCounts||{})}`).join(', ')}]`);
-          if (pickupChosen) console.log(`  pickup_chosen(JS): ${pickupChosen.data?.move} ${ccStr(pickupChosen.data?.cardCounts||{})}`);
-          if (meldLog && meldLog.data.length > 0) console.log(`  meld_cands(JS,${meldLog.data.length}): ${meldLog.data.map(c => `${c.move}${ccStr(c.cards)}`).join(' | ')}`);
-        }
+        moves = currentState.G.hasDrawn ? [] : [{ move: 'drawCard', args: [] }];
       }
       getAndResetTimings();
 

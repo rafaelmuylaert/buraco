@@ -635,35 +635,13 @@ export function calculateFinalScores(G) {
 
 
 
-// WASM-only scoring — implementations in wasm_loader.js via setScoreFunctions()
-let _scoreAllCandidates = null;
-let _scoreDiscard = null;
-let _setTurnContext = null;
+// WASM-only scoring hooks — set by wasm_loader.js
 let _updateMeld = null;
 let _syncCards = null;
 export function setScoreFunctions(scoreAll, scoreDisc, setCtx, updateMeld, syncCards) {
-    _scoreAllCandidates = scoreAll;
-    _scoreDiscard = scoreDisc;
-    _setTurnContext = setCtx;
     _updateMeld = updateMeld;
     _syncCards = syncCards;
 }
-export function scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, weights, topDiscard, layerKey, meldIdx) {
-    return _scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, weights, topDiscard, layerKey, meldIdx);
-}
-export function scoreRunnerCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, weights, meldIdx) {
-    return _scoreAllCandidates(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, candidates, weights, null, 'RUNNER', meldIdx);
-}
-export function scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, weights, meldIdx) {
-    return _scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, weights, meldIdx);
-}
-
-
-
-// ── Per-turn NN planner ───────────────────────────────────────────────────────
-// Scores all 3 phases, executes all moves on G, and returns the full move list.
-// Optional turn logger — set by bot.js for human games, null during training
-export const loggerRef = { fn: null };
 
 
 export const BuracoGame = {
@@ -716,29 +694,7 @@ export const BuracoGame = {
   },
 
   ai: {
-    enumerate: function enumerate(G, ctx, customDNA) {
-      const p = ctx.currentPlayer;
-
-      if (G.hasDrawn) {
-          if (G.handSizes[p] === 0) return [];
-          // Fall through to planTurn which handles post-draw meld+discard
-      }
-
-      let DNA = customDNA || G.botGenomes?.[p];
-      if (!DNA || DNA.length !== AI_CONFIG.TOTAL_DNA_SIZE) DNA = new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE).fill(0);
-      else if (!(DNA instanceof Float32Array)) DNA = new Float32Array(DNA);
-
-      // planTurn mutates G internally — work on a deep copy so the live state is untouched
-      const Gcopy = JSON.parse(JSON.stringify(G));
-      // Restore Float32Arrays lost by JSON serialization (plain Arrays serialize/deserialize fine)
-      const _r = (o) => { if (!o) return o; const r = {}; for (const k of Object.keys(o)) r[k] = Uint8Array.from(o[k]); return r; };
-      Gcopy.cards2      = _r(Gcopy.cards2);
-      Gcopy.knownCards2 = _r(Gcopy.knownCards2);
-      Gcopy.discardPile2 = Gcopy.discardPile2 ? Uint8Array.from(Gcopy.discardPile2) : null;
-      if (_syncCards) _syncCards(Gcopy, Gcopy.rules?.numPlayers || 4);
-      const fullPlan = planTurn(Gcopy, p, DNA);
-      return fullPlan.length > 0 ? [{ move: fullPlan[0].move, args: fullPlan[0].args }] : [];
-    }
+    enumerate: () => []
   }
 
 };
