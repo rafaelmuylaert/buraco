@@ -128,7 +128,8 @@ const _checkGaps = (m) => {
     const min = minSeqRank(m), max = maxSeqRank(m);
     if (min > max) return 0;
     let gaps = 0;
-    for (let i = min; i <= max; i++) if (!_pos(m, i)) gaps++;
+    let i=0;
+    for (i = min; i <= max; i++) if (!_pos(m, i)) gaps++;
     if (gaps===0) return min;
     else if (gaps<=maxgap) return i;
     else return -1;
