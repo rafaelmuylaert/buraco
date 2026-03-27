@@ -135,6 +135,9 @@ export function setMatchState(G, player, myTeam, oppTeam) {
     const topDiscard = G.discardPile.length > 0
         ? (G.discardPile[G.discardPile.length-1] === 54 ? 54 : G.discardPile[G.discardPile.length-1] % 52)
         : 255;
+    const topDeck = G.deck.length > 0
+        ? (G.deck[G.deck.length-1] === 54 ? 54 : G.deck[G.deck.length-1] % 52)
+        : 255;
     const runnersAllowed = (() => {
         const r = G.rules.runners;
         if (!r || r === 'none') return 0;
@@ -150,6 +153,7 @@ export function setMatchState(G, player, myTeam, oppTeam) {
         Math.min(G.deck.length, 65535),
         Math.min(G.discardPile.length, 65535),
         topDiscard,
+        topDeck,
         G.pots.length,
         G.hasDrawn ? 1 : 0,
         G.teamMortos['team0'] ? 1 : 0,

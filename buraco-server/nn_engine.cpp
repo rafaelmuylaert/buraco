@@ -92,6 +92,7 @@ static uint8_t g_hand_sizes[4];
 static uint16_t g_deck_len;
 static uint16_t g_discard_len;
 static uint8_t  g_top_discard;   // 255 = empty
+static uint8_t  g_top_deck;      // 255 = unknown/empty
 static uint8_t  g_pots_len;
 static uint8_t  g_has_drawn;
 static uint8_t  g_team_mortos[2];
@@ -701,7 +702,31 @@ static int find_valid_appends() {
     return nApp + nRunApp;
 }
 
-static void use_net(int* layers, int nlayers, int woff) {
+static void hand_add_card(int player, int cardType) {
+    if (cardType == 54) {
+        for(int i=0;i<4;i++) g_cards2[player][i*18+17]++;
+        g_cards2[player][CARDS_ALL_OFF+52]++;
+    } else {
+        int suit = cardType/13;
+        int rank = cardType%13;
+        if (rank == 1) {
+            for(int i=0;i<4;i++) g_cards2[player][i*18+13+suit]++;
+        } else {
+            g_cards2[player][suit*18+rank]++;
+        }
+        g_cards2[player][CARDS_ALL_OFF+cardType]++;
+    }
+}
+// Add all cards from g_discard2 into player's hand
+static void hand_add_discard_pile(int player) {
+    for(int i=0;i<53;i++) {
+        int ct = (i==52) ? 54 : i;
+        int cnt = g_discard2[CARDS_ALL_OFF+i];
+        for(int n=0;n<cnt;n++) hand_add_card(player, ct);
+    }
+}
+
+
     for (int i=0;i<nlayers;i++) g_layer_sizes[i]=layers[i];
     g_num_layers    = nlayers;
     g_weight_offset = woff;
@@ -814,11 +839,15 @@ static int plan_turn() {
 
     if (bestPickup == 0) {
         add_move(0, MOVE_DRAW, 0,0,0, nullptr);
+        // Simulate drawing top deck card into hand for meld/discard scoring
+        if (g_top_deck != 255) hand_add_card(player, g_top_deck);
     } else {
         add_move(0, MOVE_PICKUP, 0,0,0, pickupCC[bestPickup]);
+        // Simulate picking up entire discard pile into hand
+        hand_add_discard_pile(player);
     }
 
-    // Phase 1: Melds & Appends
+    // Phase 1: Melds & Appends (scored against simulated post-pickup hand)
     find_valid_melds();
     find_valid_appends();
 
@@ -926,7 +955,7 @@ static int plan_turn() {
     for(int i=0;i<nd;i++) {
         uint8_t cc[53]={0};
         int cardId = (dcards[i]==52) ? 54 : dcards[i];
-        cc[0] = (uint8_t)cardId;  // card ID stored in cc[0] for JS planTurnWasm to read as discardCard
+        cc[0] = (uint8_t)cardId;
         add_move(2, MOVE_DISCARD, 0,0,0, cc);
     }
 
@@ -943,11 +972,13 @@ WASM_EXPORT uint8_t* get_discard2()         { return g_discard2; }
 
 WASM_EXPORT void set_match_state(uint8_t hs0, uint8_t hs1, uint8_t hs2, uint8_t hs3,
                                   uint32_t deckLen, uint32_t discardLen, uint8_t topDiscard,
+                                  uint8_t topDeck,
                                   uint8_t potsLen, uint8_t hasDrawn,
                                   uint8_t tm0, uint8_t tm1, uint8_t cm0, uint8_t cm1,
                                   uint8_t numPlayers, uint8_t closedDiscard, uint8_t runners) {
     g_hand_sizes[0]=hs0; g_hand_sizes[1]=hs1; g_hand_sizes[2]=hs2; g_hand_sizes[3]=hs3;
     g_deck_len=(uint16_t)deckLen; g_discard_len=(uint16_t)discardLen; g_top_discard=topDiscard;
+    g_top_deck=topDeck;
     g_pots_len=potsLen; g_has_drawn=hasDrawn;
     g_team_mortos[0]=tm0; g_team_mortos[1]=tm1;
     g_clean_melds[0]=cm0; g_clean_melds[1]=cm1;
