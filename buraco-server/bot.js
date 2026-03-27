@@ -186,27 +186,27 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         const G = currentState.G;
         const myTeam = G.teams[playerID];
         const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
-        // Sync cards into WASM buffers
         syncCardsToWasm(G, G.rules?.numPlayers || 4);
-        // Load DNA and set active team
         loadMatchDNA(myTeam === 'team0' ? myDNA : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE),
                      myTeam === 'team1' ? myDNA : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE));
         setActiveTeam(myTeam === 'team0' ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
         const wasmMoves = planTurnWasm(G, playerID, myTeam, oppTeam);
         if (wasmMoves && wasmMoves.length > 0) {
-          // Convert WASM move format to boardgame.io move format
           moves = [];
+          let pickupMove = null;
           for (const m of wasmMoves) {
             if (m.phase === 0) {
-              if (m.moveType === 0) moves.push({ move: 'drawCard', args: [] });
-              else if (m.moveType === 1) moves.push({ move: 'pickUpDiscard', args: [m.cardCounts, { type: 'new' }] });
-              else if (m.moveType === 5) moves.push({ move: 'declareExhausted', args: [] });
+              if (m.moveType === 0) { pickupMove = { move: 'drawCard', args: [] }; moves.push(pickupMove); }
+              else if (m.moveType === 1) { pickupMove = { move: 'pickUpDiscard', args: [m.cardCounts, { type: 'new' }] }; moves.push(pickupMove); }
+              else if (m.moveType === 5) { moves.push({ move: 'declareExhausted', args: [] }); }
             } else if (m.phase === 1) {
+              // Skip meld moves after pickUpDiscard — server handles meld internally for closed discard
+              if (pickupMove?.move === 'pickUpDiscard') continue;
               if (m.moveType === 2) moves.push({ move: 'playMeld', args: [m.cardCounts] });
               else if (m.moveType === 3) moves.push({ move: 'appendToMeld', args: [{ type: m.targetType === 1 ? 'seq' : 'runner', suit: m.targetSuit, index: m.targetSlot }, m.cardCounts] });
             } else if (m.phase === 2) {
               moves.push({ move: 'discardCard', args: [m.discardCard] });
-              break; // only first discard
+              break;
             }
           }
         }

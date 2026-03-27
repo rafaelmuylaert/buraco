@@ -8,8 +8,6 @@ import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers,
 
 await initWasm();
 
-// �"?�"? Helpers �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
-
 function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -17,7 +15,6 @@ function shuffle(arr) {
     }
     return arr;
 }
-
 
 function prepareGenome(raw) {
     let dna = raw instanceof Float32Array ? raw : new Float32Array(raw);
@@ -29,14 +26,12 @@ function prepareGenome(raw) {
     return dna;
 }
 
-// �"?�"? Match runner �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
 function runMatch(genomes, rules, fixedDeck) {
     const numPlayers = rules.numPlayers || 4;
     const fakeRandom = { Shuffle: arr => fixedDeck ? [...fixedDeck] : shuffle(arr) };
 
-    // Build local state S �?" same shape as G but we own it entirely
     const S = BuracoGame.setup({ random: fakeRandom, ctx: { numPlayers } }, { ...rules, numPlayers });
-        // Point cards2/knownCards2/discardPile2 at WASM memory for zero-copy forward pass
+
     if (isWasmReady()) {
         const wb = getWasmCardBuffers();
         for (const k of Object.keys(S.cards2)) {
@@ -52,12 +47,12 @@ function runMatch(genomes, rules, fixedDeck) {
         for (const k of Object.keys(S.knownCards2)) S.knownCards2[k] = Uint8Array.from(S.knownCards2[k]);
         S.discardPile2 = Uint8Array.from(S.discardPile2);
     }
+
     S.botGenomes = Object.fromEntries(Object.entries(genomes).map(([k, v]) => {
         const arr = v instanceof SharedArrayBuffer ? new Float32Array(v) : new Float32Array(v);
         return [k, prepareGenome(arr)];
     }));
 
-    // Load both teams' DNA into WASM once per match
     if (isWasmReady()) {
         loadMatchDNA(S.botGenomes['0'], S.botGenomes['1']);
     }
@@ -71,7 +66,6 @@ function runMatch(genomes, rules, fixedDeck) {
         while (!gameover && moveCount < 2000) {
             const p = ctx.currentPlayer;
 
-            // Safety: if hasDrawn stuck with empty hand
             if (S.hasDrawn && (S.handSizes[p] ?? 0) === 0) {
                 S.hasDrawn = false;
                 S.lastDrawnCard = null;
@@ -81,30 +75,30 @@ function runMatch(genomes, rules, fixedDeck) {
                 const teamBase = S.teams[p] === 'team0' ? 0 : AI_CONFIG.TOTAL_DNA_SIZE;
                 setActiveTeam(teamBase);
             }
-            const _myTeam  = S.teams[p] === 'team0' ? 'team0' : 'team1';
-            const _oppTeam = _myTeam === 'team0' ? 'team1' : 'team0';
-            const moves = planTurnWasm(S, p, _myTeam, _oppTeam);
+
+            const myTeam  = S.teams[p] === 'team0' ? 'team0' : 'team1';
+            const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
+            const moves = planTurnWasm(S, p, myTeam, oppTeam);
+
             if (moves && moves.length > 0) {
                 let pickupDone = false;
                 for (const m of moves) {
-                    if (m.phase === 0) { // pickup
+                    if (m.phase === 0) {
                         if (pickupDone) continue;
                         if (m.moveType === 0) { moveDrawCard(S, p); pickupDone = true; }
-                        else if (m.moveType === 1) { if (movePickUpDiscard(S, p, m.cardCounts, {type: Object.keys(m.cardCounts).length > 0 ? 'new' : 'new'})) pickupDone = true; }
+                        else if (m.moveType === 1) { if (movePickUpDiscard(S, p, m.cardCounts, { type: 'new' })) pickupDone = true; }
                         else if (m.moveType === 5) { S.isExhausted = true; pickupDone = true; }
-                    } else if (m.phase === 1) { // meld �?" fire all, ignore failures
+                    } else if (m.phase === 1) {
                         if (m.moveType === 2) moveMeld(S, p, m.cardCounts);
                         else if (m.moveType === 3) moveMeld(S, p, m.cardCounts,
-                            {type: m.targetType===1?'seq':'runner', suit: m.targetSuit, index: m.targetSlot});
-                    } else if (m.phase === 2) { // discard �?" try until success
+                            { type: m.targetType === 1 ? 'seq' : 'runner', suit: m.targetSuit, index: m.targetSlot });
+                    } else if (m.phase === 2) {
                         if (moveDiscardCard(S, p, m.discardCard, true)) break;
                     }
                 }
             }
 
-
-
-            // If planTurn didn't end the turn (hasDrawn still true), force-discard
+            // Force-discard if turn not ended
             if (S.hasDrawn) {
                 let discarded = false;
                 for (let i = 0; i < 53 && !discarded; i++) {
@@ -141,8 +135,6 @@ function runMatch(genomes, rules, fixedDeck) {
 }
 
 let _diagCount = 0;
-
-// �"?�"? Job processing �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
 
 const _baseDeck = [];
 for (let i = 0; i < 52; i++) _baseDeck.push(i);
