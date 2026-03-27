@@ -948,15 +948,52 @@ static int plan_turn() {
 
     for (int i=0;i<nCands;i++) {
         int t=candType[i], idx=candIdx[i];
+        uint8_t* cc = (t==0) ? g_cand_seq_cc[idx] : (t==1) ? g_cand_append_cc[idx] : g_cand_run_cc[idx];
+        // Deduplicate: skip if identical cc already added
+        int dup = 0;
+        for (int k=0; k<g_move_count && !dup; k++) {
+            if (g_move_list[k][1] != MOVE_PLAY_MELD && g_move_list[k][1] != MOVE_APPEND) continue;
+            dup = 1;
+            for (int j=0;j<53;j++) if (g_move_list[k][5+j] != cc[j]) { dup=0; break; }
+        }
+        if (dup) continue;
         if (t==0) {
             add_move(1, MOVE_PLAY_MELD, 0,0,0, g_cand_seq_cc[idx]);
+            for(int j=0;j<53;j++) {
+                int cnt = g_cand_seq_cc[idx][j]; if (!cnt) continue;
+                int ct = (j==52)?54:j;
+                if (g_cards2[player][CARDS_ALL_OFF+j] >= cnt) g_cards2[player][CARDS_ALL_OFF+j] -= cnt;
+                // update per-suit slot
+                int s = (ct==54)?-1:ct/13, r = (ct==54)?-1:ct%13;
+                if (s>=0 && r==1) { for(int i=0;i<4;i++) if(g_cards2[player][i*18+13+s]>0) g_cards2[player][i*18+13+s]--; }
+                else if (s>=0) { if(g_cards2[player][s*18+r]>0) g_cards2[player][s*18+r]--; }
+                else { for(int i=0;i<4;i++) if(g_cards2[player][i*18+17]>0) g_cards2[player][i*18+17]--; }
+            }
         } else if (t==1) {
             add_move(1, MOVE_APPEND, 1, g_cand_append_suit[idx], g_cand_append_slot[idx], g_cand_append_cc[idx]);
+            for(int j=0;j<53;j++) {
+                int cnt = g_cand_append_cc[idx][j]; if (!cnt) continue;
+                int ct = (j==52)?54:j;
+                if (g_cards2[player][CARDS_ALL_OFF+j] >= cnt) g_cards2[player][CARDS_ALL_OFF+j] -= cnt;
+                int s = (ct==54)?-1:ct/13, r = (ct==54)?-1:ct%13;
+                if (s>=0 && r==1) { for(int i=0;i<4;i++) if(g_cards2[player][i*18+13+s]>0) g_cards2[player][i*18+13+s]--; }
+                else if (s>=0) { if(g_cards2[player][s*18+r]>0) g_cards2[player][s*18+r]--; }
+                else { for(int i=0;i<4;i++) if(g_cards2[player][i*18+17]>0) g_cards2[player][i*18+17]--; }
+            }
         } else {
             int isApp=0, appSlot=0;
             for(int s=0;s<MAX_RUN_SLOTS;s++)
                 if (g_run_melds[g_my_team][s][0]==g_cand_run_meld[idx][0]) { isApp=1; appSlot=s; break; }
             add_move(1, isApp?MOVE_APPEND:MOVE_PLAY_MELD, 2, 0, (uint8_t)appSlot, g_cand_run_cc[idx]);
+            for(int j=0;j<53;j++) {
+                int cnt = g_cand_run_cc[idx][j]; if (!cnt) continue;
+                int ct = (j==52)?54:j;
+                if (g_cards2[player][CARDS_ALL_OFF+j] >= cnt) g_cards2[player][CARDS_ALL_OFF+j] -= cnt;
+                int s = (ct==54)?-1:ct/13, r = (ct==54)?-1:ct%13;
+                if (s>=0 && r==1) { for(int i=0;i<4;i++) if(g_cards2[player][i*18+13+s]>0) g_cards2[player][i*18+13+s]--; }
+                else if (s>=0) { if(g_cards2[player][s*18+r]>0) g_cards2[player][s*18+r]--; }
+                else { for(int i=0;i<4;i++) if(g_cards2[player][i*18+17]>0) g_cards2[player][i*18+17]--; }
+            }
         }
     }
 

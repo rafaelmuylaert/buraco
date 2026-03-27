@@ -214,31 +214,38 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       getAndResetTimings();
 
       // ── Human-game diagnostics ──────────────────────────────────────────
-      const G = currentState.G;
-      if (!G.hasDrawn) {
-        const CAOFF_B = 72;
-        const flat = G.cards2?.[playerID] || [];
-        const handCards = [];
-        for (let i = 0; i < 53; i++) {
-          const cnt = flat[CAOFF_B + i] || 0;
-          if (cnt > 0) {
-            const cid = i === 52 ? 54 : i;
-            const s = cid === 54 ? 5 : Math.floor(cid / 13) + 1;
-            const r = cid === 54 ? 2 : (cid % 13) + 1;
-            for (let n = 0; n < cnt; n++) handCards.push(getRankChar(r) + getSuitChar(s));
-          }
+      const Glog = currentState.G;
+      const CAOFF_B = 72;
+      const flatLog = Glog.cards2?.[playerID] || [];
+      const handCards = [];
+      for (let i = 0; i < 53; i++) {
+        const cnt = flatLog[CAOFF_B + i] || 0;
+        if (cnt > 0) {
+          const cid = i === 52 ? 54 : i;
+          const s = cid === 54 ? 5 : Math.floor(cid / 13) + 1;
+          const r = cid === 54 ? 2 : (cid % 13) + 1;
+          for (let n = 0; n < cnt; n++) handCards.push(getRankChar(r) + getSuitChar(s));
         }
-        const topDiscard = G.discardPile?.length > 0 ? (() => { const c = G.discardPile[G.discardPile.length-1]; const s = c===54?5:Math.floor((c%52)/13)+1; const r = c===54?2:(c%13)+1; return getRankChar(r)+getSuitChar(s); })() : 'empty';
-        console.log(`[BOT] ${botName} | hand=[${handCards.join(' ')}] | discard_top=${topDiscard}`);
-        if (moves && moves.length > 0) {
-          const pickup = moves.find(m => m.move === 'drawCard' || m.move === 'pickUpDiscard' || m.move === 'declareExhausted');
-          const melds = moves.filter(m => m.move === 'playMeld' || m.move === 'appendToMeld');
-          const discard = moves.find(m => m.move === 'discardCard');
-          if (pickup) console.log(`  pickup: ${pickup.move} ${ccStr(pickup.args?.[0] || {})}`);
-          if (melds.length > 0) console.log(`  melds(${melds.length}): ${melds.map(m => `${m.move}${ccStr(m.args?.[0] || {})}`).join(' | ')}`);
-          else console.log(`  melds: none`);
-          if (discard) { const cid = discard.args[0]; const s = cid===54?5:Math.floor((cid%52)/13)+1; const r = cid===54?2:(cid%52)%13+1; console.log(`  discard: ${getRankChar(r)}${getSuitChar(s)}`); }
+      }
+      const topDiscard = Glog.discardPile?.length > 0 ? (() => { const c = Glog.discardPile[Glog.discardPile.length-1]; const s = c===54?5:Math.floor((c%52)/13)+1; const r = c===54?2:(c%13)+1; return getRankChar(r)+getSuitChar(s); })() : 'empty';
+      console.log(`[BOT] ${botName} | hasDrawn=${Glog.hasDrawn} hand=[${handCards.join(' ')}] | discard_top=${topDiscard}`);
+      if (moves && moves.length > 0) {
+        const pickup = moves.find(m => m.move === 'drawCard' || m.move === 'pickUpDiscard' || m.move === 'declareExhausted');
+        const melds = moves.filter(m => m.move === 'playMeld' || m.move === 'appendToMeld');
+        const discard = moves.find(m => m.move === 'discardCard');
+        // Show simulated post-pickup hand for meld verification
+        if (Glog.hasDrawn && melds.length > 0) {
+          // hand already includes drawn card
+          console.log(`  post-draw hand=[${handCards.join(' ')}]`);
+        } else if (!Glog.hasDrawn && pickup?.move === 'drawCard' && melds.length > 0) {
+          // WASM planned melds against simulated draw — show what card would be drawn
+          const topDeck = Glog.deck?.length > 0 ? (() => { const c = Glog.deck[Glog.deck.length-1]; const s = c===54?5:Math.floor((c%52)/13)+1; const r = c===54?2:(c%13)+1; return getRankChar(r)+getSuitChar(s); })() : '?';
+          console.log(`  top_deck=${topDeck} (WASM planned melds against simulated post-draw hand)`);
         }
+        if (pickup) console.log(`  pickup: ${pickup.move} ${ccStr(pickup.args?.[0] || {})}`);
+        if (melds.length > 0) console.log(`  melds(${melds.length}): ${melds.map(m => `${m.move}${ccStr(m.args?.[0] || {})}`).join(' | ')}`);
+        else console.log(`  melds: none`);
+        if (discard) { const cid = discard.args[0]; const s = cid===54?5:Math.floor((cid%52)/13)+1; const r = cid===54?2:(cid%52)%13+1; console.log(`  discard: ${getRankChar(r)}${getSuitChar(s)}`); }
       }
 
       aiQueue = moves || [];
