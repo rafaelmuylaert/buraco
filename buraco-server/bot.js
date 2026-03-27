@@ -216,9 +216,6 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         }
         if (pickupChosen) console.log(`  pickup_chosen: ${pickupChosen.data?.move} cards=${ccStr(pickupChosen.data?.cardCounts || {})} target=${JSON.stringify(pickupChosen.data?.args?.[1] || {})}`);
         const meldLog = logLines.find(l => l.event === 'melds');
-        const skipLogs = logLines.filter(l => l.event === 'pickupAppendSkip');
-        if (skipLogs.length > 0)
-          console.log(`  pickup_append_skipped(${skipLogs.length}): ${skipLogs.map(l => JSON.stringify(l.data)).join(' | ')}`);
         if (meldLog && meldLog.data.length > 0)
           console.log(`  meld_cands(${meldLog.data.length}): ${meldLog.data.map(c => `${c.move}${ccStr(c.cards)}`).join(' | ')}`);
         else
