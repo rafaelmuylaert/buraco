@@ -1,6 +1,6 @@
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
-import { BuracoGame, AI_CONFIG } from './game.js';
+import { BuracoGame, AI_CONFIG, getAndResetTimings } from './game.js';
 import { initWasm } from './wasm_loader.js';
 
 await initWasm();
@@ -166,9 +166,11 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
 
     if (aiQueue.length === 0) {
       const myDNA = dnaCache[targetBotName];
+      getAndResetTimings();
       const moves = BuracoGame.ai.enumerate(currentState.G, currentState.ctx, myDNA || undefined);
+      const t = getAndResetTimings();
+      console.log(`[BOT] ${botName} enumerated ${aiQueue.length} moves | hasDrawn=${currentState.G.hasDrawn} handSize=${currentState.G.handSizes?.[playerID]} | buildSegments=${t.buildSegments.toFixed(1)}ms forwardPass=${t.forwardPass.toFixed(1)}ms getAllValidMelds=${t.getAllValidMelds.toFixed(1)}ms`);
       aiQueue = moves || [];
-      console.log(`[BOT] ${botName} enumerated ${aiQueue.length} moves | hasDrawn=${currentState.G.hasDrawn} handSize=${currentState.G.handSizes?.[playerID]}`);
     }
 
     if (aiQueue.length > 0) {

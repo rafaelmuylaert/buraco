@@ -336,12 +336,12 @@ export const CARDS_ALL_OFF = 4 * CARDS_SUIT_STRIDE; // 72
 export const CARDS_FLAT_SIZE = CARDS_ALL_OFF + 53;   // 125
 
 export function initCards2(cards) {
-    const flat = new Array(CARDS_FLAT_SIZE).fill(0);
+    const flat = new Float32Array(CARDS_FLAT_SIZE);
     for (const c of cards) cards2Add(flat, c);
     return flat;
 }
 
-function makeCards2() { return new Array(CARDS_FLAT_SIZE).fill(0); }
+function makeCards2() { return new Float32Array(CARDS_FLAT_SIZE); }
 
 function cards2Add(flat, c) {
     const s = getSuit(c), r = getRank(c);
@@ -1158,7 +1158,7 @@ export function planTurn(G, p, DNA) {
         if (isClosedDiscard) {
             const myFlat = G.cards2[p];
             // Build a temporary flat with topDiscard added for candidate generation
-            const flatWithTop = [...myFlat];
+            const flatWithTop = new Float32Array(myFlat);
             cards2Add(flatWithTop, topDiscard);
             for (const { cardCounts: cc, parsedMeld: pm } of getAllValidMelds(flatWithTop, G.rules)) {
                 // topDiscard must be one of the cards used
@@ -1340,6 +1340,11 @@ export const BuracoGame = {
 
       // planTurn mutates G internally — work on a deep copy so the live state is untouched
       const Gcopy = JSON.parse(JSON.stringify(G));
+      // Restore Float32Arrays lost by JSON serialization
+      const _r = (o) => { if (!o) return o; const r = {}; for (const k of Object.keys(o)) r[k] = Float32Array.from(Object.values(o[k])); return r; };
+      Gcopy.cards2      = _r(Gcopy.cards2);
+      Gcopy.knownCards2 = _r(Gcopy.knownCards2);
+      Gcopy.discardPile2 = Gcopy.discardPile2 ? Float32Array.from(Object.values(Gcopy.discardPile2)) : null;
       const fullPlan = planTurn(Gcopy, p, DNA);
       return fullPlan.length > 0 ? [{ move: fullPlan[0].move, args: fullPlan[0].args }] : [];
     }
