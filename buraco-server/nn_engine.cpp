@@ -611,6 +611,10 @@ static int plan_turn() {
             g_num_seq_cands = nSeq;
             for(int ci=0; ci<g_num_seq_cands && nPickup<MAX_SEQ_CANDS+1; ci++) {
                 int usesTop = (td_alloff<53) ? g_cand_seq_cc[ci][td_alloff] : 0;
+                dbg_str("appCI="); dbg_int(ci); dbg_str(" usesTop="); dbg_int(usesTop);
+                dbg_str(" td_alloff="); dbg_int(td_alloff);
+                dbg_str(" cc[td]="); dbg_int(g_cand_append_cc[ci][td_alloff]);
+                dbg_str("\n");
                 if (!usesTop) continue;
                 pickupCandType[nPickup] = 1;
                 for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[nPickup][i]=g_cand_seq_cc[ci][i];
