@@ -97,25 +97,12 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       aiQueue = []; lastStateId = currentStateId; hasPickedUp = false; return;
     }
 
-    // Re-enumerate when state changes or queue is empty
-    if (currentStateId !== lastStateId || aiQueue.length === 0) {
+    // Re-enumerate only at turn start (before draw/pickup)
+    if (!G.hasDrawn && currentStateId !== lastStateId) {
       lastStateId = currentStateId;
+      hasPickedUp = false;
 
-      // Reset hasPickedUp when it's a new turn (hasDrawn=false)
-      if (!G.hasDrawn) hasPickedUp = false;
-
-      // Build move list using shared function
       if (isWasmReady() && dnaCache[targetBotName]) {
-        const myTeam = G.teams[playerID];
-        const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
-        syncCardsToWasm(G, G.rules?.numPlayers || 4);
-        loadMatchDNA(myTeam === 'team0' ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE),
-                     myTeam === 'team1' ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE));
-        setActiveTeam(myTeam === 'team0' ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
-        aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam) || [];
-      } else {
-        aiQueue = G.hasDrawn ? [] : [{ phase: 0, moveType: 0, cardCounts: {}, _fallback: true }];
-      }
 
       // Log
       const CAOFF = 72;
