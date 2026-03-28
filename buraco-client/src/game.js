@@ -124,15 +124,15 @@ const minSeqRank = m => m[0] ? 0 : (() => { let i = 2; while (i <= 13 && !m[i]) 
 const maxSeqRank = m => m[1] ? 14 : (() => { let i = 13; while (i >= 2 && !m[i]) i--; return i; })();
 
 const _checkGaps = (m) => {
-    const maxgap = (m[14] !== 0 || m[15] !== 0)?1:0;
     const min = minSeqRank(m), max = maxSeqRank(m);
     if (min > max) return 0;
     let gaps = 0;
     let i=0;
-    for (i = min; i <= max; i++) if (!_pos(m, i)) gaps++;
-    if (gaps===0) return 0;
-    else if (gaps<=maxgap) return i;
-    else return -1;
+    for (i = min; i <= max; i++) if (!_pos(m, i)){
+        if (gaps !== 0 || (m[14] !== 0 && m[15] !== 0)) return -1;
+        else gaps = i;
+    };
+    return gaps;
 };
 
 export function seqSuit(cardIds) {
