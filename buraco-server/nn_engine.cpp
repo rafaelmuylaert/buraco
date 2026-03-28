@@ -558,8 +558,9 @@ static void sim_init(uint8_t* sim, int player, int topDiscard) {
 static int plan_turn() {
     int player = g_player;
     g_move_count = 0;
-    dbg_str("\n\n================PICKUP======================");
+    
     dbg_reset();
+    dbg_str("\n\n================PICKUP======================\n");
     for(int i=0;i<MAX_PLANNED_MOVES;i++) for(int j=0;j<58;j++) g_move_list[i][j]=0;
 
     if (g_deck_len==0 && g_pots_len==0) {
@@ -578,6 +579,8 @@ static int plan_turn() {
     // ── Phase 0: pickup scoring ───────────────────────────────────────────────
     int pickupCandType[MAX_SEQ_CANDS+1];
     uint8_t pickupCC[MAX_SEQ_CANDS+1][CAND_CC_SIZE];
+    uint8_t pickupTarget[MAX_SEQ_CANDS+1][2];  // [suit, slot] for append pickups
+    for(int i=0;i<MAX_SEQ_CANDS+1;i++) { pickupTarget[i][0]=0; pickupTarget[i][1]=0; }
     int nPickup = 0;
     pickupCandType[0] = 0;
     for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[0][i]=0;
@@ -637,6 +640,9 @@ static int plan_turn() {
                 pickupCandType[nPickup] = 2;
                 for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[nPickup][i]=g_cand_append_cc[ci][i];
                 if (td_alloff<53 && pickupCC[nPickup][td_alloff]>0) pickupCC[nPickup][td_alloff]--;
+                // Store append target in pickupTarget array
+                pickupTarget[nPickup][0] = g_cand_append_suit[ci];
+                pickupTarget[nPickup][1] = g_cand_append_slot[ci];
                 nPickup++;
             }
             g_num_seq_cands = 0;
@@ -668,7 +674,7 @@ static int plan_turn() {
         g_num_seq_cands = 0;
     }
 
-    dbg_str("================MELD======================");
+    dbg_str("================MELD======================\n");
 
     // ── Evolve sim for phase 1 ────────────────────────────────────────────────
     // Always remove top discard from sim (consumed or not drawn)
@@ -678,7 +684,9 @@ static int plan_turn() {
         add_move(0, MOVE_DRAW, 0,0,0, nullptr);
         // Deck is secret — sim stays as real hand only
     } else {
-        add_move(0, MOVE_PICKUP, 0,0,0, pickupCC[bestPickup]);
+        add_move(0, MOVE_PICKUP, pickupCandType[bestPickup]==2?1:0,
+                 pickupTarget[bestPickup][0], pickupTarget[bestPickup][1],
+                 pickupCC[bestPickup]);
         // Add remainder of discard pile (excluding top card already removed)
         for(int j=0;j<CAND_CC_SIZE;j++) {
             int cnt = g_discard2[CARDS_ALL_OFF+j]; if(!cnt) continue;
