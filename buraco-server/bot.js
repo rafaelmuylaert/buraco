@@ -85,7 +85,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
 
   client.subscribe(state => { if (!state) return; if (state.ctx.gameover) shutdown(); });
 
-  const processQueue = () => {
+    const processQueue = () => {
     if (stopped) return;
     const currentState = client.getState();
     if (!currentState || currentState.ctx.gameover) return;
@@ -103,8 +103,17 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       hasPickedUp = false;
 
       if (isWasmReady() && dnaCache[targetBotName]) {
+        const myTeam = G.teams[playerID];
+        const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
+        syncCardsToWasm(G, G.rules?.numPlayers || 4);
+        loadMatchDNA(myTeam === 'team0' ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE),
+                     myTeam === 'team1' ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE));
+        setActiveTeam(myTeam === 'team0' ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
+        aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam) || [];
+      } else {
+        aiQueue = [{ phase: 0, moveType: 0, cardCounts: {}, _fallback: true }];
+      }
 
-      // Log
       const CAOFF = 72;
       const flat = G.cards2?.[playerID] || [];
       const handCards = [];
@@ -126,7 +135,6 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
 
     const m = aiQueue.shift();
 
-    // Apply hasPickedUp logic
     if (m.phase === 0) {
       if (hasPickedUp) return;
       if (m.moveType === 0) {
@@ -134,7 +142,6 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         client.moves.drawCard();
         hasPickedUp = true;
       } else if (m.moveType === 1) {
-        // cardCounts contains hand cards only (top discard is implicit)
         console.log(`[BOT] ${botName} dispatching: pickUpDiscard ${ccStr(m.cardCounts)}`);
         client.moves.pickUpDiscard(m.cardCounts, { type: 'new' });
         hasPickedUp = true;
@@ -144,7 +151,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         hasPickedUp = true;
       }
     } else if (m.phase === 1) {
-      if (!G.hasDrawn) return; // can't meld without having drawn/picked up
+      if (!G.hasDrawn) return;
       if (m.moveType === 2) {
         console.log(`[BOT] ${botName} dispatching: playMeld${ccStr(m.cardCounts)}`);
         client.moves.playMeld(m.cardCounts);
@@ -154,11 +161,12 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         client.moves.appendToMeld(tgt, m.cardCounts);
       }
     } else if (m.phase === 2) {
-      if (!G.hasDrawn) return; // can't discard without having drawn/picked up
+      if (!G.hasDrawn) return;
       console.log(`[BOT] ${botName} dispatching: discardCard(${discardStr(m.discardCard)})${m._fallback?' [fallback]':''}`);
       client.moves.discardCard(m.discardCard);
     }
   };
+
 
   activeIntervals[clientKey] = setInterval(processQueue, 1000);
 }
