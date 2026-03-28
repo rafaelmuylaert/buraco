@@ -481,6 +481,18 @@ export function syncCardsToWasm(G, numPlayers) {
         if (G.knownCards2[p]) _wasmKnownCards2[i].set(G.knownCards2[p]);
     }
     if (G.discardPile2) _wasmDiscard2.set(G.discardPile2);
+    // Sync meld tables from current game state
+    for (let t = 0; t < 2; t++) {
+        const teamId = t === 0 ? 'team0' : 'team1';
+        for (let s = 0; s < 4; s++) {
+            const suitMelds = G.table?.[teamId]?.[0]?.[s+1] || [];
+            for (let sl = 0; sl < 5; sl++)
+                updateSeqMeld(t, s, sl, suitMelds[sl] || null);
+        }
+        const runners = G.table?.[teamId]?.[1] || [];
+        for (let sl = 0; sl < 4; sl++)
+            updateRunMeld(t, sl, runners[sl] || null);
+    }
 }
 
 export function getWasmMeldBuffers() {
