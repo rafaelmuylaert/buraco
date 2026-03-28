@@ -140,16 +140,14 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       if (m.moveType === 0) {
         console.log(`[BOT] ${botName} dispatching: drawCard${m._fallback?' [fallback]':''}`);
         client.moves.drawCard();
-        hasPickedUp = true;
       } else if (m.moveType === 1) {
         console.log(`[BOT] ${botName} dispatching: pickUpDiscard ${ccStr(m.cardCounts)}`);
         client.moves.pickUpDiscard(m.cardCounts, { type: 'new' });
-        hasPickedUp = true;
       } else if (m.moveType === 5) {
         console.log(`[BOT] ${botName} dispatching: declareExhausted`);
         client.moves.declareExhausted();
-        hasPickedUp = true;
       }
+      hasPickedUp = true;
     } else if (m.phase === 1) {
       if (!G.hasDrawn) return;
       if (m.moveType === 2) {

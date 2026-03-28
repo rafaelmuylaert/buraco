@@ -716,12 +716,21 @@ static int plan_turn() {
                 }
             for(int ci=0; ci<g_num_append_cands && nPickup<MAX_SEQ_CANDS+1; ci++) {
                 int usesTop = (td_alloff<53) ? g_cand_append_cc[ci][td_alloff] : 0;
+                if (usesTop) {
+                    // Verify top card rank isn't already occupied in the existing meld
+                    int existSlot = g_cand_append_slot[ci];
+                    int existSuit = g_cand_append_suit[ci];
+                    const uint8_t* em = g_seq_melds[g_my_team][existSuit-1][existSlot];
+                    int topMeldSlot = (td_rank==1) ? 0 : td_rank;  // meld uses rank directly as slot index
+                    if (topMeldSlot < 16 && em[topMeldSlot]) usesTop = 0;
+                }
                 if (!usesTop) continue;
                 pickupCandType[nPickup] = 2;
                 for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[nPickup][i]=g_cand_append_cc[ci][i];
                 if (td_alloff<53 && pickupCC[nPickup][td_alloff]>0) pickupCC[nPickup][td_alloff]--;
                 nPickup++;
             }
+
 
             // Restore hand
             g_cards2[g_player][CARDS_ALL_OFF + td_alloff]--;
