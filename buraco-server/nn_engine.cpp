@@ -483,11 +483,8 @@ static int find_seq_candidates(
         } 
         if (!m[pos] || pos == 13) {
             // Gap at pos
-            // If gap is inside existing meld range, wild is consumed there — can't use for bridging
-            int local_wilds = wilds_avail;
-            if (existingMeld && pos+1 >= mstart && pos+1 <= mend) local_wilds = 0;
 
-            if (cgap > 0 && cnogap > 0 && local_wilds) {
+            if (cgap > 0 && cnogap > 0 && can_add_wild) {
                 // Emit bridged candidate: prev run + gap + current run
                 int lo = pos - cnogap - cgap - 1;
                 int hi = pos - 1;
