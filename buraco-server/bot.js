@@ -142,7 +142,8 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         client.moves.drawCard();
       } else if (m.moveType === 1) {
         console.log(`[BOT] ${botName} dispatching: pickUpDiscard ${ccStr(m.cardCounts)}`);
-        client.moves.pickUpDiscard(m.cardCounts, { type: 'new' });
+        client.moves.pickUpDiscard(m.cardCounts, m.pickupTarget || { type: 'new' });
+        hasPickedUp = true;
       } else if (m.moveType === 5) {
         console.log(`[BOT] ${botName} dispatching: declareExhausted`);
         client.moves.declareExhausted();

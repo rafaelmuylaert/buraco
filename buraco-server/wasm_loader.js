@@ -430,7 +430,12 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam) {
 
         if (phase === 0) {
             if (moveType === 0) { pickupMoves.push({ phase, moveType, cardCounts: cc }); hasDrawInPickup = true; }
-            else if (moveType === 1) pickupMoves.push({ phase, moveType, cardCounts: cc });
+            else if (moveType === 1) {
+                const tgt = tType === 2 ? { type: 'append', meldTarget: { type: 'runner', index: tSlot } }
+                          : tType === 1 ? { type: 'append', meldTarget: { type: 'seq', suit: tSuit, index: tSlot } }
+                          : { type: 'new' };
+                pickupMoves.push({ phase, moveType, cardCounts: cc, pickupTarget: tgt });
+            }
             else if (moveType === 5) pickupMoves.push({ phase, moveType, cardCounts: cc });
         } else if (phase === 1) {
             // Only positive-scored melds — C++ already sorted descending, all have score > 0 if included

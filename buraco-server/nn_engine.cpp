@@ -438,16 +438,19 @@ static int find_seq_candidates(
 
     // Ace
     if (existingMeld && (existingMeld[0] || existingMeld[1])) m[0]=1;
+    int ace_in_meld = (existingMeld && (existingMeld[0] || existingMeld[1])) ? 1 : 0;
     int ace_count = (int)sb[0] + (eb ? (int)eb[0] : 0);
-    if (ace_count > 0) { if (!m[0]) from_hand[0]=1; m[0]=1; }
+    if (ace_count > 0 && !ace_in_meld) { from_hand[0]=1; m[0]=1; }
 
     // Ranks 2-K
     for (int r=2; r<=13; r++) {
         int mi = r-1;
-        if (existingMeld && existingMeld[r]) m[mi]=1;
+        int already_in_meld = (existingMeld && existingMeld[r]) ? 1 : 0;
+        if (already_in_meld) m[mi]=1;
         int hcard = (r==2) ? (int)(sb[13+(suit-1)]) + (eb ? (int)(eb[13+(suit-1)]) : 0)
                            : (int)(sb[r-1])          + (eb ? (int)(eb[r-1])         : 0);
-        if (hcard > 0) { if (!m[mi]) from_hand[mi]=1; m[mi]=1; }
+        if (hcard > 0 && !already_in_meld) { from_hand[mi]=1; m[mi]=1; }
+        else if (hcard > 0 && already_in_meld) { /* card exists in meld already, don't mark as new */ }
     }
 
     // Wild slots: copy from existing meld, then promote nat2 if both wild slots free
