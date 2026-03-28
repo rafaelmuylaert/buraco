@@ -477,27 +477,21 @@ static int find_seq_candidates(
     if (m[0]) cgap++;
 
     for (int pos=1; pos<=13 && nSeq<MAX_SEQ_CANDS; pos++) {
-        if (m[pos]) {
-            cgap++;
-        } 
-        if (!m[pos] || pos == 13) {
-            // Gap at pos
+        if (m[pos]) cgap++;
+        if (!m[pos] || pos==13) {
+            int hi = (pos==13 && m[13]) ? pos : pos-1;
+            int local_wilds = wilds_avail;
+            if (existingMeld && pos >= mstart && pos <= mend) local_wilds = 0;
 
-            if (cgap > 0 && cnogap > 0 && can_add_wild) {
-                // Emit bridged candidate: prev run + gap + current run
-                int lo = pos - cnogap - cgap - 1;
-                int hi = pos - 1;
+            if (cgap > 0 && cnogap > 0 && local_wilds) {
+                int lo = hi - cnogap - cgap;
                 if (lo < 0) lo = 0;
                 emit(lo, hi, true);
             }
-
             if (cgap >= 3) {
-                // Emit natural run
-                int lo = pos - cgap;
-                int hi = pos - 1;
+                int lo = hi - cgap + 1;
                 emit(lo, hi, false);
             }
-
             cnogap = cgap;
             cgap = 0;
         }
