@@ -551,6 +551,10 @@ static void sim_remove_card(uint8_t* sim, int cardType) {
 
 // Initialise sim from player's real hand + top discard card
 static void sim_init(uint8_t* sim, int player, int topDiscard) {
+    dbg_str("sim_td="); dbg_int(td); dbg_str(" sim[alloff+td]="); 
+    dbg_int(sim[CARDS_ALL_OFF+td_alloff]); 
+    dbg_str(" sb6="); dbg_int(sim[(td_suit-1)*18+(td_rank-1)]); dbg_str("\n");
+
     for(int i=0;i<CARDS_FLAT_SIZE;i++) sim[i]=g_cards2[player][i];
     if (topDiscard != 255) sim_add_card(sim, topDiscard);
 }
