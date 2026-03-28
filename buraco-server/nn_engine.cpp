@@ -385,7 +385,7 @@ static int find_seq_candidates(
             if(mi<mstart)mstart=mi;
             if(mi>mend)mend=mi;
         }
-        if (hcard > 0 && !already_in_meld) { from_hand[mi]=1; m[mi]=1; }
+        if (sb[r-1] > 0 && !already_in_meld) { from_hand[mi]=1; m[mi]=1; }
     }
 
     // Wild slots from existing meld, promote nat2 if both free
