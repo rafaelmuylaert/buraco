@@ -4,7 +4,7 @@ import {
     moveDrawCard, moveDiscardCard, moveMeld, movePickUpDiscard,
     checkGameOver, getAndResetTimings
 } from './game.js';
-import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers, planTurnWasm } from './wasm_loader.js';
+import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers, buildTurnMoveList } from './wasm_loader.js';
 
 await initWasm();
 
@@ -24,6 +24,31 @@ function prepareGenome(raw) {
         dna = d;
     }
     return dna;
+}
+
+function executeTurn(S, p, moves) {
+    // Execute the ordered move list:
+    // - pickup moves: fire in order, stop on first success, skip rest
+    // - meld moves: fire all, ignore failures
+    // - discard moves: fire in order, stop on first success (ends turn)
+    let hasPickedUp = false;
+
+    for (const m of moves) {
+        if (m.phase === 0) {
+            if (hasPickedUp) continue; // already picked up, skip remaining pickup moves
+            if (m.moveType === 0) { if (moveDrawCard(S, p)) hasPickedUp = true; }
+            else if (m.moveType === 1) { if (movePickUpDiscard(S, p, m.cardCounts, { type: 'new' })) hasPickedUp = true; }
+            else if (m.moveType === 5) { S.isExhausted = true; hasPickedUp = true; }
+        } else if (m.phase === 1) {
+            if (!hasPickedUp) continue; // can't meld without picking up first
+            if (m.moveType === 2) moveMeld(S, p, m.cardCounts);
+            else if (m.moveType === 3) moveMeld(S, p, m.cardCounts,
+                { type: m.targetType === 1 ? 'seq' : 'runner', suit: m.targetSuit, index: m.targetSlot });
+        } else if (m.phase === 2) {
+            if (!hasPickedUp) continue; // can't discard without picking up first
+            if (moveDiscardCard(S, p, m.discardCard, true)) return; // turn ends on successful discard
+        }
+    }
 }
 
 function runMatch(genomes, rules, fixedDeck) {
@@ -53,9 +78,7 @@ function runMatch(genomes, rules, fixedDeck) {
         return [k, prepareGenome(arr)];
     }));
 
-    if (isWasmReady()) {
-        loadMatchDNA(S.botGenomes['0'], S.botGenomes['1']);
-    }
+    if (isWasmReady()) loadMatchDNA(S.botGenomes['0'], S.botGenomes['1']);
 
     const ctx = { currentPlayer: '0', numPlayers };
 
@@ -72,45 +95,24 @@ function runMatch(genomes, rules, fixedDeck) {
             }
 
             if (isWasmReady()) {
-                const teamBase = S.teams[p] === 'team0' ? 0 : AI_CONFIG.TOTAL_DNA_SIZE;
-                setActiveTeam(teamBase);
+                setActiveTeam(S.teams[p] === 'team0' ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
             }
 
             const myTeam  = S.teams[p] === 'team0' ? 'team0' : 'team1';
             const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
-            const moves = planTurnWasm(S, p, myTeam, oppTeam);
+            const moves = buildTurnMoveList(S, p, myTeam, oppTeam);
 
             if (moves && moves.length > 0) {
-                let pickupDone = false;
-                let pickupIsDiscard = false;
-                for (const m of moves) {
-                    if (m.phase === 0) {
-                        if (pickupDone) continue;
-                        if (m.moveType === 0) { moveDrawCard(S, p); pickupDone = true; }
-                        else if (m.moveType === 1) { if (movePickUpDiscard(S, p, m.cardCounts, { type: 'new' })) { pickupDone = true; pickupIsDiscard = true; } }
-                        else if (m.moveType === 5) { S.isExhausted = true; pickupDone = true; }
-                    } else if (m.phase === 1) {
-                        if (!pickupDone || pickupIsDiscard) continue; // skip melds if pickup failed or was discard-pickup
-                        if (m.moveType === 2) moveMeld(S, p, m.cardCounts);
-                        else if (m.moveType === 3) moveMeld(S, p, m.cardCounts,
-                            { type: m.targetType === 1 ? 'seq' : 'runner', suit: m.targetSuit, index: m.targetSlot });
-                    } else if (m.phase === 2) {
-                        if (!pickupDone) continue; // skip discards if pickup failed
-                        if (moveDiscardCard(S, p, m.discardCard, true)) break;
-                    }
-                }
-                // Force-draw fallback if no pickup succeeded
-                if (!pickupDone) { moveDrawCard(S, p); }
+                executeTurn(S, p, moves);
             }
 
-            // Force-discard if turn not ended
+            // Safety: if turn didn't end with a discard, force one
             if (S.hasDrawn) {
-                let discarded = false;
-                for (let i = 0; i < 53 && !discarded; i++) {
+                for (let i = 0; i < 53; i++) {
                     const cnt = S.cards2[p][CARDS_ALL_OFF + i] || 0;
-                    if (cnt > 0) { moveDiscardCard(S, p, i === 52 ? 54 : i, true); discarded = true; }
+                    if (cnt > 0) { moveDiscardCard(S, p, i === 52 ? 54 : i, true); break; }
                 }
-                if (!discarded) S.hasDrawn = false;
+                if (S.hasDrawn) S.hasDrawn = false;
             }
 
             ctx.currentPlayer = String((parseInt(p) + 1) % numPlayers);

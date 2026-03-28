@@ -1,7 +1,7 @@
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
-import { BuracoGame, AI_CONFIG, getAndResetTimings, CARDS_ALL_OFF } from './game.js';
-import { initWasm, syncCardsToWasm, planTurnWasm, loadMatchDNA, setActiveTeam, isWasmReady } from './wasm_loader.js';
+import { BuracoGame, AI_CONFIG, getAndResetTimings } from './game.js';
+import { initWasm, syncCardsToWasm, buildTurnMoveList, loadMatchDNA, setActiveTeam, isWasmReady } from './wasm_loader.js';
 
 await initWasm();
 
@@ -22,6 +22,7 @@ const ccStr = (cc) => {
     return v > 1 ? `${name}x${v}` : name;
   }).join(' ') + '}';
 };
+const discardStr = (cid) => { const s = cid===54?5:Math.floor((cid%52)/13)+1; const r = cid===54?2:(cid%52)%13+1; return getRankChar(r)+getSuitChar(s); };
 
 async function pollLobby() {
   try {
@@ -40,10 +41,7 @@ async function pollLobby() {
               const dnaRes = await fetch(`${SERVER_URL}/api/bots/weights/${targetBotName}`);
               if (dnaRes.ok) {
                 let loadedDNA = await dnaRes.json();
-                if (loadedDNA.length !== AI_CONFIG.TOTAL_DNA_SIZE) {
-                  console.warn(`[BOT] DNA size mismatch for '${targetBotName}'`);
-                  loadedDNA = null;
-                }
+                if (loadedDNA.length !== AI_CONFIG.TOTAL_DNA_SIZE) { console.warn(`[BOT] DNA size mismatch for '${targetBotName}'`); loadedDNA = null; }
                 dnaCache[targetBotName] = loadedDNA ? new Float32Array(loadedDNA) : null;
               }
             } catch(e) { console.error(`[BOT] Could not fetch DNA for ${targetBotName}`); }
@@ -54,9 +52,8 @@ async function pollLobby() {
               body: JSON.stringify({ playerID: p.id.toString(), playerName: assignedName })
             });
             const joinData = await joinRes.json();
-            if (joinData.playerCredentials) {
-              startBotClient(match.matchID, p.id.toString(), joinData.playerCredentials, assignedName, targetBotName);
-            } else { delete activeBots[clientKey]; }
+            if (joinData.playerCredentials) startBotClient(match.matchID, p.id.toString(), joinData.playerCredentials, assignedName, targetBotName);
+            else delete activeBots[clientKey];
           } catch(e) { console.error(`[BOT] Join failed for ${assignedName}:`, e); delete activeBots[clientKey]; }
         }
       }
@@ -68,18 +65,14 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
   const clientKey = `${matchID}_${playerID}`;
   if (activeBots[clientKey] && activeBots[clientKey] !== 'pending') return;
 
-  const client = Client({
-    game: BuracoGame,
-    multiplayer: SocketIO({ server: SERVER_URL }),
-    matchID, playerID, credentials
-  });
-
+  const client = Client({ game: BuracoGame, multiplayer: SocketIO({ server: SERVER_URL }), matchID, playerID, credentials });
   activeBots[clientKey] = client;
   client.start();
 
   let aiQueue = [];
   let lastStateId = null;
   let stopped = false;
+  let hasPickedUp = false;
 
   const shutdown = () => {
     if (stopped) return;
@@ -92,132 +85,91 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
 
   client.subscribe(state => { if (!state) return; if (state.ctx.gameover) shutdown(); });
 
-  const buildMoveList = (G) => {
-    const moves = [];
-    const myTeam = G.teams[playerID];
-    const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
-
-    if (isWasmReady() && dnaCache[targetBotName]) {
-      syncCardsToWasm(G, G.rules?.numPlayers || 4);
-      loadMatchDNA(myTeam === 'team0' ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE),
-                   myTeam === 'team1' ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE));
-      setActiveTeam(myTeam === 'team0' ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
-      const wasmMoves = planTurnWasm(G, playerID, myTeam, oppTeam);
-      if (wasmMoves && wasmMoves.length > 0) {
-        let hasPickup = false;
-        let pickupIsDiscard = false;
-        const pickupMoves = [];
-        const meldMoves = [];
-        const discardMoves = [];
-        for (const m of wasmMoves) {
-          if (m.phase === 0) {
-            if (m.moveType === 0) { pickupMoves.push({ move: 'drawCard', args: [] }); hasPickup = true; }
-            else if (m.moveType === 1) { pickupMoves.push({ move: 'pickUpDiscard', args: [m.cardCounts, { type: 'new' }] }); hasPickup = true; pickupIsDiscard = true; }
-            else if (m.moveType === 5) { pickupMoves.push({ move: 'declareExhausted', args: [] }); hasPickup = true; }
-          } else if (m.phase === 1) {
-            if (pickupIsDiscard) continue;
-            if (m.moveType === 2) meldMoves.push({ move: 'playMeld', args: [m.cardCounts] });
-            else if (m.moveType === 3) meldMoves.push({ move: 'appendToMeld', args: [{ type: m.targetType === 1 ? 'seq' : 'runner', suit: m.targetSuit, index: m.targetSlot }, m.cardCounts] });
-          } else if (m.phase === 2) {
-            discardMoves.push({ move: 'discardCard', args: [m.discardCard] });
-          }
-        }
-        // Force-draw fallback at bottom of pickup list
-        if (!hasPickup && !G.hasDrawn) pickupMoves.push({ move: 'drawCard', args: [], _fallback: true });
-        else if (!pickupMoves.some(m => m.move === 'drawCard') && !G.hasDrawn)
-          pickupMoves.push({ move: 'drawCard', args: [], _fallback: true });
-        moves.push(...pickupMoves, ...meldMoves, ...discardMoves);
-      }
-    }
-
-    // Guarantee: always end with a force-discard fallback (first card in hand)
-    if (G.hasDrawn || moves.some(m => m.move === 'drawCard' || m.move === 'pickUpDiscard')) {
-      const flat = G.cards2?.[playerID] || [];
-      const CAOFF = 72;
-      for (let i = 0; i < 53; i++) {
-        if ((flat[CAOFF + i] || 0) > 0) {
-          moves.push({ move: 'discardCard', args: [i === 52 ? 54 : i], _fallback: true });
-          break;
-        }
-      }
-    }
-    // If nothing at all, force draw
-    if (moves.length === 0 && !G.hasDrawn) moves.push({ move: 'drawCard', args: [] });
-
-    return moves;
-  };
-
   const processQueue = () => {
     if (stopped) return;
     const currentState = client.getState();
     if (!currentState || currentState.ctx.gameover) return;
 
     const currentStateId = currentState._stateID;
+    const G = currentState.G;
 
-    if (currentState.ctx.currentPlayer !== playerID) {
-      aiQueue = [];
-      lastStateId = currentStateId;
-      return;
+    if (G.ctx?.currentPlayer !== playerID && currentState.ctx.currentPlayer !== playerID) {
+      aiQueue = []; lastStateId = currentStateId; hasPickedUp = false; return;
     }
 
-    // Re-enumerate when state changes (move confirmed) or queue empty
+    // Re-enumerate when state changes or queue is empty
     if (currentStateId !== lastStateId || aiQueue.length === 0) {
       lastStateId = currentStateId;
-      const G = currentState.G;
+
+      // Reset hasPickedUp when it's a new turn (hasDrawn=false)
+      if (!G.hasDrawn) hasPickedUp = false;
+
+      // Build move list using shared function
+      if (isWasmReady() && dnaCache[targetBotName]) {
+        const myTeam = G.teams[playerID];
+        const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
+        syncCardsToWasm(G, G.rules?.numPlayers || 4);
+        loadMatchDNA(myTeam === 'team0' ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE),
+                     myTeam === 'team1' ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE));
+        setActiveTeam(myTeam === 'team0' ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
+        aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam) || [];
+      } else {
+        aiQueue = G.hasDrawn ? [] : [{ phase: 0, moveType: 0, cardCounts: {}, _fallback: true }];
+      }
 
       // Log
-      const CAOFF_B = 72;
-      const flatLog = G.cards2?.[playerID] || [];
+      const CAOFF = 72;
+      const flat = G.cards2?.[playerID] || [];
       const handCards = [];
       for (let i = 0; i < 53; i++) {
-        const cnt = flatLog[CAOFF_B + i] || 0;
-        if (cnt > 0) {
-          const cid = i === 52 ? 54 : i;
-          const s = cid === 54 ? 5 : Math.floor(cid / 13) + 1;
-          const r = cid === 54 ? 2 : (cid % 13) + 1;
-          for (let n = 0; n < cnt; n++) handCards.push(getRankChar(r) + getSuitChar(s));
-        }
+        const cnt = flat[CAOFF + i] || 0;
+        if (cnt > 0) { const cid = i===52?54:i; const s=cid===54?5:Math.floor(cid/13)+1; const r=cid===54?2:(cid%13)+1; for (let n=0;n<cnt;n++) handCards.push(getRankChar(r)+getSuitChar(s)); }
       }
-      const topDiscard = G.discardPile?.length > 0 ? (() => { const c = G.discardPile[G.discardPile.length-1]; const s = c===54?5:Math.floor((c%52)/13)+1; const r = c===54?2:(c%13)+1; return getRankChar(r)+getSuitChar(s); })() : 'empty';
+      const topDiscard = G.discardPile?.length > 0 ? discardStr(G.discardPile[G.discardPile.length-1]) : 'empty';
       console.log(`[BOT] ${botName} | hasDrawn=${G.hasDrawn} hand=[${handCards.join(' ')}] | discard_top=${topDiscard}`);
-
-      aiQueue = buildMoveList(G);
-
-      const pickupM = aiQueue.find(m => m.move === 'drawCard' || m.move === 'pickUpDiscard' || m.move === 'declareExhausted');
-      const meldMs = aiQueue.filter(m => m.move === 'playMeld' || m.move === 'appendToMeld');
-      const discardMs = aiQueue.filter(m => m.move === 'discardCard');
-      if (pickupM) console.log(`  pickup: ${pickupM.move} ${ccStr(pickupM.args?.[0] || {})}`);
-      if (meldMs.length > 0) console.log(`  melds(${meldMs.length}): ${meldMs.map(m => `${m.move}${ccStr(m.args?.[0] || {})}`).join(' | ')}`);
-      else console.log(`  melds: none`);
-      if (discardMs.length > 0) { const cid = discardMs[0].args[0]; const s = cid===54?5:Math.floor((cid%52)/13)+1; const r = cid===54?2:(cid%52)%13+1; console.log(`  discard[0]: ${getRankChar(r)}${getSuitChar(s)} (+${discardMs.length-1} fallbacks)`); }
+      const pickups = aiQueue.filter(m => m.phase === 0);
+      const melds   = aiQueue.filter(m => m.phase === 1);
+      const discards = aiQueue.filter(m => m.phase === 2);
+      if (pickups.length) console.log(`  pickups(${pickups.length}): ${pickups.map(m => m.moveType===0?'draw':m.moveType===5?'exhaust':`pickup${ccStr(m.cardCounts)}`).join(', ')}`);
+      if (melds.length)   console.log(`  melds(${melds.length}): ${melds.map(m => `${m.moveType===2?'meld':'append'}${ccStr(m.cardCounts)}`).join(' | ')}`);
+      if (discards.length) console.log(`  discards(${discards.length}): ${discards.map(m => discardStr(m.discardCard)+(m._fallback?'[fb]':'')).join(', ')}`);
     }
 
     if (aiQueue.length === 0) return;
 
-    const nextMove = aiQueue.shift();
+    const m = aiQueue.shift();
 
-    // Skip pickup if already drawn
-    if ((nextMove.move === 'drawCard' || nextMove.move === 'pickUpDiscard') && currentState.G.hasDrawn) return;
-    // Skip discard if not drawn yet
-    if (nextMove.move === 'discardCard' && !currentState.G.hasDrawn) return;
-
-    const serverMove = nextMove.move === 'meld' ? 'playMeld' : nextMove.move;
-
-    if (nextMove.move === 'discardCard') {
-      const cid = nextMove.args[0]; const s = cid===54?5:Math.floor((cid%52)/13)+1; const r = cid===54?2:(cid%52)%13+1;
-      console.log(`[BOT] ${botName} dispatching: discardCard(${getRankChar(r)}${getSuitChar(s)})${nextMove._fallback?' [fallback]':''}`);
-    } else if (nextMove.move === 'pickUpDiscard') {
-      console.log(`[BOT] ${botName} dispatching: pickUpDiscard ${ccStr(nextMove.args[0] || {})}`);
-    } else if (nextMove.move === 'playMeld') {
-      console.log(`[BOT] ${botName} dispatching: playMeld${ccStr(nextMove.args[0] || {})}`);
-    } else if (nextMove.move === 'appendToMeld') {
-      const tgt = nextMove.args[0];
-      console.log(`[BOT] ${botName} dispatching: appendToMeld ${tgt?.type}[${tgt?.suit||''}${tgt?.index}] ${ccStr(nextMove.args[1] || {})}`);
-    } else {
-      console.log(`[BOT] ${botName} dispatching: ${serverMove}`);
+    // Apply hasPickedUp logic
+    if (m.phase === 0) {
+      if (hasPickedUp) return; // skip remaining pickup moves
+      // Dispatch pickup
+      if (m.moveType === 0) {
+        console.log(`[BOT] ${botName} dispatching: drawCard${m._fallback?' [fallback]':''}`);
+        client.moves.drawCard();
+      } else if (m.moveType === 1) {
+        console.log(`[BOT] ${botName} dispatching: pickUpDiscard ${ccStr(m.cardCounts)}`);
+        client.moves.pickUpDiscard(m.cardCounts, { type: 'new' });
+      } else if (m.moveType === 5) {
+        console.log(`[BOT] ${botName} dispatching: declareExhausted`);
+        client.moves.declareExhausted();
+      }
+      // Mark as picked up optimistically — server will confirm via state change
+      hasPickedUp = true;
+    } else if (m.phase === 1) {
+      if (!hasPickedUp && !G.hasDrawn) return; // can't meld without pickup
+      if (m.moveType === 2) {
+        console.log(`[BOT] ${botName} dispatching: playMeld${ccStr(m.cardCounts)}`);
+        client.moves.playMeld(m.cardCounts);
+      } else if (m.moveType === 3) {
+        const tgt = { type: m.targetType === 1 ? 'seq' : 'runner', suit: m.targetSuit, index: m.targetSlot };
+        console.log(`[BOT] ${botName} dispatching: appendToMeld ${tgt.type}[${tgt.suit||''}${tgt.index}] ${ccStr(m.cardCounts)}`);
+        client.moves.appendToMeld(tgt, m.cardCounts);
+      }
+    } else if (m.phase === 2) {
+      if (!hasPickedUp && !G.hasDrawn) return; // can't discard without pickup
+      console.log(`[BOT] ${botName} dispatching: discardCard(${discardStr(m.discardCard)})${m._fallback?' [fallback]':''}`);
+      client.moves.discardCard(m.discardCard);
     }
-
-    client.moves[serverMove](...(nextMove.args || []));
   };
 
   activeIntervals[clientKey] = setInterval(processQueue, 1000);

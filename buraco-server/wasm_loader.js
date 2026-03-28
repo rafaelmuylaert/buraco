@@ -384,6 +384,72 @@ function _scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, weights
 
 export function isWasmReady() { return _ex !== null; }
 
+// ── Shared turn executor ──────────────────────────────────────────────────────
+// Builds the full ordered move list from WASM output:
+//   [pickup candidates in score order] + [drawCard fallback]
+//   [meld/append moves with positive score, in score order]
+//   [discard candidates in score order] + [force-discard fallback]
+// Returns the list. Callers iterate it:
+//   - fire each move in order
+//   - once a pickup succeeds (hasPickedUp), skip remaining pickup moves
+//   - once a discard succeeds, stop (turn ends)
+export function buildTurnMoveList(G, player, myTeam, oppTeam) {
+    if (!_ex?.cpp_plan_turn) return null;
+    const pInt = parseInt(player);
+    const myTeamIdx = myTeam === 'team0' ? 0 : 1;
+    setActiveTeam(myTeamIdx === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
+    _ex.set_eval_context(pInt, myTeamIdx, myTeamIdx === 0 ? 1 : 0, 0, 0);
+    setMatchState(G, pInt, myTeam, oppTeam);
+    const count = _ex.cpp_plan_turn();
+    if (count === 0) return [];
+
+    const listPtr = _ex.get_move_list();
+    const buf = new Uint8Array(_mem.buffer, listPtr, count * 58);
+
+    const pickupMoves = [];
+    const meldMoves = [];
+    const discardMoves = [];
+    let hasDrawInPickup = false;
+
+    for (let i = 0; i < count; i++) {
+        const off = i * 58;
+        const phase    = buf[off];
+        const moveType = buf[off+1];
+        const tType    = buf[off+2];
+        const tSuit    = buf[off+3];
+        const tSlot    = buf[off+4];
+        const cc = {};
+        for (let j = 0; j < 53; j++) if (buf[off+5+j] > 0) cc[j === 52 ? 54 : j] = buf[off+5+j];
+
+        if (phase === 0) {
+            if (moveType === 0) { pickupMoves.push({ phase, moveType, cardCounts: cc }); hasDrawInPickup = true; }
+            else if (moveType === 1) pickupMoves.push({ phase, moveType, cardCounts: cc });
+            else if (moveType === 5) pickupMoves.push({ phase, moveType, cardCounts: cc });
+        } else if (phase === 1) {
+            // Only positive-scored melds — C++ already sorted descending, all have score > 0 if included
+            meldMoves.push({ phase, moveType, targetType: tType, targetSuit: tSuit, targetSlot: tSlot, cardCounts: cc });
+        } else if (phase === 2) {
+            const discardCard = buf[off+5] === 54 ? 54 : buf[off+5];
+            discardMoves.push({ phase, moveType, discardCard, cardCounts: cc });
+        }
+    }
+
+    // Fallback: force-draw at bottom of pickup list if not already there
+    if (!hasDrawInPickup) pickupMoves.push({ phase: 0, moveType: 0, cardCounts: {}, _fallback: true });
+
+    // Fallback: force-discard (first card in hand) at bottom of discard list
+    const CAOFF = 72;
+    const flat = G.cards2?.[player.toString()] || G.cards2?.[pInt] || [];
+    for (let i = 0; i < 53; i++) {
+        if ((flat[CAOFF + i] || 0) > 0) {
+            discardMoves.push({ phase: 2, moveType: 4, discardCard: i === 52 ? 54 : i, cardCounts: {}, _fallback: true });
+            break;
+        }
+    }
+
+    return [...pickupMoves, ...meldMoves, ...discardMoves];
+}
+
 export function getWasmCardBuffers() {
     return { cards2: _wasmCards2, knownCards2: _wasmKnownCards2, discard2: _wasmDiscard2 };
 }
