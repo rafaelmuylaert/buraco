@@ -363,15 +363,28 @@ static int find_seq_candidates(
     uint8_t m[14] = {0};
     uint8_t from_hand[14] = {0};
 
+    int mstart = 14, mend = -1;
     // Ace
-    if (existingMeld && (existingMeld[0] || existingMeld[1])) m[0]=1;
-    if (sb[0] > 0) { if (!m[0]) from_hand[0]=1; m[0]=1; }
+    if (existingMeld && (existingMeld[0])) {
+        m[0]=1;
+        mstart=0;
+    }
+    if (existingMeld && (existingMeld[1])) {
+        m[13]=1;
+        mend=13;
+    }
+    if (sb[0] > 0) { if (!m[0]) from_hand[0]=1; m[0]=1; from_hand[13]=1; m[13]=1;}
 
+    
     // Ranks 2-K
     for (int r=2; r<=13; r++) {
         int mi = r-1;
         int already_in_meld = (existingMeld && existingMeld[r]) ? 1 : 0;
-        if (already_in_meld) m[mi]=1;
+        if (already_in_meld) {
+            m[mi]=1;
+            if(mi<mstart)mstart=mi;
+            if(mi>mend)mend=mi;
+        }
         int hcard = (r==2) ? (int)(sb[13+(suit-1)]) : (int)(sb[r-1]);
         if (hcard > 0 && !already_in_meld) { from_hand[mi]=1; m[mi]=1; }
     }
@@ -390,12 +403,6 @@ static int find_seq_candidates(
         if (wild0type<0 && sb[17]>0) wild0type=54;
     }
 
-    // Existing meld range in m[] coords
-    int mstart = 14, mend = -1;
-    if (existingMeld) {
-        if (existingMeld[0] || existingMeld[1]) { mstart=0; mend=0; }
-        for (int r=2;r<=13;r++) if (existingMeld[r]) { int mi=r-1; if(mi<mstart)mstart=mi; if(mi>mend)mend=mi; }
-    }
 
     // Log
     dbg_str("fsc s="); dbg_int(suit);
@@ -410,77 +417,35 @@ static int find_seq_candidates(
 
     int run_start = -1, prev_end = -1, prev_start = -1;
 
-    auto emit = [&](int lo, int hi) -> int {
+    auto emit = [&](int lo, int hi, bool gaps) -> int {
         if (nSeq >= MAX_SEQ_CANDS) return 0;
         int new_cards = 0;
         for (int i=lo;i<=hi;i++) if(m[i] && from_hand[i]) new_cards++;
         if (existingMeld && new_cards == 0) return 0;
 
         // For appends: new hand cards must be adjacent to existing meld boundary
-        if (existingMeld && new_cards > 0) {
-            int ex_lo=15, ex_hi=-1;
-            if (existingMeld[0]) { ex_lo=0; ex_hi=0; }
-            if (existingMeld[1]) { if(14<ex_lo)ex_lo=14; if(14>ex_hi)ex_hi=14; }
-            for(int j=2;j<=13;j++) if(existingMeld[j]) { if(j<ex_lo)ex_lo=j; if(j>ex_hi)ex_hi=j; }
-            int touches=0;
-            for(int i=lo;i<=hi&&!touches;i++) {
-                if (!from_hand[i]) continue;
-                int ds = (i==0)?0:(i+1);
-                if (ds >= ex_lo-2 && ds <= ex_hi+2) touches=1;
-            }
-            if (!touches) return 0;
-        }
+        if (existingMeld && (lo>=mstart || hi<=mend)) return 0;
 
         uint8_t dst[16]={0}, cc[53]={0};
         dst[14] = w14;
         dst[15] = w15;
-
-        int has_ace = 0;
         for (int i=lo;i<=hi;i++) {
             if (!m[i]) continue;
-            if (existingMeld && !from_hand[i]) {
-                if (i==0) has_ace=1;
-                else if (i==1) { /* nat2 already promoted to w15 */ }
-                else dst[i+1]=1;
-                continue;
-            }
-            if (i==0) { has_ace=1; cc[(suit-1)*13+0]++; }
-            else if (i==1) {
-                if (dst[15]==0 && dst[14]==0) { dst[15]=1; cc[(suit-1)*13+1]++; }
-            }
-            else { dst[i+1]=1; cc[(suit-1)*13+i]=1; }
+            dst[i==13 ? 1 : i==0 ? 0 : i+1]=m[i];
+            int cardindex = i==13 ? (suit-1)*13+0  : i==0 ? (suit-1)*13+0  : (suit-1)*13+i; //special case for high ace
+            cc[cardindex]+=from_hand[i];
         }
 
-        if (has_ace) {
-            if (from_hand[0]) {
-                if (dst[13]) { if(!existingMeld||!existingMeld[1]) dst[1]=1; }
-                else         { if(!existingMeld||!existingMeld[0]) dst[0]=1; }
-            } else if (existingMeld) {
-                dst[0]=existingMeld[0]; dst[1]=existingMeld[1];
+        if(gaps && w14 == 0 && w15==0) {
+            if (sb[13+(suit-1)]>from_hand[1]) {
+                cc[(suit-1)*13+1]++;
+                dst[15]=1;
             }
-        }
-
-        int gaps = check_gaps(dst);
-        if (gaps > 0) {
-            if (dst[14]!=0 || dst[15]!=0) {
-                // existing wild covers the gap
-            } else if (can_add_wild && wild0type >= 0) {
-                int ws = (wild0type==54)?5:(wild0type/13+1);
-                if (ws==5||ws!=suit) dst[14]=(uint8_t)ws;
-                else                 dst[15]=1;
+            else{
                 cc[wild0type==54?52:wild0type]++;
-            } else {
-                return 0;
+                dst[14]=(uint8_t)(wild0type==54?5:wild0type/13+1);
             }
         }
-
-        if (dst[15]==1 && dst[3]==1) { dst[2]=1; dst[15]=0; cc[(suit-1)*13+1]=0; }
-
-        gaps = check_gaps(dst);
-        int hw2 = dst[14]!=0 || dst[15]!=0;
-        int tlen = dst[15]+(dst[14]?1:0);
-        for(int j=0;j<=13;j++) tlen+=dst[j];
-        if (gaps>(hw2?1:0) || tlen<3 || tlen>14) return 0;
 
         dbg_str(" emit["); dbg_int(lo); dbg_str("-"); dbg_int(hi); dbg_str("]\n");
 
@@ -515,7 +480,8 @@ static int find_seq_candidates(
     for (int pos=1; pos<=13 && nSeq<MAX_SEQ_CANDS; pos++) {
         if (m[pos]) {
             cgap++;
-        } else {
+        } 
+        if (!m[pos] || pos == 13) {
             // Gap at pos
             // If gap is inside existing meld range, wild is consumed there — can't use for bridging
             int local_wilds = wilds_avail;
@@ -526,51 +492,20 @@ static int find_seq_candidates(
                 int lo = pos - cnogap - cgap - 1;
                 int hi = pos - 1;
                 if (lo < 0) lo = 0;
-                emit(lo, hi);
+                emit(lo, hi, true);
             }
 
             if (cgap >= 3) {
                 // Emit natural run
                 int lo = pos - cgap;
                 int hi = pos - 1;
-                emit(lo, hi);
+                emit(lo, hi, false);
             }
 
             cnogap = cgap;
             cgap = 0;
         }
     }
-
-    // Flush final run
-    {
-        int pos = 14;  // one past end
-        int local_wilds = wilds_avail;
-
-        if (cgap > 0 && cnogap > 0 && local_wilds) {
-            int lo = pos - cnogap - cgap - 1;
-            int hi = pos - 1;
-            if (lo < 0) lo = 0;
-            emit(lo, hi);
-        }
-
-        if (cgap >= 3) {
-            int lo = pos - cgap;
-            int hi = pos - 1;
-            emit(lo, hi);
-        }
-
-        // Wild hi-extension: extend final run by 1
-        if (cgap >= 2 && wilds_avail && pos <= 13) {
-            emit(pos - cgap, pos);
-        }
-
-        // Wild lo-extension: extend final run down by 1
-        if (cgap >= 2 && wilds_avail) {
-            int lo = pos - cgap - 1;
-            if (lo >= 0) emit(lo, pos - 1);
-        }
-    }
-
     return nSeq;
 }
 
