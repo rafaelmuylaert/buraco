@@ -458,6 +458,11 @@ export function getWasmCardBuffers() {
 // use WASM-backed buffers directly (runs in main process, not worker).
 export function syncCardsToWasm(G, numPlayers) {
     if (!_wasmCards2.length) return;
+    for (let i = 0; i < 4; i++) {
+        _wasmCards2[i].fill(0);
+        _wasmKnownCards2[i].fill(0);
+    }
+    _wasmDiscard2.fill(0);
     for (let i = 0; i < numPlayers; i++) {
         const p = i.toString();
         if (G.cards2[p])      _wasmCards2[i].set(G.cards2[p]);
