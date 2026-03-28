@@ -375,9 +375,9 @@ static int find_seq_candidates(
     }
     if (sb[0] > 0) { if (!m[0]) from_hand[0]=1; m[0]=1; from_hand[13]=1; m[13]=1;}
 
-    
+    m[1] = existingMeld ? existingMeld[2] : 0;
     // Ranks 2-K
-    for (int r=2; r<=13; r++) {
+    for (int r=3; r<=13; r++) {
         int mi = r-1;
         int already_in_meld = (existingMeld && existingMeld[r]) ? 1 : 0;
         if (already_in_meld) {
@@ -385,7 +385,6 @@ static int find_seq_candidates(
             if(mi<mstart)mstart=mi;
             if(mi>mend)mend=mi;
         }
-        int hcard = (r==2) ? (int)(sb[13+(suit-1)]) : (int)(sb[r-1]);
         if (hcard > 0 && !already_in_meld) { from_hand[mi]=1; m[mi]=1; }
     }
 
@@ -637,22 +636,11 @@ static int plan_turn() {
                 }
                         for(int ci=0; ci<g_num_append_cands && nPickup<MAX_SEQ_CANDS+1; ci++) {
                 int usesTop = (td_alloff<53) ? g_cand_append_cc[ci][td_alloff] : 0;
-                dbg_str("appCI="); dbg_int(ci);
-                dbg_str(" nac="); dbg_int(g_num_append_cands);
-                dbg_str(" usesTop="); dbg_int(usesTop);
-                dbg_str(" td_alloff="); dbg_int(td_alloff);
-                dbg_str(" cc="); dbg_int(g_cand_append_cc[ci][td_alloff]);
-                dbg_str(" suit="); dbg_int(g_cand_append_suit[ci]);
-                dbg_str(" slot="); dbg_int(g_cand_append_slot[ci]);
-                dbg_str("\n");
                 if (usesTop) {
                     int existSlot = g_cand_append_slot[ci];
                     int existSuit = g_cand_append_suit[ci];
                     const uint8_t* em = g_seq_melds[g_my_team][existSuit-1][existSlot];
                     int topMeldSlot = (td_rank==1)?0:td_rank;
-                    dbg_str(" topMeldSlot="); dbg_int(topMeldSlot);
-                    dbg_str(" em[tms]="); dbg_int(topMeldSlot<16?em[topMeldSlot]:99);
-                    dbg_str("\n");
                     if (topMeldSlot<16 && em[topMeldSlot]) usesTop=0;
                 }
                 if (!usesTop) continue;
