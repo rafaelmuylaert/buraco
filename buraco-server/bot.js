@@ -99,6 +99,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
   let aiQueue = [];
   let failStreak = 0;
   let lastDispatchedAt = 0;
+  let lastDispatchedMove = null;
   let lastStateId = null;
   let stopped = false;
 
@@ -144,11 +145,14 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         lastStateId = currentStateId;
         failStreak = 0;
       } else if (now - lastDispatchedAt >= 3000) {
-        // Move rejected — skip it and continue queue
-        console.warn(`[BOT] ${botName} move rejected, skipping | hasDrawn=${currentState.G.hasDrawn}`);
+        // Move rejected — if it was a discard, try next in queue; otherwise clear
+        const wasDiscard = lastDispatchedMove?.move === 'discardCard';
+        console.warn(`[BOT] ${botName} move rejected (${lastDispatchedMove?.move}) | hasDrawn=${currentState.G.hasDrawn}`);
         lastDispatchedAt = 0;
         failStreak++;
-        if (failStreak >= 5) {
+        if (wasDiscard && aiQueue.length > 0) {
+          // Queue still has more discards to try — let the loop continue
+        } else if (failStreak >= 5) {
           aiQueue = [];
           failStreak = 0;
           const handSize = currentState.G.handSizes?.[playerID] ?? 0;
@@ -276,6 +280,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         console.log(`[BOT] ${botName} dispatching: ${serverMove}`);
       }
       client.moves[serverMove](...(nextMove.args || []));
+      lastDispatchedMove = nextMove;
       lastDispatchedAt = Date.now();
     } else {
       console.warn(`[BOT] ${botName} enumerate returned empty | hasDrawn=${currentState.G.hasDrawn} handSize=${currentState.G.handSizes?.[playerID]}`);
