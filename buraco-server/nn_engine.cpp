@@ -635,24 +635,35 @@ static int plan_turn() {
                     if (!hasCards) continue;
                     g_num_append_cands = find_seq_candidates(sim, s, wild0type, hasWild, em, slot, g_num_append_cands);
                 }
-            for(int ci=0; ci<g_num_append_cands && nPickup<MAX_SEQ_CANDS+1; ci++) {
+                        for(int ci=0; ci<g_num_append_cands && nPickup<MAX_SEQ_CANDS+1; ci++) {
                 int usesTop = (td_alloff<53) ? g_cand_append_cc[ci][td_alloff] : 0;
+                dbg_str("appCI="); dbg_int(ci);
+                dbg_str(" nac="); dbg_int(g_num_append_cands);
+                dbg_str(" usesTop="); dbg_int(usesTop);
+                dbg_str(" td_alloff="); dbg_int(td_alloff);
+                dbg_str(" cc="); dbg_int(g_cand_append_cc[ci][td_alloff]);
+                dbg_str(" suit="); dbg_int(g_cand_append_suit[ci]);
+                dbg_str(" slot="); dbg_int(g_cand_append_slot[ci]);
+                dbg_str("\n");
                 if (usesTop) {
                     int existSlot = g_cand_append_slot[ci];
                     int existSuit = g_cand_append_suit[ci];
                     const uint8_t* em = g_seq_melds[g_my_team][existSuit-1][existSlot];
                     int topMeldSlot = (td_rank==1)?0:td_rank;
+                    dbg_str(" topMeldSlot="); dbg_int(topMeldSlot);
+                    dbg_str(" em[tms]="); dbg_int(topMeldSlot<16?em[topMeldSlot]:99);
+                    dbg_str("\n");
                     if (topMeldSlot<16 && em[topMeldSlot]) usesTop=0;
                 }
                 if (!usesTop) continue;
                 pickupCandType[nPickup] = 2;
                 for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[nPickup][i]=g_cand_append_cc[ci][i];
                 if (td_alloff<53 && pickupCC[nPickup][td_alloff]>0) pickupCC[nPickup][td_alloff]--;
-                // Store append target in pickupTarget array
                 pickupTarget[nPickup][0] = g_cand_append_suit[ci];
                 pickupTarget[nPickup][1] = g_cand_append_slot[ci];
                 nPickup++;
             }
+
             g_num_seq_cands = 0;
             g_num_run_cands = 0;
             g_num_append_cands = 0;
