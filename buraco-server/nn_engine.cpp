@@ -427,31 +427,40 @@ static void dbg_int(int v) {
 static int find_seq_candidates(
     int player, int suit, int wild0type, int hasWild,
     const uint8_t* existingMeld, int existingSlot,
-    int nSeq
+    int nSeq,
+    const uint8_t* extraCards = nullptr  // optional extra cards to merge into bitmap
 ) {
     const uint8_t* sb = &g_cards2[player][(suit-1)*18];
+    const uint8_t* eb = extraCards ? &extraCards[(suit-1)*18] : nullptr;
 
     uint8_t m[14] = {0};
     uint8_t from_hand[14] = {0};
 
     // Ace
     if (existingMeld && (existingMeld[0] || existingMeld[1])) m[0]=1;
-    if (sb[0] > 0) { if (!m[0]) from_hand[0]=1; m[0]=1; }
+    int ace_count = (int)sb[0] + (eb ? (int)eb[0] : 0);
+    if (ace_count > 0) { if (!m[0]) from_hand[0]=1; m[0]=1; }
 
     // Ranks 2-K
     for (int r=2; r<=13; r++) {
         int mi = r-1;
         if (existingMeld && existingMeld[r]) m[mi]=1;
-        int hcard = (r==2) ? (int)(sb[13+(suit-1)]) : (int)(sb[r-1]);
+        int hcard = (r==2) ? (int)(sb[13+(suit-1)]) + (eb ? (int)(eb[13+(suit-1)]) : 0)
+                           : (int)(sb[r-1])          + (eb ? (int)(eb[r-1])         : 0);
         if (hcard > 0) { if (!m[mi]) from_hand[mi]=1; m[mi]=1; }
     }
 
-    // Wild slots: copy from existing meld, then promote nat2 if both wild slots free
-    uint8_t w14 = existingMeld ? existingMeld[14] : 0;
-    uint8_t w15 = existingMeld ? existingMeld[15] : 0;
-    if (existingMeld && existingMeld[2]==1 && w14==0 && w15==0) {
-        m[1] = 0;  // clear rank-2 position from merged bitmap
-        w15 = 1;   // promote to nat-wild slot
+    // Wild availability
+    int meld_has_wild = existingMeld ? ((existingMeld[14]!=0?1:0) + existingMeld[15] > 0 ? 1 : 0) : 0;
+    // hand wilds: all wild slots in this suit's block + joker slot
+    int hand_wilds = 0;
+    for (int i=13;i<=17;i++) hand_wilds += sb[i];
+    if (eb) for (int i=13;i<=17;i++) hand_wilds += eb[i];
+    int can_add_wild = (!meld_has_wild && (hasWild || hand_wilds > 0)) ? 1 : 0;
+    // Update wild0type from extra cards if not already set
+    if (can_add_wild && wild0type < 0) {
+        for(int s=1;s<=4&&wild0type<0;s++) if(eb && eb[13+(s-1)]>0) wild0type=(s-1)*13+1;
+        if (wild0type<0 && eb && eb[17]>0) wild0type=54;
     }
 
     // Can add a wild from hand only if both wild slots still free
@@ -568,9 +577,7 @@ static int find_seq_candidates(
                     emit(prev_start, cur_end);
                 if (cur_len >= 2) emit(run_start, pos);
                 if (cur_len >= 2 && run_start > 0) {
-                    m[run_start-1]=1; from_hand[run_start-1]=1;
                     emit(run_start-1, cur_end);
-                    m[run_start-1]=0; from_hand[run_start-1]=0;
                 }
                 prev_start = run_start;
                 prev_end   = cur_end;
@@ -586,9 +593,7 @@ static int find_seq_candidates(
         if (cur_len >= 3) emit(run_start, cur_end);
         if (cur_len >= 2 && cur_end < 13) emit(run_start, cur_end+1);
         if (cur_len >= 2 && run_start > 0) {
-            m[run_start-1]=1; from_hand[run_start-1]=1;
             emit(run_start-1, cur_end);
-            m[run_start-1]=0; from_hand[run_start-1]=0;
         }
         if (prev_end >= 0 && run_start == prev_end + 2)
             emit(prev_start, cur_end);
@@ -772,41 +777,51 @@ static int plan_turn() {
         g_num_seq_cands = 0;  // reset after pickup net pass
     }
 
-    // Snapshot hand before simulation — restored after scoring to keep WASM state clean
-    uint8_t hand_snap[CARDS_FLAT_SIZE];
-    for(int i=0;i<CARDS_FLAT_SIZE;i++) hand_snap[i]=g_cards2[player][i];
+        // Build extra-cards buffer for post-pickup simulation (never touches g_cards2)
+    uint8_t extra[CARDS_FLAT_SIZE] = {0};
+    const uint8_t* extraPtr = nullptr;
 
-        if (bestPickup == 0) {
+    if (bestPickup == 0) {
         add_move(0, MOVE_DRAW, 0,0,0, nullptr);
-        if (g_top_deck != 255) hand_add_card(player, g_top_deck);
+        // Deck top is secret on client — no simulation possible, plan from real hand only
     } else {
         add_move(0, MOVE_PICKUP, 0,0,0, pickupCC[bestPickup]);
-        // Meld simulation: add full discard pile, then subtract the pickup meld cards
-        // (hand cards used + top card which is implicit in pickupCC but was already
-        // removed from the pile by the server). This gives phase-1 the correct hand.
-        hand_add_discard_pile(player);
+        // extra = full discard pile minus the pickup meld hand cards
         for(int j=0;j<CAND_CC_SIZE;j++) {
-            int cnt=pickupCC[bestPickup][j]; if(!cnt) continue;
-            int ct=(j==52)?54:j;
-            if(g_cards2[player][CARDS_ALL_OFF+j]>=cnt) g_cards2[player][CARDS_ALL_OFF+j]-=cnt;
-            int s=(ct==54)?-1:ct/13, r=(ct==54)?-1:ct%13;
-            if(s>=0&&r==1) { for(int i=0;i<4;i++) if(g_cards2[player][i*18+13+s]>0) g_cards2[player][i*18+13+s]--; }
-            else if(s>=0)  { if(g_cards2[player][s*18+r]>0) g_cards2[player][s*18+r]--; }
-            else           { for(int i=0;i<4;i++) if(g_cards2[player][i*18+17]>0) g_cards2[player][i*18+17]--; }
+            int pile = g_discard2[CARDS_ALL_OFF+j];
+            int used = (j<CAND_CC_SIZE) ? pickupCC[bestPickup][j] : 0;
+            int net  = pile - used;
+            if (net <= 0) continue;
+            int ct = (j==52)?54:j;
+            // add net copies to extra[]
+            for(int n=0;n<net;n++) {
+                if (ct==54) {
+                    for(int i=0;i<4;i++) extra[i*18+17]++;
+                    extra[CARDS_ALL_OFF+52]++;
+                } else {
+                    int s=ct/13, r=ct%13;
+                    if (r==1) { for(int i=0;i<4;i++) extra[i*18+13+s]++; }
+                    else      { extra[s*18+r]++; }
+                    extra[CARDS_ALL_OFF+ct]++;
+                }
+            }
         }
+        extraPtr = extra;
     }
 
-
-    // Phase 1: Melds & Appends (scored against simulated post-pickup hand)
-    // Find wild card in hand (first 2 or joker)
+    // Phase 1: Melds & Appends — find wild in real hand + extra
     int p1_wild0type = -1, p1_hasWild = 0;
     for(int s=1;s<=4&&!p1_hasWild;s++) {
-        if (wild2_count(player,s)) { p1_wild0type=(s-1)*13+1; p1_hasWild=1; }
+        int w = wild2_count(player,s) + (extraPtr ? extraPtr[(s-1)*18+13+(s-1)] : 0);
+        if (w) { p1_wild0type=(s-1)*13+1; p1_hasWild=1; }
     }
-    if (!p1_hasWild && all_count(player,54)) { p1_wild0type=54; p1_hasWild=1; }
+    if (!p1_hasWild) {
+        int j = all_count(player,54) + (extraPtr ? extraPtr[CARDS_ALL_OFF+52] : 0);
+        if (j) { p1_wild0type=54; p1_hasWild=1; }
+    }
     // New melds
     int p1_nSeq = 0;
-    for(int s=1;s<=4;s++) p1_nSeq = find_seq_candidates(player, s, p1_wild0type, p1_hasWild, nullptr, -1, p1_nSeq);
+    for(int s=1;s<=4;s++) p1_nSeq = find_seq_candidates(player, s, p1_wild0type, p1_hasWild, nullptr, -1, p1_nSeq, extraPtr);
     g_num_seq_cands = p1_nSeq;
     // Appends
     g_num_append_cands = 0;
@@ -815,9 +830,8 @@ static int plan_turn() {
             const uint8_t* em = g_seq_melds[g_my_team][s-1][slot];
             int hasCards=0; for(int j=0;j<16;j++) if(em[j]) { hasCards=1; break; }
             if (!hasCards) continue;
-            g_num_append_cands = find_seq_candidates(player, s, p1_wild0type, p1_hasWild, em, slot, g_num_append_cands);
+            g_num_append_cands = find_seq_candidates(player, s, p1_wild0type, p1_hasWild, em, slot, g_num_append_cands, extraPtr);
         }
-
     int handTotal=0;
     for(int i=0;i<53;i++) handTotal+=g_cards2[player][CARDS_ALL_OFF+i];
     (void)handTotal; // suppress unused warning
@@ -940,7 +954,7 @@ static int plan_turn() {
         }
     }
 
-    // Phase 2: Discard — score all cards, add sorted
+    // Phase 2: Discard — score all cards in real hand + extra
     use_net(g_discard_layers, g_discard_nlayers, g_discard_woff);
     g_layerkey=3; g_suit=0;
     for(int o=0;o<g_layer_sizes[g_discard_nlayers-1];o++) g_out[o]=0.0f;
@@ -948,7 +962,8 @@ static int plan_turn() {
 
     float dscores[53]; int dcards[53]; int nd=0;
     for(int i=0;i<53;i++) {
-        if (!g_cards2[player][CARDS_ALL_OFF+i]) continue;
+        int cnt = g_cards2[player][CARDS_ALL_OFF+i] + (extraPtr ? extraPtr[CARDS_ALL_OFF+i] : 0);
+        if (!cnt) continue;
         dscores[nd]=g_out[i]; dcards[nd]=i; nd++;
     }
     for(int i=1;i<nd;i++) {
@@ -962,9 +977,6 @@ static int plan_turn() {
         cc[0] = (uint8_t)cardId;
         add_move(2, MOVE_DISCARD, 0,0,0, cc);
     }
-
-    // Restore hand to pre-simulation state
-    for(int i=0;i<CARDS_FLAT_SIZE;i++) g_cards2[player][i]=hand_snap[i];
 
     return g_move_count;
 }
