@@ -428,7 +428,7 @@ static int find_seq_candidates(
     int player, int suit, int wild0type, int hasWild,
     const uint8_t* existingMeld, int existingSlot,
     int nSeq,
-    const uint8_t* extraCards = nullptr  // optional extra cards to merge into bitmap
+    const uint8_t* extraCards = nullptr
 ) {
     const uint8_t* sb = &g_cards2[player][(suit-1)*18];
     const uint8_t* eb = extraCards ? &extraCards[(suit-1)*18] : nullptr;
@@ -450,21 +450,25 @@ static int find_seq_candidates(
         if (hcard > 0) { if (!m[mi]) from_hand[mi]=1; m[mi]=1; }
     }
 
-    // Wild availability
-    int meld_has_wild = existingMeld ? ((existingMeld[14]!=0?1:0) + existingMeld[15] > 0 ? 1 : 0) : 0;
-    // hand wilds: all wild slots in this suit's block + joker slot
+    // Wild slots: copy from existing meld, then promote nat2 if both wild slots free
+    uint8_t w14 = existingMeld ? existingMeld[14] : 0;
+    uint8_t w15 = existingMeld ? existingMeld[15] : 0;
+    if (existingMeld && existingMeld[2]==1 && w14==0 && w15==0) {
+        m[1] = 0;
+        w15 = 1;
+    }
+
+    // Can add a wild from hand+extra only if both wild slots still free
     int hand_wilds = 0;
     for (int i=13;i<=17;i++) hand_wilds += sb[i];
     if (eb) for (int i=13;i<=17;i++) hand_wilds += eb[i];
-    int can_add_wild = (!meld_has_wild && (hasWild || hand_wilds > 0)) ? 1 : 0;
-    // Update wild0type from extra cards if not already set
+    int can_add_wild = (w14==0 && w15==0 && (hasWild || hand_wilds > 0)) ? 1 : 0;
+    // Resolve wild0type from extra if not already set
     if (can_add_wild && wild0type < 0) {
-        for(int s=1;s<=4&&wild0type<0;s++) if(eb && eb[13+(s-1)]>0) wild0type=(s-1)*13+1;
+        for(int s=1;s<=4&&wild0type<0;s++)
+            if (eb && eb[13+(s-1)]>0) wild0type=(s-1)*13+1;
         if (wild0type<0 && eb && eb[17]>0) wild0type=54;
     }
-
-    // Can add a wild from hand only if both wild slots still free
-    int can_add_wild = (w14==0 && w15==0 && hasWild) ? 1 : 0;
 
     // Existing meld range in m[] coords
     int mstart = 14, mend = -1;
@@ -482,6 +486,7 @@ static int find_seq_candidates(
     dbg_str(" m[");
     for(int i=0;i<14;i++) if(m[i]) { dbg_int(i); dbg_char(from_hand[i]?'h':'e'); dbg_char(' '); }
     dbg_str("]\n");
+
 
     int run_start = -1, prev_end = -1, prev_start = -1;
 
