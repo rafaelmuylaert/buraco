@@ -405,18 +405,22 @@ static int find_seq_candidates(
     for (int r = 1; r <= 13; r++) bm[r] = rank_count(player, suit, r);
     bm[14] = bm[1];
 
-    // For appends: determine the existing meld's [mn..mx] no-split zone
+    // For appends: determine the existing meld's [mn..mx] range in bitmap coords
+    // Bitmap coords: 1=Ace-low, 2..13=2..K, 14=Ace-high
+    // Meld slot coords: 0=Ace-low, 1=Ace-high, 2..13=2..K
+    // Convert: slot 0 -> bm 1, slot 1 -> bm 14, slot r(2..13) -> bm r
     int ex_mn = -1, ex_mx = -1;
     if (existingMeld) {
-        // min/max of existing meld
-        if (existingMeld[0]) ex_mn = 0;
+        // Find min in bitmap coords
+        if (existingMeld[0]) ex_mn = 1;  // Ace-low = bm[1]
         else { for (int i=2;i<=13;i++) if (existingMeld[i]) { ex_mn=i; break; } }
         if (ex_mn < 0) ex_mn = existingMeld[1] ? 14 : 15;
-        if (existingMeld[1]) ex_mx = 14;
+        // Find max in bitmap coords
+        if (existingMeld[1]) ex_mx = 14;  // Ace-high = bm[14]
         else { for (int i=13;i>=2;i--) if (existingMeld[i]) { ex_mx=i; break; } }
-        if (ex_mx < 0) ex_mx = existingMeld[0] ? 0 : -1;
+        if (ex_mx < 0) ex_mx = existingMeld[0] ? 1 : -1;
 
-        // For appends, add existing meld cards to bitmap so runs extend naturally
+        // Add existing meld cards to bitmap so runs extend naturally
         if (existingMeld[0]) bm[1] = 1;
         if (existingMeld[1]) bm[14] = 1;
         for (int r=2;r<=13;r++) if (existingMeld[r]) bm[r] = 1;
@@ -430,14 +434,12 @@ static int find_seq_candidates(
         int hi = r - 1;
         int runLen = hi - lo + 1;
 
-        // For appends: only consider runs that extend beyond the existing meld
-        // (i.e. the run must overlap with [ex_mn..ex_mx] and extend past it)
+        // For appends: skip runs entirely within the existing meld range
+        // A run that extends at least one step beyond [ex_mn..ex_mx] is valid
         if (existingMeld) {
-            // Skip runs entirely within the existing meld
-            if (lo >= ex_mn && hi <= ex_mx) continue;
-            // Skip runs entirely outside (no overlap with existing meld)
-            if (hi < ex_mn || lo > ex_mx) continue;
-            // The run overlaps — compute the cc as only the NEW cards (outside existing meld)
+            if (lo >= ex_mn && hi <= ex_mx) continue;  // entirely inside — skip
+            // runs entirely outside are fine: they won't produce new cards adjacent
+            // to the meld, so check_gaps will reject them naturally
         }
 
         // 1. Natural run >= 3
@@ -499,7 +501,7 @@ static int find_seq_candidates(
                         dst[rr]=1; cc[(suit-1)*13+(rr-1)]=1; added++;
                     }
                     if (lo==1&&!existingMeld[0]) { dst[0]=1; cc[(suit-1)*13+0]=1; added++; }
-                    if (added>=0) {
+                    if (added > 0) {
                         int gaps=check_gaps(dst), hw=dst[14]!=0||dst[15]!=0;
                         int len=dst[15]+(dst[14]?1:0); for(int j=0;j<=13;j++) len+=dst[j];
                         if (gaps<=(hw?1:0)&&len>=3&&len<=14) {
