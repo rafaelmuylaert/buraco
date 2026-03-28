@@ -37,7 +37,7 @@ function executeTurn(S, p, moves) {
         if (m.phase === 0) {
             if (hasPickedUp) continue; // already picked up, skip remaining pickup moves
             if (m.moveType === 0) { if (moveDrawCard(S, p)) hasPickedUp = true; }
-            else if (m.moveType === 1) { if (movePickUpDiscard(S, p, m.cardCounts, { type: 'new' })) hasPickedUp = true; }
+            else if (m.moveType === 1) { if (movePickUpDiscard(S, p, m.cardCounts, m.pickupTarget || { type: 'new' })) hasPickedUp = true; }
             else if (m.moveType === 5) { S.isExhausted = true; hasPickedUp = true; }
         } else if (m.phase === 1) {
             if (!hasPickedUp) continue; // can't meld without picking up first
