@@ -424,7 +424,7 @@ static int find_seq_candidates(
         if (existingMeld && new_cards == 0) return 0;
 
         // For appends: new hand cards must be adjacent to existing meld boundary
-        if (existingMeld && (lo>=mstart || hi<=mend)) return 0;
+        if (existingMeld && (lo>mstart || hi<mend)) return 0;
 
         uint8_t dst[16]={0}, cc[53]={0};
         dst[14] = w14;
