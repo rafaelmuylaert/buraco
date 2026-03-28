@@ -400,7 +400,7 @@ export function isWasmReady() { return _ex !== null; }
 //   - fire each move in order
 //   - once a pickup succeeds (hasPickedUp), skip remaining pickup moves
 //   - once a discard succeeds, stop (turn ends)
-export function buildTurnMoveList(G, player, myTeam, oppTeam) {
+export function buildTurnMoveList(G, player, myTeam, oppTeam, silent = false) {
     if (!_ex?.cpp_plan_turn) return null;
     const pInt = parseInt(player);
     const myTeamIdx = myTeam === 'team0' ? 0 : 1;
@@ -408,7 +408,7 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam) {
     _ex.set_eval_context(pInt, myTeamIdx, myTeamIdx === 0 ? 1 : 0, 0, 0);
     setMatchState(G, pInt, myTeam, oppTeam);
     const count = _ex.cpp_plan_turn();
-    if (_ex.get_dbg_buf && _ex.get_dbg_len) { const len = _ex.get_dbg_len(); if (len > 0) console.log("[CPP]" + new TextDecoder().decode(new Uint8Array(_mem.buffer, _ex.get_dbg_buf(), len))); }
+    if (!silent && _ex.get_dbg_buf && _ex.get_dbg_len) { const len = _ex.get_dbg_len(); if (len > 0) console.log("[CPP]" + new TextDecoder().decode(new Uint8Array(_mem.buffer, _ex.get_dbg_buf(), len))); }
 
     const listPtr = _ex.get_move_list();
     const buf = new Uint8Array(_mem.buffer, listPtr, count * 58);

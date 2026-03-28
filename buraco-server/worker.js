@@ -100,7 +100,7 @@ function runMatch(genomes, rules, fixedDeck) {
 
             const myTeam  = S.teams[p] === 'team0' ? 'team0' : 'team1';
             const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
-            const moves = buildTurnMoveList(S, p, myTeam, oppTeam);
+            const moves = buildTurnMoveList(S, p, myTeam, oppTeam, true);
 
             if (moves && moves.length > 0) {
                 executeTurn(S, p, moves);
