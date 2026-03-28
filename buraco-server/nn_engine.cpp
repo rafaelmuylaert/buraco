@@ -558,7 +558,7 @@ static void sim_init(uint8_t* sim, int player, int topDiscard) {
 static int plan_turn() {
     int player = g_player;
     g_move_count = 0;
-    dbg_str("\n\n================PICKUP======================")
+    dbg_str("\n\n================PICKUP======================");
     dbg_reset();
     for(int i=0;i<MAX_PLANNED_MOVES;i++) for(int j=0;j<58;j++) g_move_list[i][j]=0;
 
@@ -668,7 +668,7 @@ static int plan_turn() {
         g_num_seq_cands = 0;
     }
 
-    dbg_str("\n\n================MELD======================")
+    dbg_str("================MELD======================");
 
     // ── Evolve sim for phase 1 ────────────────────────────────────────────────
     // Always remove top discard from sim (consumed or not drawn)
