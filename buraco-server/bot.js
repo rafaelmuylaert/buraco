@@ -106,22 +106,27 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       if (wasmMoves && wasmMoves.length > 0) {
         let hasPickup = false;
         let pickupIsDiscard = false;
+        const pickupMoves = [];
+        const meldMoves = [];
+        const discardMoves = [];
         for (const m of wasmMoves) {
           if (m.phase === 0) {
-            if (m.moveType === 0) { moves.push({ move: 'drawCard', args: [] }); hasPickup = true; }
-            else if (m.moveType === 1) { moves.push({ move: 'pickUpDiscard', args: [m.cardCounts, { type: 'new' }] }); hasPickup = true; pickupIsDiscard = true; }
-            else if (m.moveType === 5) { moves.push({ move: 'declareExhausted', args: [] }); hasPickup = true; }
+            if (m.moveType === 0) { pickupMoves.push({ move: 'drawCard', args: [] }); hasPickup = true; }
+            else if (m.moveType === 1) { pickupMoves.push({ move: 'pickUpDiscard', args: [m.cardCounts, { type: 'new' }] }); hasPickup = true; pickupIsDiscard = true; }
+            else if (m.moveType === 5) { pickupMoves.push({ move: 'declareExhausted', args: [] }); hasPickup = true; }
           } else if (m.phase === 1) {
-            if (pickupIsDiscard) continue; // server handles meld for closed discard pickup
-            if (m.moveType === 2) moves.push({ move: 'playMeld', args: [m.cardCounts] });
-            else if (m.moveType === 3) moves.push({ move: 'appendToMeld', args: [{ type: m.targetType === 1 ? 'seq' : 'runner', suit: m.targetSuit, index: m.targetSlot }, m.cardCounts] });
+            if (pickupIsDiscard) continue;
+            if (m.moveType === 2) meldMoves.push({ move: 'playMeld', args: [m.cardCounts] });
+            else if (m.moveType === 3) meldMoves.push({ move: 'appendToMeld', args: [{ type: m.targetType === 1 ? 'seq' : 'runner', suit: m.targetSuit, index: m.targetSlot }, m.cardCounts] });
           } else if (m.phase === 2) {
-            moves.push({ move: 'discardCard', args: [m.discardCard] });
-            // keep going — add all remaining discards as fallbacks
+            discardMoves.push({ move: 'discardCard', args: [m.discardCard] });
           }
         }
-        // Guarantee: if no pickup in list, add drawCard as fallback at top
-        if (!hasPickup && !G.hasDrawn) moves.unshift({ move: 'drawCard', args: [] });
+        // Force-draw fallback at bottom of pickup list
+        if (!hasPickup && !G.hasDrawn) pickupMoves.push({ move: 'drawCard', args: [], _fallback: true });
+        else if (!pickupMoves.some(m => m.move === 'drawCard') && !G.hasDrawn)
+          pickupMoves.push({ move: 'drawCard', args: [], _fallback: true });
+        moves.push(...pickupMoves, ...meldMoves, ...discardMoves);
       }
     }
 

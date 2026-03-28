@@ -216,7 +216,6 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
     // A same-suit nat-2 acting as wild should be demoted back to m[2] only when
     // rank 3 is present (so the 2 naturally belongs next to it) and there are no
     // other gaps that actually need filling.
-    console.log(`[cardsToSeqSlots] append wild: suit=${suit} m[14]=${m[14]} m[15]=${m[15]} m[2]=${m[2]} m[3]=${m[3]} gaps=${gaps}`);
     if (m[15] === 1 && (gaps === 2 || gaps === 0 && m[3]===1)) {
             m[2] = 1; m[15] = 0;
     }
@@ -510,11 +509,6 @@ export function moveMeld(G, p, cardCounts, target = null, addCards = 0, topDisca
     const parsed = parseMeld(allCounts, G.rules, existingMeld, target?.suit ? parseInt(target.suit) : 0);
     if (!parsed) return false;
     // Debug: log when appending wilds to check suit context
-    if (target && existingMeld && process?.env?.NODE_ENV !== 'production') {
-        const ids = countsToIds(allCounts);
-        const hasWild = ids.some(c => getRank(c) === 2 || getSuit(c) === 5);
-        if (hasWild) console.log(`[moveMeld] append wild: target.suit=${target?.suit} parsed[14]=${parsed[14]} parsed[15]=${parsed[15]} clean=${isMeldClean(parsed)}`);
-    }
     const newHandSize = G.handSizes[p] - Object.values(counts).reduce((a, b) => a + b, 0) + addCards;
     const isRunner = parsed.length === 6;
     const suit = isRunner ? 0 : (target ? target.suit : seqSuit(allCardIds));

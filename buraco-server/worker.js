@@ -82,20 +82,25 @@ function runMatch(genomes, rules, fixedDeck) {
 
             if (moves && moves.length > 0) {
                 let pickupDone = false;
+                let pickupIsDiscard = false;
                 for (const m of moves) {
                     if (m.phase === 0) {
                         if (pickupDone) continue;
                         if (m.moveType === 0) { moveDrawCard(S, p); pickupDone = true; }
-                        else if (m.moveType === 1) { if (movePickUpDiscard(S, p, m.cardCounts, { type: 'new' })) pickupDone = true; }
+                        else if (m.moveType === 1) { if (movePickUpDiscard(S, p, m.cardCounts, { type: 'new' })) { pickupDone = true; pickupIsDiscard = true; } }
                         else if (m.moveType === 5) { S.isExhausted = true; pickupDone = true; }
                     } else if (m.phase === 1) {
+                        if (!pickupDone || pickupIsDiscard) continue; // skip melds if pickup failed or was discard-pickup
                         if (m.moveType === 2) moveMeld(S, p, m.cardCounts);
                         else if (m.moveType === 3) moveMeld(S, p, m.cardCounts,
                             { type: m.targetType === 1 ? 'seq' : 'runner', suit: m.targetSuit, index: m.targetSlot });
                     } else if (m.phase === 2) {
+                        if (!pickupDone) continue; // skip discards if pickup failed
                         if (moveDiscardCard(S, p, m.discardCard, true)) break;
                     }
                 }
+                // Force-draw fallback if no pickup succeeded
+                if (!pickupDone) { moveDrawCard(S, p); }
             }
 
             // Force-discard if turn not ended
