@@ -216,6 +216,7 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
     // A same-suit nat-2 acting as wild should be demoted back to m[2] only when
     // rank 3 is present (so the 2 naturally belongs next to it) and there are no
     // other gaps that actually need filling.
+    console.log(`[cardsToSeqSlots] append wild: suit=${suit} m[14]=${m[14]} m[15]=${m[15]} m[2]=${m[2]} m[3]=${m[3]} gaps=${gaps}`);
     if (m[15] === 1 && (gaps === 2 || gaps === 0 && m[3]===1)) {
             m[2] = 1; m[15] = 0;
     }
@@ -645,8 +646,8 @@ export function calculateFinalScores(G) {
 let _updateMeld = null;
 let _syncCards = null;
 export function setScoreFunctions(scoreAll, scoreDisc, setCtx, updateMeld, syncCards) {
-    _updateMeld = updateMeld;
-    _syncCards = syncCards;
+    if (updateMeld) _updateMeld = updateMeld;
+    if (syncCards) _syncCards = syncCards;
 }
 
 

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { AI_CONFIG, isMeldClean, seqSuit, addForwardPassTime, addWasmDiag } from './game.js';
+import { AI_CONFIG, isMeldClean, seqSuit, addForwardPassTime, addWasmDiag, setScoreFunctions } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -93,6 +93,8 @@ export async function initWasm() {
 
         _refreshViews();
         _ex.set_inp_scale(1.0 / 255.0);
+        // Register meld update hook so WASM meld tables stay in sync
+        setScoreFunctions(null, null, null, _onUpdateMeld, syncCardsToWasm);
         console.log('🚀 WASM Neural Network Engine Online! (zero-copy)');
         return true;
     } catch (e) {
