@@ -224,7 +224,14 @@ export function updateSeqMeld(teamIdx, suit0, slotIdx, meldArray) {
     if (!_wasmSeqMelds[teamIdx]?.[suit0]?.[slotIdx]) return;
     const dst = _wasmSeqMelds[teamIdx][suit0][slotIdx];
     dst.fill(0);
-    if (meldArray) for (let i = 0; i < 16 && i < meldArray.length; i++) dst[i] = meldArray[i] ? 255 : 0;
+    if (meldArray) {
+        // slots 0-13: binary presence (0 or 1) → store as 0/255
+        for (let i = 0; i < 14 && i < meldArray.length; i++) dst[i] = meldArray[i] ? 255 : 0;
+        // slot 14: foreign wild suit (0=none, 1-5) → store raw value
+        dst[14] = meldArray[14] || 0;
+        // slot 15: nat wild count (0 or 1) → store as 0/255
+        dst[15] = meldArray[15] ? 255 : 0;
+    }
 }
 export function updateRunMeld(teamIdx, slotIdx, meldArray) {
     if (!_wasmRunMelds[teamIdx]?.[slotIdx]) return;
