@@ -141,22 +141,23 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
 
     // Apply hasPickedUp logic
     if (m.phase === 0) {
-      if (hasPickedUp) return; // skip remaining pickup moves
-      // Dispatch pickup
+      if (hasPickedUp) return;
       if (m.moveType === 0) {
         console.log(`[BOT] ${botName} dispatching: drawCard${m._fallback?' [fallback]':''}`);
         client.moves.drawCard();
+        hasPickedUp = true;
       } else if (m.moveType === 1) {
+        // cardCounts contains hand cards only (top discard is implicit)
         console.log(`[BOT] ${botName} dispatching: pickUpDiscard ${ccStr(m.cardCounts)}`);
         client.moves.pickUpDiscard(m.cardCounts, { type: 'new' });
+        hasPickedUp = true;
       } else if (m.moveType === 5) {
         console.log(`[BOT] ${botName} dispatching: declareExhausted`);
         client.moves.declareExhausted();
+        hasPickedUp = true;
       }
-      // Mark as picked up optimistically — server will confirm via state change
-      hasPickedUp = true;
     } else if (m.phase === 1) {
-      if (!hasPickedUp && !G.hasDrawn) return; // can't meld without pickup
+      if (!G.hasDrawn) return; // can't meld without having drawn/picked up
       if (m.moveType === 2) {
         console.log(`[BOT] ${botName} dispatching: playMeld${ccStr(m.cardCounts)}`);
         client.moves.playMeld(m.cardCounts);
@@ -166,7 +167,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         client.moves.appendToMeld(tgt, m.cardCounts);
       }
     } else if (m.phase === 2) {
-      if (!hasPickedUp && !G.hasDrawn) return; // can't discard without pickup
+      if (!G.hasDrawn) return; // can't discard without having drawn/picked up
       console.log(`[BOT] ${botName} dispatching: discardCard(${discardStr(m.discardCard)})${m._fallback?' [fallback]':''}`);
       client.moves.discardCard(m.discardCard);
     }

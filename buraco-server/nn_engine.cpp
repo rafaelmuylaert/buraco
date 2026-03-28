@@ -767,13 +767,26 @@ static int plan_turn() {
     uint8_t hand_snap[CARDS_FLAT_SIZE];
     for(int i=0;i<CARDS_FLAT_SIZE;i++) hand_snap[i]=g_cards2[player][i];
 
-    if (bestPickup == 0) {
+        if (bestPickup == 0) {
         add_move(0, MOVE_DRAW, 0,0,0, nullptr);
         if (g_top_deck != 255) hand_add_card(player, g_top_deck);
     } else {
         add_move(0, MOVE_PICKUP, 0,0,0, pickupCC[bestPickup]);
+        // Meld simulation: add full discard pile, then subtract the pickup meld cards
+        // (hand cards used + top card which is implicit in pickupCC but was already
+        // removed from the pile by the server). This gives phase-1 the correct hand.
         hand_add_discard_pile(player);
+        for(int j=0;j<CAND_CC_SIZE;j++) {
+            int cnt=pickupCC[bestPickup][j]; if(!cnt) continue;
+            int ct=(j==52)?54:j;
+            if(g_cards2[player][CARDS_ALL_OFF+j]>=cnt) g_cards2[player][CARDS_ALL_OFF+j]-=cnt;
+            int s=(ct==54)?-1:ct/13, r=(ct==54)?-1:ct%13;
+            if(s>=0&&r==1) { for(int i=0;i<4;i++) if(g_cards2[player][i*18+13+s]>0) g_cards2[player][i*18+13+s]--; }
+            else if(s>=0)  { if(g_cards2[player][s*18+r]>0) g_cards2[player][s*18+r]--; }
+            else           { for(int i=0;i<4;i++) if(g_cards2[player][i*18+17]>0) g_cards2[player][i*18+17]--; }
+        }
     }
+
 
     // Phase 1: Melds & Appends (scored against simulated post-pickup hand)
     // Find wild card in hand (first 2 or joker)
