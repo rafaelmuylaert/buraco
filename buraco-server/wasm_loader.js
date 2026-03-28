@@ -401,7 +401,7 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam) {
     _ex.set_eval_context(pInt, myTeamIdx, myTeamIdx === 0 ? 1 : 0, 0, 0);
     setMatchState(G, pInt, myTeam, oppTeam);
     const count = _ex.cpp_plan_turn();
-    if (count === 0) return [];
+    if (_ex.get_dbg_buf && _ex.get_dbg_len) { const len = _ex.get_dbg_len(); if (len > 0) console.log("[CPP]" + new TextDecoder().decode(new Uint8Array(_mem.buffer, _ex.get_dbg_buf(), len))); }
 
     const listPtr = _ex.get_move_list();
     const buf = new Uint8Array(_mem.buffer, listPtr, count * 58);

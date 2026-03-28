@@ -404,183 +404,199 @@ static int build_seq_from_run(int player, int suit, int lo, int hi,
 }
 
 
+// ── Debug log buffer ─────────────────────────────────────────────────────────
+#define DBG_BUF_SIZE 4096
+static char g_dbg_buf[DBG_BUF_SIZE];
+static int  g_dbg_pos = 0;
+static void dbg_reset() { g_dbg_pos = 0; g_dbg_buf[0] = 0; }
+static void dbg_char(char c) { if (g_dbg_pos < DBG_BUF_SIZE-1) { g_dbg_buf[g_dbg_pos++]=c; g_dbg_buf[g_dbg_pos]=0; } }
+static void dbg_str(const char* s) { while(*s) dbg_char(*s++); }
+static void dbg_int(int v) {
+    if (v<0) { dbg_char('-'); v=-v; }
+    char tmp[12]; int i=0;
+    if (!v) { dbg_char('0'); return; }
+    while(v>0) { tmp[i++]='0'+(v%10); v/=10; }
+    while(i-->0) dbg_char(tmp[i]);
+}
+
 // ── find_seq_candidates ──────────────────────────────────────────────────────
-// Unified function for both new melds and appends to existing melds.
-// For new melds: existingMeld=null, existingSlot=-1, existingSuit=0
-// For appends:   existingMeld points to the meld, existingSlot/Suit identify it
-// Scans the hand bitmap for the given suit, finds valid runs, tries natural +
-// wild-extended + gap-bridged variants. Writes into g_cand_seq_* arrays.
-// Returns number of candidates added (starting from nSeq).
+// Scans the merged (hand + existingMeld) bitmap linearly, emitting candidates
+// at run boundaries. For new melds: existingMeld=null. For appends: existingMeld
+// is the current meld; only candidates that add at least one new hand card are kept.
+// Returns updated nSeq count.
 static int find_seq_candidates(
     int player, int suit, int wild0type, int hasWild,
     const uint8_t* existingMeld, int existingSlot,
-    int nSeq  // current count, appends from here
+    int nSeq
 ) {
-    // Build bitmap[1..14], slot 14 = ace-high copy of slot 1
-    // bm[2] = same-suit wild-2 count (can fill rank-2 slot or act as wild)
-    int bm[15] = {0};
-    for (int r = 1; r <= 13; r++) bm[r] = rank_count(player, suit, r);
-    bm[2] = wild2_count(player, suit);  // same-suit 2s occupy the rank-2 position
-    bm[14] = bm[1];
+    const uint8_t* sb = &g_cards2[player][(suit-1)*18];
 
-    // For appends: determine the existing meld's [mn..mx] range in bitmap coords
-    // Bitmap coords: 1=Ace-low, 2..13=2..K, 14=Ace-high
-    // Meld slot coords: 0=Ace-low, 1=Ace-high, 2..13=2..K
-    // Convert: slot 0 -> bm 1, slot 1 -> bm 14, slot r(2..13) -> bm r
-    int ex_mn = -1, ex_mx = -1;
+    uint8_t m[14] = {0};
+    uint8_t from_hand[14] = {0};
+
+    // Ace
+    if (existingMeld && (existingMeld[0] || existingMeld[1])) m[0]=1;
+    if (sb[0] > 0) { if (!m[0]) from_hand[0]=1; m[0]=1; }
+
+    // Ranks 2-K
+    for (int r=2; r<=13; r++) {
+        int mi = r-1;
+        if (existingMeld && existingMeld[r]) m[mi]=1;
+        int hcard = (r==2) ? (int)(sb[13+(suit-1)]) : (int)(sb[r-1]);
+        if (hcard > 0) { if (!m[mi]) from_hand[mi]=1; m[mi]=1; }
+    }
+
+    // Wild slots: copy from existing meld, then promote nat2 if both wild slots free
+    uint8_t w14 = existingMeld ? existingMeld[14] : 0;
+    uint8_t w15 = existingMeld ? existingMeld[15] : 0;
+    if (existingMeld && existingMeld[2]==1 && w14==0 && w15==0) {
+        m[1] = 0;  // clear rank-2 position from merged bitmap
+        w15 = 1;   // promote to nat-wild slot
+    }
+
+    // Can add a wild from hand only if both wild slots still free
+    int can_add_wild = (w14==0 && w15==0 && hasWild) ? 1 : 0;
+
+    // Existing meld range in m[] coords
+    int mstart = 14, mend = -1;
     if (existingMeld) {
-        // Find min in bitmap coords
-        if (existingMeld[0]) ex_mn = 1;  // Ace-low = bm[1]
-        else { for (int i=2;i<=13;i++) if (existingMeld[i]) { ex_mn=i; break; } }
-        if (ex_mn < 0) ex_mn = existingMeld[1] ? 14 : 15;
-        // Find max in bitmap coords
-        if (existingMeld[1]) ex_mx = 14;  // Ace-high = bm[14]
-        else { for (int i=13;i>=2;i--) if (existingMeld[i]) { ex_mx=i; break; } }
-        if (ex_mx < 0) ex_mx = existingMeld[0] ? 1 : -1;
-
-        // Add existing meld cards to bitmap so runs extend naturally
-        if (existingMeld[0]) bm[1] = 1;
-        if (existingMeld[1]) bm[14] = 1;
-        for (int r=2;r<=13;r++) if (existingMeld[r]) bm[r] = 1;
+        if (existingMeld[0] || existingMeld[1]) { mstart=0; mend=0; }
+        for (int r=2;r<=13;r++) if (existingMeld[r]) { int mi=r-1; if(mi<mstart)mstart=mi; if(mi>mend)mend=mi; }
     }
 
-    int r = 1;
-    while (r <= 14 && nSeq < MAX_SEQ_CANDS) {
-        if (!bm[r]) { r++; continue; }
-        int lo = r;
-        while (r <= 14 && bm[r]) r++;
-        int hi = r - 1;
-        int runLen = hi - lo + 1;
+    // Log
+    dbg_str("fsc s="); dbg_int(suit);
+    dbg_str(" caw="); dbg_int(can_add_wild);
+    dbg_str(" w14="); dbg_int(w14);
+    dbg_str(" w15="); dbg_int(w15);
+    dbg_str(" app="); dbg_int(existingMeld ? existingSlot : -1);
+    dbg_str(" m[");
+    for(int i=0;i<14;i++) if(m[i]) { dbg_int(i); dbg_char(from_hand[i]?'h':'e'); dbg_char(' '); }
+    dbg_str("]\n");
 
-        // For appends: skip runs entirely within the existing meld range
-        // A run that extends at least one step beyond [ex_mn..ex_mx] is valid
-        if (existingMeld) {
-            if (lo >= ex_mn && hi <= ex_mx) continue;  // entirely inside — skip
-            // runs entirely outside are fine: they won't produce new cards adjacent
-            // to the meld, so check_gaps will reject them naturally
+    int run_start = -1, prev_end = -1, prev_start = -1;
+
+    auto emit = [&](int lo, int hi) -> int {
+        if (nSeq >= MAX_SEQ_CANDS) return 0;
+        int new_cards = 0;
+        for (int i=lo;i<=hi;i++) if(m[i] && from_hand[i]) new_cards++;
+        if (existingMeld && new_cards == 0) return 0;
+
+        uint8_t dst[16]={0}, cc[53]={0};
+        dst[14] = w14;
+        dst[15] = w15;
+
+        int has_ace = 0;
+        for (int i=lo;i<=hi;i++) {
+            if (!m[i]) continue;
+            if (existingMeld && !from_hand[i]) {
+                if (i==0) has_ace=1;
+                else if (i==1) { /* nat2 already promoted to w15 */ }
+                else dst[i+1]=1;
+                continue;
+            }
+            // from hand
+            if (i==0) { has_ace=1; cc[(suit-1)*13+0]++; }
+            else if (i==1) {
+                if (dst[15]==0 && dst[14]==0) { dst[15]=1; cc[(suit-1)*13+1]++; }
+            }
+            else { dst[i+1]=1; cc[(suit-1)*13+i]=1; }
         }
 
-        // 1. Natural run >= 3
-        if (runLen >= 3 && nSeq < MAX_SEQ_CANDS) {
-            if (existingMeld) {
-                // For appends: cc = only cards outside [ex_mn..ex_mx]
-                uint8_t dst[16]={0}, cc[53]={0}, sc[SEQ_CAND_FEATS]={0};
-                for(int j=0;j<16;j++) dst[j]=existingMeld[j];
-                for(int j=0;j<53;j++) cc[j]=0;
-                // Add new cards (those in run but not in existing meld)
-                int added=0;
-                for (int rr=lo;rr<=hi;rr++) {
-                    if (rr==1||rr==14) continue; // aces handled separately
-                    if (rr>=ex_mn && rr<=ex_mx) continue; // already in meld
-                    if (rr==2) {
-                        // same-suit 2: promote to nat-wild if slot free
-                        if (wild2_count(player,suit)>0 && dst[15]==0 && dst[14]==0)
-                            { dst[15]=1; cc[(suit-1)*13+1]++; added++; }
-                        continue;
-                    }
-                    if (!bm[rr]) continue;
-                    dst[rr]=1; cc[(suit-1)*13+(rr-1)]=1; added++;
-                }
-                // Handle ace extension
-                if (lo==1 && !existingMeld[0]) { dst[0]=1; cc[(suit-1)*13+0]=1; added++; }
-                if (hi==14 && !existingMeld[1]) { dst[1]=1; cc[(suit-1)*13+0]=(cc[(suit-1)*13+0]||0)+1; added++; }
-                if (added > 0) {
-                    int gaps=check_gaps(dst), hw=dst[14]!=0||dst[15]!=0;
-                    int len=dst[15]+(dst[14]?1:0); for(int j=0;j<=13;j++) len+=dst[j];
-                    if (gaps<=(hw?1:0) && len>=3 && len<=14) {
-                        if (dst[15]==1&&dst[3]==1) { dst[2]=1; dst[15]=0; }
-                        for(int j=0;j<16;j++) g_cand_append_meld[nSeq][j]=dst[j];
-                        for(int j=0;j<53;j++) g_cand_append_cc[nSeq][j]=cc[j];
-                        g_cand_append_suit[nSeq]=(uint8_t)suit;
-                        g_cand_append_slot[nSeq]=(uint8_t)existingSlot;
-                        nSeq++;
-                    }
-                }
+        // Ace placement
+        if (has_ace) {
+            if (from_hand[0]) {
+                if (dst[13]) { if(!existingMeld||!existingMeld[1]) dst[1]=1; }
+                else         { if(!existingMeld||!existingMeld[0]) dst[0]=1; }
+            } else if (existingMeld) {
+                dst[0]=existingMeld[0]; dst[1]=existingMeld[1];
+            }
+        }
+
+        // Fill gap with wild if needed
+        int gaps = check_gaps(dst);
+        if (gaps > 0) {
+            if (dst[14]!=0 || dst[15]!=0) {
+                // existing wild covers the gap — ok
+            } else if (can_add_wild && wild0type >= 0) {
+                int ws = (wild0type==54)?5:(wild0type/13+1);
+                if (ws==5||ws!=suit) dst[14]=(uint8_t)ws;
+                else                 dst[15]=1;
+                cc[wild0type==54?52:wild0type]++;
             } else {
-                if (build_seq_from_run(player,suit,lo,hi,0,-1,
-                        g_cand_seq_meld[nSeq],g_cand_seq_cc[nSeq],g_seq_cands[nSeq])) nSeq++;
+                return 0;
             }
         }
 
-        if (!hasWild) continue;
+        // nat2 demotion
+        if (dst[15]==1 && dst[3]==1) { dst[2]=1; dst[15]=0; cc[(suit-1)*13+1]=0; }
 
-        // 2. Wild lo-edge extension
-        if (runLen >= 2 && lo > 1 && nSeq < MAX_SEQ_CANDS) {
-            if (!existingMeld || lo-1 < ex_mn) { // only extend beyond existing meld
-                if (existingMeld) {
-                    // append variant: add wild + cards outside existing meld
-                    uint8_t dst[16]={0}, cc[53]={0}, sc[SEQ_CAND_FEATS]={0};
-                    for(int j=0;j<16;j++) dst[j]=existingMeld[j];
-                    int ws=(wild0type==54)?5:(wild0type/13+1);
-                    if (ws==5||ws!=suit) dst[14]=(uint8_t)ws; else dst[15]=1;
-                    cc[wild0type==54?52:wild0type]=1;
-                    int added=0;
-                    for (int rr=lo;rr<=hi;rr++) {
-                        if (rr>=ex_mn&&rr<=ex_mx) continue;
-                        if (rr==1||rr==14) continue;
-                        if (rr==2) {
-                            if (wild2_count(player,suit)>0 && dst[15]==0 && dst[14]==0)
-                                { dst[15]=1; cc[(suit-1)*13+1]++; added++; }
-                            continue;
-                        }
-                        if (!bm[rr]) continue;
-                        dst[rr]=1; cc[(suit-1)*13+(rr-1)]=1; added++;
-                    }
-                    if (lo==1&&!existingMeld[0]) { dst[0]=1; cc[(suit-1)*13+0]=1; added++; }
-                    if (added > 0) {
-                        int gaps=check_gaps(dst), hw=dst[14]!=0||dst[15]!=0;
-                        int len=dst[15]+(dst[14]?1:0); for(int j=0;j<=13;j++) len+=dst[j];
-                        if (gaps<=(hw?1:0)&&len>=3&&len<=14) {
-                            if (dst[15]==1&&dst[3]==1) { dst[2]=1; dst[15]=0; }
-                            for(int j=0;j<16;j++) g_cand_append_meld[nSeq][j]=dst[j];
-                            for(int j=0;j<53;j++) g_cand_append_cc[nSeq][j]=cc[j];
-                            g_cand_append_suit[nSeq]=(uint8_t)suit;
-                            g_cand_append_slot[nSeq]=(uint8_t)existingSlot;
-                            nSeq++;
-                        }
-                    }
-                } else {
-                    if (build_seq_from_run(player,suit,lo-1,hi,1,wild0type,
-                            g_cand_seq_meld[nSeq],g_cand_seq_cc[nSeq],g_seq_cands[nSeq])) nSeq++;
-                }
-            }
+        gaps = check_gaps(dst);
+        int hw2 = dst[14]!=0 || dst[15]!=0;
+        int tlen = dst[15]+(dst[14]?1:0);
+        for(int j=0;j<=13;j++) tlen+=dst[j];
+        if (gaps>(hw2?1:0) || tlen<3 || tlen>14) return 0;
+
+        dbg_str(" emit["); dbg_int(lo); dbg_str("-"); dbg_int(hi); dbg_str("]\n");
+
+        if (existingMeld) {
+            for(int j=0;j<16;j++) g_cand_append_meld[nSeq][j]=dst[j];
+            for(int j=0;j<53;j++) g_cand_append_cc[nSeq][j]=cc[j];
+            g_cand_append_suit[nSeq]=(uint8_t)suit;
+            g_cand_append_slot[nSeq]=(uint8_t)existingSlot;
+        } else {
+            for(int j=0;j<16;j++) g_cand_seq_meld[nSeq][j]=dst[j];
+            for(int j=0;j<53;j++) g_cand_seq_cc[nSeq][j]=cc[j];
+            for(int j=0;j<14;j++) g_seq_cands[nSeq][j]=dst[j]?255:0;
+            g_seq_cands[nSeq][14]=dst[14]?255:0;
+            g_seq_cands[nSeq][15]=dst[15]?255:0;
+            g_seq_cands[nSeq][16]=0;
         }
+        nSeq++;
+        return 1;
+    };
 
-        // 3. Wild hi-edge extension
-        if (runLen >= 2 && hi < 14 && nSeq < MAX_SEQ_CANDS) {
-            if (!existingMeld || hi+1 > ex_mx) {
-                if (!existingMeld) {
-                    if (build_seq_from_run(player,suit,lo,hi+1,1,wild0type,
-                            g_cand_seq_meld[nSeq],g_cand_seq_cc[nSeq],g_seq_cands[nSeq])) nSeq++;
+    for (int pos=0; pos<=13 && nSeq<MAX_SEQ_CANDS; pos++) {
+        if (m[pos]) {
+            if (run_start < 0) run_start = pos;
+        } else {
+            if (run_start >= 0) {
+                int cur_end = pos - 1;
+                int cur_len = cur_end - run_start + 1;
+                if (cur_len >= 3) emit(run_start, cur_end);
+                if (prev_end >= 0 && run_start == prev_end + 2)
+                    emit(prev_start, cur_end);
+                if (cur_len >= 2) emit(run_start, pos);
+                if (cur_len >= 2 && run_start > 0) {
+                    m[run_start-1]=1; from_hand[run_start-1]=1;
+                    emit(run_start-1, cur_end);
+                    m[run_start-1]=0; from_hand[run_start-1]=0;
                 }
-                // append wild-hi handled by gap-bridge below
-            }
-        }
-
-        // 4. Bridge single gap to next run (new melds only — appends use edge extension)
-        if (!existingMeld && r <= 14 && !bm[r]) {
-            int r2 = r + 1;
-            if (r2 <= 14 && bm[r2]) {
-                int lo2=r2; while (r2<=14&&bm[r2]) r2++; int hi2=r2-1;
-                if ((hi-lo+1)+(hi2-lo2+1) >= 2 && nSeq < MAX_SEQ_CANDS) {
-                    if (build_seq_from_run(player,suit,lo,hi2,1,wild0type,
-                            g_cand_seq_meld[nSeq],g_cand_seq_cc[nSeq],g_seq_cands[nSeq])) nSeq++;
-                }
-                int runLen2=hi2-lo2+1;
-                if (runLen2>=3 && nSeq<MAX_SEQ_CANDS)
-                    if (build_seq_from_run(player,suit,lo2,hi2,0,-1,
-                            g_cand_seq_meld[nSeq],g_cand_seq_cc[nSeq],g_seq_cands[nSeq])) nSeq++;
-                if (runLen2>=2 && lo2>1 && nSeq<MAX_SEQ_CANDS)
-                    if (build_seq_from_run(player,suit,lo2-1,hi2,1,wild0type,
-                            g_cand_seq_meld[nSeq],g_cand_seq_cc[nSeq],g_seq_cands[nSeq])) nSeq++;
-                if (runLen2>=2 && hi2<14 && nSeq<MAX_SEQ_CANDS)
-                    if (build_seq_from_run(player,suit,lo2,hi2+1,1,wild0type,
-                            g_cand_seq_meld[nSeq],g_cand_seq_cc[nSeq],g_seq_cands[nSeq])) nSeq++;
+                prev_start = run_start;
+                prev_end   = cur_end;
+                run_start  = -1;
             }
         }
     }
+    // Flush final run
+    if (run_start >= 0) {
+        int cur_end = 13;
+        while (cur_end > run_start && !m[cur_end]) cur_end--;
+        int cur_len = cur_end - run_start + 1;
+        if (cur_len >= 3) emit(run_start, cur_end);
+        if (cur_len >= 2 && cur_end < 13) emit(run_start, cur_end+1);
+        if (cur_len >= 2 && run_start > 0) {
+            m[run_start-1]=1; from_hand[run_start-1]=1;
+            emit(run_start-1, cur_end);
+            m[run_start-1]=0; from_hand[run_start-1]=0;
+        }
+        if (prev_end >= 0 && run_start == prev_end + 2)
+            emit(prev_start, cur_end);
+    }
+
     return nSeq;
 }
+
 
 
 static void hand_add_card(int player, int cardType) {
@@ -624,6 +640,7 @@ static void add_move(uint8_t phase, uint8_t moveType, uint8_t tType, uint8_t tSu
 static int plan_turn() {
     int player = g_player;
     g_move_count = 0;
+    dbg_reset();
     for(int i=0;i<MAX_PLANNED_MOVES;i++) for(int j=0;j<58;j++) g_move_list[i][j]=0;
 
     if (g_deck_len==0 && g_pots_len==0) {
@@ -746,13 +763,15 @@ static int plan_turn() {
         g_num_seq_cands = 0;  // reset after pickup net pass
     }
 
+    // Snapshot hand before simulation — restored after scoring to keep WASM state clean
+    uint8_t hand_snap[CARDS_FLAT_SIZE];
+    for(int i=0;i<CARDS_FLAT_SIZE;i++) hand_snap[i]=g_cards2[player][i];
+
     if (bestPickup == 0) {
         add_move(0, MOVE_DRAW, 0,0,0, nullptr);
-        // Simulate drawing top deck card into hand for meld/discard scoring
         if (g_top_deck != 255) hand_add_card(player, g_top_deck);
     } else {
         add_move(0, MOVE_PICKUP, 0,0,0, pickupCC[bestPickup]);
-        // Simulate picking up entire discard pile into hand
         hand_add_discard_pile(player);
     }
 
@@ -922,6 +941,9 @@ static int plan_turn() {
         add_move(2, MOVE_DISCARD, 0,0,0, cc);
     }
 
+    // Restore hand to pre-simulation state
+    for(int i=0;i<CARDS_FLAT_SIZE;i++) g_cards2[player][i]=hand_snap[i];
+
     return g_move_count;
 }
 
@@ -1018,6 +1040,8 @@ WASM_EXPORT int      get_move_count()       { return g_move_count; }
 WASM_EXPORT uint8_t* get_planned_move()     { return g_planned_move; } // kept for compat
 
 
+WASM_EXPORT char*  get_dbg_buf()  { return g_dbg_buf; }
+WASM_EXPORT int    get_dbg_len()  { return g_dbg_pos; }
 WASM_EXPORT int cpp_plan_turn()           { return plan_turn(); }
 WASM_EXPORT int cpp_find_valid_appends() { return 0; } // replaced by find_seq_candidates
 // Simpler: call configure_net_pickup/meld/runner/discard separately
