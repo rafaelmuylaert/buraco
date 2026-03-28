@@ -300,8 +300,12 @@ static void forward_pass(float* out_acc) {
 }
 
 static inline int rank_count(int player, int suit, int rank) {
-    if (rank == 2) return g_cards2[player][(suit-1)*18 + 13 + (suit-1)]; // wild 2s stored at offset 13-16
+    // rank 1..13: stored at (suit-1)*18 + (rank-1), i.e. offsets 0..12
+    // wild 2s (used as wilds) are at offsets 13-16 — NOT the same as rank 2
     return g_cards2[player][(suit-1)*18 + (rank-1)];
+}
+static inline int wild2_count(int player, int suit) {
+    return g_cards2[player][(suit-1)*18 + 13 + (suit-1)];
 }
 static inline int all_count(int player, int cardType) {
     return g_cards2[player][CARDS_ALL_OFF + (cardType == 54 ? 52 : cardType)];
@@ -343,16 +347,26 @@ static int build_seq_from_run(int player, int suit, int lo, int hi,
     int aces=0;
     for (int r=lo; r<=hi; r++) {
         int actual_rank = (r==14)?1:r;
-        int cnt = rank_count(player, suit, actual_rank);
-        if (!cnt) continue;
-        if (r==1 || r==14) { aces++; }
-        else { dst[r]=1; cc[(suit-1)*13+(r-1)]=1; }  // cap at 1 per rank slot
+        if (r==1 || r==14) {
+            if (rank_count(player, suit, 1)) aces++;
+        } else if (actual_rank == 2) {
+            // Same-suit 2: promote to nat-wild slot (m[15]), cc uses wild2 slot
+            int w2 = wild2_count(player, suit);
+            if (w2 > 0 && dst[15] == 0 && dst[14] == 0) {
+                dst[15] = 1;
+                cc[(suit-1)*13+1]++;  // wild-2 of this suit: cardType = (suit-1)*13+1
+            }
+        } else {
+            int cnt = rank_count(player, suit, actual_rank);
+            if (!cnt) continue;
+            dst[r]=1; cc[(suit-1)*13+(r-1)]=1;
+        }
     }
 
     if (withWild) {
         int ws = (wild0type==54) ? 5 : (wild0type/13)+1;
         if (ws==5 || ws!=suit) dst[14]=(uint8_t)ws;
-        else dst[15]=1;
+        else if (dst[15]==0) dst[15]=1;  // only if nat-wild slot not already used by a 2
         cc[wild0type==54?52:wild0type]++;
     }
 
@@ -373,8 +387,10 @@ static int build_seq_from_run(int player, int suit, int lo, int hi,
     for (int r=0;r<=13;r++) len+=dst[r];
     if (len<3 || len>14) return 0;
 
-    // nat2 demotion
-    if (dst[15]==1 && dst[3]==1 && (gaps==0 || dst[0]==1)) { dst[2]=1; dst[15]=0; }
+    // nat2 demotion: same-suit 2 acting as wild demotes back to m[2] when
+    // rank-3 is present (2 naturally sits next to 3) and no other gap needs filling
+    // Matches cardsToSeqSlots: if (m[15]===1 && (gaps===2 || gaps===0 && m[3]===1))
+    if (dst[15]==1 && dst[3]==1 && (gaps==0 || gaps==2)) { dst[2]=1; dst[15]=0; }
 
     // Encode directly into sc_out — no separate loop at call site
     if (sc_out) {
@@ -401,8 +417,10 @@ static int find_seq_candidates(
     int nSeq  // current count, appends from here
 ) {
     // Build bitmap[1..14], slot 14 = ace-high copy of slot 1
+    // bm[2] = same-suit wild-2 count (can fill rank-2 slot or act as wild)
     int bm[15] = {0};
     for (int r = 1; r <= 13; r++) bm[r] = rank_count(player, suit, r);
+    bm[2] = wild2_count(player, suit);  // same-suit 2s occupy the rank-2 position
     bm[14] = bm[1];
 
     // For appends: determine the existing meld's [mn..mx] range in bitmap coords
@@ -454,6 +472,12 @@ static int find_seq_candidates(
                 for (int rr=lo;rr<=hi;rr++) {
                     if (rr==1||rr==14) continue; // aces handled separately
                     if (rr>=ex_mn && rr<=ex_mx) continue; // already in meld
+                    if (rr==2) {
+                        // same-suit 2: promote to nat-wild if slot free
+                        if (wild2_count(player,suit)>0 && dst[15]==0 && dst[14]==0)
+                            { dst[15]=1; cc[(suit-1)*13+1]++; added++; }
+                        continue;
+                    }
                     if (!bm[rr]) continue;
                     dst[rr]=1; cc[(suit-1)*13+(rr-1)]=1; added++;
                 }
@@ -465,12 +489,8 @@ static int find_seq_candidates(
                     int len=dst[15]+(dst[14]?1:0); for(int j=0;j<=13;j++) len+=dst[j];
                     if (gaps<=(hw?1:0) && len>=3 && len<=14) {
                         if (dst[15]==1&&dst[3]==1) { dst[2]=1; dst[15]=0; }
-                        for(int j=0;j<14;j++) sc[j]=dst[j]?255:0;
-                        sc[14]=dst[14]?255:0; sc[15]=dst[15]?255:0;
-                        sc[16]=(uint8_t)((existingSlot+1)/5.0f*255+0.5f);
                         for(int j=0;j<16;j++) g_cand_append_meld[nSeq][j]=dst[j];
                         for(int j=0;j<53;j++) g_cand_append_cc[nSeq][j]=cc[j];
-                        for(int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[nSeq][j]=sc[j];
                         g_cand_append_suit[nSeq]=(uint8_t)suit;
                         g_cand_append_slot[nSeq]=(uint8_t)existingSlot;
                         nSeq++;
@@ -497,7 +517,13 @@ static int find_seq_candidates(
                     int added=0;
                     for (int rr=lo;rr<=hi;rr++) {
                         if (rr>=ex_mn&&rr<=ex_mx) continue;
-                        if (!bm[rr]||rr==1||rr==14) continue;
+                        if (rr==1||rr==14) continue;
+                        if (rr==2) {
+                            if (wild2_count(player,suit)>0 && dst[15]==0 && dst[14]==0)
+                                { dst[15]=1; cc[(suit-1)*13+1]++; added++; }
+                            continue;
+                        }
+                        if (!bm[rr]) continue;
                         dst[rr]=1; cc[(suit-1)*13+(rr-1)]=1; added++;
                     }
                     if (lo==1&&!existingMeld[0]) { dst[0]=1; cc[(suit-1)*13+0]=1; added++; }
@@ -506,12 +532,8 @@ static int find_seq_candidates(
                         int len=dst[15]+(dst[14]?1:0); for(int j=0;j<=13;j++) len+=dst[j];
                         if (gaps<=(hw?1:0)&&len>=3&&len<=14) {
                             if (dst[15]==1&&dst[3]==1) { dst[2]=1; dst[15]=0; }
-                            for(int j=0;j<14;j++) sc[j]=dst[j]?255:0;
-                            sc[14]=dst[14]?255:0; sc[15]=dst[15]?255:0;
-                            sc[16]=(uint8_t)((existingSlot+1)/5.0f*255+0.5f);
                             for(int j=0;j<16;j++) g_cand_append_meld[nSeq][j]=dst[j];
                             for(int j=0;j<53;j++) g_cand_append_cc[nSeq][j]=cc[j];
-                            for(int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[nSeq][j]=sc[j];
                             g_cand_append_suit[nSeq]=(uint8_t)suit;
                             g_cand_append_slot[nSeq]=(uint8_t)existingSlot;
                             nSeq++;
@@ -647,6 +669,11 @@ static int plan_turn() {
             int wild0type = -1; int hasWild = 0;
             if (td==54) { wild0type=54; hasWild=1; }
             else if (td_rank==2) { wild0type=td; hasWild=1; }
+            else {
+                // Check if player has a wild in hand
+                for(int s=1;s<=4&&!hasWild;s++) if(wild2_count(player,s)) { wild0type=(s-1)*13+1; hasWild=1; }
+                if (!hasWild && all_count(player,54)) { wild0type=54; hasWild=1; }
+            }
             int nSeq = 0;
             if (td_suit>=1 && td_suit<=4 && td_rank!=2)
                 nSeq = find_seq_candidates(player, td_suit, wild0type, hasWild, nullptr, -1, nSeq);
@@ -733,7 +760,7 @@ static int plan_turn() {
     // Find wild card in hand (first 2 or joker)
     int p1_wild0type = -1, p1_hasWild = 0;
     for(int s=1;s<=4&&!p1_hasWild;s++) {
-        if (rank_count(player,s,2)) { p1_wild0type=(s-1)*13+1; p1_hasWild=1; }
+        if (wild2_count(player,s)) { p1_wild0type=(s-1)*13+1; p1_hasWild=1; }
     }
     if (!p1_hasWild && all_count(player,54)) { p1_wild0type=54; p1_hasWild=1; }
     // New melds
