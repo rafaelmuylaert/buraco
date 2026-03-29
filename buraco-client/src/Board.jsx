@@ -237,10 +237,11 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
           const prevSeqs = prev.seqs[s] || [];
           const currSeqs = curr[0][s] || [];
           currSeqs.forEach((meld, i) => {
-            // Find matching previous meld by content similarity (same suit, closest length)
-            // New melds inserted at any position shift indices — match by finding best overlap
-            const prevMeld = prevSeqs.find(pm => getMeldLength(pm) <= getMeldLength(meld) &&
-              [3,4,5,6,7,8,9,10,11,12,13].some(r => pm[r] && meld[r]));
+            // Match previous meld by finding one with shared rank slots (handles index shifts from insertions)
+            const prevMeld = prevSeqs.find(pm =>
+              getMeldLength(pm) <= getMeldLength(meld) &&
+              meld.slice(2,14).some((v, r) => v && pm[r+2])
+            );
             const prevLen = prevMeld ? getMeldLength(prevMeld) : 0;
             const currLen = getMeldLength(meld);
             if (currLen > prevLen) highlights[`seq-${s}-${i}`] = currLen - prevLen;
