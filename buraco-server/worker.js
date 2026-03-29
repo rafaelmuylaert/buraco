@@ -5,7 +5,7 @@ import {
     checkGameOver, getAndResetTimings
 } from './game.js';
 import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers,
-         buildTurnMoveList, runTurn, getCppTimings } from './wasm_loader.js';
+         buildTurnMoveList, runTurn, getCppTimings, setUsingWasmBackedBuffers } from './wasm_loader.js';
 
 await initWasm();
 
@@ -55,6 +55,7 @@ function runMatch(genomes, rules, fixedDeck) {
         }
         wb.discard2.set(S.discardPile2);
         S.discardPile2 = wb.discard2;
+        setUsingWasmBackedBuffers(true);
     } else {
         for (const k of Object.keys(S.cards2))      S.cards2[k]      = Uint8Array.from(S.cards2[k]);
         for (const k of Object.keys(S.knownCards2)) S.knownCards2[k] = Uint8Array.from(S.knownCards2[k]);

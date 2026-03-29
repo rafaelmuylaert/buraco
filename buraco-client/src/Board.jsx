@@ -110,8 +110,8 @@ function meldToCards(m, suit) {
             return { rank: ws === 5 ? 'JOKER' : '2', suit: getSuitChar(ws === 5 ? 5 : ws), id: `w-${wildUsed ? 'b' : 'a'}` };
         };
 
-        // A-low at the start
-        if (m[0]) cards.push({ rank: 'A', suit: getSuitChar(suit), id: 'n-0' });
+        // A-low at the start only if adjacent to rank 3 (natural position)
+        if (m[0] && m[3]) cards.push({ rank: 'A', suit: getSuitChar(suit), id: 'n-0' });
 
         // 3..K run with at most one gap
         if (runMin <= runMax) {
@@ -125,6 +125,9 @@ function meldToCards(m, suit) {
                 }
             }
         }
+
+        // A-low at the end if NOT adjacent to rank 3 (e.g. Q-K-A)
+        if (m[0] && !m[3]) cards.push({ rank: 'A', suit: getSuitChar(suit), id: 'n-0' });
 
         // A-high at the end
         if (m[1]) cards.push({ rank: 'A', suit: getSuitChar(suit), id: 'n-1' });
@@ -234,10 +237,15 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
           const prevSeqs = prev.seqs[s] || [];
           const currSeqs = curr[0][s] || [];
           currSeqs.forEach((meld, i) => {
-            const prevLen = prevSeqs[i] ? getMeldLength(prevSeqs[i]) : 0;
+            // Find matching previous meld by content similarity (same suit, closest length)
+            // New melds inserted at any position shift indices — match by finding best overlap
+            const prevMeld = prevSeqs.find(pm => getMeldLength(pm) <= getMeldLength(meld) &&
+              [3,4,5,6,7,8,9,10,11,12,13].some(r => pm[r] && meld[r]));
+            const prevLen = prevMeld ? getMeldLength(prevMeld) : 0;
             const currLen = getMeldLength(meld);
             if (currLen > prevLen) highlights[`seq-${s}-${i}`] = currLen - prevLen;
           });
+        }
         }
         (curr[1] || []).forEach((meld, i) => {
           const prevLen = prev.runners[i] ? getMeldLength(prev.runners[i]) : 0;
@@ -625,7 +633,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
               const mortoAvailable = !hasMorto && G.pots.length > ti;
               return (
                 <div key={team} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span style={{ fontSize: '0.7em', color: hasMorto ? '#ffd700' : '#888', fontWeight: 'bold' }}>{label}: {hasMorto ? 'Sim' : 'Sim'}</span>
+                  <span style={{ fontSize: '0.7em', color: hasMorto ? '#50fa7b' : '#888', fontWeight: 'bold' }}>{label}: {hasMorto ? '✅' : '❌'}</span>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
                     {mortoAvailable && (
                       <div style={{

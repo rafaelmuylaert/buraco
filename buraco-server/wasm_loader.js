@@ -484,19 +484,25 @@ export function syncCardsToWasm(G, numPlayers) {
         if (G.knownCards2[p]) _wasmKnownCards2[i].set(G.knownCards2[p]);
     }
     if (G.discardPile2) _wasmDiscard2.set(G.discardPile2);
-    // Sync meld tables from current game state
-    for (let t = 0; t < 2; t++) {
-        const teamId = t === 0 ? 'team0' : 'team1';
-        for (let s = 0; s < 4; s++) {
-            const suitMelds = G.table?.[teamId]?.[0]?.[s+1] || [];
-            for (let sl = 0; sl < 5; sl++)
-                updateSeqMeld(t, s, sl, suitMelds[sl] || null);
+    // Sync meld tables — only when not using WASM-backed buffers (bot.js)
+    // Worker.js keeps melds in sync via _onUpdateMeld hook, skip full re-sync
+    if (!_usingWasmBackedBuffers) {
+        for (let t = 0; t < 2; t++) {
+            const teamId = t === 0 ? 'team0' : 'team1';
+            for (let s = 0; s < 4; s++) {
+                const suitMelds = G.table?.[teamId]?.[0]?.[s+1] || [];
+                for (let sl = 0; sl < 5; sl++)
+                    updateSeqMeld(t, s, sl, suitMelds[sl] || null);
+            }
+            const runners = G.table?.[teamId]?.[1] || [];
+            for (let sl = 0; sl < 4; sl++)
+                updateRunMeld(t, sl, runners[sl] || null);
         }
-        const runners = G.table?.[teamId]?.[1] || [];
-        for (let sl = 0; sl < 4; sl++)
-            updateRunMeld(t, sl, runners[sl] || null);
     }
 }
+
+let _usingWasmBackedBuffers = false;
+export function setUsingWasmBackedBuffers(v) { _usingWasmBackedBuffers = v; }
 
 export function getWasmMeldBuffers() {
     return { seqMelds: _wasmSeqMelds, runMelds: _wasmRunMelds };
