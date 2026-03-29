@@ -40,10 +40,6 @@ const MAX_SEQ_SLOTS  = 5;
 const MAX_RUN_SLOTS  = 4;
 const CARDS_FLAT_SIZE = 125;
 
-const { instance } = await WebAssembly.instantiate(buf, {
-    env: { now: () => performance.now() }
-});
-
 function _refreshViews() {
     const buf = _mem.buffer;
     _vWeights       = new Float32Array(buf, _ex.get_weights(), AI_CONFIG.TOTAL_DNA_SIZE * 2);
