@@ -92,7 +92,9 @@ export async function initWasm() {
     if (!fs.existsSync(wasmPath)) return false;
     try {
         const buf = fs.readFileSync(wasmPath);
-        const { instance } = await WebAssembly.instantiate(buf, {});
+        const { instance } = await WebAssembly.instantiate(buf, {
+            env: { now: () => performance.now() }
+        });
         _ex  = instance.exports;
         _mem = _ex.memory;
 
