@@ -1,7 +1,7 @@
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import { BuracoGame, AI_CONFIG, getAndResetTimings } from './game.js';
-import { initWasm, syncCardsToWasm, buildTurnMoveList, loadMatchDNA, setActiveTeam, isWasmReady } from './wasm_loader.js';
+import { initWasm, syncCardsToWasm, buildTurnMoveList, loadMatchDNA, setActiveTeam, isWasmReady, dispatchNextMove, buildFallbackQueue } from './wasm_loader.js';
 
 await initWasm();
 
@@ -131,39 +131,39 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       if (discards.length) console.log(`  discards(${discards.length}): ${discards.map(m => discardStr(m.discardCard)+(m._fallback?'[fb]':'')).join(', ')}`);
     }
 
-    if (aiQueue.length === 0) return;
+      if (aiQueue.length === 0) return;
 
-    const m = aiQueue.shift();
+      dispatchNextMove(aiQueue, client, playerID, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
 
-    if (m.phase === 0) {
-      if (hasPickedUp) return;
-      if (m.moveType === 0) {
-        console.log(`[BOT] ${botName} dispatching: drawCard${m._fallback?' [fallback]':''}`);
-        client.moves.drawCard();
-      } else if (m.moveType === 1) {
-        console.log(`[BOT] ${botName} dispatching: pickUpDiscard ${ccStr(m.cardCounts)}`);
-        client.moves.pickUpDiscard(m.cardCounts, m.pickupTarget || { type: 'new' });
-        hasPickedUp = true;
-      } else if (m.moveType === 5) {
-        console.log(`[BOT] ${botName} dispatching: declareExhausted`);
-        client.moves.declareExhausted();
-      }
-      hasPickedUp = true;
-    } else if (m.phase === 1) {
-      if (!G.hasDrawn) return;
-      if (m.moveType === 2) {
-        console.log(`[BOT] ${botName} dispatching: playMeld${ccStr(m.cardCounts)}`);
-        client.moves.playMeld(m.cardCounts);
-      } else if (m.moveType === 3) {
-        const tgt = { type: m.targetType === 1 ? 'seq' : 'runner', suit: m.targetSuit, index: m.targetSlot };
-        console.log(`[BOT] ${botName} dispatching: appendToMeld ${tgt.type}[${tgt.suit||''}${tgt.index}] ${ccStr(m.cardCounts)}`);
-        client.moves.appendToMeld(tgt, m.cardCounts);
-      }
-    } else if (m.phase === 2) {
-      if (!G.hasDrawn) return;
-      console.log(`[BOT] ${botName} dispatching: discardCard(${discardStr(m.discardCard)})${m._fallback?' [fallback]':''}`);
-      client.moves.discardCard(m.discardCard);
-    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   };
 
 

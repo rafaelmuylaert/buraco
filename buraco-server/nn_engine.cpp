@@ -652,8 +652,9 @@ static int plan_turn() {
         }
     }
 
-    // Score pickup candidates
-    int bestPickup = 0;
+        // Score all pickup candidates and emit ALL of them sorted, fallback (draw) at score 0
+    // Score pickup candidates with net
+    float pickupScores[MAX_SEQ_CANDS+1] = {0};
     if (nPickup > 1) {
         uint8_t pickupSeqCands[MAX_SEQ_CANDS+1][SEQ_CAND_FEATS];
         for(int i=0;i<nPickup;i++) {
@@ -670,10 +671,40 @@ static int plan_turn() {
         g_num_seq_cands = nPickup;
         for(int o=0;o<g_layer_sizes[g_pickup_nlayers-1];o++) g_out[o]=0.0f;
         forward_pass(g_out);
-        float bestScore = g_out[0];
-        for(int i=1;i<nPickup;i++) if(g_out[i]>bestScore){bestScore=g_out[i];bestPickup=i;}
+        for(int i=0;i<nPickup;i++) pickupScores[i]=g_out[i];
         g_num_seq_cands = 0;
     }
+    // pickupScores[0] is draw — that's our score=0 reference (fallback)
+    // Sort all candidates by score descending, keeping draw as the fallback marker
+    // Simple insertion sort
+    int pickupOrder[MAX_SEQ_CANDS+1];
+    for(int i=0;i<nPickup;i++) pickupOrder[i]=i;
+    for(int i=1;i<nPickup;i++) {
+        float s=pickupScores[pickupOrder[i]]; int idx=pickupOrder[i]; int j=i-1;
+        while(j>=0 && pickupScores[pickupOrder[j]]<s) { pickupOrder[j+1]=pickupOrder[j]; j--; }
+        pickupOrder[j+1]=idx;
+    }
+    // Emit all pickup moves in sorted order
+    for(int i=0;i<nPickup;i++) {
+        int ci=pickupOrder[i];
+        if (pickupCandType[ci]==0) {
+            add_move(0, MOVE_DRAW, 0,0,0, nullptr);
+        } else {
+            add_move(0, MOVE_PICKUP,
+                     pickupCandType[ci]==2?1:0,
+                     pickupTarget[ci][0], pickupTarget[ci][1],
+                     pickupCC[ci]);
+        }
+    }
+    // Determine bestPickup for sim evolution (highest scoring non-draw)
+    int bestPickup = 0;
+    for(int i=0;i<nPickup;i++) {
+        int ci=pickupOrder[i];
+        if (pickupCandType[ci]!=0) { bestPickup=ci; break; }
+    }
+    // If best is draw (all scores <= draw score), bestPickup stays 0
+    if (pickupScores[bestPickup] <= pickupScores[0]) bestPickup=0;
+
 
     dbg_str("================MELD======================\n");
 
@@ -819,26 +850,47 @@ static int plan_turn() {
     }
 
 
-    // ── Phase 2: Discard scored against sim (post-meld hand) ─────────────────
+    // Phase 2: Discard — score all, emit sorted with fallback at score=0 position
     use_net(g_discard_layers, g_discard_nlayers, g_discard_woff);
     g_layerkey=3; g_suit=0;
     for(int o=0;o<g_layer_sizes[g_discard_nlayers-1];o++) g_out[o]=0.0f;
     forward_pass(g_out);
+
+    // Find first card in hand as fallback
+    int fallback_card = -1;
+    for(int i=0;i<53;i++) if(sim[CARDS_ALL_OFF+i]) { fallback_card=i; break; }
 
     float dscores[53]; int dcards[53]; int nd=0;
     for(int i=0;i<53;i++) {
         if (!sim[CARDS_ALL_OFF+i]) continue;
         dscores[nd]=g_out[i]; dcards[nd]=i; nd++;
     }
+    // Insertion sort descending
     for(int i=1;i<nd;i++) {
         float s=dscores[i]; int c=dcards[i]; int j=i-1;
         while(j>=0 && dscores[j]<s) { dscores[j+1]=dscores[j]; dcards[j+1]=dcards[j]; j--; }
         dscores[j+1]=s; dcards[j+1]=c;
     }
+    // Emit all discard moves; insert fallback at score=0 boundary
+    bool fallback_emitted = false;
     for(int i=0;i<nd;i++) {
+        // Insert fallback before first negative score
+        if (!fallback_emitted && dscores[i] < 0.0f) {
+            if (fallback_card >= 0) {
+                uint8_t fcc[53]={0};
+                fcc[0]=(uint8_t)((fallback_card==52)?54:fallback_card);
+                add_move(2, MOVE_DISCARD, 0,0,0, fcc);
+            }
+            fallback_emitted = true;
+        }
         uint8_t cc[53]={0};
         cc[0]=(uint8_t)((dcards[i]==52)?54:dcards[i]);
         add_move(2, MOVE_DISCARD, 0,0,0, cc);
+    }
+    if (!fallback_emitted && fallback_card >= 0) {
+        uint8_t fcc[53]={0};
+        fcc[0]=(uint8_t)((fallback_card==52)?54:fallback_card);
+        add_move(2, MOVE_DISCARD, 0,0,0, fcc);
     }
 
     return g_move_count;

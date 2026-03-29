@@ -498,3 +498,156 @@ export function syncCardsToWasm(G, numPlayers) {
 export function getWasmMeldBuffers() {
     return { seqMelds: _wasmSeqMelds, runMelds: _wasmRunMelds };
 }
+
+// ── Shared turn executor ───────────────────────────────────────────────────────
+// iface must provide:
+//   draw(), pickup(cc, target), meld(cc), append(tgt, cc), discard(cardId), exhaust()
+//   hasDrawn() -> bool, firstHandCard() -> cardId or -1
+// Returns true if turn ended (discard succeeded or exhausted).
+export function executeTurnMove(m, iface, log) {
+    if (!m) return false;
+
+    if (m.phase === 0) {
+        if (iface.hasDrawn()) return false; // already picked up, skip
+        if (m.moveType === 5) {
+            log?.('declareExhausted'); iface.exhaust(); return true;
+        } else if (m.moveType === 0) {
+            log?.(`drawCard${m._fallback?' [fallback]':''}`); iface.draw(); return false;
+        } else if (m.moveType === 1) {
+            log?.(`pickUpDiscard ${JSON.stringify(m.cardCounts)}`);
+            iface.pickup(m.cardCounts, m.pickupTarget || { type: 'new' }); return false;
+        }
+    }
+
+    if (m.phase === 1) {
+        if (!iface.hasDrawn()) return false;
+        if (m.moveType === 2) {
+            log?.(`playMeld ${JSON.stringify(m.cardCounts)}`);
+            iface.meld(m.cardCounts);
+        } else if (m.moveType === 3) {
+            const tgt = { type: m.targetType === 1 ? 'seq' : 'runner', suit: m.targetSuit, index: m.targetSlot };
+            log?.(`appendToMeld ${tgt.type}[${tgt.suit||''}${tgt.index}] ${JSON.stringify(m.cardCounts)}`);
+            iface.append(tgt, m.cardCounts);
+        }
+        return false;
+    }
+
+    if (m.phase === 2) {
+        if (!iface.hasDrawn()) return false;
+        log?.(`discardCard(${m.discardCard})${m._fallback?' [fallback]':''}`);
+        iface.discard(m.discardCard); return true;
+    }
+
+    return false;
+}
+
+
+
+// Full turn executor: fires all moves in queue with hardcoded fallbacks from live gamestate
+export function executeTurn(getG, playerID, moves, iface, log) {
+    // Phase 0: pickup — fire in order until hasDrawn, then hardcoded fallback
+    for (const m of moves.filter(m => m.phase === 0)) {
+        if (iface.hasDrawn()) break;
+        executeTurnMove(m, iface, log);
+    }
+    if (!iface.hasDrawn()) {
+        const G = getG();
+        if (G.deck.length === 0 && G.pots.length === 0) {
+            log?.('declareExhausted [hardcoded fallback]'); iface.exhaust();
+        } else {
+            log?.('drawCard [hardcoded fallback]'); iface.draw();
+        }
+    }
+
+    // Phase 1: melds — fire all, ignore failures
+    for (const m of moves.filter(m => m.phase === 1)) {
+        executeTurnMove(m, iface, log);
+    }
+
+    // Phase 2: discard — fire in order until !hasDrawn, then hardcoded fallback
+    for (const m of moves.filter(m => m.phase === 2)) {
+        if (!iface.hasDrawn()) break;
+        executeTurnMove(m, iface, log);
+    }
+    if (iface.hasDrawn()) {
+        const G = getG();
+        const CAOFF = 72;
+        const flat = G.cards2?.[playerID.toString()] || [];
+        for (let i = 0; i < 53; i++) {
+            if ((flat[CAOFF + i] || 0) > 0) {
+                const cardId = i === 52 ? 54 : i;
+                log?.(`discardCard(${cardId}) [hardcoded fallback]`);
+                iface.discard(cardId);
+                break;
+            }
+        }
+    }
+}
+
+// ── runTurn ───────────────────────────────────────────────────────────────────
+// Shared turn logic used by both bot.js (one move per tick) and worker.js (sync loop).
+//
+// iface must provide:
+//   hasDrawn() -> bool
+//   draw(), pickup(cc, target), meld(cc), append(tgt, cc), discard(cardId), exhaust()
+//
+// getG() -> current G (live state for bot.js, direct S reference for worker.js)
+// queue: the move list built by buildTurnMoveList, mutated in place (moves shifted out)
+// log: optional (msg) => void, omit for worker.js to avoid spam
+//
+// Bot.js: call once per tick — fires one move and returns.
+// Worker.js: call in a while(!done) loop until turn ends.
+// Returns true when the turn is complete (discard or exhaust succeeded).
+
+export function runTurn(queue, getG, playerID, iface, log) {
+    const G = getG();
+
+    // Phase 0: pickup — find next pickup move in queue, or hardcoded fallback
+    if (!iface.hasDrawn()) {
+        const idx = queue.findIndex(m => m.phase === 0);
+        if (idx >= 0) {
+            const m = queue.splice(idx, 1)[0];
+            executeTurnMove(m, iface, log);
+            return false;
+        }
+        // No pickup moves left — hardcoded fallback
+        if (G.deck.length === 0 && G.pots.length === 0) {
+            log?.('declareExhausted [hardcoded fallback]');
+            iface.exhaust();
+            return true;
+        }
+        log?.('drawCard [hardcoded fallback]');
+        iface.draw();
+        return false;
+    }
+
+    // Phase 1: meld/append — fire next one if available
+    const meldIdx = queue.findIndex(m => m.phase === 1);
+    if (meldIdx >= 0) {
+        const m = queue.splice(meldIdx, 1)[0];
+        executeTurnMove(m, iface, log);
+        return false;
+    }
+
+    // Phase 2: discard — fire next one if available
+    const discIdx = queue.findIndex(m => m.phase === 2);
+    if (discIdx >= 0) {
+        const m = queue.splice(discIdx, 1)[0];
+        executeTurnMove(m, iface, log);
+        return true;
+    }
+
+    // No discard moves left — hardcoded fallback from live gamestate
+    const CAOFF = 72;
+    const flat = G.cards2?.[playerID.toString()] || [];
+    for (let i = 0; i < 53; i++) {
+        if ((flat[CAOFF + i] || 0) > 0) {
+            const cardId = i === 52 ? 54 : i;
+            log?.(`discardCard(${cardId}) [hardcoded fallback]`);
+            iface.discard(cardId);
+            return true;
+        }
+    }
+    return false;
+}
+
