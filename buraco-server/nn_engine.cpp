@@ -750,7 +750,8 @@ static int plan_turn() {
             for(int n=0;n<cnt;n++) sim_remove_card(sim, (j==52)?54:j);
         }
     }
-     g_t_phase0 += now() - _tp0;
+     double _tp1 = now();
+     g_t_phase0 += _tp1 - _tp0;
      dbg_str("================MELD======================\n");
 
     // ── Phase 1: Melds & Appends scored against sim ───────────────────────────
@@ -867,7 +868,8 @@ static int plan_turn() {
             add_move(1, isApp?MOVE_APPEND:MOVE_PLAY_MELD, 2, 0, (uint8_t)appSlot, g_cand_run_cc[idx]);
         }
     }
-    g_t_phase1 += now() - _tp0 - g_t_phase0 ;
+    double _tp2 = now();
+    g_t_phase1 += _tp2 - _tp1 ;
 
 
     // Phase 2: Discard — score all, emit sorted with fallback at score=0 position
@@ -912,7 +914,7 @@ static int plan_turn() {
         fcc[0]=(uint8_t)((fallback_card==52)?54:fallback_card);
         add_move(2, MOVE_DISCARD, 0,0,0, fcc);
     }
-    g_t_phase2 += now() - _tp0 - g_t_phase0  - g_t_phase1 ;
+    g_t_phase2 += now() - _tp2;
     g_n_turns++;
 
     return g_move_count;
