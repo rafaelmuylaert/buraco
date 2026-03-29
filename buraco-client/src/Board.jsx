@@ -247,7 +247,6 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
             if (currLen > prevLen) highlights[`seq-${s}-${i}`] = currLen - prevLen;
           });
         }
-        }
         (curr[1] || []).forEach((meld, i) => {
           const prevLen = prev.runners[i] ? getMeldLength(prev.runners[i]) : 0;
           const currLen = getMeldLength(meld);
