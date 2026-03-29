@@ -199,14 +199,18 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
 
   // Persist the last seen gameover across remounts (ReconnectingClient resets key on reconnect)
   const storageKey = matchID ? `gameover_${matchID}_${playerID}` : null;
-  const lastGameoverRef = React.useRef(null);
+    const lastGameoverRef = React.useRef(null);
   if (ctx?.gameover) {
     lastGameoverRef.current = ctx.gameover;
     if (storageKey) sessionStorage.setItem(storageKey, JSON.stringify(ctx.gameover));
+  } else if (G?.hasDrawn !== undefined) {
+    // Game is clearly still active — clear any stale gameover from storage
+    if (storageKey) sessionStorage.removeItem(storageKey);
   } else if (!lastGameoverRef.current && storageKey) {
     const stored = sessionStorage.getItem(storageKey);
     if (stored) try { lastGameoverRef.current = JSON.parse(stored); } catch (_) {}
   }
+
   const gameover = lastGameoverRef.current;
 
   // Track melds snapshot at end of my last turn to highlight opponent additions
