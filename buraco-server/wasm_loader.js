@@ -44,23 +44,6 @@ const { instance } = await WebAssembly.instantiate(buf, {
     env: { now: () => performance.now() }
 });
 
-export function getCppTimings() {
-    if (!_ex?.get_t_fsc) return null;
-    const t = {
-        fsc:     _ex.get_t_fsc(),
-        build_h1:_ex.get_t_build_h1(),
-        fwd:     _ex.get_t_fwd(),
-        phase0:  _ex.get_t_phase0(),
-        phase1:  _ex.get_t_phase1(),
-        phase2:  _ex.get_t_phase2(),
-        n_fsc:   _ex.get_n_fsc(),
-        n_fwd:   _ex.get_n_fwd(),
-        n_turns: _ex.get_n_turns(),
-    };
-    _ex.reset_timings();
-    return t;
-}
-
 function _refreshViews() {
     const buf = _mem.buffer;
     _vWeights       = new Float32Array(buf, _ex.get_weights(), AI_CONFIG.TOTAL_DNA_SIZE * 2);
