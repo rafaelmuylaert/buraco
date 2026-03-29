@@ -118,7 +118,7 @@ function meldToCards(m, suit) {
             for (let r = runMin; r <= runMax; r++) {
                 if (m[r]) {
                     const rank = r === 2 ? 2 : r;
-                    cards.push({ rank: getRankChar(rank), suit: getSuitChar(suit), id: `n-${r}` });
+                    cards.push({ rank: getRankChar(rank), suit: getSuitChar(suit), id: `nat-${r}` });
                 } else {
                     cards.push(wildCard());
                     wildUsed = true;
@@ -236,17 +236,14 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
         for (let s = 1; s <= 4; s++) {
           const prevSeqs = prev.seqs[s] || [];
           const currSeqs = curr[0][s] || [];
-          currSeqs.forEach((meld, i) => {
-            // Match previous meld by finding one with shared rank slots (handles index shifts from insertions)
-            const prevMeld = prevSeqs.find(pm =>
-              getMeldLength(pm) <= getMeldLength(meld) &&
-              meld.slice(2,14).some((v, r) => v && pm[r+2])
-            );
-            const prevLen = prevMeld ? getMeldLength(prevMeld) : 0;
-            const currLen = getMeldLength(meld);
-            if (currLen > prevLen) highlights[`seq-${s}-${i}`] = currLen - prevLen;
-          });
-        }
+            currSeqs.forEach((meld, i) => {
+              const prevMeld = prevSeqs.find(pm => getMeldLength(pm) < getMeldLength(meld) && pm.every((v, idx) => !v || meld[idx]));
+              const prevLen = prevMeld ? getMeldLength(prevMeld) : 0;
+              const currLen = getMeldLength(meld);
+              if (currLen > prevLen) highlights[`seq-${s}-${i}`] = currLen - prevLen;
+            });
+          }
+
         (curr[1] || []).forEach((meld, i) => {
           const prevLen = prev.runners[i] ? getMeldLength(prev.runners[i]) : 0;
           const currLen = getMeldLength(meld);
@@ -506,9 +503,27 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       const status = isCanasta ? (isMeldClean(meldGroup) ? 'clean' : 'dirty') : null;
       const points = calculateMeldPoints(meldGroup, G.rules);
       const borderColor = status === 'clean' ? '#ffd700' : (status === 'dirty' ? '#c0c0c0' : 'transparent');
+      const prevMeldSnap = (() => {
+        if (!meldSnapshotRef.current || !hasNewCards) return null;
+        const teamSnap = meldSnapshotRef.current[isMyTeam ? myTeam : oppTeam];
+        if (!teamSnap) return null;
+        if (isRunner) return teamSnap.runners?.[index] || null;
+        return (teamSnap.seqs?.[suit] || []).find(pm => pm.every((v, idx) => !v || meldGroup[idx])) || null;
+      })();
+
       const renderedCards = meldToCards(meldGroup, suit);
       const hasNewCards = !!newMeldCards[key];
-      const newCount = newMeldCards[key] || 0;
+      const prevMeld = (() => {
+        if (!meldSnapshotRef.current) return null;
+        const mySnap = meldSnapshotRef.current;
+        const teamSnap = isMyTeam ? mySnap[myTeam] : mySnap[oppTeam];
+        if (isRunner) return teamSnap?.runners?.[index] || null;
+        return teamSnap?.seqs?.[suit]?.find(pm =>
+          getMeldLength(pm) < getMeldLength(meldGroup) && pm.every((v, idx) => !v || meldGroup[idx])
+        ) || null;
+      })();
+      const prevRendered = prevMeld ? new Set(meldToCards(prevMeld, suit).map(c => c.id)) : new Set();
+
       return (
         <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div onClick={() => {
@@ -524,7 +539,15 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
             }}
             style={{ position: 'relative', display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: hasNewCards ? '2px solid #50fa7b' : `2px solid ${borderColor}`, boxShadow: hasNewCards ? '0 0 10px rgba(80,250,123,0.5)' : 'none', cursor: (isMyTurn && isMyTeam && (selectedCount > 0 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default' }}>
             {renderedCards.map((card, i) => {
-              const isNewCard = hasNewCards && i >= renderedCards.length - newCount;
+              const isNewCard = hasNewCards && !prevMeldSnap
+                ? true
+                : hasNewCards && (() => {
+                    // card is new if its meld slot was 0 in the previous snapshot
+                    if (card.id === 'n-0') return !prevMeldSnap[0];
+                    if (card.id === 'n-1') return !prevMeldSnap[1];
+                    if (card.id.startsWith('nat-')) return !prevMeldSnap[+card.id.slice(4)];
+                    return false; // wilds: don't highlight (position may shift)
+                  })();
               return (
                 <Card key={card.id} card={card} isNewlyDrawn={isNewCard} customStyle={{
                   marginLeft: (!isRunner && i > 0) ? `-${CARD_W - 14}px` : '0',
