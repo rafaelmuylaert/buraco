@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { AI_CONFIG, isMeldClean, seqSuit, addForwardPassTime, addWasmDiag, setScoreFunctions } from './game.js';
+import { AI_CONFIG, isMeldClean, seqSuit, addForwardPassTime, addPlanTurnTime, addWasmDiag, setScoreFunctions } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,6 +39,27 @@ const MAX_RUN_CANDS  = 2;
 const MAX_SEQ_SLOTS  = 5;
 const MAX_RUN_SLOTS  = 4;
 const CARDS_FLAT_SIZE = 125;
+
+const { instance } = await WebAssembly.instantiate(buf, {
+    env: { now: () => performance.now() }
+});
+
+export function getCppTimings() {
+    if (!_ex?.get_t_fsc) return null;
+    const t = {
+        fsc:     _ex.get_t_fsc(),
+        build_h1:_ex.get_t_build_h1(),
+        fwd:     _ex.get_t_fwd(),
+        phase0:  _ex.get_t_phase0(),
+        phase1:  _ex.get_t_phase1(),
+        phase2:  _ex.get_t_phase2(),
+        n_fsc:   _ex.get_n_fsc(),
+        n_fwd:   _ex.get_n_fwd(),
+        n_turns: _ex.get_n_turns(),
+    };
+    _ex.reset_timings();
+    return t;
+}
 
 function _refreshViews() {
     const buf = _mem.buffer;
@@ -391,6 +412,7 @@ function _scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, weights
 
 export function isWasmReady() { return _ex !== null; }
 
+
 // ── Shared turn executor ──────────────────────────────────────────────────────
 // Builds the full ordered move list from WASM output:
 //   [pickup candidates in score order] + [drawCard fallback]
@@ -407,7 +429,7 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, silent = false) {
     setActiveTeam(myTeamIdx === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
     _ex.set_eval_context(pInt, myTeamIdx, myTeamIdx === 0 ? 1 : 0, 0, 0);
     setMatchState(G, pInt, myTeam, oppTeam);
-    const count = _ex.cpp_plan_turn();
+    const _pt0 = performance.now(); const count = _ex.cpp_plan_turn(); addPlanTurnTime(performance.now() - _pt0);
     if (!silent && _ex.get_dbg_buf && _ex.get_dbg_len) { const len = _ex.get_dbg_len(); if (len > 0) console.log("[CPP]" + new TextDecoder().decode(new Uint8Array(_mem.buffer, _ex.get_dbg_buf(), len))); }
 
     const listPtr = _ex.get_move_list();
@@ -497,6 +519,23 @@ export function syncCardsToWasm(G, numPlayers) {
 
 export function getWasmMeldBuffers() {
     return { seqMelds: _wasmSeqMelds, runMelds: _wasmRunMelds };
+}
+
+export function getCppTimings() {
+    if (!_ex?.get_t_fsc) return { fsc:0, build_h1:0, fwd:0, phase0:0, phase1:0, phase2:0, n_fsc:0, n_fwd:0, n_turns:0 };
+    const t = {
+        fsc:      _ex.get_t_fsc(),
+        build_h1: _ex.get_t_build_h1(),
+        fwd:      _ex.get_t_fwd(),
+        phase0:   _ex.get_t_phase0(),
+        phase1:   _ex.get_t_phase1(),
+        phase2:   _ex.get_t_phase2(),
+        n_fsc:    _ex.get_n_fsc(),
+        n_fwd:    _ex.get_n_fwd(),
+        n_turns:  _ex.get_n_turns(),
+    };
+    _ex.reset_timings();
+    return t;
 }
 
 // ── Shared turn executor ───────────────────────────────────────────────────────

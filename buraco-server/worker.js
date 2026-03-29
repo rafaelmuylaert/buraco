@@ -5,7 +5,7 @@ import {
     checkGameOver, getAndResetTimings
 } from './game.js';
 import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers,
-         buildTurnMoveList, runTurn } from './wasm_loader.js';
+         buildTurnMoveList, runTurn, getCppTimings } from './wasm_loader.js';
 
 await initWasm();
 
@@ -137,7 +137,11 @@ async function processJob(matches, rules) {
         const g2 = runMatch({ '0': dnaB, '1': dnaA, '2': dnaB, '3': dnaA }, rules, pairDeck);
         results.push([g1 - g2, g2 - g1, Math.abs(g1), Math.abs(g2)]);
     }
-    return { results, timings: getAndResetTimings() };
+    return {
+        results,
+        timings: getAndResetTimings(),
+        cppTimings: getCppTimings(),
+    };
 }
 
 if (workerData.matches.length === 0) {

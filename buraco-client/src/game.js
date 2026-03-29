@@ -8,7 +8,7 @@ export const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9
 const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15];
 
 // ── Timing accumulators ───────────────────────────────────────────────────────
-const _timings = { buildSegments: 0, forwardPass: 0, getAllValidMelds: 0, getAllValidAppends: 0 };
+const _timings = { buildSegments: 0, forwardPass: 0, getAllValidMelds: 0, getAllValidAppends: 0, planTurn: 0, planTurnCalls: 0 };
 export function getAndResetTimings() {
     const snap = { ..._timings };
     _timings.buildSegments = 0;
@@ -17,6 +17,7 @@ export function getAndResetTimings() {
     return snap;
 }
 export function addForwardPassTime(ms) { _timings.forwardPass += ms; }
+export function addPlanTurnTime(ms) { _timings.planTurn += ms; _timings.planTurnCalls++; }
 export function addWasmDiag(evalCount, copyMs) { _timings._evalCount = (_timings._evalCount||0) + evalCount; _timings._copyMs = (_timings._copyMs||0) + copyMs; }
 
 // 🚀 CENTRALIZED AI ARCHITECTURE CONFIGURATION

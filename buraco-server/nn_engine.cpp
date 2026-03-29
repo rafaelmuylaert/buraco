@@ -114,7 +114,6 @@ static uint8_t g_planned_move[57];
 static uint8_t g_move_list[MAX_PLANNED_MOVES][58];
 static int     g_move_count = 0;
 
-
 // ── Seq meld candidate storage (internal, richer than g_seq_cands) ────────────
 // Stores up to MAX_SEQ_CANDS full parsed melds + cardCounts for execution
 #define CAND_MELD_SIZE 16
@@ -128,6 +127,19 @@ static uint8_t g_cand_append_cc  [MAX_SEQ_CANDS][CAND_CC_SIZE];
 static uint8_t g_cand_append_suit[MAX_SEQ_CANDS];
 static uint8_t g_cand_append_slot[MAX_SEQ_CANDS];
 static int     g_num_append_cands;
+
+// Timing accumulators (milliseconds, reset via JS export)
+extern "C" { extern double now(); }
+static double g_t_fsc       = 0;  // find_seq_candidates
+static double g_t_build_h1  = 0;  // build_h1
+static double g_t_fwd       = 0;  // forward_pass
+static double g_t_phase0    = 0;  // plan_turn phase 0 (pickup scoring)
+static double g_t_phase1    = 0;  // plan_turn phase 1 (meld scoring)
+static double g_t_phase2    = 0;  // plan_turn phase 2 (discard scoring)
+static uint32_t g_n_fsc     = 0;  // find_seq_candidates call count
+static uint32_t g_n_fwd     = 0;  // forward_pass call count
+static uint32_t g_n_turns   = 0;  // plan_turn call count
+
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -261,6 +273,7 @@ static void build_h1(float* h1, int h1sz, const float* W, int inSz) {
 }
 
 static void forward_pass(float* out_acc) {
+    double _t0 = now();
     const int inSz  = g_layer_sizes[0];
     const int h1Sz  = g_layer_sizes[1];
     const float* W1 = g_weights + g_weight_offset;
@@ -268,6 +281,7 @@ static void forward_pass(float* out_acc) {
 
     // First layer: read directly from structured buffers
     build_h1(g_buf0, h1Sz, W1, inSz);
+    g_t_build_h1 += now() - _t0;
     for (int o = 0; o < h1Sz; o++) g_buf0[o] = relu(g_buf0[o] + b1[o]);
 
     // Remaining layers: float activations
@@ -297,6 +311,7 @@ static void forward_pass(float* out_acc) {
         woff += lIn * lOut + lOut;
         cur = next;
     }
+    g_t_fwd += now() - _t0; g_n_fwd++;
 }
 
 static inline int rank_count(const uint8_t* buf, int suit, int rank) {
@@ -358,6 +373,7 @@ static int find_seq_candidates(
     const uint8_t* existingMeld, int existingSlot,
     int nSeq
 ) {
+    double _t0 = now(); 
     const uint8_t* sb = &sim[(suit-1)*18];
 
     uint8_t m[14] = {0};
@@ -496,6 +512,7 @@ static int find_seq_candidates(
             cgap = 0;
         }
     }
+    g_t_fsc += now() - _t0; g_n_fsc++;
     return nSeq;
 }
 
@@ -549,9 +566,9 @@ static void sim_init(uint8_t* sim, int player, int topDiscard) {
 }
 
 static int plan_turn() {
+    double _tp0 = now();
     int player = g_player;
     g_move_count = 0;
-    
     dbg_reset();
     dbg_str("\n\n================PICKUP======================\n");
     for(int i=0;i<MAX_PLANNED_MOVES;i++) for(int j=0;j<58;j++) g_move_list[i][j]=0;
@@ -706,7 +723,7 @@ static int plan_turn() {
     if (pickupScores[bestPickup] <= pickupScores[0]) bestPickup=0;
 
 
-    dbg_str("================MELD======================\n");
+    
 
     // ── Evolve sim for phase 1 ────────────────────────────────────────────────
     // Always remove top discard from sim (consumed or not drawn)
@@ -733,6 +750,8 @@ static int plan_turn() {
             for(int n=0;n<cnt;n++) sim_remove_card(sim, (j==52)?54:j);
         }
     }
+     g_t_phase0 += now() - _tp0;
+     dbg_str("================MELD======================\n");
 
     // ── Phase 1: Melds & Appends scored against sim ───────────────────────────
     // Phase 1 wild detection
@@ -848,6 +867,7 @@ static int plan_turn() {
             add_move(1, isApp?MOVE_APPEND:MOVE_PLAY_MELD, 2, 0, (uint8_t)appSlot, g_cand_run_cc[idx]);
         }
     }
+    g_t_phase1 += now() - _tp0 - g_t_phase0 ;
 
 
     // Phase 2: Discard — score all, emit sorted with fallback at score=0 position
@@ -892,6 +912,8 @@ static int plan_turn() {
         fcc[0]=(uint8_t)((fallback_card==52)?54:fallback_card);
         add_move(2, MOVE_DISCARD, 0,0,0, fcc);
     }
+    g_t_phase2 += now() - _tp0 - g_t_phase0  - g_t_phase1 ;
+    g_n_turns++;
 
     return g_move_count;
 }
@@ -1012,5 +1034,18 @@ WASM_EXPORT void configure_net_discard(int nlayers, int woff) {
     for(int i=0;i<nlayers;i++) g_discard_layers[i]=g_layer_sizes_buf[i];
 }
 
+WASM_EXPORT double   get_t_fsc()      { return g_t_fsc; }
+WASM_EXPORT double   get_t_build_h1() { return g_t_build_h1; }
+WASM_EXPORT double   get_t_fwd()      { return g_t_fwd; }
+WASM_EXPORT double   get_t_phase0()   { return g_t_phase0; }
+WASM_EXPORT double   get_t_phase1()   { return g_t_phase1; }
+WASM_EXPORT double   get_t_phase2()   { return g_t_phase2; }
+WASM_EXPORT uint32_t get_n_fsc()      { return g_n_fsc; }
+WASM_EXPORT uint32_t get_n_fwd()      { return g_n_fwd; }
+WASM_EXPORT uint32_t get_n_turns()    { return g_n_turns; }
+WASM_EXPORT void reset_timings() {
+    g_t_fsc=g_t_build_h1=g_t_fwd=g_t_phase0=g_t_phase1=g_t_phase2=0;
+    g_n_fsc=g_n_fwd=g_n_turns=0;
+}
 } // extern "C"
 

@@ -14,7 +14,6 @@ const activeTrainings = new Map();
 const stopFlags = new Set();
 
 function gaussianRandom() {
-    // Box-Muller transform
     let u, v;
     do { u = Math.random(); } while (u === 0);
     do { v = Math.random(); } while (v === 0);
@@ -34,7 +33,6 @@ function mutate(genome, mutationRate = 0.05, mutationStrength = 0.1) {
 function breed(parentA, parentB) {
     const child = new Float32Array(parentA.length);
     for (let i = 0; i < child.length; i++) {
-        // Uniform blend crossover with small mutation
         const alpha = Math.random();
         child[i] = alpha * parentA[i] + (1 - alpha) * parentB[i];
     }
@@ -43,7 +41,6 @@ function breed(parentA, parentB) {
 
 const generateRandomGenome = () => {
     const g = new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE);
-    // Xavier init per network segment using each net's input size
     let off = 0;
     for (const key of ['PICKUP', 'MELD', 'DISCARD']) {
         const inSize = AI_CONFIG[key + '_INPUT_SIZE'];
@@ -69,19 +66,26 @@ function toBuffer(genome) {
     return buf;
 }
 
+const _cppTimingsZero = () => ({ fsc:0, build_h1:0, fwd:0, phase0:0, phase1:0, phase2:0, n_fsc:0, n_fwd:0, n_turns:0 });
+
 class WorkerPool {
     constructor(size, path) {
         this.queue = [];
-        this._timings = { buildStateVector: 0, buildDiscardVector: 0, forwardPass: 0, getAllValidMelds: 0, getAllValidAppends: 0, _evalCount: 0, _copyMs: 0 };
+        this._timings = { buildStateVector: 0, buildDiscardVector: 0, forwardPass: 0, getAllValidMelds: 0, getAllValidAppends: 0, planTurn: 0, planTurnCalls: 0, _evalCount: 0, _copyMs: 0 };
+        this._cppTimings = _cppTimingsZero();
         this.workers = Array.from({ length: size }, () => {
             const w = new Worker(path, { workerData: { matches: [], rules: {} } });
             w.idle = true;
             w.on('message', (msg) => {
-                if (!w.currentJob) return; // shuffleDeck ack or stray message
+                if (!w.currentJob) return;
                 const results = msg?.results ?? msg;
                 if (msg?.timings) {
                     for (const k of Object.keys(this._timings))
                         this._timings[k] += msg.timings[k] ?? 0;
+                }
+                if (msg?.cppTimings) {
+                    for (const k of Object.keys(this._cppTimings))
+                        this._cppTimings[k] += msg.cppTimings[k] ?? 0;
                 }
                 const { offset, allResults, remaining, onDone } = w.currentJob;
                 results.forEach((r, i) => allResults[offset + i] = r);
@@ -96,8 +100,9 @@ class WorkerPool {
     }
 
     getAndResetTimings() {
-        const snap = { ...this._timings };
+        const snap = { ...this._timings, cpp: { ...this._cppTimings } };
         for (const k of Object.keys(this._timings)) this._timings[k] = 0;
+        this._cppTimings = _cppTimingsZero();
         return snap;
     }
 
@@ -218,19 +223,16 @@ export const TrainerService = {
         const seedDNA = TrainerService.getBotWeights(botName);
         const originalDNA = generateRandomGenome();
 
-        // Load lifetime generation count from meta
         const metaPath = path.join(BOTS_DIR, `${botName}.meta.json`);
         const existingMeta = fs.existsSync(metaPath) ? JSON.parse(fs.readFileSync(metaPath, 'utf-8')) : null;
         const lifetimeGenOffset = existingMeta?.lifetimeGenerations || 0;
 
-        let population;
         if (seedDNA) {
-            console.log(`�Y�� Resuming training for '${botName}'...`);
+            console.log(`🤖 Resuming training for '${botName}'...`);
         } else {
-            console.log(`�Y�� Starting fresh training for '${botName}'...`);
+            console.log(`🤖 Starting fresh training for '${botName}'...`);
         }
 
-        // Helper to load a saved island genome, falling back to seedDNA or random
         const loadIslandSeed = (k) => {
             const fp = path.join(BOTS_DIR, `${botName}_${k}.json`);
             if (fs.existsSync(fp)) {
@@ -266,14 +268,16 @@ export const TrainerService = {
             );
         });
 
-        // Shared state for island coordination
         const islandElites = new Array(NUM_ISLANDS).fill(null);
         const islandBroadcastGen = new Array(NUM_ISLANDS).fill(0);
         const islandLastInjectedGen = new Array(NUM_ISLANDS).fill(0);
         let latestChampion = null;
         let championTournamentRunning = false;
-        let lastChampionTournamentGen = 0; // milestone gen at which last tournament ran
-        const roundStartTimes = new Map(); // roundGen -> Date.now() when first island hit it
+        let lastChampionTournamentGen = 0;
+        let lastBenchmarkTime = Date.now();
+        const roundStartTimes = new Map();
+
+        const fmt = ms => ms < 60000 ? `${(ms/1000).toFixed(1)}s` : `${Math.floor(ms/60000)}m${((ms%60000)/1000).toFixed(0)}s`;
 
         const runIslandGeneration = async (pop) => {
             const finalists = await runPlayoffTournament(pop, rules);
@@ -314,8 +318,6 @@ export const TrainerService = {
             };
         };
 
-        // Run inter-island champion tournament and broadcast winner back to all islands.
-        // Called by whichever island triggers the condition; guarded by championTournamentRunning.
         const runChampionTournament = async (roundGen = 0) => {
             if (championTournamentRunning) return;
             championTournamentRunning = true;
@@ -361,10 +363,12 @@ export const TrainerService = {
                 }
                 const prev = activeTrainings.get(botName);
                 if (prev) activeTrainings.set(botName, { ...prev, benchmarkDiff });
+
                 const tournamentMs = Date.now() - tournamentStart;
                 const roundMs = Date.now() - roundStart;
-                const fmt = ms => ms < 60000 ? `${(ms/1000).toFixed(1)}s` : `${Math.floor(ms/60000)}m${((ms%60000)/1000).toFixed(0)}s`;
-                console.log(`[${botName}] �Y�? Champion: Island ${candidates[bestIdx].k} | Bench: ${benchmarkDiff ?? 'N/A'} | Tournament: ${fmt(tournamentMs)} | Round total: ${fmt(roundMs)}`);
+                const elapsedMs = Date.now() - lastBenchmarkTime;
+                lastBenchmarkTime = Date.now();
+                console.log(`[${botName}] 🏆 Champion: Island ${candidates[bestIdx].k} | Bench: ${benchmarkDiff ?? 'N/A'} | ⏱ ${fmt(elapsedMs)} since last | Tournament: ${fmt(tournamentMs)} | Round: ${fmt(roundMs)}`);
                 roundStartTimes.delete(roundGen);
             } finally {
                 championTournamentRunning = false;
@@ -382,14 +386,12 @@ export const TrainerService = {
                     islandPops[islandIdx] = result.nextPop;
 
                     if (gen % SAVE_EVERY === 0 || gen === GENERATIONS) {
-                        // Inject latest champion once per broadcast cycle
                         if (latestChampion && gen - islandLastInjectedGen[islandIdx] >= SAVE_EVERY) {
                             const replaceIdx = 2 + Math.floor(Math.random() * (islandPops[islandIdx].length - 2));
                             islandPops[islandIdx][replaceIdx] = new Float32Array(latestChampion);
                             islandLastInjectedGen[islandIdx] = gen;
                         }
 
-                        // Broadcast this island's champion
                         islandElites[islandIdx] = result.rankedFinalists[0];
                         islandBroadcastGen[islandIdx] = gen;
 
@@ -407,19 +409,20 @@ export const TrainerService = {
                             totalGenerations: GENERATIONS,
                             islands
                         });
-                        console.log(`[${botName}] Island ${islandIdx} Gen ${gen}/${GENERATIONS} | MaxDiff: ${result.bestDiff.toFixed(0)} | AvgDiff: ${result.avgDiff.toFixed(0)}`);
-                        const t = getPool().getAndResetTimings();
-                        console.log(`[${botName}] [TIMING/${SAVE_EVERY}gens] forwardPass=${t.forwardPass.toFixed(0)}ms copyToWasm=${(t._copyMs||0).toFixed(0)}ms evalCount=${(t._evalCount||0).toFixed(0)} getAllValidMelds=${t.getAllValidMelds.toFixed(0)}ms getAllValidAppends=${(t.getAllValidAppends||0).toFixed(0)}ms`);
 
-                        // Fire champion tournament only when ALL islands have completed
-                        // this milestone round �?" i.e. every island's broadcastGen is a
-                        // multiple of SAVE_EVERY strictly greater than the last tournament.
+                        console.log(`[${botName}] Island ${islandIdx} Gen ${gen}/${GENERATIONS} | MaxDiff: ${result.bestDiff.toFixed(0)} | AvgDiff: ${result.avgDiff.toFixed(0)}`);
+
+                        const t = getPool().getAndResetTimings();
+                        const cpp = t.cpp || {};
+                        const mspt = cpp.n_turns > 0 ? (t.planTurn / cpp.n_turns).toFixed(2) : '?';
+                        console.log(`[${botName}] [TIMING/${SAVE_EVERY}gens] planTurn=${(t.planTurn||0).toFixed(0)}ms (${mspt}ms/turn) turns=${cpp.n_turns||0} fsc=${(cpp.fsc||0).toFixed(0)}ms(${cpp.n_fsc||0}) fwd=${(cpp.fwd||0).toFixed(0)}ms(${cpp.n_fwd||0}) p0=${(cpp.phase0||0).toFixed(0)}ms p1=${(cpp.phase1||0).toFixed(0)}ms p2=${(cpp.phase2||0).toFixed(0)}ms`);
+
                         const minBroadcastGen = Math.min(...islandBroadcastGen);
                         const roundGen = Math.floor(minBroadcastGen / SAVE_EVERY) * SAVE_EVERY;
                         if (!roundStartTimes.has(roundGen)) roundStartTimes.set(roundGen, Date.now());
                         if (roundGen > lastChampionTournamentGen && islandElites.every(e => e !== null)) {
                             lastChampionTournamentGen = roundGen;
-                            runChampionTournament(roundGen); // fire-and-forget, guarded internally
+                            runChampionTournament(roundGen);
                         }
                     }
                 }
@@ -433,13 +436,12 @@ export const TrainerService = {
 
         try {
             await Promise.allSettled(Array.from({ length: NUM_ISLANDS }, (_, k) => runIsland(k)));
-            // Final champion tournament after all islands finish
             if (islandElites.some(e => e !== null)) await runChampionTournament(lastChampionTournamentGen + SAVE_EVERY);
             if (islandErrors.length) console.error(`[TRAINER] ${islandErrors.length} island(s) failed for ${botName}`);
         } catch (error) {
             console.error(`[TRAINER] Error for ${botName}:`, error);
         } finally {
-            console.log(`�o. Training complete for '${botName}'!`);
+            console.log(`Training complete for '${botName}'!`);
             if (_pool) { _pool.terminate(); _pool = null; }
             activeTrainings.delete(botName);
             stopFlags.delete(botName);
