@@ -592,7 +592,7 @@ static int plan_turn() {
     int player = g_player;
     g_move_count = 0;
     dbg_reset();
-    dbg_str("\n\n>BOT");dbg_int(g_player)dbg_char("\n");
+    dbg_str("\n\n>BOT");dbg_int(g_player);dbg_str("\n");
     dbg_str("\n\n>>================PICKUP======================\n");
     for(int i=0;i<MAX_PLANNED_MOVES;i++) for(int j=0;j<58;j++) g_move_list[i][j]=0;
 
