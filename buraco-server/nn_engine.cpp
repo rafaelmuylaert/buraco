@@ -435,9 +435,9 @@ static int find_seq_candidates(
     // Log
     //dbg_str(" caw="); dbg_int(can_add_wild);
     dbg_str(existingMeld ? "Append - " : "New    - ");
-    dbg_str(" Wild="); dbg_suit(w14>0?w14:w15===1?suit:0); 
+    dbg_str(" Wild="); dbg_suit(w14>0 ? w14 : w15==1 ? suit : 0); 
     dbg_str(" m[");
-    for(int i=0;i<14;i++) if(m[i]) {dbg_int(i+1); dbg_suit(suit); dbg_char(from_hand[i]?'h':'e')}
+    for(int i=0;i<14;i++) if(m[i]) {dbg_int(i+1); dbg_suit(suit); dbg_char(from_hand[i]?'h':'e');}
     dbg_str("]\n");
     
 
