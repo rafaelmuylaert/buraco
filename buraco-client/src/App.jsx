@@ -135,6 +135,7 @@ const App = () => {
   const [botInfoList, setBotInfoList] = useState([]);
   const [showTrainBotPopup, setShowTrainBotPopup] = useState(false);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [trainBotIsNew, setTrainBotIsNew] = useState(false);
   const [trainingStatus, setTrainingStatus] = useState(null);
 
   const DEFAULT_CARD_POINT_VALUES = { joker: 50, two: 20, ace: 15, high: 10, low: 5 };
