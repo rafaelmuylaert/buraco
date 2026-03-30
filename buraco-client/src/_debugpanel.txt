@@ -1,0 +1,111 @@
+// ── Tree log parser ───────────────────────────────────────────────────────────
+// Parses lines with leading '>' characters into a nested tree structure.
+// Lines without '>' are depth-0 nodes.
+function parseLogTree(lines) {
+  const root = { text: '__root__', depth: -1, children: [], collapsed: false };
+  const stack = [root];
+  for (const line of lines) {
+    let depth = 0;
+    while (line[depth] === '>') depth++;
+    const text = line.slice(depth);
+    const node = { text, depth, children: [], collapsed: depth < 2 };
+    while (stack.length > 1 && stack[stack.length - 1].depth >= depth) stack.pop();
+    stack[stack.length - 1].children.push(node);
+    stack.push(node);
+  }
+  return root.children;
+}
+
+function LogTree({ nodes, setVersion }) {
+  if (!nodes || nodes.length === 0) return null;
+  return (
+    <>
+      {nodes.map((node, i) => {
+        const hasChildren = node.children.length > 0;
+        const isError = node.text.includes('Error') || node.text.includes('error');
+        const isHighlight = node.text.includes('Champion') || node.text.includes('DEBUG');
+        const color = isError ? '#ff5555' : isHighlight ? '#ffd700' : node.depth === 0 ? '#50fa7b' : node.depth === 1 ? '#8be9fd' : '#ccc';
+        return (
+          <div key={i} style={{ marginLeft: `${node.depth * 12}px` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: hasChildren ? 'pointer' : 'default' }}
+              onClick={() => { if (hasChildren) { node.collapsed = !node.collapsed; setVersion(v => v + 1); } }}>
+              {hasChildren && (
+                <span style={{ color: '#888', fontSize: '0.8em', width: '10px', flexShrink: 0 }}>
+                  {node.collapsed ? '▶' : '▼'}
+                </span>
+              )}
+              {!hasChildren && <span style={{ width: '14px', flexShrink: 0 }} />}
+              <span style={{ color }}>{node.text}</span>
+            </div>
+            {!node.collapsed && hasChildren && <LogTree nodes={node.children} setVersion={setVersion} />}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function BotDebugPanel({ apiBase, botName, rules, onClose }) {
+  const [logs, setLogs] = React.useState([]);
+  const [running, setRunning] = React.useState(false);
+  const [result, setResult] = React.useState(null);
+  const [version, setVersion] = React.useState(0);
+  const logsEndRef = React.useRef(null);
+  const treeRef = React.useRef([]);
+
+  React.useEffect(() => {
+    const es = new EventSource(`${apiBase}/api/logs`);
+    es.onmessage = (e) => {
+      try {
+        const line = JSON.parse(e.data);
+        setLogs(prev => {
+          const next = [...prev.slice(-5000), line];
+          treeRef.current = parseLogTree(next);
+          return next;
+        });
+      } catch (_) {}
+    };
+    return () => es.close();
+  }, [apiBase]);
+
+  React.useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
+
+  const runDebugMatch = async () => {
+    setRunning(true); setResult(null);
+    try {
+      const res = await fetch(`${apiBase}/api/bots/debug-match`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ botName, rules })
+      });
+      setResult(await res.json());
+    } catch (e) { setResult({ error: e.message }); }
+    setRunning(false);
+  };
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '20px', fontFamily: 'monospace' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <h2 style={{ color: '#50fa7b', margin: 0 }}>🤖 Debug — {botName || 'sem bot'}</h2>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={runDebugMatch} disabled={running} style={{ padding: '8px 18px', background: running ? '#555' : '#50fa7b', color: '#000', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: running ? 'not-allowed' : 'pointer' }}>
+            {running ? '⏳ Rodando...' : '▶ Rodar Partida Debug'}
+          </button>
+          <button onClick={() => { setLogs([]); treeRef.current = []; setVersion(v => v + 1); }} style={{ padding: '8px 12px', background: '#444', color: '#ccc', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Limpar</button>
+          <button onClick={onClose} style={{ padding: '8px 12px', background: '#e63946', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>✕ Fechar</button>
+        </div>
+      </div>
+      {result && (
+        <div style={{ background: result.error ? '#3d0000' : '#003d1a', color: result.error ? '#ff5555' : '#50fa7b', padding: '8px 12px', borderRadius: '5px', marginBottom: '8px', fontSize: '0.9em' }}>
+          {result.error ? `Erro: ${result.error}` : `A=${result.rawA} B=${result.rawB} | Vencedor: ${result.scoreA > 0 ? 'A' : result.scoreA < 0 ? 'B' : 'Empate'}`}
+        </div>
+      )}
+      <div style={{ flex: 1, overflowY: 'auto', background: '#0d0d0d', border: '1px solid #333', borderRadius: '5px', padding: '10px', fontSize: '0.78em', lineHeight: '1.5' }}>
+        {logs.length === 0 && <span style={{ color: '#555' }}>Aguardando logs do servidor...</span>}
+        <LogTree nodes={treeRef.current} setVersion={setVersion} />
+        <div ref={logsEndRef} />
+      </div>
+    </div>
+  );
+}

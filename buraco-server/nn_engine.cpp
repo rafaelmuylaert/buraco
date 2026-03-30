@@ -557,7 +557,7 @@ static void sim_add_card(uint8_t* sim, int cardType) {
         sim[CARDS_ALL_OFF+cardType]++;
     }
     dbg_str(">>>SIM=");
-    for(int i=0;i<CARDS_FLAT_SIZE;i++) if(sim[i]) dbg_card(i);
+    for(int i=0;i<CARDS_ALL_OFF;i++) if(sim[i]) dbg_card(i);
     dbg_str("\n");
 }
 
@@ -572,14 +572,14 @@ static void sim_remove_card(uint8_t* sim, int cardType) {
         if(sim[CARDS_ALL_OFF+cardType]>0) sim[CARDS_ALL_OFF+cardType]--;
     }
     dbg_str(">>>SIM=  ");
-    for(int i=0;i<CARDS_FLAT_SIZE;i++) if(sim[i]) dbg_card(i);
+    for(int i=0;i<CARDS_ALL_OFF;i++) if(sim[i]) dbg_card(i);
     dbg_str("\n");
 }
 
 // Initialise sim from player's real hand + top discard card
 static void sim_init(uint8_t* sim, int player, int topDiscard) {
     dbg_str(">>>G_Cards2=  ");
-    for(int i=0;i<CARDS_FLAT_SIZE;i++) if(g_cards2[player][i]) dbg_card(i);
+    for(int i=0;i<CARDS_ALL_OFF;i++) if(g_cards2[player][i]) dbg_card(i);
     dbg_str(" Top Discard= ");
     dbg_card(topDiscard);
     dbg_str("\n");
