@@ -55,7 +55,7 @@ function BotDebugPanel({ apiBase, botName, rules, onClose }) {
   React.useEffect(() => {
     const es = new EventSource(`${apiBase}/api/logs`);
     es.onmessage = (e) => {
-      try { setLogs(prev => [...prev.slice(-500), JSON.parse(e.data)]); } catch (_) {}
+      try { setLogs(prev => [...prev.slice(-5000), JSON.parse(e.data)]); } catch (_) {}
     };
     return () => es.close();
   }, [apiBase]);

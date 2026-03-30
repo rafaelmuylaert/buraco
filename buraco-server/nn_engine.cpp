@@ -433,15 +433,13 @@ static int find_seq_candidates(
 
 
     // Log
-    dbg_str("fsc s="); dbg_suit(suit);
-    dbg_str(" caw="); dbg_int(can_add_wild);
-    dbg_str(" w14="); dbg_int(w14);
-    dbg_str(" w15="); dbg_int(w15);
-    dbg_str(" app="); dbg_int(existingMeld ? existingSlot : -1);
+    //dbg_str(" caw="); dbg_int(can_add_wild);
+    dbg_str(existingMeld ? "Append - " : "New    - ");
+    dbg_str(" Wild="); dbg_suit(w14>0?w14:w15===1?suit:0); 
     dbg_str(" m[");
-    for(int i=0;i<14;i++) if(m[i]) { dbg_int(i+1); dbg_char(from_hand[i]?'h':'e'); dbg_char(' '); }
+    for(int i=0;i<14;i++) if(m[i]) {dbg_int(i+1); dbg_suit(suit); dbg_char(from_hand[i]?'h':'e')}
     dbg_str("]\n");
-
+    
 
     int run_start = -1, prev_end = -1, prev_start = -1;
 
@@ -475,7 +473,7 @@ static int find_seq_candidates(
             }
         }
 
-        dbg_str(" emit["); dbg_int(lo); dbg_str("-"); dbg_int(hi); dbg_str("]\n");
+        dbg_str(" emit["); dbg_int(lo + 1); dbg_suit(suit); dbg_str("-"); dbg_int(hi + 1); dbg_suit(suit); dbg_str("]\n");
 
         if (existingMeld) {
             for(int j=0;j<16;j++) g_cand_append_meld[nSeq][j]=dst[j];
@@ -598,9 +596,9 @@ static int plan_turn() {
     int td_rank = td%13+1;
     int td_alloff = (td==54)?52:td;
     sim_init(sim, player, (g_top_discard!=255 && g_discard_len>0) ? td : 255);
-    dbg_str("sim_td="); dbg_card(td); dbg_str(" sim[alloff+td]=");
-    dbg_int(sim[CARDS_ALL_OFF+td_alloff]); 
-    dbg_str(" sb6="); dbg_int(sim[(td_suit-1)*18+(td_rank-1)]); dbg_str("\n");
+    //dbg_str("sim_td="); dbg_card(td); dbg_str(" sim[alloff+td]=");
+    //dbg_int(sim[CARDS_ALL_OFF+td_alloff]); 
+    //dbg_str(" sb6="); dbg_int(sim[(td_suit-1)*18+(td_rank-1)]); dbg_str("\n");
 
 
     // ── Phase 0: pickup scoring ───────────────────────────────────────────────
@@ -638,10 +636,10 @@ static int plan_turn() {
             g_num_seq_cands = nSeq;
             for(int ci=0; ci<g_num_seq_cands && nPickup<MAX_SEQ_CANDS+1; ci++) {
                 int usesTop = (td_alloff<53) ? g_cand_seq_cc[ci][td_alloff] : 0;
-                dbg_str("appCI="); dbg_int(ci); dbg_str(" usesTop="); dbg_int(usesTop);
-                dbg_str(" td="); dbg_card(td_alloff);
-                dbg_str(" cc[td]="); dbg_int(g_cand_append_cc[ci][td_alloff]);
-                dbg_str("\n");
+                //dbg_str("appCI="); dbg_int(ci); dbg_str(" usesTop="); dbg_int(usesTop);
+                //dbg_str(" td="); dbg_card(td_alloff);
+                //dbg_str(" cc[td]="); dbg_int(g_cand_append_cc[ci][td_alloff]);
+                //dbg_str("\n");
                 if (!usesTop) continue;
                 pickupCandType[nPickup] = 1;
                 for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[nPickup][i]=g_cand_seq_cc[ci][i];
