@@ -364,7 +364,7 @@ static void dbg_int(int v) {
 }
 static void dbg_suit(int s) {
     // s: 1=♠ 2=♥ 3=♣ 4=♦ 5=★
-    const char* syms[] = { "\xe2\x99\xa0", "\xe2\x99\xa5", "\xe2\x99\xa3", "\xe2\x99\xa6", "\xe2\x98\x85" };
+    const char* syms[] = { "\xe2\x99\xa0 ", "\xe2\x99\xa5 ", "\xe2\x99\xa3 ", "\xe2\x99\xa6 ", "\xe2\x98\x85 " };
     if (s >= 1 && s <= 5) dbg_str(syms[s-1]); else dbg_int(s);
 }
 static void dbg_card(int td) {
@@ -434,11 +434,11 @@ static int find_seq_candidates(
 
     // Log
     //dbg_str(" caw="); dbg_int(can_add_wild);
-    dbg_str(existingMeld ? "Append - " : "New    - ");
-    dbg_str(" Wild="); dbg_suit(w14>0 ? w14 : w15==1 ? suit : 0); 
-    dbg_str(" m[");
+    dbg_str(existingMeld ? ">>>>Append - " : "New    - ");
+    dbg_str(">>>> Wild="); dbg_suit(w14>0 ? w14 : w15==1 ? suit : 0); 
+    dbg_str(">>>> m[");
     for(int i=0;i<14;i++) if(m[i]) {dbg_int(i+1); dbg_suit(suit); dbg_char(from_hand[i]?'h':'e');}
-    dbg_str("]\n");
+    dbg_str(">>>>]\n");
     
 
     int run_start = -1, prev_end = -1, prev_start = -1;
@@ -473,7 +473,7 @@ static int find_seq_candidates(
             }
         }
 
-        dbg_str(" emit["); dbg_int(lo + 1); dbg_suit(suit); dbg_str("-"); dbg_int(hi + 1); dbg_suit(suit); dbg_str("]\n");
+        dbg_str(">>>> emit["); dbg_int(lo + 1); dbg_suit(suit); dbg_str("-"); dbg_int(hi + 1); dbg_suit(suit); dbg_str("]\n");
 
         if (existingMeld) {
             for(int j=0;j<16;j++) g_cand_append_meld[nSeq][j]=dst[j];
@@ -556,6 +556,9 @@ static void sim_add_card(uint8_t* sim, int cardType) {
         else      { sim[s*18+r]++; }
         sim[CARDS_ALL_OFF+cardType]++;
     }
+    dbg_str(">>>SIM=");
+    for(int i=0;i<CARDS_FLAT_SIZE;i++) dbg_card(sim[i]);
+    dbg_str("\n");
 }
 
 static void sim_remove_card(uint8_t* sim, int cardType) {
@@ -568,10 +571,18 @@ static void sim_remove_card(uint8_t* sim, int cardType) {
         else      { if(sim[s*18+r]>0) sim[s*18+r]--; }
         if(sim[CARDS_ALL_OFF+cardType]>0) sim[CARDS_ALL_OFF+cardType]--;
     }
+    dbg_str(">>>SIM=");
+    for(int i=0;i<CARDS_FLAT_SIZE;i++) dbg_card(sim[i]);
+    dbg_str("\n");
 }
 
 // Initialise sim from player's real hand + top discard card
 static void sim_init(uint8_t* sim, int player, int topDiscard) {
+    dbg_str(">>>G_Cards2=");
+    for(int i=0;i<CARDS_FLAT_SIZE;i++) dbg_card(g_cards2[player][i]);
+    dbg_str(" Top Discard=");
+    dbg_card(topDiscard);
+    dbg_str("\n");
     for(int i=0;i<CARDS_FLAT_SIZE;i++) sim[i]=g_cards2[player][i];
     if (topDiscard != 255) sim_add_card(sim, topDiscard);
 }
@@ -581,7 +592,8 @@ static int plan_turn() {
     int player = g_player;
     g_move_count = 0;
     dbg_reset();
-    dbg_str("\n\n================PICKUP======================\n");
+    dbg_str("\n\n>BOT");dbg_int(g_player)dbg_char("\n");
+    dbg_str("\n\n>>================PICKUP======================\n");
     for(int i=0;i<MAX_PLANNED_MOVES;i++) for(int j=0;j<58;j++) g_move_list[i][j]=0;
 
     if (g_deck_len==0 && g_pots_len==0) {
@@ -763,7 +775,7 @@ static int plan_turn() {
     }
      double _tp1 = now();
      g_t_phase0 += _tp1 - _tp0;
-     dbg_str("================MELD======================\n");
+     dbg_str(">>================MELD======================\n");
 
     // ── Phase 1: Melds & Appends scored against sim ───────────────────────────
     // Phase 1 wild detection
