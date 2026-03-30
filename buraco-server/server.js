@@ -295,11 +295,18 @@ server.router.post('/api/admin/delete-match', async (ctx) => {
 
 // ── Log capture for SSE streaming ──────────────────────────────────────────
 const logSubscribers = new Set();
-const _origLog = console.log.bind(console);
-const _origErr = console.error.bind(console);
-const _broadcast = (line) => { for (const send of logSubscribers) send(line); };
-console.log = (...args) => { const line = args.join(' '); _origLog(line); _broadcast(line); };
-console.error = (...args) => { const line = args.join(' '); _origErr(line); _broadcast(line); };
+const _origStdoutWrite = process.stdout.write.bind(process.stdout);
+const _origStderrWrite = process.stderr.write.bind(process.stderr);
+const _intercept = (orig) => function(chunk, ...args) {
+    const result = orig(chunk, ...args);
+    const str = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+    for (const line of str.split('\n')) {
+        if (line.trim()) for (const send of logSubscribers) send(line);
+    }
+    return result;
+};
+process.stdout.write = _intercept(_origStdoutWrite);
+process.stderr.write = _intercept(_origStderrWrite);
 
 server.router.get('/api/logs', (ctx) => {
     setCors(ctx);
