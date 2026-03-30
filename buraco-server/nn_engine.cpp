@@ -362,6 +362,19 @@ static void dbg_int(int v) {
     while(v>0) { tmp[i++]='0'+(v%10); v/=10; }
     while(i-->0) dbg_char(tmp[i]);
 }
+static void dbg_suit(int s) {
+    // s: 1=♠ 2=♥ 3=♣ 4=♦ 5=★
+    const char* syms[] = { "\xe2\x99\xa0", "\xe2\x99\xa5", "\xe2\x99\xa3", "\xe2\x99\xa6", "\xe2\x98\x85" };
+    if (s >= 1 && s <= 5) dbg_str(syms[s-1]); else dbg_int(s);
+}
+static void dbg_card(int td) {
+    // td: 0-51 = normal card, 54 = joker
+    if (td == 54 || td == 52) { dbg_str("JK"); return; }
+    int s = td / 13 + 1;
+    int r = td % 13 + 1;
+    const char* ranks[] = { "A","2","3","4","5","6","7","8","9","10","J","Q","K" };
+    dbg_str(ranks[r-1]); dbg_suit(s);
+}
 
 // ── find_seq_candidates ──────────────────────────────────────────────────────
 // Scans the merged (hand + existingMeld) bitmap linearly, emitting candidates
@@ -420,13 +433,13 @@ static int find_seq_candidates(
 
 
     // Log
-    dbg_str("fsc s="); dbg_int(suit);
+    dbg_str("fsc s="); dbg_suit(suit);
     dbg_str(" caw="); dbg_int(can_add_wild);
     dbg_str(" w14="); dbg_int(w14);
     dbg_str(" w15="); dbg_int(w15);
     dbg_str(" app="); dbg_int(existingMeld ? existingSlot : -1);
     dbg_str(" m[");
-    for(int i=0;i<14;i++) if(m[i]) { dbg_int(i); dbg_char(from_hand[i]?'h':'e'); dbg_char(' '); }
+    for(int i=0;i<14;i++) if(m[i]) { dbg_int(i+1); dbg_char(from_hand[i]?'h':'e'); dbg_char(' '); }
     dbg_str("]\n");
 
 
@@ -581,11 +594,11 @@ static int plan_turn() {
     // ── Sim buffer: real hand + top discard ──────────────────────────────────
     uint8_t sim[CARDS_FLAT_SIZE];
     int td = g_top_discard;
-    int td_suit = (td==54)?5:td/13+1;
-    int td_rank = (td==54)?2:td%13+1;
+    int td_suit = td/13+1;
+    int td_rank = td%13+1;
     int td_alloff = (td==54)?52:td;
     sim_init(sim, player, (g_top_discard!=255 && g_discard_len>0) ? td : 255);
-    dbg_str("sim_td="); dbg_int(td); dbg_str(" sim[alloff+td]="); 
+    dbg_str("sim_td="); dbg_card(td); dbg_str(" sim[alloff+td]=");
     dbg_int(sim[CARDS_ALL_OFF+td_alloff]); 
     dbg_str(" sb6="); dbg_int(sim[(td_suit-1)*18+(td_rank-1)]); dbg_str("\n");
 
@@ -626,7 +639,7 @@ static int plan_turn() {
             for(int ci=0; ci<g_num_seq_cands && nPickup<MAX_SEQ_CANDS+1; ci++) {
                 int usesTop = (td_alloff<53) ? g_cand_seq_cc[ci][td_alloff] : 0;
                 dbg_str("appCI="); dbg_int(ci); dbg_str(" usesTop="); dbg_int(usesTop);
-                dbg_str(" td_alloff="); dbg_int(td_alloff);
+                dbg_str(" td="); dbg_card(td_alloff);
                 dbg_str(" cc[td]="); dbg_int(g_cand_append_cc[ci][td_alloff]);
                 dbg_str("\n");
                 if (!usesTop) continue;

@@ -18,7 +18,7 @@ class ErrorBoundary extends React.Component {
 }
 
 // Inlined dependencies from game.js to resolve preview environment import errors
-const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
+const suitValues = { '♠': 1, '♥': 2, '♣': 3, '♦': 4, '★': 5 };
 const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
 // Seq format: [A-low, A-high, nat2, 3, 4..K, foreignWildSuit, nat2-wild-count]  (16 elements, indices 0-15)
 // Runner format: [rank, ?cnt, ?cnt, ?cnt, ?cnt, wildSuit]  (6 elements)
@@ -79,7 +79,7 @@ function calculateMeldPoints(meld, rules) {
     return pts;
 }
 
-const getSuitChar = s => ['♠', '♥', '♦', '♣', '★'][s - 1];
+const getSuitChar = s => ['♠', '♥', '♣', '♦', '★'][s - 1];
 const getRankChar = r => r === 1 ? 'A' : r === 11 ? 'J' : r === 12 ? 'Q' : r === 13 ? 'K' : r === 14 ? 'A' : r.toString();
 
 function intToCardObj(c) {

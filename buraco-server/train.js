@@ -176,6 +176,13 @@ async function runPlayoffTournament(population, rules) {
     return remaining.filter(Boolean).map(r => r.genome);
 }
 
+export async function runDebugMatch(dna, rules = {}) {
+    const [[scoreA, scoreB, rawA, rawB]] = await runMatchBatch(
+        [{ dnaA: dna, dnaB: dna }], { ...rules, debugLog: true }
+    );
+    return { scoreA, scoreB, rawA, rawB };
+}
+
 export const TrainerService = {
 
     stopTraining: (botName) => {

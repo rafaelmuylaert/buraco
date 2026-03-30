@@ -2,7 +2,7 @@
 export const getSuit = c => c >= 104 ? 5 : Math.floor((c % 52) / 13) + 1; // 1:♠, 2:♥, 3:♦, 4:♣, 5:★
 export const getRank = c => c >= 104 ? 2 : (c % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:K
 
-export const suitValues = { '♠': 1, '♥': 2, '♦': 3, '♣': 4, '★': 5 };
+export const suitValues = { '♠': 1, '♥': 2, '♣': 3, '♦': 4, '★': 5 };
 export const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
 
 const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15];

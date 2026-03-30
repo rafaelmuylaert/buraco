@@ -46,6 +46,64 @@ function ReconnectingClient({ matchID, playerID, credentials, tournament, tourna
   return <BuracoClient key={key} matchID={matchID} playerID={playerID} credentials={credentials} tournament={tournament} tournamentStandings={tournamentStandings} />;
 }
 
+function BotDebugPanel({ apiBase, botName, rules, onClose }) {
+  const [logs, setLogs] = React.useState([]);
+  const [running, setRunning] = React.useState(false);
+  const [result, setResult] = React.useState(null);
+  const logsEndRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const es = new EventSource(`${apiBase}/api/logs`);
+    es.onmessage = (e) => {
+      try { setLogs(prev => [...prev.slice(-500), JSON.parse(e.data)]); } catch (_) {}
+    };
+    return () => es.close();
+  }, [apiBase]);
+
+  React.useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
+
+  const runDebugMatch = async () => {
+    setRunning(true); setResult(null);
+    try {
+      const res = await fetch(`${apiBase}/api/bots/debug-match`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ botName, rules })
+      });
+      setResult(await res.json());
+    } catch (e) { setResult({ error: e.message }); }
+    setRunning(false);
+  };
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '20px', fontFamily: 'monospace' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <h2 style={{ color: '#50fa7b', margin: 0 }}>🐛 Debug — {botName || 'sem bot'}</h2>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={runDebugMatch} disabled={running} style={{ padding: '8px 18px', background: running ? '#555' : '#50fa7b', color: '#000', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: running ? 'not-allowed' : 'pointer' }}>
+            {running ? '⏳ Rodando...' : '▶ Rodar Partida Debug'}
+          </button>
+          <button onClick={() => setLogs([])} style={{ padding: '8px 12px', background: '#444', color: '#ccc', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Limpar</button>
+          <button onClick={onClose} style={{ padding: '8px 12px', background: '#e63946', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>✕ Fechar</button>
+        </div>
+      </div>
+      {result && (
+        <div style={{ background: result.error ? '#3d0000' : '#003d1a', color: result.error ? '#ff5555' : '#50fa7b', padding: '8px 12px', borderRadius: '5px', marginBottom: '8px', fontSize: '0.9em' }}>
+          {result.error ? `Erro: ${result.error}` : `A=${result.rawA} B=${result.rawB} | Vencedor: ${result.scoreA > 0 ? 'A' : result.scoreA < 0 ? 'B' : 'Empate'}`}
+        </div>
+      )}
+      <div style={{ flex: 1, overflowY: 'auto', background: '#0d0d0d', border: '1px solid #333', borderRadius: '5px', padding: '10px', fontSize: '0.78em', lineHeight: '1.5' }}>
+        {logs.length === 0 && <span style={{ color: '#555' }}>Aguardando logs do servidor...</span>}
+        {logs.map((line, i) => (
+          <div key={i} style={{ color: line.includes('Error') || line.includes('error') ? '#ff5555' : line.includes('🏆') || line.includes('Champion') ? '#ffd700' : line.includes('[DEBUG]') ? '#50fa7b' : '#ccc' }}>{line}</div>
+        ))}
+        <div ref={logsEndRef} />
+      </div>
+    </div>
+  );
+}
+
 const App = () => {
   const [view, setView] = useState('lounge'); 
   const [matches, setMatches] = useState([]);
@@ -76,7 +134,7 @@ const App = () => {
   const [availableBots, setAvailableBots] = useState([]);
   const [botInfoList, setBotInfoList] = useState([]);
   const [showTrainBotPopup, setShowTrainBotPopup] = useState(false);
-  const [trainBotIsNew, setTrainBotIsNew] = useState(false);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [trainingStatus, setTrainingStatus] = useState(null);
 
   const DEFAULT_CARD_POINT_VALUES = { joker: 50, two: 20, ace: 15, high: 10, low: 5 };
@@ -835,6 +893,8 @@ const App = () => {
               <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
                 <button onClick={() => setShowTrainBotPopup(false)} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Cancelar</button>
                 <button onClick={handleStartTraining} style={{ padding: '10px 20px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Iniciar Mutação</button>
+                <button onClick={() => setShowDebugPanel(true)} style={{ padding: '10px 20px', background: '#333', color: '#50fa7b', border: '1px solid #50fa7b', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer', marginLeft: '8px' }}>🐛 Debug</button>
+                {showDebugPanel && <BotDebugPanel apiBase={API_ADDRESS} botName={trainBotConfig.name} rules={trainBotConfig.rules} onClose={() => setShowDebugPanel(false)} />}
               </div>
             </div>
           </div>

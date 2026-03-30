@@ -284,15 +284,56 @@ server.router.post('/api/admin/delete-match', async (ctx) => {
     if (body && body.matchID) {
       await server.db.wipe(body.matchID);
       const matchFilePath = path.join(gamesPath, body.matchID);
-      if (fs.existsSync(matchFilePath)) {
-        fs.unlinkSync(matchFilePath);
-      }
+      if (fs.existsSync(matchFilePath)) fs.unlinkSync(matchFilePath);
     }
     ctx.body = { success: true };
   } catch (e) {
     ctx.status = 500;
     ctx.body = { error: 'Failed to delete match' };
   }
+});
+
+// ── Log capture for SSE streaming ──────────────────────────────────────────
+const logSubscribers = new Set();
+const _origLog = console.log.bind(console);
+const _origErr = console.error.bind(console);
+const _broadcast = (line) => { for (const send of logSubscribers) send(line); };
+console.log = (...args) => { const line = args.join(' '); _origLog(line); _broadcast(line); };
+console.error = (...args) => { const line = args.join(' '); _origErr(line); _broadcast(line); };
+
+server.router.get('/api/logs', (ctx) => {
+    setCors(ctx);
+    ctx.set('Content-Type', 'text/event-stream');
+    ctx.set('Cache-Control', 'no-cache');
+    ctx.set('Connection', 'keep-alive');
+    ctx.status = 200;
+    const send = (line) => { try { ctx.res.write(`data: ${JSON.stringify(line)}\n\n`); } catch(_) {} };
+    logSubscribers.add(send);
+    ctx.req.on('close', () => logSubscribers.delete(send));
+    ctx.respond = false;
+    ctx.res.flushHeaders();
+});
+
+server.router.post('/api/bots/debug-match', async (ctx) => {
+    setCors(ctx);
+    try {
+        const body = await parseBody(ctx);
+        const botName = body?.botName;
+        const rules = body?.rules || {};
+        const weights = botName ? TrainerService.getBotWeights(botName) : null;
+        const { AI_CONFIG } = await import('./game.js');
+        const dna = new SharedArrayBuffer(AI_CONFIG.TOTAL_DNA_SIZE * 4);
+        if (weights) new Float32Array(dna).set(weights);
+        console.log(`[DEBUG] Running debug match${botName ? ` with bot '${botName}'` : ' (random DNA)'}...`);
+        const { runDebugMatch } = await import('./train.js');
+        const result = await runDebugMatch(dna, rules);
+        console.log(`[DEBUG] Match done: A=${result.rawA} B=${result.rawB}`);
+        ctx.body = { success: true, ...result };
+    } catch (e) {
+        console.error('[DEBUG] Debug match error:', e.message);
+        ctx.status = 500;
+        ctx.body = { error: e.message };
+    }
 });
 
 server.run({ port: 8000, host: '0.0.0.0' }, () => {
