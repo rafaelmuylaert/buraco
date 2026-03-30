@@ -507,26 +507,20 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       const status = isCanasta ? (isMeldClean(meldGroup) ? 'clean' : 'dirty') : null;
       const points = calculateMeldPoints(meldGroup, G.rules);
       const borderColor = status === 'clean' ? '#ffd700' : (status === 'dirty' ? '#c0c0c0' : 'transparent');
-      const prevMeldSnap = (() => {
-        if (!meldSnapshotRef.current || !hasNewCards) return null;
+      const hasNewCards = !!newMeldCards[key];
+      const renderedCards = meldToCards(meldGroup, suit);
+
+      const prevRendered = (() => {
+        if (!hasNewCards || !meldSnapshotRef.current) return new Set();
         const teamSnap = meldSnapshotRef.current[isMyTeam ? myTeam : oppTeam];
-        if (!teamSnap) return null;
-        if (isRunner) return teamSnap.runners?.[index] || null;
-        return (teamSnap.seqs?.[suit] || []).find(pm => pm.every((v, idx) => !v || meldGroup[idx])) || null;
+        if (!teamSnap) return new Set();
+        const prevMeld = isRunner
+          ? teamSnap.runners?.[index]
+          : (teamSnap.seqs?.[suit] || []).find(pm => pm.every((v, idx) => !v || meldGroup[idx]));
+        if (!prevMeld) return new Set();
+        return new Set(meldToCards(prevMeld, suit).map(c => c.id));
       })();
 
-      const renderedCards = meldToCards(meldGroup, suit);
-      const hasNewCards = !!newMeldCards[key];
-      const prevMeld = (() => {
-        if (!meldSnapshotRef.current) return null;
-        const mySnap = meldSnapshotRef.current;
-        const teamSnap = isMyTeam ? mySnap[myTeam] : mySnap[oppTeam];
-        if (isRunner) return teamSnap?.runners?.[index] || null;
-        return teamSnap?.seqs?.[suit]?.find(pm =>
-          getMeldLength(pm) < getMeldLength(meldGroup) && pm.every((v, idx) => !v || meldGroup[idx])
-        ) || null;
-      })();
-      const prevRendered = prevMeld ? new Set(meldToCards(prevMeld, suit).map(c => c.id)) : new Set();
 
       return (
         <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -543,15 +537,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
             }}
             style={{ position: 'relative', display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: hasNewCards ? '2px solid #50fa7b' : `2px solid ${borderColor}`, boxShadow: hasNewCards ? '0 0 10px rgba(80,250,123,0.5)' : 'none', cursor: (isMyTurn && isMyTeam && (selectedCount > 0 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default' }}>
             {renderedCards.map((card, i) => {
-              const isNewCard = hasNewCards && !prevMeldSnap
-                ? true
-                : hasNewCards && (() => {
-                    // card is new if its meld slot was 0 in the previous snapshot
-                    if (card.id === 'n-0') return !prevMeldSnap[0];
-                    if (card.id === 'n-1') return !prevMeldSnap[1];
-                    if (card.id.startsWith('nat-')) return !prevMeldSnap[+card.id.slice(4)];
-                    return false; // wilds: don't highlight (position may shift)
-                  })();
+              const isNewCard = hasNewCards && !prevRendered.has(card.id);
               return (
                 <Card key={card.id} card={card} isNewlyDrawn={isNewCard} customStyle={{
                   marginLeft: (!isRunner && i > 0) ? `-${CARD_W - 14}px` : '0',
