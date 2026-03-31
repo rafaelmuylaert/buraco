@@ -663,12 +663,16 @@ export function runTurn(queue, getG, playerID, iface, log) {
         return true;
     }
 
-    // No discard moves left — hardcoded fallback from live gamestate
+    // No discard moves left — hardcoded fallback: try each card in hand in order across ticks
     const CAOFF = 72;
     const flat = G.cards2?.[playerID.toString()] || [];
     for (let i = 0; i < 53; i++) {
         if ((flat[CAOFF + i] || 0) > 0) {
             const cardId = i === 52 ? 54 : i;
+            // Push remaining cards back as fallback moves so next tick tries the next card
+            for (let j = i + 1; j < 53; j++)
+                if ((flat[CAOFF + j] || 0) > 0)
+                    queue.push({ phase: 2, moveType: 4, discardCard: j === 52 ? 54 : j, _fallback: true });
             log?.(`discardCard(${cardId}) [hardcoded fallback]`);
             iface.discard(cardId);
             return true;
