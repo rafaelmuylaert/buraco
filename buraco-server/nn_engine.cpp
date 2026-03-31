@@ -578,7 +578,7 @@ static void sim_remove_card(uint8_t* sim, int cardType) {
 
 // Initialise sim from player's real hand + top discard card
 static void sim_init(uint8_t* sim, int player, int topDiscard) {
-    dbg_str(">>>G_Cards2=  ");
+    dbg_str(">>G_Cards2=  ");
     for(int i=0;i<CARDS_ALL_OFF;i++) if(g_cards2[player][i]) dbg_card(i);
     dbg_str(" Top Discard= ");
     dbg_card(topDiscard);
@@ -593,7 +593,7 @@ static int plan_turn() {
     g_move_count = 0;
     dbg_reset();
     dbg_str("\n\n>BOT");dbg_int(g_player);dbg_str("\n");
-    dbg_str("\n\n>>================PICKUP======================\n");
+    
     for(int i=0;i<MAX_PLANNED_MOVES;i++) for(int j=0;j<58;j++) g_move_list[i][j]=0;
 
     if (g_deck_len==0 && g_pots_len==0) {
@@ -608,6 +608,7 @@ static int plan_turn() {
     int td_rank = td%13+1;
     int td_alloff = (td==54)?52:td;
     sim_init(sim, player, (g_top_discard!=255 && g_discard_len>0) ? td : 255);
+    dbg_str("\n\n>>================PICKUP======================\n");
     //dbg_str("sim_td="); dbg_card(td); dbg_str(" sim[alloff+td]=");
     //dbg_int(sim[CARDS_ALL_OFF+td_alloff]); 
     //dbg_str(" sb6="); dbg_int(sim[(td_suit-1)*18+(td_rank-1)]); dbg_str("\n");
