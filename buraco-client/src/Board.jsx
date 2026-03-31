@@ -710,7 +710,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                   <div style={{ fontSize: '0.7em', color: '#888', marginBottom: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}:</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
                     {knownCards.map((cId, i) => { const c = intToCardObj(cId); return (
-                      <div key={i} style={{ background: 'white', color: (c.suit===getSuitChar(2)||c.suit===getSuitChar(3))?'red':'black', padding: '1px 3px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold' }}>{c.rank}{c.suit}</div>
+                      <div key={i} style={{ background: 'white', color: (c.suit===getSuitChar(2)||c.suit===getSuitChar(4))?'red':'black', padding: '1px 3px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold' }}>{c.rank}{c.suit}</div>
                     ); })}
                   </div>
                 </div>
