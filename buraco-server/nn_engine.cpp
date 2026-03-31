@@ -578,7 +578,7 @@ static void sim_remove_card(uint8_t* sim, int cardType) {
 
 // Initialise sim from player's real hand + top discard card
 static void sim_init(uint8_t* sim, int player, int topDiscard) {
-    dbg_str(">>G_Cards2=  ");
+    dbg_str(">G_Cards2=  ");
     for(int i=0;i<CARDS_ALL_OFF;i++) if(g_cards2[player][i]) dbg_card(i);
     dbg_str(" Top Discard= ");
     dbg_card(topDiscard);
@@ -592,7 +592,7 @@ static int plan_turn() {
     int player = g_player;
     g_move_count = 0;
     dbg_reset();
-    dbg_str("\n\n>BOT");dbg_int(g_player);dbg_str("\n");
+    dbg_str("\n\nBOT");dbg_int(g_player);dbg_str("\n");
     
     for(int i=0;i<MAX_PLANNED_MOVES;i++) for(int j=0;j<58;j++) g_move_list[i][j]=0;
 
