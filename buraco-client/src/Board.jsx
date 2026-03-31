@@ -154,7 +154,7 @@ function meldToCards(m, suit) {
 const CARD_W = 46, CARD_H = 60;
 
 const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle }) => {
-  const isRed = card.suit === getSuitChar(2) || card.suit === getSuitChar(3);
+  const isRed = card.suit === getSuitChar(2) || card.suit === getSuitChar(4);
   return (
     <div onClick={onClick} style={{
       position: 'relative',
