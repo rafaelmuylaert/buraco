@@ -45,7 +45,9 @@ function makeIface(S, p) {
     };
 }
 
-function runMatch(genomes, rules, fixedDeck) {
+// worker.js
+
+function runMatch(genomes, rules, fixedDeck, swapTeams = false) {
     const numPlayers = rules.numPlayers || 4;
     const fakeRandom = { Shuffle: arr => fixedDeck ? [...fixedDeck] : shuffle(arr) };
 
@@ -60,6 +62,14 @@ function runMatch(genomes, rules, fixedDeck) {
             S.knownCards[k] = wb.knownCards[+k];
         }
         setUsingWasmBackedBuffers(true);
+        // Clear all WASM meld tables for fresh match
+        for (let t = 0; t < 2; t++) {
+            for (let s = 0; s < 4; s++)
+                for (let sl = 0; sl < 5; sl++)
+                    updateSeqMeld(t, s, sl, null);
+            for (let sl = 0; sl < 4; sl++)
+                updateRunMeld(t, sl, null);
+        }
     } else {
         for (const k of Object.keys(S.cards))      S.cards[k]      = Uint8Array.from(S.cards[k]);
         for (const k of Object.keys(S.knownCards)) S.knownCards[k] = Uint8Array.from(S.knownCards[k]);
@@ -70,18 +80,6 @@ function runMatch(genomes, rules, fixedDeck) {
         const arr = v instanceof SharedArrayBuffer ? new Float32Array(v) : new Float32Array(v);
         return [k, prepareGenome(arr)];
     }));
-
-    if (isWasmReady()) {
-    loadMatchDNA(S.botGenomes['0'], S.botGenomes['1']);
-    // Clear all WASM meld tables for fresh match
-    for (let t = 0; t < 2; t++) {
-        for (let s = 0; s < 4; s++)
-            for (let sl = 0; sl < 5; sl++)
-                updateSeqMeld(t, s, sl, null);
-        for (let sl = 0; sl < 4; sl++)
-            updateRunMeld(t, sl, null);
-    }
-}
 
     const ctx = { currentPlayer: '0', numPlayers };
 
@@ -97,14 +95,17 @@ function runMatch(genomes, rules, fixedDeck) {
                 S.lastDrawnCard = null;
             }
 
-            if (isWasmReady()) setActiveTeam(S.teams[p] === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
+            if (isWasmReady()) {
+                // swapTeams XORs which DNA offset is used for each team
+                const isTeam0 = S.teams[p] === 0;
+                setActiveTeam((isTeam0 ^ swapTeams) ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
+            }
 
             const myTeam  = S.teams[p];
             const oppTeam = myTeam === 0 ? 1 : 0;
             const moves = buildTurnMoveList(S, p, myTeam, oppTeam, !rules.debugLog) || [];
             const iface = makeIface(S, p);
 
-            // Run full turn synchronously
             let done = false;
             let safety = 0;
             while (!done && safety++ < 30) {
@@ -137,6 +138,9 @@ function runMatch(genomes, rules, fixedDeck) {
     }
 }
 
+
+
+
 let _diagCount = 0;
 
 const _baseDeck = [];
@@ -148,8 +152,22 @@ async function processJob(matches, rules) {
     const results = [];
     for (const { dnaA, dnaB } of matches) {
         const pairDeck = rules.fixedDeck ? _fixedDeck : shuffle([..._baseDeck]);
-        const g1 = runMatch({ '0': dnaA, '1': dnaB, '2': dnaA, '3': dnaB }, rules, pairDeck);
-        const g2 = runMatch({ '0': dnaB, '1': dnaA, '2': dnaB, '3': dnaA }, rules, pairDeck);
+
+        // Load DNA once for both matches in the pair
+        if (isWasmReady()) {
+            const gA = prepareGenome(dnaA instanceof SharedArrayBuffer ? new Float32Array(dnaA) : new Float32Array(dnaA));
+            const gB = prepareGenome(dnaB instanceof SharedArrayBuffer ? new Float32Array(dnaB) : new Float32Array(dnaB));
+            loadMatchDNA(gA, gB);
+        }
+
+        const genomes1 = { '0': dnaA, '1': dnaB, '2': dnaA, '3': dnaB };
+        const genomes2 = { '0': dnaB, '1': dnaA, '2': dnaB, '3': dnaA };
+
+        // Match 1: A=team0, B=team1 (no swap)
+        // Match 2: B=team0, A=team1 (swap — XORs offset, no DNA reload)
+        const g1 = runMatch(genomes1, rules, pairDeck, false);
+        const g2 = runMatch(genomes2, rules, pairDeck, true);
+
         results.push([g1 - g2, g2 - g1, Math.abs(g1), Math.abs(g2)]);
     }
     return {
