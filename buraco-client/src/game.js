@@ -97,14 +97,6 @@ export function sortCards(cards) {
   });
 }
 
-function ensureTable(G) {
-    if (!G.table) G.table = [[{}, []], [{}, []]];
-    for (let t = 0; t < 2; t++) {
-        if (!G.table[t]) G.table[t] = [{}, []];
-        if (!G.table[t][0]) G.table[t][0] = {};
-        if (!G.table[t][1]) G.table[t][1] = [];
-    }
-}
 // Seq layout: m[0]=A-low, m[1]=A-high, m[2]=nat2, m[3]=3 ... m[13]=K, m[14]=foreignWildSuit, m[15]=nat2-wild
 // Runner layout: m[0]=rank, m[1..4]=suit counts ♠♥♦♣, m[5]=wildSuit (0=none, 1-5)
 export const isSeq = m => m.length !== 6;
@@ -405,7 +397,6 @@ export function moveDrawCard(G, p) {
 }
 
 export function movePickUpDiscard(G, p, selectedHandIds, target) {
-    ensureTable(G);
     if (G.hasDrawn || G.discardPile.length === 0) return false;
     const topCard = G.discardPile[G.discardPile.length - 1];
     const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
@@ -429,7 +420,6 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
 // target: null (new meld) | { type: 'seq', suit, index } | { type: 'runner', index }
 // Hand: { cardType: count } — card types to use from hand (+ topDiscard if provided), or list of ids
 export function moveMeld(G, p, Hand, target = null, addCards = 0, topDiscard = null) {
-    ensureTable(G);
     if (!G.hasDrawn && topDiscard === null) { console.log('moveMeld fail: not drawn'); return false; }
     const teamId = G.teams[p];
     const selectedHandIds = Array.isArray(Hand) ? Hand : countsToIds(Hand);
@@ -588,7 +578,7 @@ export const BuracoGame = {
     let teams = []; let teamPlayers = [];
     if (numPlayers === 2) { teams = [0, 1]; teamPlayers = [[0], [1]]; }
     else { teams = [0, 1, 0, 1]; teamPlayers = [[0, 2], [1, 3]]; }
-    const table = [[{}, []], [{}, []]]
+    const table = [[[],[[],[],[],[]]], [[],[[],[],[],[]]]];
     return { rules, deck: initialDeck, discardPile: [firstDiscard], pots, cards, knownCards, handSizes, hasDrawn: false, lastDrawnCard: null, teams, teamPlayers, teamMortos: { 0: false, 1: false }, isExhausted: false, table, cleanMelds: [0, 0] };
   },
 
@@ -600,14 +590,7 @@ export const BuracoGame = {
       if (!movePickUpDiscard(G, ctx.currentPlayer, selectedHandIds, target)) return 'INVALID_MOVE';
     },
     playMeld: ({ G, ctx }, cardCounts) => {
-        try {
-            const result = moveMeld(G, ctx.currentPlayer, cardCounts);
-            console.log('[playMeld] result:', result, 'cardCounts:', cardCounts);
-            if (!result) return 'INVALID_MOVE';
-        } catch(e) {
-            console.error('[playMeld] threw:', e.message, e.stack);
-            return 'INVALID_MOVE';
-        }
+      if (!moveMeld(G, ctx.currentPlayer, cardCounts)) return 'INVALID_MOVE';
     },
     appendToMeld: ({ G, ctx }, target, cardCounts) => {
       if (!moveMeld(G, ctx.currentPlayer, cardCounts, target)) return 'INVALID_MOVE';
