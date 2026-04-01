@@ -97,6 +97,14 @@ export function sortCards(cards) {
   });
 }
 
+function ensureTable(G) {
+    if (!G.table) G.table = [[{}, []], [{}, []]];
+    for (let t = 0; t < 2; t++) {
+        if (!G.table[t]) G.table[t] = [{}, []];
+        if (!G.table[t][0]) G.table[t][0] = {};
+        if (!G.table[t][1]) G.table[t][1] = [];
+    }
+}
 // Seq layout: m[0]=A-low, m[1]=A-high, m[2]=nat2, m[3]=3 ... m[13]=K, m[14]=foreignWildSuit, m[15]=nat2-wild
 // Runner layout: m[0]=rank, m[1..4]=suit counts ♠♥♦♣, m[5]=wildSuit (0=none, 1-5)
 export const isSeq = m => m.length !== 6;
@@ -397,6 +405,7 @@ export function moveDrawCard(G, p) {
 }
 
 export function movePickUpDiscard(G, p, selectedHandIds, target) {
+    ensureTable(G);
     if (G.hasDrawn || G.discardPile.length === 0) return false;
     const topCard = G.discardPile[G.discardPile.length - 1];
     const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
@@ -420,6 +429,7 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
 // target: null (new meld) | { type: 'seq', suit, index } | { type: 'runner', index }
 // Hand: { cardType: count } — card types to use from hand (+ topDiscard if provided), or list of ids
 export function moveMeld(G, p, Hand, target = null, addCards = 0, topDiscard = null) {
+    ensureTable(G);
     if (!G.hasDrawn && topDiscard === null) { console.log('moveMeld fail: not drawn'); return false; }
     const teamId = G.teams[p];
     const selectedHandIds = Array.isArray(Hand) ? Hand : countsToIds(Hand);
