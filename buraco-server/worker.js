@@ -1,6 +1,6 @@
 import { workerData, parentPort } from 'worker_threads';
 import {
-    BuracoGame, AI_CONFIG, CARDS_ALL_OFF,
+    BuracoGame, AI_CONFIG,
     moveDrawCard, moveDiscardCard, moveMeld, movePickUpDiscard,
     checkGameOver, getAndResetTimings
 } from './game.js';
