@@ -10,9 +10,7 @@
 #define MAX_WEIGHTS      4000000
 #define MAX_SUITS        4
 #define MAX_PLAYERS      4
-#define CARDS_FLAT_SIZE  125
-#define CARDS_ALL_OFF    72
-#define CARDS_SUIT_STRIDE 18
+#define CARDS_FLAT_SIZE  54
 
 // ── Structured input buffers (JS writes directly, C++ reads in-place) ─────────
 
@@ -84,9 +82,6 @@ static int g_suit;         // 1-4 (0 = all-suit / runner pass)
 static int g_layerkey;     // 0=PICKUP, 1=MELD, 2=RUNNER, 3=DISCARD
 
 
-// Legacy: get_inp still available for compat but unused in new path
-static uint8_t g_inp_legacy[4][2048];
-WASM_EXPORT uint8_t* get_inp(int i) { return g_inp_legacy[i]; }
 // ── Game state (set by JS once per turn via set_match_state) ─────────────────
 static uint8_t g_hand_sizes[4];
 static uint16_t g_deck_len;
@@ -183,6 +178,30 @@ static inline void accum_u8(float* __restrict__ h1, int h1sz, int inSz,
     }
 }
 
+// Replace accum_u8 per-suit calls with this:
+static void accum_suit(float* h1, int h1sz, int inSz,
+                        const float* W, int inOff,
+                        const uint8_t* flat, int suit) {
+    // suit 1-4: naturals are cards (suit-1)*13 .. (suit-1)*13+12
+    // wilds: 2s are at indices 1, 14, 27, 40 (rank 2 of each suit), joker at 52
+    int base = (suit - 1) * 13;
+    for (int r = 0; r < 13; r++) {
+        uint8_t v = flat[base + r];
+        if (!v) continue;
+        float fv = (float)v * g_inp_scale;
+        for (int o = 0; o < h1sz; o++) h1[o] += fv * W[o * inSz + inOff + r];
+    }
+    // wilds: suited 2s (indices 1,14,27,40) + joker (52) → slots 13-17
+    int wslot = 13;
+    for (int ws = 0; ws < 4; ws++) {
+        uint8_t v = flat[ws * 13 + 1];  // rank-2 of suit ws+1
+        if (v) { float fv = (float)v * g_inp_scale; for (int o = 0; o < h1sz; o++) h1[o] += fv * W[o * inSz + inOff + wslot]; }
+        wslot++;
+    }
+    uint8_t jv = flat[52];  // joker
+    if (jv) { float fv = (float)jv * g_inp_scale; for (int o = 0; o < h1sz; o++) h1[o] += fv * W[o * inSz + inOff + 17]; }
+}
+
 // Build h1 directly from structured buffers — no g_inp staging
 static void build_h1(float* h1, int h1sz, const float* W, int inSz) {
     for (int o = 0; o < h1sz; o++) h1[o] = 0.0f;
@@ -192,18 +211,18 @@ static void build_h1(float* h1, int h1sz, const float* W, int inSz) {
     if (g_layerkey == 3) {
         // DISCARD: 5 all-suit card groups + scalars
         // own hand
-        accum_u8(h1, h1sz, inSz, W, off, g_cards2[g_player], CARDS_ALL_OFF, 53); off += 53;
+        accum_u8(h1, h1sz, inSz, W, off, g_cards2[g_player], 0, 53); off += 53;
         // discard pile
-        accum_u8(h1, h1sz, inSz, W, off, g_discard2, CARDS_ALL_OFF, 53); off += 53;
+        accum_u8(h1, h1sz, inSz, W, off, g_discard2, 0, 53); off += 53;
         // partner known (slot 2 in 4p: player^2, else zeros)
         int partner = (g_player + 2) & 3;
-        accum_u8(h1, h1sz, inSz, W, off, g_knowncards2[partner], CARDS_ALL_OFF, 53); off += 53;
+        accum_u8(h1, h1sz, inSz, W, off, g_knowncards2[partner], 0, 53); off += 53;
         // opp1 known
         int opp1 = (g_player + 1) & 3;
-        accum_u8(h1, h1sz, inSz, W, off, g_knowncards2[opp1], CARDS_ALL_OFF, 53); off += 53;
+        accum_u8(h1, h1sz, inSz, W, off, g_knowncards2[opp1], 0, 53); off += 53;
         // opp2 known
         int opp2 = (g_player + 3) & 3;
-        accum_u8(h1, h1sz, inSz, W, off, g_knowncards2[opp2], CARDS_ALL_OFF, 53); off += 53;
+        accum_u8(h1, h1sz, inSz, W, off, g_knowncards2[opp2], 0, 53); off += 53;
         // scalars
         accum_u8(h1, h1sz, inSz, W, off, g_scalars, 0, 11); off += 11;
         return;
@@ -260,16 +279,16 @@ static void build_h1(float* h1, int h1sz, const float* W, int inSz) {
 
     // Card groups: own hand + discard (per-suit for seq nets, all-suit for runner)
     if (g_layerkey == 2) {
-        accum_u8(h1, h1sz, inSz, W, off, g_cards2[g_player], CARDS_ALL_OFF, 53); off += 53;
-        accum_u8(h1, h1sz, inSz, W, off, g_discard2, CARDS_ALL_OFF, 53); off += 53;
+        accum_u8(h1, h1sz, inSz, W, off, g_cards2[g_player], 0, 53); off += 53;
+        accum_u8(h1, h1sz, inSz, W, off, g_discard2,         0, 53); off += 53;
     } else {
-        int so = suit_idx * CARDS_SUIT_STRIDE;
-        accum_u8(h1, h1sz, inSz, W, off, g_cards2[g_player], so, 18); off += 18;
-        accum_u8(h1, h1sz, inSz, W, off, g_discard2, so, 18); off += 18;
+        // NEW per-suit (PICKUP/MELD):
+        accum_suit(h1, h1sz, inSz, W, off, g_cards2[g_player], g_suit); off += 18;
+        accum_suit(h1, h1sz, inSz, W, off, g_discard2,         g_suit); off += 18;
     }
 
     // Scalars
-    accum_u8(h1, h1sz, inSz, W, off, g_scalars, 0, 11);
+    accum_u8(h1, h1sz, inSz, W, off, g_scalars, 0, 11); off += 11;
 }
 
 static void forward_pass(float* out_acc) {
@@ -315,13 +334,13 @@ static void forward_pass(float* out_acc) {
 }
 
 static inline int rank_count(const uint8_t* buf, int suit, int rank) {
-    return buf[(suit-1)*18 + (rank-1)];
+    return buf[(suit-1)*13 + (rank-1)];
 }
 static inline int wild2_count(const uint8_t* buf, int suit) {
-    return buf[(suit-1)*18 + 13 + (suit-1)];
+    return buf[(suit-1)*13 + 1];  // rank-2 of that suit
 }
 static inline int all_count(const uint8_t* buf, int cardType) {
-    return buf[CARDS_ALL_OFF + (cardType == 54 ? 52 : cardType)];
+    return buf[cardType == 54 ? 52 : cardType];
 }
 
 static inline int is_runner_allowed(int rank) {
@@ -387,7 +406,9 @@ static int find_seq_candidates(
     int nSeq
 ) {
     double _t0 = now(); 
-    const uint8_t* sb = &sim[(suit-1)*18];
+    auto sb_rank = [&](int r) -> uint8_t { return sim[(suit-1)*13 + (r-1)]; };  // r=1..13
+    auto sb_wild2 = [&](int s) -> uint8_t { return sim[(s-1)*13 + 1]; };        // wild-2 of suit s
+    auto sb_joker = [&]() -> uint8_t { return sim[52]; };
 
     uint8_t m[14] = {0};
     uint8_t from_hand[14] = {0};
@@ -402,7 +423,7 @@ static int find_seq_candidates(
         m[13]=1;
         mend=13;
     }
-    if (sb[0] > 0) { if (!m[0]) from_hand[0]=1; m[0]=1; from_hand[13]=1; m[13]=1;}
+    if (sb_rank(1) > 0) { if (!m[0]) from_hand[0]=1; m[0]=1; from_hand[13]=1; m[13]=1;}
 
     m[1] = existingMeld ? existingMeld[2] : 0;
     // Ranks 2-K
@@ -414,7 +435,7 @@ static int find_seq_candidates(
             if(mi<mstart)mstart=mi;
             if(mi>mend)mend=mi;
         }
-        if (sb[r-1] > 0 && !already_in_meld) { from_hand[mi]=1; m[mi]=1; }
+        if (sb_rank(r) > 0 && !already_in_meld) { from_hand[mi]=1; m[mi]=1; }
     }
 
     // Wild slots from existing meld, promote nat2 if both free
@@ -423,12 +444,12 @@ static int find_seq_candidates(
     if (existingMeld && existingMeld[2]==1 && w14==0 && w15==0) { m[1]=0; w15=1; }
 
     int hand_wilds = 0;
-    for (int i=13;i<=17;i++) hand_wilds += sb[i];
+    for(int s=1;s<=4;s++) hand_wilds += sb_wild2(s); hand_wilds += sb_joker();
     int can_add_wild = (w14==0 && w15==0 && (hasWild || hand_wilds > 0)) ? 1 : 0;
     if (can_add_wild && wild0type < 0) {
         for(int s=1;s<=4&&wild0type<0;s++)
-            if (sb[13+(s-1)]>0) wild0type=(s-1)*13+1;
-        if (wild0type<0 && sb[17]>0) wild0type=54;
+            if (sb_wild2(s)) wild0type=(s-1)*13+1;
+        if (wild0type<0 && sb_joker()>0) wild0type=54;
     }
 
 
@@ -463,7 +484,7 @@ static int find_seq_candidates(
         }
 
         if(gaps && w14 == 0 && w15==0) {
-            if (sb[13+(suit-1)]>from_hand[1]) {
+            if (sb_wild2(suit) > from_hand[1]){
                 cc[(suit-1)*13+1]++;
                 dst[15]=1;
             }
@@ -547,43 +568,28 @@ static void add_move(uint8_t phase, uint8_t moveType, uint8_t tType, uint8_t tSu
 // It mirrors g_cards2 layout: per-suit blocks [0..71] + all-suit block [72..124].
 
 static void sim_add_card(uint8_t* sim, int cardType) {
-    if (cardType == 54) {
-        for(int i=0;i<4;i++) sim[i*18+17]++;
-        sim[CARDS_ALL_OFF+52]++;
-    } else {
-        int s=cardType/13, r=cardType%13;
-        if (r==1) { for(int i=0;i<4;i++) sim[i*18+13+s]++; }
-        else      { sim[s*18+r]++; }
-        sim[CARDS_ALL_OFF+cardType]++;
-    }
+    sim[cardType == 54 ? 52 : cardType]++;
     dbg_str(">>>SIM=");
-    for(int i=0;i<CARDS_ALL_OFF;i++) if(sim[i]) dbg_card(i);
+    for(int i=0;i<CARDS_FLAT_SIZE;i++) if(sim[i]) dbg_card(i);
     dbg_str("\n");
 }
 
 static void sim_remove_card(uint8_t* sim, int cardType) {
-    if (cardType == 54) {
-        for(int i=0;i<4;i++) if(sim[i*18+17]>0) sim[i*18+17]--;
-        if(sim[CARDS_ALL_OFF+52]>0) sim[CARDS_ALL_OFF+52]--;
-    } else {
-        int s=cardType/13, r=cardType%13;
-        if (r==1) { for(int i=0;i<4;i++) if(sim[i*18+13+s]>0){ sim[i*18+13+s]--; break; } }
-        else      { if(sim[s*18+r]>0) sim[s*18+r]--; }
-        if(sim[CARDS_ALL_OFF+cardType]>0) sim[CARDS_ALL_OFF+cardType]--;
-    }
+    int idx = cardType == 54 ? 52 : cardType;
+    if (sim[idx] > 0) sim[idx]--;
     dbg_str(">>>SIM=  ");
-    for(int i=0;i<CARDS_ALL_OFF;i++) if(sim[i]) dbg_card(i);
+    for(int i=0;i<CARDS_FLAT_SIZE;i++) if(sim[i]) dbg_card(i);
     dbg_str("\n");
 }
 
 // Initialise sim from player's real hand + top discard card
 static void sim_init(uint8_t* sim, int player, int topDiscard) {
     dbg_str(">G_Cards2=  ");
-    for(int i=0;i<CARDS_ALL_OFF;i++) if(g_cards2[player][i]) dbg_card(i);
+    for(int i=0;i<CARDS_FLAT_SIZE;i++) if(g_cards2[player][i]) dbg_card(i);
     dbg_str(" Top Discard= ");
     dbg_card(topDiscard);
     dbg_str("\n");
-    for(int i=0;i<CARDS_FLAT_SIZE;i++) sim[i]=g_cards2[player][i];
+    for (int i = 0; i < CARDS_FLAT_SIZE; i++) sim[i] = g_cards2[player][i];
     if (topDiscard != 255) sim_add_card(sim, topDiscard);
 }
 
@@ -760,14 +766,14 @@ static int plan_turn() {
         add_move(0, MOVE_PICKUP, pickupCandType[bestPickup]==2?1:0,
                  pickupTarget[bestPickup][0], pickupTarget[bestPickup][1],
                  pickupCC[bestPickup]);
-        // Add remainder of discard pile (excluding top card already removed)
-        for(int j=0;j<CAND_CC_SIZE;j++) {
-            int cnt = g_discard2[CARDS_ALL_OFF+j]; if(!cnt) continue;
-            // subtract top card count from pile
+        // 1. Add remainder of discard pile
+        for (int j = 0; j < CAND_CC_SIZE; j++) {
+            int cnt = g_discard2[j]; if (!cnt) continue;
             int pile = cnt;
-            if (j==td_alloff && td!=255) pile--;
-            for(int n=0;n<pile;n++) sim_add_card(sim, (j==52)?54:j);
+            if (j == td_alloff && td != 255) pile--;
+            for (int n = 0; n < pile; n++) sim_add_card(sim, (j == 52) ? 54 : j);
         }
+
         // Remove hand cards used in the pickup meld
         for(int j=0;j<CAND_CC_SIZE;j++) {
             int cnt=pickupCC[bestPickup][j]; if(!cnt) continue;
@@ -872,10 +878,11 @@ static int plan_turn() {
         int t=candType[i], idx=candIdx[i];
         uint8_t* cc = (t==0)?g_cand_seq_cc[idx]:(t==1)?g_cand_append_cc[idx]:g_cand_run_cc[idx];
 
-        // Skip if any required card is no longer available in sim
-        int ok=1;
-        for(int j=0;j<CAND_CC_SIZE&&ok;j++) if(cc[j]>sim[CARDS_ALL_OFF+j]) ok=0;
+        // 2. Skip if any required card no longer available in sim
+        int ok = 1;
+        for (int j = 0; j < CAND_CC_SIZE && ok; j++) if (cc[j] > sim[j]) ok = 0;
         if (!ok) continue;
+
 
         // Subtract consumed cards from sim
         for(int j=0;j<CAND_CC_SIZE;j++)
@@ -902,15 +909,16 @@ static int plan_turn() {
     for(int o=0;o<g_layer_sizes[g_discard_nlayers-1];o++) g_out[o]=0.0f;
     forward_pass(g_out);
 
-    // Find first card in hand as fallback
+    // 3. Find first card in hand as fallback
     int fallback_card = -1;
-    for(int i=0;i<53;i++) if(sim[CARDS_ALL_OFF+i]) { fallback_card=i; break; }
+    for (int i = 0; i < 53; i++) if (sim[i]) { fallback_card = i; break; }
 
-    float dscores[53]; int dcards[53]; int nd=0;
-    for(int i=0;i<53;i++) {
-        if (!sim[CARDS_ALL_OFF+i]) continue;
-        dscores[nd]=g_out[i]; dcards[nd]=i; nd++;
+    float dscores[53]; int dcards[53]; int nd = 0;
+    for (int i = 0; i < 53; i++) {
+        if (!sim[i]) continue;
+        dscores[nd] = g_out[i]; dcards[nd] = i; nd++;
     }
+
     // Insertion sort descending
     for(int i=1;i<nd;i++) {
         float s=dscores[i]; int c=dcards[i]; int j=i-1;
@@ -1030,7 +1038,9 @@ WASM_EXPORT void configure_nets(
 }
 
 WASM_EXPORT int get_hand_total(int player) {
-    int t=0; for(int i=0;i<53;i++) t+=g_cards2[player][CARDS_ALL_OFF+i]; return t;
+    int t = 0;
+    for (int i = 0; i < CARDS_FLAT_SIZE; i++) t += g_cards2[player][i];
+    return t;
 }
 
 WASM_EXPORT uint8_t* get_move_list()        { return &g_move_list[0][0]; }

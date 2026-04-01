@@ -47,19 +47,19 @@ function runMatch(genomes, rules, fixedDeck) {
 
     if (isWasmReady()) {
         const wb = getWasmCardBuffers();
-        for (const k of Object.keys(S.cards2)) {
-            wb.cards2[+k].set(S.cards2[k]);
-            wb.knownCards2[+k].set(S.knownCards2[k]);
-            S.cards2[k]      = wb.cards2[+k];
-            S.knownCards2[k] = wb.knownCards2[+k];
+        for (const k of Object.keys(S.cards)) {
+            wb.cards[+k].set(S.cards[k]);
+            wb.knownCards[+k].set(S.knownCards[k]);
+            S.cards[k]      = wb.cards[+k];
+            S.knownCards[k] = wb.knownCards[+k];
         }
-        wb.discard2.set(S.discardPile2);
-        S.discardPile2 = wb.discard2;
+        wb.discard2.set(S.discardPile);
+        S.discardPile = wb.discard2;
         setUsingWasmBackedBuffers(true);
     } else {
-        for (const k of Object.keys(S.cards2))      S.cards2[k]      = Uint8Array.from(S.cards2[k]);
-        for (const k of Object.keys(S.knownCards2)) S.knownCards2[k] = Uint8Array.from(S.knownCards2[k]);
-        S.discardPile2 = Uint8Array.from(S.discardPile2);
+        for (const k of Object.keys(S.cards))      S.cards[k]      = Uint8Array.from(S.cards[k]);
+        for (const k of Object.keys(S.knownCards)) S.knownCards[k] = Uint8Array.from(S.knownCards[k]);
+        S.discardPile = Uint8Array.from(S.discardPile);
     }
 
     S.botGenomes = Object.fromEntries(Object.entries(genomes).map(([k, v]) => {
@@ -83,10 +83,10 @@ function runMatch(genomes, rules, fixedDeck) {
                 S.lastDrawnCard = null;
             }
 
-            if (isWasmReady()) setActiveTeam(S.teams[p] === 'team0' ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
+            if (isWasmReady()) setActiveTeam(S.teams[p] === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
 
-            const myTeam  = S.teams[p] === 'team0' ? 'team0' : 'team1';
-            const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
+            const myTeam  = S.teams[p];
+            const oppTeam = myTeam === 0 ? 1 : 0;
             const moves = buildTurnMoveList(S, p, myTeam, oppTeam, !rules.debugLog) || [];
             const iface = makeIface(S, p);
 
@@ -105,13 +105,13 @@ function runMatch(genomes, rules, fixedDeck) {
             moveCount++;
         }
 
-        const scores = gameover ? gameover.scores : (() => { console.warn('[runMatch] hit 2000 move limit'); return { team0: { total: -5000 }, team1: { total: -5000 } }; })();
-        const diff = scores.team0.total - scores.team1.total;
+        const scores = gameover ? gameover.scores : (() => { console.warn('[runMatch] hit 2000 move limit'); return [{ total: -5000 }, { total: -5000 }]; })();
+        const diff = scores[0].total - scores[1].total;
         if (_diagCount < 2) {
             _diagCount++;
-            const t0 = scores.team0, t1 = scores.team1;
-            const meldCount = Object.values(S.table.team0[0]).flat().length + S.table.team0[1].length
-                           + Object.values(S.table.team1[0]).flat().length + S.table.team1[1].length;
+            const t0 = scores[0], t1 = scores[1];
+            const meldCount = Object.values(S.table[0][0]).flat().length + S.table[0][1].length
+                           + Object.values(S.table[1][0]).flat().length + S.table[1][1].length;
             console.log(`[DIAG] reason=${gameover?.reason} moves=${moveCount} melds=${meldCount}`);
             console.log(`[DIAG] t0: table=${t0.table} hand=${t0.hand} morto=${t0.mortoPenalty} total=${t0.total}`);
             console.log(`[DIAG] t1: table=${t1.table} hand=${t1.hand} morto=${t1.mortoPenalty} total=${t1.total} diff=${diff}`);

@@ -83,8 +83,8 @@ const getSuitChar = s => ['♠', '♥', '♣', '♦', '★'][s - 1];
 const getRankChar = r => r === 1 ? 'A' : r === 11 ? 'J' : r === 12 ? 'Q' : r === 13 ? 'K' : r === 14 ? 'A' : r.toString();
 
 function intToCardObj(c) {
-    const s = c >= 104 ? 5 : Math.floor((c % 52) / 13) + 1;
-    const r = c >= 104 ? 2 : (c % 13) + 1;
+    const s = Math.floor((c % 55) / 13) + 1;
+    const r = ((c % 55) % 13) + 1;
     return { rank: s === 5 ? 'JOKER' : getRankChar(r), suit: getSuitChar(s), id: c };
 }
 
@@ -219,7 +219,7 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
 
   const snapshotTable = (table) => {
     const snap = {};
-    for (const teamId of ['team0', 'team1']) {
+    for (const teamId of [0, 1]) {
       snap[teamId] = { seqs: {}, runners: [] };
       for (let s = 1; s <= 4; s++)
         snap[teamId].seqs[s] = (table[teamId][0][s] || []).map(m => [...m]);
@@ -234,7 +234,7 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
     if (isMyTurn && !wasMyTurnRef.current) {
       if (meldSnapshotRef.current) {
         const highlights = {};
-        const oppTeamId = G.teams[playerID] === 'team0' ? 'team1' : 'team0';
+        const oppTeamId = G.teams[playerID] === 0 ? 1 : 0;
         const prev = meldSnapshotRef.current[oppTeamId];
         const curr = G.table[oppTeamId];
         for (let s = 1; s <= 4; s++) {
@@ -286,10 +286,10 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
   }, [gameover, matchID]);
 
   const gameOverPopup = gameover ? (() => {
-    const s0 = gameover.scores?.team0 ?? { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 };
-    const s1 = gameover.scores?.team1 ?? { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 };
-    const team0NamesArr = (G.teamPlayers.team0 || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`);
-    const team1NamesArr = (G.teamPlayers.team1 || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`);
+    const s0 = gameover.scores?.[0] ?? { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 };
+    const s1 = gameover.scores?.[1] ?? { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 };
+    const team0NamesArr = (G.teamPlayers[0] || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`);
+    const team1NamesArr = (G.teamPlayers[1] || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`);
     const team0Names = team0NamesArr.join(' & ');
     const team1Names = team1NamesArr.join(' & ');
     const myName = G.rules?.assignments?.[playerID] || "Eu";
@@ -358,7 +358,7 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
   })() : null;
 if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregando Mesa...</div>;
 
-  if (!G.cards2 || !G.teams || !G.teamPlayers || !G.table) {
+  if (!G.cards || !G.teams || !G.teamPlayers || !G.table) {
     return (
       <div style={{ color: 'white', padding: '40px', backgroundColor: '#1b4332', minHeight: '100vh', fontFamily: 'sans-serif' }}>
         <h1 style={{ color: '#ffd700' }}>Fim de Jogo</h1>
@@ -369,26 +369,13 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
   }
 
   // Build hand display from cards2 flat buffer
-  const myFlat = G.cards2[playerID] || [];
-  const CARDS_ALL_OFF_B = 72; // 4*18
+  const myFlat = G.cards[playerID] || [];
   const handCardObjs = [];
-  // Natural cards
-  for (let s = 1; s <= 4; s++) {
-    for (let r = 1; r <= 13; r++) {
-      const count = myFlat[(s-1)*18 + (r-1)] || 0;
-      const cardId = (s-1)*13 + (r-1);
-      for (let i = 0; i < count; i++) handCardObjs.push({ ...intToCardObj(cardId), uid: `${cardId}_${i}` });
-    }
+  for (let i = 0; i < 53; i++) {
+      const cnt = myFlat[i] || 0;
+      for (let j = 0; j < cnt; j++)
+          handCardObjs.push({ ...intToCardObj(i === 52 ? 54 : i), uid: `${i}_${j}` });
   }
-  // Suited-2 wilds
-  const suited2Ids = [1, 14, 27, 40];
-  for (const cId of suited2Ids) {
-    const count = myFlat[CARDS_ALL_OFF_B + cId] || 0;
-    for (let i = 0; i < count; i++) handCardObjs.push({ ...intToCardObj(cId), uid: `${cId}_w${i}` });
-  }
-  // Jokers
-  const jokerCount = myFlat[CARDS_ALL_OFF_B + 52] || 0;
-  for (let i = 0; i < jokerCount; i++) handCardObjs.push({ ...intToCardObj(54), uid: `54_${i}` });
 
   const sortedHandObj = sortCards(handCardObjs);
 
@@ -396,26 +383,26 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
   const newlyDrawnTypes = React.useMemo(() => {
     if (ctx.currentPlayer !== playerID || G.lastDrawnCard == null) return new Set();
     const drawn = Array.isArray(G.lastDrawnCard) ? G.lastDrawnCard : [G.lastDrawnCard];
-    return new Set(drawn.map(c => c >= 104 ? 54 : c % 52));
-  }, [G.lastDrawnCard]);
+    return new Set(drawn.map(c => c === 54 ? 52 : c));
+    }, [G.lastDrawnCard]);
   // For each card in sorted hand, mark as newly drawn if its type was drawn
   // Track per-type count to only highlight the right number of copies
   const newlyDrawnCounts = React.useMemo(() => {
     const counts = {};
     if (ctx.currentPlayer !== playerID || G.lastDrawnCard == null) return counts;
     const drawn = Array.isArray(G.lastDrawnCard) ? G.lastDrawnCard : [G.lastDrawnCard];
-    for (const c of drawn) { const k = c >= 104 ? 54 : c % 52; counts[k] = (counts[k] || 0) + 1; }
+    for (const c of drawn) { const k = c === 54 ? 52 : c; counts[k] = (counts[k] || 0) + 1; }
     return counts;
   }, [G.lastDrawnCard]);
   const drawnRemaining = { ...newlyDrawnCounts };
   const isNewlyDrawn = (cardObj) => {
-    const k = cardObj.id >= 104 ? 54 : cardObj.id % 52;
+    const k = cardObj.id === 54 ? 52 : cardObj.id;
     if (drawnRemaining[k] > 0) { drawnRemaining[k]--; return true; } return false;
   };
   const topDiscard = G.discardPile.length > 0 ? intToCardObj(G.discardPile[G.discardPile.length - 1]) : null;
   
   const myTeam = G.teams[playerID];
-  const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
+  const oppTeam = myTeam === 0 ? 1 : 0;
   const myTeamPlayers = G.teamPlayers[myTeam] || [];
   const oppTeamPlayers = G.teamPlayers[oppTeam] || [];
 
@@ -438,10 +425,9 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
 
   const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
   const toggleCardSelection = (cardId, cardUid) => {
-    const k = cardId >= 104 ? 54 : cardId % 52;
-    const flat = G.cards2[playerID] || [];
-    const CAOFF = 72;
-    const have = flat[CAOFF + (k === 54 ? 52 : k)] || 0;
+    const k = cardId === 54 ? 52 : cardId;
+    const flat = G.cards[playerID] || [];
+    const have = flat[k] || 0;
     setSelectedCards(prev => {
       const cur = prev[k] || 0;
       // Count how many of this type appear before this uid in the sorted hand
@@ -449,7 +435,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       let instanceIdx = 0;
       for (const c of sortedHandObj) {
         if (c.uid === cardUid) break;
-        if ((c.id >= 104 ? 54 : c.id % 52) === k) instanceIdx++;
+        if ((c.id === 54 ? 52 : c.id) === k) instanceIdx++;
       }
       // This card instance is selected if instanceIdx < cur
       const thisIsSelected = instanceIdx < cur;
@@ -471,7 +457,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
   // Per-card selection: track how many of each type are selected, highlight in order
   const selectionCounters = {};
   const isCardSelected = (cardObj) => {
-    const k = cardObj.id >= 104 ? 54 : cardObj.id % 52;
+    const k = cardObj.id === 54 ? 52 : cardObj.id;
     const selected = selectedCards[k] || 0;
     if (selected <= 0) return false;
     selectionCounters[k] = (selectionCounters[k] || 0) + 1;
@@ -686,23 +672,20 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
           })}
         </div>
 
-        {G.rules?.showKnownCards && G.knownCards2 && Object.keys(G.knownCards2).some(p => {
-            const flat = G.knownCards2[p] || [];
+        {G.rules?.showKnownCards && G.knownCards && Object.keys(G.knownCards).some(p => {
+            const flat = G.knownCards[p] || [];
             return flat.some(v => v > 0);
           }) && (
           <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '8px', boxSizing: 'border-box' }}>
             <h4 style={{ margin: '0 0 10px 0', fontSize: '0.8em', color: '#ccc' }}>Memorizadas</h4>
-            {Object.keys(G.knownCards2).map(p => {
-              const flat = G.knownCards2[p] || [];
-              const CAOFF = 72;
+            {Object.keys(G.knownCards).map(p => {
+              const flat = G.knownCards[p] || [];
               const knownCards = [];
-              for (let s = 1; s <= 4; s++) for (let r = 1; r <= 13; r++) {
-                const cnt = flat[(s-1)*18+(r-1)]||0;
-                const cId = (s-1)*13+(r-1);
-                for (let i = 0; i < cnt; i++) knownCards.push(cId);
+              for (let i = 0; i < 53; i++) {
+                  const cnt = flat[i] || 0;
+                  const cId = i === 52 ? 54 : i;
+                  for (let j = 0; j < cnt; j++) knownCards.push(cId);
               }
-              [1,14,27,40].forEach(cId => { const cnt = flat[CAOFF+cId] || 0; for (let i=0;i<cnt;i++) knownCards.push(cId); });
-              const jc = flat[CAOFF+52]||0; for (let i=0;i<jc;i++) knownCards.push(54);
               if (knownCards.length === 0) return null;
               const name = G.rules?.assignments?.[p] || `P${p}`;
               return (

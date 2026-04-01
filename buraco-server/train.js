@@ -42,7 +42,7 @@ function breed(parentA, parentB) {
 const generateRandomGenome = () => {
     const g = new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE);
     let off = 0;
-    for (const key of ['PICKUP', 'MELD', 'DISCARD']) {
+    for (const key of ['PICKUP', 'MELD', 'RUNNER', 'DISCARD']) {
         const inSize = AI_CONFIG[key + '_INPUT_SIZE'];
         const scale = 1 / Math.sqrt(inSize);
         const end = off + AI_CONFIG['DNA_' + key];

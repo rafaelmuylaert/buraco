@@ -23,7 +23,11 @@ const ccStr = (cc) => {
     return v > 1 ? `${name}x${v}` : name;
   }).join(' ') + '}';
 };
-const discardStr = (cid) => { const s = cid===54?5:Math.floor((cid%52)/13)+1; const r = cid===54?2:(cid%52)%13+1; return getRankChar(r)+getSuitChar(s); };
+const discardStr = (cid) => {
+    const s = cid === 54 ? 5 : Math.floor(cid / 13) + 1;
+    const r = cid === 54 ? 2 : (cid % 13) + 1;
+    return getRankChar(r) + getSuitChar(s);
+};
 
 function makeIface(client) {
   return {
@@ -115,19 +119,18 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
 
       if (isWasmReady() && dnaCache[targetBotName]) {
         const myTeam = G.teams[playerID];
-        const oppTeam = myTeam === 'team0' ? 'team1' : 'team0';
+        const oppTeam = myTeam === 0 ? 1 : 0;
         syncCardsToWasm(G, G.rules?.numPlayers || 4);
-        loadMatchDNA(myTeam === 'team0' ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE),
-                     myTeam === 'team1' ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE));
-        setActiveTeam(myTeam === 'team0' ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
+        loadMatchDNA(myTeam === 0 ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE),
+                     myTeam === 1 ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE));
+        setActiveTeam(myTeam === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
         aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam) || [];
       }
 
-      const CAOFF = 72;
-      const flat = G.cards2?.[playerID] || [];
+      const flat = G.cards?.[playerID] || [];
       const handCards = [];
       for (let i = 0; i < 53; i++) {
-        const cnt = flat[CAOFF + i] || 0;
+        const cnt = flat[i] || 0;
         if (cnt > 0) { const cid = i===52?54:i; const s=cid===54?5:Math.floor(cid/13)+1; const r=cid===54?2:(cid%13)+1; for (let n=0;n<cnt;n++) handCards.push(getRankChar(r)+getSuitChar(s)); }
       }
       const topDiscard = G.discardPile?.length > 0 ? discardStr(G.discardPile[G.discardPile.length-1]) : 'empty';

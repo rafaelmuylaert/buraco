@@ -38,7 +38,7 @@ const MAX_SEQ_CANDS  = 5;
 const MAX_RUN_CANDS  = 2;
 const MAX_SEQ_SLOTS  = 5;
 const MAX_RUN_SLOTS  = 4;
-const CARDS_FLAT_SIZE = 125;
+const CARDS_FLAT_SIZE = 54;
 
 function _refreshViews() {
     const buf = _mem.buffer;
@@ -130,14 +130,11 @@ export function setMatchState(G, player, myTeam, oppTeam) {
     if (!_ex) return;
     const numP = G.rules.numPlayers || 4;
     const hs = (p) => G.handSizes[p.toString()] ?? 0;
-    const myTeamIdx  = myTeam  === 'team0' ? 0 : 1;
-    const oppTeamIdx = oppTeam === 'team0' ? 0 : 1;
-    const topDiscard = G.discardPile.length > 0
-        ? (G.discardPile[G.discardPile.length-1] === 54 ? 54 : G.discardPile[G.discardPile.length-1] % 52)
-        : 255;
-    const topDeck = G.deck.length > 0
-        ? (G.deck[G.deck.length-1] === 54 ? 54 : G.deck[G.deck.length-1] % 52)
-        : 255;
+    const myTeamIdx  = myTeam;
+    const oppTeamIdx = oppTeam;
+    // topDiscard/topDeck: card IDs are now direct, no % 52 needed:
+    const topDiscard = G.discardPile.length > 0 ? G.discardPile[G.discardPile.length-1] : 255;
+    const topDeck    = G.deck.length > 0 ? G.deck[G.deck.length-1] : 255;
     const runnersAllowed = (() => {
         const r = G.rules.runners;
         if (!r || r === 'none') return 0;
@@ -156,10 +153,10 @@ export function setMatchState(G, player, myTeam, oppTeam) {
         topDeck,
         G.pots.length,
         G.hasDrawn ? 1 : 0,
-        G.teamMortos['team0'] ? 1 : 0,
-        G.teamMortos['team1'] ? 1 : 0,
-        G.cleanMelds['team0'] || 0,
-        G.cleanMelds['team1'] || 0,
+        G.teamMortos[0] ? 1 : 0,
+        G.teamMortos[1] ? 1 : 0,
+        G.cleanMelds[0] || 0,
+        G.cleanMelds[1] || 0,
         numP,
         (G.rules.discard === 'closed' || G.rules.discard === true) ? 1 : 0,
         runnersAllowed
@@ -186,7 +183,7 @@ export function setMatchState(G, player, myTeam, oppTeam) {
 export function planTurnWasm(G, player, myTeam, oppTeam) {
     if (!_ex?.cpp_plan_turn) return null;
     const pInt = parseInt(player);
-    const myTeamIdx  = myTeam  === 'team0' ? 0 : 1;
+    const myTeamIdx  = myTeam;
     setActiveTeam(myTeamIdx === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
     _ex.set_eval_context(pInt, myTeamIdx, myTeamIdx===0?1:0, 0, 0);
     setMatchState(G, pInt, myTeam, oppTeam);
@@ -216,8 +213,8 @@ export function planTurnWasm(G, player, myTeam, oppTeam) {
 // Called by planTurn once per turn to set player context and write scalars
 export function setTurnContext(player, myTeam, oppTeam, scalars) {
     _activePlayer  = player;
-    _activeMyTeam  = myTeam === 'team0' ? 0 : 1;
-    _activeOppTeam = oppTeam === 'team0' ? 0 : 1;
+    _activeMyTeam  = myTeam;
+    _activeOppTeam = oppTeam;
     if (_wasmScalars && scalars) _wasmScalars.set(scalars);
 }
 
@@ -290,8 +287,8 @@ function _configureNet(layerSizes, netOffset) {
 
 function suitsToEvaluate(topDiscard) {
     if (topDiscard === null) return [1,2,3,4];
-    const s = topDiscard >= 104 ? 5 : Math.floor((topDiscard % 52) / 13) + 1;
-    const r = topDiscard >= 104 ? 2 : (topDiscard % 13) + 1;
+    const s = Math.floor((topDiscard % 55) / 13) + 1;
+    const r = ((topDiscard % 55) % 13) + 1;
     if (s === 5 || r === 2) return [1,2,3,4];
     return [s];
 }
@@ -406,7 +403,7 @@ export function isWasmReady() { return _ex !== null; }
 export function buildTurnMoveList(G, player, myTeam, oppTeam, silent = false) {
     if (!_ex?.cpp_plan_turn) return null;
     const pInt = parseInt(player);
-    const myTeamIdx = myTeam === 'team0' ? 0 : 1;
+    const myTeamIdx = myTeam;
     setActiveTeam(myTeamIdx === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
     _ex.set_eval_context(pInt, myTeamIdx, myTeamIdx === 0 ? 1 : 0, 0, 0);
     setMatchState(G, pInt, myTeam, oppTeam);
@@ -453,10 +450,9 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, silent = false) {
     if (!hasDrawInPickup) pickupMoves.push({ phase: 0, moveType: 0, cardCounts: {}, _fallback: true });
 
     // Fallback: force-discard (first card in hand) at bottom of discard list
-    const CAOFF = 72;
-    const flat = G.cards2?.[player.toString()] || G.cards2?.[pInt] || [];
+    const flat = G.cards?.[player.toString()] || G.cards?.[pInt] || [];
     for (let i = 0; i < 53; i++) {
-        if ((flat[CAOFF + i] || 0) > 0) {
+        if ((flat[i] || 0) > 0) {
             discardMoves.push({ phase: 2, moveType: 4, discardCard: i === 52 ? 54 : i, cardCounts: {}, _fallback: true });
             break;
         }
@@ -466,7 +462,7 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, silent = false) {
 }
 
 export function getWasmCardBuffers() {
-    return { cards2: _wasmCards2, knownCards2: _wasmKnownCards2, discard2: _wasmDiscard2 };
+    return { cards: _wasmCards2, knownCards: _wasmKnownCards2, discard2: _wasmDiscard2 };
 }
 
 // Sync a game state's card buffers into WASM — used by bot.js which can't
@@ -480,15 +476,18 @@ export function syncCardsToWasm(G, numPlayers) {
     _wasmDiscard2.fill(0);
     for (let i = 0; i < numPlayers; i++) {
         const p = i.toString();
-        if (G.cards2[p])      _wasmCards2[i].set(G.cards2[p]);
-        if (G.knownCards2[p]) _wasmKnownCards2[i].set(G.knownCards2[p]);
+        if (G.cards[p])      _wasmCards2[i].set(G.cards[p]);
+        if (G.knownCards[p]) _wasmKnownCards2[i].set(G.knownCards[p]);
     }
-    if (G.discardPile2) _wasmDiscard2.set(G.discardPile2);
+    for (const c of (G.discardPile || [])) {
+        const idx = c === 54 ? 52 : c;
+        if (idx < 54) _wasmDiscard2[idx]++;
+    }
     // Sync meld tables — only when not using WASM-backed buffers (bot.js)
     // Worker.js keeps melds in sync via _onUpdateMeld hook, skip full re-sync
     if (!_usingWasmBackedBuffers) {
         for (let t = 0; t < 2; t++) {
-            const teamId = t === 0 ? 'team0' : 'team1';
+            const teamId = t;
             for (let s = 0; s < 4; s++) {
                 const suitMelds = G.table?.[teamId]?.[0]?.[s+1] || [];
                 for (let sl = 0; sl < 5; sl++)
@@ -597,10 +596,9 @@ export function executeTurn(getG, playerID, moves, iface, log) {
     }
     if (iface.hasDrawn()) {
         const G = getG();
-        const CAOFF = 72;
-        const flat = G.cards2?.[playerID.toString()] || [];
+        const flat = G.cards?.[playerID] || [];
         for (let i = 0; i < 53; i++) {
-            if ((flat[CAOFF + i] || 0) > 0) {
+            if ((flat[i] || 0) > 0) {
                 const cardId = i === 52 ? 54 : i;
                 log?.(`discardCard(${cardId}) [hardcoded fallback]`);
                 iface.discard(cardId);
@@ -664,14 +662,13 @@ export function runTurn(queue, getG, playerID, iface, log) {
     }
 
     // No discard moves left — hardcoded fallback: try each card in hand in order across ticks
-    const CAOFF = 72;
-    const flat = G.cards2?.[playerID.toString()] || [];
+    const flat = G.cards?.[playerID.toString()] || [];
     for (let i = 0; i < 53; i++) {
-        if ((flat[CAOFF + i] || 0) > 0) {
+        if ((flat[i] || 0) > 0) {
             const cardId = i === 52 ? 54 : i;
             // Push remaining cards back as fallback moves so next tick tries the next card
             for (let j = i + 1; j < 53; j++)
-                if ((flat[CAOFF + j] || 0) > 0)
+                if ((flat[j] || 0) > 0)
                     queue.push({ phase: 2, moveType: 4, discardCard: j === 52 ? 54 : j, _fallback: true });
             log?.(`discardCard(${cardId}) [hardcoded fallback]`);
             iface.discard(cardId);

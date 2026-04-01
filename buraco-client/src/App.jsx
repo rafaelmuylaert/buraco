@@ -589,7 +589,8 @@ const App = () => {
     } catch (e) { alert("Erro ao gerar mesas: " + e.message); }
   };
 
-  const getScoreTotal = (teamScore) => typeof teamScore === 'number' ? teamScore : (teamScore?.total || 0);
+  const getScoreTotal = (teamScore) => 
+    typeof teamScore === 'number' ? teamScore : (teamScore?.total || 0);
 
   const getLeaderboard = (t) => {
     let stats = {};
