@@ -51,6 +51,13 @@ function getMeldLength(m) {
     return c + m[15] + (m[14] !== 0 ? 1 : 0);
 }
 
+const selectedCardIdsArray = () => {
+    const ids = [];
+    for (const [k, n] of Object.entries(selectedCards))
+      for (let i = 0; i < n; i++) ids.push(+k);
+    return ids;
+  };
+
 function calculateMeldPoints(meld, rules) {
     let pts = 0;
     if (!meld || meld.length === 0) return 0;
@@ -473,7 +480,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       setSelectedCards({});
     } else if (!G.hasDrawn && G.discardPile.length > 0) {
       if (isClosedDiscard) {
-        moves.pickUpDiscard(selectedCardIds(), { type: 'new' });
+        moves.pickUpDiscard(selectedCardIdsArray(), { type: 'new' });
         setSelectedCards({});
       } else {
         moves.pickUpDiscard();
@@ -483,9 +490,9 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
 
   const renderTeamTable = (teamId, title, isMyTeam) => {
     const teamTable = G.table[teamId];
-    const runners = (teamTable[1] || []).map((meldGroup, index) => ({ key: `runner-${index}`, index, meldGroup, isRunner: true }));
+    const runners = (teamTable[1] || []).filter(m => getMeldLength(m) > 0).map((meldGroup, index) => ({ key: `runner-${index}`, index, meldGroup, isRunner: true }));
     const sequences = [1,2,3,4].flatMap(suit =>
-      (teamTable[0][suit] || []).map((meldGroup, index) => ({ key: `seq-${suit}-${index}`, index, suit, meldGroup, isRunner: false }))
+      (teamTable[0][suit] || []).filter(m => getMeldLength(m) > 0).map((meldGroup, index) => ({ key: `seq-${suit}-${index}`, index, suit, meldGroup, isRunner: false }))
     );
 
     const renderMeld = ({ key, index, suit, meldGroup, isRunner }) => {
@@ -516,9 +523,9 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                   ? { type: 'runner', index }
                   : { type: 'seq', suit, index };
               if (!G.hasDrawn && isClosedDiscard && G.discardPile.length > 0) {
-                moves.pickUpDiscard(selectedCardIds(), { type: 'append', meldTarget: target }); setSelectedCards({});
+                moves.pickUpDiscard(selectedCardIdsArray(), { type: 'append', meldTarget: target }); setSelectedCards({});
               } else if (selectedCount > 0) {
-                moves.appendToMeld(target, selectedCardIds()); setSelectedCards({});
+                moves.appendToMeld(target, selectedCardIdsArray()); setSelectedCards({});
               }
             }}
             style={{ position: 'relative', display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: hasNewCards ? '2px solid #50fa7b' : `2px solid ${borderColor}`, boxShadow: hasNewCards ? '0 0 10px rgba(80,250,123,0.5)' : 'none', cursor: (isMyTurn && isMyTeam && (selectedCount > 0 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default' }}>
@@ -557,9 +564,9 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
               <div onClick={() => {
                   if (!isMyTurn) return;
                   if (!G.hasDrawn && isClosedDiscard && G.discardPile.length > 0) {
-                    moves.pickUpDiscard(selectedCardIds(), { type: 'new' }); setSelectedCards({});
+                    moves.pickUpDiscard(selectedCardIdsArray(), { type: 'new' }); setSelectedCards({});
                   } else if (G.hasDrawn && selectedCount >= 3) {
-                    moves.playMeld(selectedCardIds()); setSelectedCards({});
+                    moves.playMeld(selectedCardIdsArray()); setSelectedCards({});
                   }
                 }}
                 style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && ((G.hasDrawn && selectedCount >= 3) || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default', color: '#888' }}>
