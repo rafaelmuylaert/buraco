@@ -51,12 +51,7 @@ function getMeldLength(m) {
     return c + m[15] + (m[14] !== 0 ? 1 : 0);
 }
 
-const selectedCardIdsArray = () => {
-    const ids = [];
-    for (const [k, n] of Object.entries(selectedCards))
-      for (let i = 0; i < n; i++) ids.push(+k);
-    return ids;
-  };
+
 
 function calculateMeldPoints(meld, rules) {
     let pts = 0;
@@ -459,6 +454,12 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
 
   // selectedCards is already a {cardType: count} map ?" use it directly as move arg
   const selectedCardIds = () => ({ ...selectedCards });
+  const selectedCardIdsArray = () => {
+    const ids = [];
+    for (const [k, n] of Object.entries(selectedCards))
+      for (let i = 0; i < n; i++) ids.push(+k);
+    return ids;
+  };
   const selectedCount = Object.values(selectedCards).reduce((a, b) => a + b, 0);
 
   // Per-card selection: track how many of each type are selected, highlight in order
