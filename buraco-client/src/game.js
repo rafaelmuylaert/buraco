@@ -420,23 +420,23 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
 // target: null (new meld) | { type: 'seq', suit, index } | { type: 'runner', index }
 // Hand: { cardType: count } — card types to use from hand (+ topDiscard if provided), or list of ids
 export function moveMeld(G, p, Hand, target = null, addCards = 0, topDiscard = null) {
-    if (!G.hasDrawn && topDiscard === null) { console.log('moveMeld fail: not drawn'); return false; }
+    if (!G.hasDrawn && topDiscard === null) { if (G.rules?.debugLog) console.log('moveMeld fail: not drawn'); return false; }
     const teamId = G.teams[p];
     const selectedHandIds = Array.isArray(Hand) ? Hand : countsToIds(Hand);
 
     const needCounts = {};
     for (const c of selectedHandIds) needCounts[c] = (needCounts[c] || 0) + 1;
     for (const [c, n] of Object.entries(needCounts))
-        if ((G.cards[p][+c] || 0) < n) { console.log('moveMeld fail: missing card', c, 'have', G.cards[p][+c], 'need', n); return false; }
+        if ((G.cards[p][+c] || 0) < n) { if (G.rules?.debugLog) console.log('moveMeld fail: missing card', c, 'have', G.cards[p][+c], 'need', n); return false; }
 
     const allCardIds = topDiscard !== null ? [...selectedHandIds, topDiscard] : selectedHandIds;
     const existingMeld = target === null ? null
         : target.type === 'runner' ? G.table[teamId][1][target.index]
         : (G.table[teamId][0][target.suit] || [])[target.index];
-    if (target !== null && !existingMeld) { console.log('moveMeld fail: no existing meld', target); return false; }
+    if (target !== null && !existingMeld) { if (G.rules?.debugLog) console.log('moveMeld fail: no existing meld', target); return false; }
 
     const parsed = parseMeld(allCardIds, G.rules, existingMeld, target?.suit ? parseInt(target.suit) : 0);
-    if (!parsed) { console.log('moveMeld fail: parseMeld returned null', allCardIds); return false; }
+    if (!parsed) { if (G.rules?.debugLog) console.log('moveMeld fail: parseMeld returned null', allCardIds); return false; }
 
     const newHandSize = G.handSizes[p] + addCards - selectedHandIds.length;
     const isRunner = parsed.length === 6;
@@ -444,7 +444,7 @@ export function moveMeld(G, p, Hand, target = null, addCards = 0, topDiscard = n
     const wasClean = existingMeld ? isMeldClean(existingMeld) : false;
     const willBeClean = isMeldClean(parsed);
     const addCleancount = willBeClean !== wasClean ? (willBeClean ? 1 : -1) : 0;
-    if (newHandSize < 2 && (G.cleanMelds[teamId] + addCleancount) <= 0) { console.log('moveMeld fail: hand too small', newHandSize); return false; }
+    if (newHandSize < 2 && (G.cleanMelds[teamId] + addCleancount) <= 0) { if (G.rules?.debugLog) console.log('moveMeld fail: hand too small', newHandSize); return false; }
 
     // Remove cards from hand bitmap
     cardsRemoveCards(G, p, selectedHandIds);

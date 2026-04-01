@@ -224,8 +224,8 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
     for (const teamId of [0, 1]) {
       snap[teamId] = { seqs: {}, runners: [] };
       for (let s = 1; s <= 4; s++)
-        snap[teamId].seqs[s] = (table[teamId][0][s] || []).map(m => [...m]);
-      snap[teamId].runners = (table[teamId][1] || []).map(m => [...m]);
+        snap[teamId].seqs[s] = (table[teamId][0][s] || []).filter(Boolean).map(m => [...m]);
+        snap[teamId].runners = (table[teamId][1] || []).filter(Boolean).map(m => [...m]);
     }
     return snap;
   };
@@ -420,8 +420,8 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
 
   const calcTeamTablePoints = (teamId) => {
     let total = 0;
-    Object.values(G.table[teamId][0]).forEach(arr => arr.forEach(m => total += calculateMeldPoints(m, G.rules)));
-    (G.table[teamId][1] || []).forEach(m => total += calculateMeldPoints(m, G.rules));
+    Object.values(G.table[teamId][0]).forEach(arr => arr && arr.forEach(m => total += calculateMeldPoints(m, G.rules)));
+    (G.table[teamId][1] || []).forEach(m => m && (total += calculateMeldPoints(m, G.rules)));
     return total;
   };
 
@@ -491,9 +491,9 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
 
   const renderTeamTable = (teamId, title, isMyTeam) => {
     const teamTable = G.table[teamId];
-    const runners = (teamTable[1] || []).filter(m => getMeldLength(m) > 0).map((meldGroup, index) => ({ key: `runner-${index}`, index, meldGroup, isRunner: true }));
+    const runners = (teamTable[1] || []).filter(m => m && getMeldLength(m) > 0).map((meldGroup, index) => ({ key: `runner-${index}`, index, meldGroup, isRunner: true }));
     const sequences = [1,2,3,4].flatMap(suit =>
-      (teamTable[0][suit] || []).filter(m => getMeldLength(m) > 0).map((meldGroup, index) => ({ key: `seq-${suit}-${index}`, index, suit, meldGroup, isRunner: false }))
+      (teamTable[0][suit] || []).filter(m => m && getMeldLength(m) > 0).map((meldGroup, index) => ({ key: `seq-${suit}-${index}`, index, suit, meldGroup, isRunner: false }))
     );
 
     const renderMeld = ({ key, index, suit, meldGroup, isRunner }) => {
