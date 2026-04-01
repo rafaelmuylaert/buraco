@@ -2,12 +2,18 @@ import { workerData, parentPort } from 'worker_threads';
 import {
     BuracoGame, AI_CONFIG,
     moveDrawCard, moveDiscardCard, moveMeld, movePickUpDiscard,
-    checkGameOver, getAndResetTimings
+    checkGameOver, setScoreFunctions, getAndResetTimings
 } from './game.js';
 import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers,
-         buildTurnMoveList, runTurn, getCppTimings, setUsingWasmBackedBuffers } from './wasm_loader.js';
+         buildTurnMoveList, runTurn, getCppTimings, setUsingWasmBackedBuffers,
+         updateSeqMeld, updateRunMeld } from './wasm_loader.js';
+
 
 await initWasm();
+setScoreFunctions(null, null, null, (isSeq, teamIdx, suit0, slotIdx, meldArray) => {
+    if (isSeq) updateSeqMeld(teamIdx, suit0, slotIdx, meldArray);
+    else updateRunMeld(teamIdx, slotIdx, meldArray);
+}, null);
 
 function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
@@ -53,8 +59,6 @@ function runMatch(genomes, rules, fixedDeck) {
             S.cards[k]      = wb.cards[+k];
             S.knownCards[k] = wb.knownCards[+k];
         }
-        wb.discard2.set(S.discardPile);
-        S.discardPile = wb.discard2;
         setUsingWasmBackedBuffers(true);
     } else {
         for (const k of Object.keys(S.cards))      S.cards[k]      = Uint8Array.from(S.cards[k]);
