@@ -71,7 +71,17 @@ function runMatch(genomes, rules, fixedDeck) {
         return [k, prepareGenome(arr)];
     }));
 
-    if (isWasmReady()) loadMatchDNA(S.botGenomes['0'], S.botGenomes['1']);
+    if (isWasmReady()) {
+    loadMatchDNA(S.botGenomes['0'], S.botGenomes['1']);
+    // Clear all WASM meld tables for fresh match
+    for (let t = 0; t < 2; t++) {
+        for (let s = 0; s < 4; s++)
+            for (let sl = 0; sl < 5; sl++)
+                updateSeqMeld(t, s, sl, null);
+        for (let sl = 0; sl < 4; sl++)
+            updateRunMeld(t, sl, null);
+    }
+}
 
     const ctx = { currentPlayer: '0', numPlayers };
 
