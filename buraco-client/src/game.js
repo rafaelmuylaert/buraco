@@ -531,7 +531,7 @@ export function calculateFinalScores(G) {
     }
     if (scoreHandPenalty) {
       for (const p of (G.teamPlayers[teamId] || [])) {
-        const flat = G.cards[p];
+        const flat = G.cards[p.toString()];
         if (!flat) continue;
         // Sum card points directly from all-suit section of cards
         for (let i = 0; i < 54; i++) {
