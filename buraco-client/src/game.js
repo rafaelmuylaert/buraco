@@ -600,7 +600,14 @@ export const BuracoGame = {
       if (!movePickUpDiscard(G, ctx.currentPlayer, selectedHandIds, target)) return 'INVALID_MOVE';
     },
     playMeld: ({ G, ctx }, cardCounts) => {
-      if (!moveMeld(G, ctx.currentPlayer, cardCounts)) return 'INVALID_MOVE';
+        try {
+            const result = moveMeld(G, ctx.currentPlayer, cardCounts);
+            console.log('[playMeld] result:', result, 'cardCounts:', cardCounts);
+            if (!result) return 'INVALID_MOVE';
+        } catch(e) {
+            console.error('[playMeld] threw:', e.message, e.stack);
+            return 'INVALID_MOVE';
+        }
     },
     appendToMeld: ({ G, ctx }, target, cardCounts) => {
       if (!moveMeld(G, ctx.currentPlayer, cardCounts, target)) return 'INVALID_MOVE';
