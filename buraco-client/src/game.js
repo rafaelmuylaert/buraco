@@ -118,14 +118,14 @@ function getmeldwildsuit(m, meldsuit){
 
 
 export function meldToCards(m, suit) {
-  cards = [];
-  for (c of meldToCardIDs(m, suit)){
+  const cards = [];
+  for (const c of meldToCardIDs(m, suit)){
     cards.push(intToCardObj(c));
   }
   return cards;
 }
 
-export function handToCards(playerID){
+export function handToCards(G, playerID){
   const myFlat = G.cards[playerID] || [];
   const handCardObjs = [];
   for (let i = 0; i < 53; i++) {
@@ -135,6 +135,7 @@ export function handToCards(playerID){
         handCardObjs.push({ ...intToCardObj(cardID), uid: `${cardID}` });
       }
   }
+  return handCardObjs;
 }
 
 
@@ -518,7 +519,7 @@ export function moveMeld(G, p, Hand, target = null, addCards = 0, topDiscard = n
     const wasClean = existingMeld ? isMeldClean(existingMeld) : false;
     const willBeClean = isMeldClean(parsed);
     const addCleancount = willBeClean !== wasClean ? (willBeClean ? 1 : -1) : 0;
-    if (newHandSize < 2 && !mortoSafe(G, teamID, addCleancount)) return false;
+    if (newHandSize < 2 && !mortoSafe(G, teamId, addCleancount)) return false;
 
     // Remove cards from hand bitmap
     cardsRemoveCards(G, p, selectedHandIds);

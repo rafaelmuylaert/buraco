@@ -237,7 +237,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
   }
 
   // Build hand display from cards2 flat buffer
-  const handCardObjs = handToCards(playerID);
+  const handCardObjs = handToCards(G, playerID);
 
 
   // lastDrawnCard: int or array of ints ?" track by card type for highlighting
