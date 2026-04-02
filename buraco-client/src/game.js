@@ -94,7 +94,7 @@ AI_CONFIG.TOTAL_DNA_SIZE = AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD + AI_CONFIG
 // Cards: 0-51 = normal (two copies each), 53 = Joker (two copies). Card 52 unused.
 export const getSuit = c => Math.floor((c % 54) / 13) + 1; // 1:♠, 2:♥, 3:♦, 4:♣, 5:★
 export const getRank = c => ((c % 54) % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:K
-const getSuitChar = s => ['♠', '♥', '♣', '♦', '★'][s];
+const getSuitChar = s => ['♠', '♥', '♣', '♦', '★'][s-1];
 const getRankChar = r => r === 1 ? 'A' : r === 11 ? 'J' : r === 12 ? 'Q' : r === 13 ? 'K' : r === 14 ? 'A' : r.toString();
 const getColor = s => (s%2) === 0 ? 'red' : 'black';
 
