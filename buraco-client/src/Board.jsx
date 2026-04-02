@@ -348,9 +348,9 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                   ? { type: 'runner', index }
                   : { type: 'seq', suit, index };
               if (!G.hasDrawn && isClosedDiscard && G.discardPile.length > 0) {
-                moves.pickUpDiscard(selectedCardIdsArray(), { type: 'append', meldTarget: target }); setSelectedCards({});
+                moves.pickUpDiscard(selectedCardIdsArray(), { type: 'append', meldTarget: target }); setSelectedCards(new Set());
               } else if (selectedCount > 0) {
-                moves.appendToMeld(target, selectedCardIdsArray()); setSelectedCards({});
+                moves.appendToMeld(target, selectedCardIdsArray()); setSelectedCards(new Set());
               }
             }}
             style={{ position: 'relative', display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: hasNewCards ? '2px solid #50fa7b' : `2px solid ${borderColor}`, boxShadow: hasNewCards ? '0 0 10px rgba(80,250,123,0.5)' : 'none', cursor: (isMyTurn && isMyTeam && (selectedCount > 0 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default' }}>
@@ -389,9 +389,9 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
               <div onClick={() => {
                   if (!isMyTurn) return;
                   if (!G.hasDrawn && isClosedDiscard && G.discardPile.length > 0) {
-                    moves.pickUpDiscard(selectedCardIdsArray(), { type: 'new' }); setSelectedCards({});
+                    moves.pickUpDiscard(selectedCardIdsArray(), { type: 'new' }); setSelectedCards(new Set());
                   } else if (G.hasDrawn && selectedCount >= 3) {
-                    moves.playMeld(selectedCardIdsArray()); setSelectedCards({});
+                    moves.playMeld(selectedCardIdsArray()); setSelectedCards(new Set());
                   }
                 }}
                 style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && ((G.hasDrawn && selectedCount >= 3) || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default', color: '#888' }}>
