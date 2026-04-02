@@ -106,7 +106,7 @@ export function intToCardObj(c) {
 
 //rank is zerobased
 function getcardid_zerobased(suit, rank) {
-  return suit * 13 + rank;
+  return (suit - 1) * 13 + rank;
 }
 
 
