@@ -289,18 +289,18 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
 
 
   // selectedCards is already a {cardType: count} map ?" use it directly as move arg
-  // uid encodes type in low bits: uid % 54 === cardId (with joker at 53)
-  const selectedCardIdsArray = () => [...selectedCards].map(uid => uid % 54);
+  // id encodes type in low bits: id % 54 === cardId (with joker at 53)
+  const selectedCardIdsArray = () => [...selectedCards].map(id => id % 54);
   const selectedCount = selectedCards.size;
 
-  const isCardSelected = (cardObj) => selectedCards.has(cardObj.uid);
+  const isCardSelected = (cardObj) => selectedCards.has(cardObj.id);
 
 
   const handleDiscardPileClick = () => {
     if (!isMyTurn) return;
     if (selectedCount === 1 && G.hasDrawn) {
-        const uid = [...selectedCards][0];
-        moves.discardCard(uid % 54);
+        const id = [...selectedCards][0];
+        moves.discardCard(id % 54);
         setSelectedCards(new Set());
     } else if (!G.hasDrawn && G.discardPile.length > 0) {
         if (isClosedDiscard) {
