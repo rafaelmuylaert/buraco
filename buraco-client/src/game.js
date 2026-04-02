@@ -157,15 +157,17 @@ function meldToCardIDs(m, suit) {
         const gap = _checkGaps(m);
         // Slot → zero-based rank mapping:
         // m[0]=A-low → 0, m[1]=A-high → 0, m[2]=nat2 → 1, m[3]=3 → 2, m[r] for r≥3 → r-1
-        for (let r = 0; r <= 14; r++) {
+        if (m[0]) cards.push(getcardid_zerobased(suit, 0));
+        for (let r = 2; r <= 13; r++) {
             if (m[r]) {
                 cards.push(getcardid_zerobased(suit, slotToRank0(r)));
             } else if (r == gap) {
                 cards.push(getcardid_zerobased(WildSuit, 1));
             }
         }
+        if (m[1]) cards.push(getcardid_zerobased(suit, 0));
         // Edge wild not consumed by a gap
-        if (!gap && WildSuit !== 0) {
+        if (gap === 0 && WildSuit !== 0) {
           if (!m[0]) cards.unshift(getcardid_zerobased(WildSuit, 1)); else cards.push(getcardid_zerobased(WildSuit, 1));
         }
     } else { // Runner: [rank, ?cnt, ?cnt, ?cnt, ?cnt, wildSuit]
