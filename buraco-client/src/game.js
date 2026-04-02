@@ -110,7 +110,6 @@ function getcardid_zerobased(suit, rank) {
 }
 
 
-
 function getmeldwildsuit(m, meldsuit){
   if(isSeq(m)) return m[15] ? meldsuit : m[14];
   else return m[5];
@@ -128,10 +127,10 @@ export function meldToCards(m, suit) {
 export function handToCards(G, playerID){
   const myFlat = G.cards[playerID] || [];
   const handCardObjs = [];
-  for (let i = 0; i < 53; i++) {
+  for (let i = 0; i < 54; i++) {
       const cnt = myFlat[i] || 0;
       for (let j = 0; j < cnt; j++){
-        let cardID = i + 54 * j;
+        let cardID = i + (54 * j);
         handCardObjs.push({ ...intToCardObj(cardID), uid: `${cardID}` });
       }
   }
@@ -148,6 +147,7 @@ export function handToCards(G, playerID){
 export const isSeq = m => m.length !== 6;
 
 
+const slotToRank0 = (i) => i === 0 ? 0 : i === 14 ? 0 : i-1;
 // Seq format: [A-low, A-high, nat2, 3..K, foreignWildSuit, nat2-wild-count] (16 elements)
 // Runner format: [rank, ?cnt, ?cnt, ?cnt, ?cnt, wildSuit] (6 elements)
 function meldToCardIDs(m, suit) {
@@ -157,7 +157,6 @@ function meldToCardIDs(m, suit) {
         const gap = _checkGaps(m);
         // Slot → zero-based rank mapping:
         // m[0]=A-low → 0, m[1]=A-high → 0, m[2]=nat2 → 1, m[3]=3 → 2, m[r] for r≥3 → r-1
-        const slotToRank0 = r => r <= 1 ? 0 : r - 1;
         for (let r = 0; r <= 14; r++) {
             if (m[r]) {
                 cards.push(getcardid_zerobased(suit, slotToRank0(r)));
