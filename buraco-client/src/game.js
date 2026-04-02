@@ -98,7 +98,7 @@ const getSuitChar = s => ['♠', '♥', '♣', '♦', '★'][s];
 const getRankChar = r => r === 1 ? 'A' : r === 11 ? 'J' : r === 12 ? 'Q' : r === 13 ? 'K' : r === 14 ? 'A' : r.toString();
 const getColor = s => (s%2) === 0 ? 'red' : 'black';
 
-function intToCardObj(c) {
+export function intToCardObj(c) {
     const s = getSuit(c);
     const r = getRank(c);
     return { rank: s === 5 ? 'JOKER' : getRankChar(r), suit: getSuitChar(s), color: getColor(s), id: c };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {isMeldClean, getMeldLength, calculateMeldPoints, meldToCards, handToCards} from './game.js';
+import {isMeldClean, getMeldLength, calculateMeldPoints, meldToCards, handToCards, intToCardObj} from './game.js';
 
 
 class ErrorBoundary extends React.Component {
