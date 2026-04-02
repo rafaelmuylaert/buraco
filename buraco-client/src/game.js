@@ -155,10 +155,13 @@ function meldToCardIDs(m, suit) {
     const WildSuit = getmeldwildsuit(m, suit);
     if (isSeq(m)) { // Sequence
         const gap = _checkGaps(m);
+        // Slot → zero-based rank mapping:
+        // m[0]=A-low → 0, m[1]=A-high → 0, m[2]=nat2 → 1, m[3]=3 → 2, m[r] for r≥3 → r-1
+        const slotToRank0 = r => r <= 1 ? 0 : r - 1;
         for (let r = 0; r <= 14; r++) {
             if (m[r]) {
-                cards.push(getcardid_zerobased(suit, r));
-            } else if(r == gap) {
+                cards.push(getcardid_zerobased(suit, slotToRank0(r)));
+            } else if (r == gap) {
                 cards.push(getcardid_zerobased(WildSuit, 1));
             }
         }
@@ -170,7 +173,7 @@ function meldToCardIDs(m, suit) {
         const rank = m[0], wildSuit = m[5];
         for (let s = 1; s <= 4; s++)
             for (let i = 0; i < m[s]; i++)
-                cards.push(getcardid_zerobased(s, rank) + 54 * i);
+                cards.push(getcardid_zerobased(s, rank - 1) + 54 * i);
         if (wildSuit !== 0)
             cards.push(getcardid_zerobased(WildSuit, 1));
     }
