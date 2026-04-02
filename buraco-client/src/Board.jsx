@@ -62,7 +62,9 @@ export function BuracoBoard(props) {
 }
 
 function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null, tournamentStandings = null }) {
-  const [selectedCards, setSelectedCards] = useState({}); // { cardType: count }
+  // State: Set of uids instead of {cardType: count}
+  const [selectedCards, setSelectedCards] = useState(new Set());
+
   const isMyTurn = ctx.currentPlayer === playerID;
 
   // Persist the last seen gameover across remounts (ReconnectingClient resets key on reconnect)
@@ -239,33 +241,24 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
   // Build hand display from cards2 flat buffer
   const handCardObjs = handToCards(G, playerID);
 
-
-  // lastDrawnCard: int or array of ints ?" track by card type for highlighting
-  const newlyDrawnTypes = React.useMemo(() => {
-    if (ctx.currentPlayer !== playerID || G.lastDrawnCard == null) return new Set();
-    const drawn = Array.isArray(G.lastDrawnCard) ? G.lastDrawnCard : [G.lastDrawnCard];
-    return new Set(drawn.map(c => c === 54 ? 52 : c));
-    }, [G.lastDrawnCard]);
   // For each card in sorted hand, mark as newly drawn if its type was drawn
   // Track per-type count to only highlight the right number of copies
   const newlyDrawnCounts = React.useMemo(() => {
     const counts = {};
     if (ctx.currentPlayer !== playerID || G.lastDrawnCard == null) return counts;
     const drawn = Array.isArray(G.lastDrawnCard) ? G.lastDrawnCard : [G.lastDrawnCard];
-    for (const c of drawn) { const k = c === 54 ? 52 : c; counts[k] = (counts[k] || 0) + 1; }
+    for (const c of drawn) { const k = c; counts[k] = (counts[k] || 0) + 1; }
     return counts;
   }, [G.lastDrawnCard]);
   const drawnRemaining = { ...newlyDrawnCounts };
   const isNewlyDrawn = (cardObj) => {
-    const k = cardObj.id === 54 ? 52 : cardObj.id;
+    const k = cardObj.id;
     if (drawnRemaining[k] > 0) { drawnRemaining[k]--; return true; } return false;
   };
   const topDiscard = G.discardPile.length > 0 ? intToCardObj(G.discardPile[G.discardPile.length - 1]) : null;
   
   const myTeam = G.teams[playerID];
   const oppTeam = myTeam === 0 ? 1 : 0;
-  const myTeamPlayers = G.teamPlayers[myTeam] || [];
-  const oppTeamPlayers = G.teamPlayers[oppTeam] || [];
 
   const LEFT_COL_W = 100;
   // In open discard view cards overlap: first card takes CARD_W, each additional takes (CARD_W - 37)px
@@ -285,68 +278,40 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
   };
 
   const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
-  const toggleCardSelection = (cardId, cardUid) => {
-    const k = cardId === 54 ? 52 : cardId;
-    const flat = G.cards[playerID] || [];
-    const have = flat[cardId] || 0;
+  const toggleCardSelection = (cardUid) => {
     setSelectedCards(prev => {
-      const cur = prev[cardId] || 0;
-      // Count how many of this type appear before this uid in the sorted hand
-      // to determine if this specific card instance is currently selected
-      let instanceIdx = 0;
-      for (const c of handCardObjs) {
-        if (c.uid === cardUid) break;
-        if (c.id === cardId) instanceIdx++;
-      }
-      // This card instance is selected if instanceIdx < cur
-      const thisIsSelected = instanceIdx < cur;
-      if (thisIsSelected) {
-        // Deselect: decrement
-        const next = { ...prev }; next[k]--; if (next[k] === 0) delete next[k]; return next;
-      } else {
-        // Select: increment if we have more available
-        if (cur >= have) return prev;
-        return { ...prev, [k]: cur + 1 };
-      }
+        const next = new Set(prev);
+        if (next.has(cardUid)) next.delete(cardUid);
+        else next.add(cardUid);
+        return next;
     });
-  };
+};
+
 
   // selectedCards is already a {cardType: count} map ?" use it directly as move arg
-  const selectedCardIds = () => ({ ...selectedCards });
-  const selectedCardIdsArray = () => {
-    const ids = [];
-    for (const [k, n] of Object.entries(selectedCards))
-      for (let i = 0; i < n; i++) ids.push(+k);
-    return ids;
-  };
-  const selectedCount = Object.values(selectedCards).reduce((a, b) => a + b, 0);
+  // uid encodes type in low bits: uid % 54 === cardId (with joker at 53)
+  const selectedCardIdsArray = () => [...selectedCards].map(uid => uid % 54);
+  const selectedCount = selectedCards.size;
 
-  // Per-card selection: track how many of each type are selected, highlight in order
-  const selectionCounters = {};
-  const isCardSelected = (cardObj) => {
-    const k = cardObj.id === 54 ? 52 : cardObj.id;
-    const selected = selectedCards[k] || 0;
-    if (selected <= 0) return false;
-    selectionCounters[k] = (selectionCounters[k] || 0) + 1;
-    return selectionCounters[k] <= selected;
-  };
+  const isCardSelected = (cardObj) => selectedCards.has(cardObj.uid);
+
 
   const handleDiscardPileClick = () => {
     if (!isMyTurn) return;
     if (selectedCount === 1 && G.hasDrawn) {
-      // Get the single selected card type
-      const cardType = +Object.keys(selectedCards)[0];
-      moves.discardCard(cardType);
-      setSelectedCards({});
+        const uid = [...selectedCards][0];
+        moves.discardCard(uid % 54);
+        setSelectedCards(new Set());
     } else if (!G.hasDrawn && G.discardPile.length > 0) {
-      if (isClosedDiscard) {
-        moves.pickUpDiscard(selectedCardIdsArray(), { type: 'new' });
-        setSelectedCards({});
-      } else {
-        moves.pickUpDiscard();
-      }
+        if (isClosedDiscard) {
+            moves.pickUpDiscard(selectedCardIdsArray(), { type: 'new' });
+            setSelectedCards(new Set());
+        } else {
+            moves.pickUpDiscard();
+        }
     }
-  };
+};
+
 
   const renderTeamTable = (teamId, title, isMyTeam) => {
     const teamTable = G.table[teamId];
@@ -577,7 +542,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
           <h2 style={{ fontSize: '1.2em', margin: '0 0 10px 0' }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
             {handCardObjs.map(card => {
-              return <Card key={card.uid} card={card} isSelected={isCardSelected(card)} isNewlyDrawn={isNewlyDrawn(card)} onClick={() => toggleCardSelection(card.id, card.uid)} />;
+              return <Card key={card.id} card={card} isSelected={isCardSelected(card)} isNewlyDrawn={isNewlyDrawn(card)} onClick={() => toggleCardSelection(card.id)} />;
             })}
           </div>
         </div>

@@ -227,8 +227,8 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
     if (suit == 0){ suit = seqSuit(cardIds)}
     if (suit == 0) return null;
 
-    // Promote m[2] to wild only if it's gap-filling (no rank-3 present), not if it's a natural 2 next to rank-3
-    if (m[2] == 1 && m[0] == 0) { m[15]++; m[2] = 0; }
+    // Promote m[2] to wild
+    if (m[2] == 1) { m[15]++; m[2] = 0; }
 
     // ── 1. Classify incoming cards ────────────────────────────────────────────
     let aces = m[0] + m[1];
@@ -236,13 +236,13 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
         const s = getSuit(c), r = getRank(c);
         if (s === 5 || r === 2) {
             // Determine suit context: same-suit 2 = natural wild candidate; everything else = foreign
-            if (m[15] + (m[14] !== 0 ? 1 : 0) >= 2) {return null;}
             const isSameSuit2 = (s == suit);  // loose equality handles string/number mismatch
             if (isSameSuit2) { m[15]++; }
             else if (m[14]==0) { m[14] = s; }
             else {return null;}
+            if (m[15] + (m[14] !== 0 ? 1 : 0) > 2) {return null;}
         } 
-        else if (s != suit){  // loose equality
+        else if (s !== suit){  // loose equality
             return null;
         }
         else if (r === 1) {
@@ -257,17 +257,22 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
 
     // Assign wild slots
     if (m[15] === 2) {
-        // One goes to natural slot, one to foreign slot
-        m[15] = 1;
+        // One goes to natural 2 slot, one to foreign slot
+        m[2] = 1;
         m[14] = suit;
+        m[15] = 0;
     } 
+    else if (m[15] == 1 && m[14]>0){
+        m[2] = 1;
+        m[15] = 0;
+    }
 
     // ── 5. Ace placement ─────────────────────────────────────────────────────
     if (aces === 2) {
         m[0] = 1; m[1] = 1;
     } else if (aces === 1) {
-            if      (m[13] === 1) {m[0] = 0; m[1] = 1;} 
-            else if (m[3]  === 1) {m[0] = 1; m[1] = 0;}
+            if      ((m[13] === 1 && m[0] === 0) || m[1] === 1 ) {m[0] = 0; m[1] = 1;} 
+            else if (m[3]  === 1 || m[0] ===1 ) {m[0] = 1; m[1] = 0;}
             else                  {m[0] = 0; m[1] = 1;}
     } else {
         m[0] = 0; m[1] = 0;
