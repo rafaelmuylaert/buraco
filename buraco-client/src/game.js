@@ -1,11 +1,8 @@
-// Cards: 0-51 = normal (two copies each), 54 = Joker (two copies). Card 53 unused.
-export const getSuit = c => Math.floor((c % 55) / 13) + 1; // 1:♠, 2:♥, 3:♦, 4:♣, 5:★
-export const getRank = c => ((c % 55) % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:K
 
-export const suitValues = { '♠': 1, '♥': 2, '♣': 3, '♦': 4, '★': 5 };
-export const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
 
-const SEQ_POINTS = [0, 0, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 15];
+
+// SEQ_POINTS indexed by rank slot: [0]=A-low, [1]=A-high, [2]=nat2, [3]=3 ... [13]=K
+const SEQ_POINTS_NEW = [15, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10];
 
 // ── Timing accumulators ───────────────────────────────────────────────────────
 const _timings = { buildSegments: 0, forwardPass: 0, getAllValidMelds: 0, getAllValidAppends: 0, planTurn: 0, planTurnCalls: 0 };
@@ -89,17 +86,95 @@ AI_CONFIG.DNA_RUNNER     = nn_size('RUNNER',  AI_CONFIG.RUNNER_SEQ_SLOTS,  AI_CO
 AI_CONFIG.DNA_DISCARD    = nn_size('DISCARD', 0,                           0,                              0,                            0,                                AI_CONFIG.DISCARD_CARD_GROUPS, false, AI_CONFIG.DISCARD_CLASSES,    AI_CONFIG.HIDDEN_WIDTH_DISCARD);
 AI_CONFIG.TOTAL_DNA_SIZE = AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD + AI_CONFIG.DNA_RUNNER + AI_CONFIG.DNA_DISCARD;
 
-export function sortCards(cards) {
-  const sortVals = { ...sequenceMath, 'A': 14, '2': 15, 'JOKER': 16 };
-  return [...cards].sort((a, b) => {
-    if (suitValues[a.suit] !== suitValues[b.suit]) return suitValues[a.suit] - suitValues[b.suit];
-    return sortVals[a.rank] - sortVals[b.rank];
-  });
+
+//=========================================================================================================================================================================================================
+//==================================================================================CARD FUNCTIONS=========================================================================================================
+//=========================================================================================================================================================================================================
+
+// Cards: 0-51 = normal (two copies each), 53 = Joker (two copies). Card 52 unused.
+export const getSuit = c => Math.floor((c % 54) / 13) + 1; // 1:♠, 2:♥, 3:♦, 4:♣, 5:★
+export const getRank = c => ((c % 54) % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:K
+const getSuitChar = s => ['♠', '♥', '♣', '♦', '★'][s];
+const getRankChar = r => r === 1 ? 'A' : r === 11 ? 'J' : r === 12 ? 'Q' : r === 13 ? 'K' : r === 14 ? 'A' : r.toString();
+const getColor = s => (s%2) === 0 ? 'red' : 'black';
+
+function intToCardObj(c) {
+    const s = getSuit(c);
+    const r = getRank(c);
+    return { rank: s === 5 ? 'JOKER' : getRankChar(r), suit: getSuitChar(s), color: getColor(s), id: c };
 }
+
+//rank is zerobased
+function getcardid_zerobased(suit, rank) {
+  return suit * 13 + rank;
+}
+
+
+
+function getmeldwildsuit(m, meldsuit){
+  if(isSeq(m)) return m[15] ? meldsuit : m[14];
+  else return m[5];
+}
+
+
+export function meldToCards(m, suit) {
+  cards = [];
+  for (c of meldToCardIDs(m, suit)){
+    cards.push(intToCardObj(c));
+  }
+  return cards;
+}
+
+export function handToCards(playerID){
+  const myFlat = G.cards[playerID] || [];
+  const handCardObjs = [];
+  for (let i = 0; i < 53; i++) {
+      const cnt = myFlat[i] || 0;
+      for (let j = 0; j < cnt; j++){
+        let cardID = i + 54 * j;
+        handCardObjs.push({ ...intToCardObj(cardID), uid: `${cardID}` });
+      }
+  }
+}
+
+
+//=========================================================================================================================================================================================================
+//=================================================================================MELD FUNCTIONS==========================================================================================================
+//=========================================================================================================================================================================================================
 
 // Seq layout: m[0]=A-low, m[1]=A-high, m[2]=nat2, m[3]=3 ... m[13]=K, m[14]=foreignWildSuit, m[15]=nat2-wild
 // Runner layout: m[0]=rank, m[1..4]=suit counts ♠♥♦♣, m[5]=wildSuit (0=none, 1-5)
 export const isSeq = m => m.length !== 6;
+
+
+// Seq format: [A-low, A-high, nat2, 3..K, foreignWildSuit, nat2-wild-count] (16 elements)
+// Runner format: [rank, ?cnt, ?cnt, ?cnt, ?cnt, wildSuit] (6 elements)
+function meldToCardIDs(m, suit) {
+    let cards = [];
+    const WildSuit = getmeldwildsuit(m, suit);
+    if (isSeq(m)) { // Sequence
+        const gap = _checkGaps(m);
+        for (let r = 0; r <= 14; r++) {
+            if (m[r]) {
+                cards.push(getcardid_zerobased(suit, r));
+            } else if(r == gap) {
+                cards.push(getcardid_zerobased(WildSuit, 1));
+            }
+        }
+        // Edge wild not consumed by a gap
+        if (!gap && WildSuit !== 0) {
+          if (!m[0]) cards.unshift(getcardid_zerobased(WildSuit, 1)); else cards.push(getcardid_zerobased(WildSuit, 1));
+        }
+    } else { // Runner: [rank, ?cnt, ?cnt, ?cnt, ?cnt, wildSuit]
+        const rank = m[0], wildSuit = m[5];
+        for (let s = 1; s <= 4; s++)
+            for (let i = 0; i < m[s]; i++)
+                cards.push(getcardid_zerobased(s, rank) + 54 * i);
+        if (wildSuit !== 0)
+            cards.push(getcardid_zerobased(WildSuit, 1));
+    }
+    return cards;
+}
 
 export function isMeldClean(m) {
     if (!m || m.length === 0) return false;
@@ -266,8 +341,7 @@ export function parseMeld(cardIds, rules, existingMeld = null, meldSuit = 0) {
 }
 
 
-// SEQ_POINTS indexed by rank slot: [0]=A-low, [1]=A-high, [2]=nat2, [3]=3 ... [13]=K
-const SEQ_POINTS_NEW = [15, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10];
+
 
 export function calculateMeldPoints(meld, rules, dirtyCanastraBonus, cleanCanastraBonus) {
     let pts = 0;
@@ -370,8 +444,8 @@ export function teamHasClean(G, teamId) {
     return (G.cleanMelds?.[teamId] ?? 0) > 0;
 }
 
-export function mortoSafe(G, team) {
-    return teamHasClean(G, team) || (G.pots.length > 0 && !G.teamMortos[team]);
+export function mortoSafe(G, team, addCleancount) {
+    return G.rules.cleanCanastaToWin || (G.pots.length > 0 && !G.teamMortos[team]) || ((G.cleanMelds[team] + addCleancount) <= 0);
 }
 
 export function tryPickupMorto(G, p) {
@@ -444,8 +518,12 @@ export function moveMeld(G, p, Hand, target = null, addCards = 0, topDiscard = n
     const wasClean = existingMeld ? isMeldClean(existingMeld) : false;
     const willBeClean = isMeldClean(parsed);
     const addCleancount = willBeClean !== wasClean ? (willBeClean ? 1 : -1) : 0;
+<<<<<<< HEAD
     if (newHandSize < 2 && (G.cleanMelds[teamId] + addCleancount) <= 0) { if (G.rules?.debugLog) console.log('moveMeld fail: hand too small', newHandSize); return false; }
 
+=======
+    if (newHandSize < 2 && !mortoSafe(G, teamID, addCleancount)) return false;
+>>>>>>> 71f5aa8 (Changes to game board interface)
     // Remove cards from hand bitmap
     cardsRemoveCards(G, p, selectedHandIds);
     

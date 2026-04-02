@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import {isMeldClean, getMeldLength, calculateMeldPoints, meldToCards, handToCards} from './game.js';
+
 
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
@@ -17,6 +19,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+<<<<<<< HEAD
 // Inlined dependencies from game.js to resolve preview environment import errors
 const suitValues = { '♠': 1, '♥': 2, '♣': 3, '♦': 4, '★': 5 };
 const sequenceMath = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
@@ -151,12 +154,13 @@ function meldToCards(m, suit) {
     }
     return cards;
 }
+=======
+>>>>>>> 71f5aa8 (Changes to game board interface)
 
 // Card dimensions used for overlap calculations
 const CARD_W = 46, CARD_H = 60;
 
 const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle }) => {
-  const isRed = card.suit === getSuitChar(2) || card.suit === getSuitChar(4);
   return (
     <div onClick={onClick} style={{
       position: 'relative',
@@ -167,15 +171,15 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle }) => {
       borderRadius: '6px', width: `${CARD_W}px`, height: `${CARD_H}px`, minWidth: `${CARD_W}px`,
       display: 'inline-flex', flexDirection: 'column', 
       justifyContent: 'center', alignItems: 'center', margin: '2px',
-      backgroundColor: 'white', color: isRed ? 'red' : 'black', 
+      backgroundColor: 'white', color: card.color, 
       boxShadow: isNewlyDrawn && !isSelected ? '0 0 12px rgba(255, 204, 0, 0.8)' : '2px 2px 4px rgba(0,0,0,0.4)',
       ...customStyle
     }}>
       <div style={{ position: 'absolute', top: '3px', left: '3px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1' }}>
         <span style={{ fontSize: '0.75em', fontWeight: 'bold' }}>{card.rank}</span>
-        <span style={{ fontSize: '0.75em' }}>{card.suit}</span>
+        <span style={{ fontSize: '1.0em' }}>{card.suit}</span>
       </div>
-      <div style={{ fontSize: '1.4em', opacity: 0.25 }}>{card.suit}</div>
+      <div style={{ fontSize: '2.4em', opacity: 0.25 }}>{card.suit}</div>
     </div>
   );
 };
@@ -371,15 +375,8 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
   }
 
   // Build hand display from cards2 flat buffer
-  const myFlat = G.cards[playerID] || [];
-  const handCardObjs = [];
-  for (let i = 0; i < 53; i++) {
-      const cnt = myFlat[i] || 0;
-      for (let j = 0; j < cnt; j++)
-          handCardObjs.push({ ...intToCardObj(i === 52 ? 54 : i), uid: `${i}_${j}` });
-  }
+  const handCardObjs = handToCards(playerID);
 
-  const sortedHandObj = sortCards(handCardObjs);
 
   // lastDrawnCard: int or array of ints ?" track by card type for highlighting
   const newlyDrawnTypes = React.useMemo(() => {
@@ -429,15 +426,15 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
   const toggleCardSelection = (cardId, cardUid) => {
     const k = cardId === 54 ? 52 : cardId;
     const flat = G.cards[playerID] || [];
-    const have = flat[k] || 0;
+    const have = flat[cardId] || 0;
     setSelectedCards(prev => {
-      const cur = prev[k] || 0;
+      const cur = prev[cardId] || 0;
       // Count how many of this type appear before this uid in the sorted hand
       // to determine if this specific card instance is currently selected
       let instanceIdx = 0;
-      for (const c of sortedHandObj) {
+      for (const c of handCardObjs) {
         if (c.uid === cardUid) break;
-        if ((c.id === 54 ? 52 : c.id) === k) instanceIdx++;
+        if (c.id === cardId) instanceIdx++;
       }
       // This card instance is selected if instanceIdx < cur
       const thisIsSelected = instanceIdx < cur;
@@ -701,7 +698,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                   <div style={{ fontSize: '0.7em', color: '#888', marginBottom: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}:</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
                     {knownCards.map((cId, i) => { const c = intToCardObj(cId); return (
-                      <div key={i} style={{ background: 'white', color: (c.suit===getSuitChar(2)||c.suit===getSuitChar(4))?'red':'black', padding: '1px 3px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold' }}>{c.rank}{c.suit}</div>
+                      <div key={i} style={{ background: 'white', color: c.color, padding: '1px 3px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold' }}>{c.rank}{c.suit}</div>
                     ); })}
                   </div>
                 </div>
@@ -717,7 +714,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
         <div style={{ flexShrink: 0 }}>
           <h2 style={{ fontSize: '1.2em', margin: '0 0 10px 0' }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-            {sortedHandObj.map(card => {
+            {handCardObjs.map(card => {
               return <Card key={card.uid} card={card} isSelected={isCardSelected(card)} isNewlyDrawn={isNewlyDrawn(card)} onClick={() => toggleCardSelection(card.id, card.uid)} />;
             })}
           </div>
