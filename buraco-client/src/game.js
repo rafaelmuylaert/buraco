@@ -445,7 +445,7 @@ export function teamHasClean(G, teamId) {
 }
 
 export function mortoSafe(G, team, addCleancount) {
-    return G.rules.cleanCanastaToWin || (G.pots.length > 0 && !G.teamMortos[team]) || ((G.cleanMelds[team] + addCleancount) <= 0);
+    return G.rules.cleanCanastaToWin || (G.pots.length > 0 && !G.teamMortos[team]) || ((G.cleanMelds[team] + addCleancount) > 0);
 }
 
 export function tryPickupMorto(G, p) {
@@ -518,12 +518,8 @@ export function moveMeld(G, p, Hand, target = null, addCards = 0, topDiscard = n
     const wasClean = existingMeld ? isMeldClean(existingMeld) : false;
     const willBeClean = isMeldClean(parsed);
     const addCleancount = willBeClean !== wasClean ? (willBeClean ? 1 : -1) : 0;
-<<<<<<< HEAD
-    if (newHandSize < 2 && (G.cleanMelds[teamId] + addCleancount) <= 0) { if (G.rules?.debugLog) console.log('moveMeld fail: hand too small', newHandSize); return false; }
-
-=======
     if (newHandSize < 2 && !mortoSafe(G, teamID, addCleancount)) return false;
->>>>>>> 71f5aa8 (Changes to game board interface)
+
     // Remove cards from hand bitmap
     cardsRemoveCards(G, p, selectedHandIds);
     
