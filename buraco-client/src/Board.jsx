@@ -99,44 +99,42 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
   };
 
   const wasMyTurnRef = React.useRef(false);
+  // Snapshot when my turn ends
   useEffect(() => {
-    if (!G || !ctx || gameover) return;
+      if (!G || !ctx || gameover) return;
+      if (!isMyTurn) {
+          meldSnapshotRef.current = snapshotTable(G.table);
+      }
+  }, [isMyTurn]);
 
-    if (isMyTurn && !wasMyTurnRef.current) {
-        // my turn just started — compute opponent highlights
-        if (meldSnapshotRef.current) {
-            const highlights = {};
-            const oppTeamId = G.teams[playerID] === 0 ? 1 : 0;
-            const prev = meldSnapshotRef.current[oppTeamId];
-            const curr = G.table[oppTeamId];
-            for (let s = 1; s <= 4; s++) {
-                const prevSeqs = prev.seqs[s] || [];
-                const currSeqs = curr[0][s] || [];
-                currSeqs.forEach((meld, i) => {
-                    const prevMeld = prevSeqs.find(pm => getMeldLength(pm) < getMeldLength(meld) && pm.every((v, idx) => !v || meld[idx]));
-                    const prevLen = prevMeld ? getMeldLength(prevMeld) : 0;
-                    const currLen = getMeldLength(meld);
-                    if (currLen > prevLen) highlights[`seq-${s}-${i}`] = currLen - prevLen;
-                });
-            }
-            (curr[1] || []).forEach((meld, i) => {
-                const prevLen = prev.runners[i] ? getMeldLength(prev.runners[i]) : 0;
-                const currLen = getMeldLength(meld);
-                if (currLen > prevLen) highlights[`runner-${i}`] = currLen - prevLen;
-            });
-            setNewMeldCards(highlights);
-        }
-    } else if (!isMyTurn) {
-        if (wasMyTurnRef.current) {
-            // my turn just ended — snapshot the table
-            meldSnapshotRef.current = snapshotTable(G.table);
-        }
-        // clear highlights on every opponent turn change
-        setNewMeldCards({});
-    }
+  // Highlight when my turn starts, clear on every other player's turn
+  useEffect(() => {
+      if (!G || !ctx || gameover) return;
+      if (!isMyTurn) {
+          setNewMeldCards({});
+          return;
+      }
+      if (!meldSnapshotRef.current) return;
+      const highlights = {};
+      const oppTeamId = G.teams[playerID] === 0 ? 1 : 0;
+      const prev = meldSnapshotRef.current[oppTeamId];
+      const curr = G.table[oppTeamId];
+      for (let s = 1; s <= 4; s++) {
+          const prevSeqs = prev.seqs[s] || [];
+          const currSeqs = curr[0][s] || [];
+          currSeqs.forEach((meld, i) => {
+              const prevMeld = prevSeqs.find(pm => getMeldLength(pm) < getMeldLength(meld) && pm.every((v, idx) => !v || meld[idx]));
+              const prevLen = prevMeld ? getMeldLength(prevMeld) : 0;
+              if (getMeldLength(meld) > prevLen) highlights[`seq-${s}-${i}`] = getMeldLength(meld) - prevLen;
+          });
+      }
+      (curr[1] || []).forEach((meld, i) => {
+          const prevLen = prev.runners[i] ? getMeldLength(prev.runners[i]) : 0;
+          if (getMeldLength(meld) > prevLen) highlights[`runner-${i}`] = getMeldLength(meld) - prevLen;
+      });
+      setNewMeldCards(highlights);
+  }, [ctx?.currentPlayer]);
 
-    wasMyTurnRef.current = isMyTurn;
-}, [isMyTurn, ctx?.currentPlayer]);
 
 
 
