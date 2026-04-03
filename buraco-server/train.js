@@ -363,7 +363,7 @@ export const TrainerService = {
                         getPool().broadcastDeck(benchDeck);
                         const [[benchScore]] = await runMatchBatch(
                             [{ dnaA: toBuffer(latestChampion), dnaB: toBuffer(originalDNA) }],
-                            { ...rules, fixedDeck: true, finalscorelog: true }
+                            { ...rules, fixedDeck: true }
                         );
                         benchmarkDiff = benchScore;
                     } catch (e) {}
