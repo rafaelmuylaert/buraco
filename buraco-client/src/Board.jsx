@@ -98,67 +98,85 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
     return snap;
   };
 
-  const wasMyTurnRef = React.useRef(false);
-  // Snapshot when my turn ends
-  useEffect(() => {
-      if (!G || !ctx || gameover) return;
-      if (!isMyTurn) {
-          meldSnapshotRef.current = snapshotTable(G.table);
-      }
-  }, [isMyTurn]);
+  
+  // Snapshot when my turn ends (isMyTurn flips to false)
+useEffect(() => {
+    if (!G || !ctx || gameover) return;
+    if (!isMyTurn) meldSnapshotRef.current = snapshotTable(G.table);
+}, [isMyTurn]);
 
-  // Highlight when my turn starts, clear on every other player's turn
-  useEffect(() => {
-      if (!G || !ctx || gameover) return;
-      if (!isMyTurn) {
-          setNewMeldCards({});
-          return;
-      }
-      if (!meldSnapshotRef.current) return;
-      const highlights = {};
-      const oppTeamId = G.teams[playerID] === 0 ? 1 : 0;
-      const prev = meldSnapshotRef.current[oppTeamId];
-      const curr = G.table[oppTeamId];
-      for (let s = 1; s <= 4; s++) {
-          const prevSeqs = prev.seqs[s] || [];
-          const currSeqs = curr[0][s] || [];
-          currSeqs.forEach((meld, i) => {
-              const prevMeld = prevSeqs.find(pm => getMeldLength(pm) < getMeldLength(meld) && pm.every((v, idx) => !v || meld[idx]));
-              const prevLen = prevMeld ? getMeldLength(prevMeld) : 0;
-              if (getMeldLength(meld) > prevLen) highlights[`seq-${s}-${i}`] = getMeldLength(meld) - prevLen;
-          });
-      }
-      (curr[1] || []).forEach((meld, i) => {
-          const prevLen = prev.runners[i] ? getMeldLength(prev.runners[i]) : 0;
-          if (getMeldLength(meld) > prevLen) highlights[`runner-${i}`] = getMeldLength(meld) - prevLen;
-      });
-      setNewMeldCards(highlights);
-  }, [ctx?.currentPlayer]);
-
-
-
-
-  useEffect(() => {
-    if (ctx && G && !gameover && ctx.phase === 'waitingRoom' && G.players && !G.players.includes(playerID)) {
-      moves.joinTable(playerID);
+// On every player change: clear if my turn, highlight what changed since my last turn
+useEffect(() => {
+    if (!G || !ctx || gameover) return;
+    if (isMyTurn) {
+        // compute highlights for BOTH teams (partner + opponents)
+        if (!meldSnapshotRef.current) return;
+        const highlights = {};
+        for (const teamId of [0, 1]) {
+            const prev = meldSnapshotRef.current[teamId];
+            if (!prev) continue;
+            const curr = G.table[teamId];
+            for (let s = 1; s <= 4; s++) {
+                const prevSeqs = prev.seqs[s] || [];
+                const currSeqs = curr[0][s] || [];
+                currSeqs.forEach((meld, i) => {
+                    const prevMeld = prevSeqs.find(pm =>
+                        getMeldLength(pm) < getMeldLength(meld) &&
+                        pm.every((v, idx) => !v || meld[idx])
+                    );
+                    const prevLen = prevMeld ? getMeldLength(prevMeld) : 0;
+                    if (getMeldLength(meld) > prevLen) highlights[`seq-${s}-${i}`] = getMeldLength(meld) - prevLen;
+                });
+            }
+            (curr[1] || []).forEach((meld, i) => {
+                const prevLen = prev.runners[i] ? getMeldLength(prev.runners[i]) : 0;
+                if (getMeldLength(meld) > prevLen) highlights[`runner-${i}`] = getMeldLength(meld) - prevLen;
+            });
+        }
+        setNewMeldCards(highlights);
+    } else {
+        setNewMeldCards({});
     }
-  }, [ctx, G, playerID, moves]);
+}, [ctx?.currentPlayer]);
 
+const wasMyTurnRef = React.useRef(false);
   useEffect(() => {
-    if (gameover && matchID) {
-      const { port, hostname, protocol, origin } = window.location;
-      const apiBase = ['8000','5173'].includes(port)
-        ? `${protocol}//${hostname}:8000`
-        : hostname.startsWith('buraco.')
-          ? `${protocol}//buracoapi.${hostname.replace('buraco.', '')}`
-          : `${origin}/buraco`;
-      fetch(`${apiBase}/api/history/add`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matchID, date: new Date().toLocaleString(), scores: gameover.scores })
-      }).then(() => window.dispatchEvent(new Event('history_updated')));
+    if (!G || !ctx || gameover) return;
+
+    if (wasMyTurnRef.current && !isMyTurn) {
+        // my turn just ended — snapshot
+        meldSnapshotRef.current = snapshotTable(G.table);
+        setNewMeldCards({});
+    } else if (isMyTurn && !wasMyTurnRef.current) {
+        // my turn just started — diff against snapshot
+        if (meldSnapshotRef.current) {
+            const highlights = {};
+            for (const teamId of [0, 1]) {
+                const prev = meldSnapshotRef.current[teamId];
+                if (!prev) continue;
+                const curr = G.table[teamId];
+                for (let s = 1; s <= 4; s++) {
+                    (curr[0][s] || []).forEach((meld, i) => {
+                        const prevMeld = (prev.seqs[s] || []).find(pm =>
+                            getMeldLength(pm) < getMeldLength(meld) &&
+                            pm.every((v, idx) => !v || meld[idx])
+                        );
+                        const prevLen = prevMeld ? getMeldLength(prevMeld) : 0;
+                        if (getMeldLength(meld) > prevLen) highlights[`seq-${s}-${i}`] = getMeldLength(meld) - prevLen;
+                    });
+                }
+                (curr[1] || []).forEach((meld, i) => {
+                    const prevLen = prev.runners[i] ? getMeldLength(prev.runners[i]) : 0;
+                    if (getMeldLength(meld) > prevLen) highlights[`runner-${i}`] = getMeldLength(meld) - prevLen;
+                });
+            }
+            setNewMeldCards(highlights);
+        }
     }
-  }, [gameover, matchID]);
+
+    wasMyTurnRef.current = isMyTurn;
+}, [ctx?.currentPlayer]);
+
 
   const gameOverPopup = gameover ? (() => {
     const s0 = gameover.scores?.[0] ?? { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 };
@@ -334,15 +352,16 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       const renderedCards = meldToCards(meldGroup, suit);
 
       const prevRendered = (() => {
-        if (!hasNewCards || !meldSnapshotRef.current) return new Set();
-        const teamSnap = meldSnapshotRef.current[isMyTeam ? myTeam : oppTeam];
-        if (!teamSnap) return new Set();
-        const prevMeld = isRunner
-          ? teamSnap.runners?.[index]
-          : (teamSnap.seqs?.[suit] || []).find(pm => pm.every((v, idx) => !v || meldGroup[idx]));
-        if (!prevMeld) return new Set();
-        return new Set(meldToCards(prevMeld, suit).map(c => c.id));
+          if (!hasNewCards || !meldSnapshotRef.current) return new Set();
+          const teamSnap = meldSnapshotRef.current[teamId];  // use teamId directly
+          if (!teamSnap) return new Set();
+          const prevMeld = isRunner
+              ? teamSnap.runners?.[index]
+              : (teamSnap.seqs?.[suit] || []).find(pm => pm.every((v, idx) => !v || meldGroup[idx]));
+          if (!prevMeld) return new Set();
+          return new Set(meldToCards(prevMeld, suit).map(c => c.id));
       })();
+
 
 
       return (
