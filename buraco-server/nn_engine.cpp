@@ -545,7 +545,7 @@ static int find_seq_candidates(
                 if (lo < 0) lo = 0;
                 emit(lo, hi, true);
             }
-            if (cgap >= 3) {
+            if (cgap >= 3 && (cgap + existingMeld[15] + existingMeld[14]>1?1:0)<=14) {
                 int lo = hi - cgap + 1;
                 emit(lo, hi, false);
             }
