@@ -435,7 +435,7 @@ static int find_seq_candidates(
         if (already_in_meld) {
             m[mr]=1;
             if(mr<mstart)mstart=mr;
-            mend=mr;
+            if(mr>mend) mend=mr;
         }
         else if (sb_rank(cr) > 0 && !already_in_meld) { from_hand[mr]=1; m[mr]=1; }
     }
