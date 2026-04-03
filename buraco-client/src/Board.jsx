@@ -140,39 +140,39 @@ useEffect(() => {
 }, [ctx?.currentPlayer]);
 
 const wasMyTurnRef = React.useRef(false);
-  useEffect(() => {
+useEffect(() => {
     if (!G || !ctx || gameover) return;
-
-    if (wasMyTurnRef.current && !isMyTurn) {
-        // my turn just ended — snapshot
+    if (isMyTurn && !wasMyTurnRef.current) {
+        if (meldSnapshotRef.current) {
+            const highlights = {};
+            const oppTeamId = G.teams[playerID] === 0 ? 1 : 0;
+            const prev = meldSnapshotRef.current[oppTeamId];
+            const curr = G.table[oppTeamId];
+            for (let s = 1; s <= 4; s++) {
+                const prevSeqs = prev.seqs[s] || [];
+                const currSeqs = curr[0][s] || [];
+                currSeqs.forEach((meld, i) => {
+                    const prevMeld = prevSeqs.find(pm => getMeldLength(pm) < getMeldLength(meld) && pm.every((v, idx) => !v || meld[idx]));
+                    const prevLen = prevMeld ? getMeldLength(prevMeld) : 0;
+                    const currLen = getMeldLength(meld);
+                    if (currLen > prevLen) highlights[`seq-${s}-${i}`] = currLen - prevLen;
+                });
+            }
+            (curr[1] || []).forEach((meld, i) => {
+                const prevLen = prev.runners[i] ? getMeldLength(prev.runners[i]) : 0;
+                const currLen = getMeldLength(meld);
+                if (currLen > prevLen) highlights[`runner-${i}`] = currLen - prevLen;
+            });
+            setNewMeldCards(highlights);
+        }
+    }
+    if (!isMyTurn && wasMyTurnRef.current) {
         meldSnapshotRef.current = snapshotTable(G.table);
         setNewMeldCards({});
-    } else if (isMyTurn && !wasMyTurnRef.current) {
-      if (meldSnapshotRef.current) {
-          const highlights = {};
-          for (const teamId of [0, 1]) {
-              const prev = meldSnapshotRef.current[teamId];
-              if (!prev) continue;
-              const curr = G.table[teamId];
-              for (let s = 1; s <= 4; s++) {
-                  (curr[0][s] || []).forEach((meld, i) => {
-                      const prevLen = prev.seqs[s]?.[i] ? getMeldLength(prev.seqs[s][i]) : 0;
-                      if (getMeldLength(meld) > prevLen) highlights[`seq-${s}-${i}`] = getMeldLength(meld) - prevLen;
-                  });
-              }
-              (curr[1] || []).forEach((meld, i) => {
-                  const prevLen = prev.runners[i] ? getMeldLength(prev.runners[i]) : 0;
-                  if (getMeldLength(meld) > prevLen) highlights[`runner-${i}`] = getMeldLength(meld) - prevLen;
-              });
-          }
-          setNewMeldCards(highlights);
-          meldSnapshotRef.current = snapshotTable(G.table);
-      }
-  }
-
-
+    }
     wasMyTurnRef.current = isMyTurn;
-}, [ctx?.currentPlayer]);
+}, [isMyTurn, ctx?.currentPlayer]);
+
 
 
   const gameOverPopup = gameover ? (() => {
@@ -350,11 +350,11 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
 
       const prevRendered = (() => {
           if (!hasNewCards || !meldSnapshotRef.current) return new Set();
-          const teamSnap = meldSnapshotRef.current[teamId];
+          const teamSnap = meldSnapshotRef.current[teamId];  // use teamId directly
           if (!teamSnap) return new Set();
           const prevMeld = isRunner
               ? teamSnap.runners?.[index]
-              : teamSnap.seqs?.[suit]?.[index];
+              : (teamSnap.seqs?.[suit] || []).find(pm => pm.every((v, idx) => !v || meldGroup[idx]));
           if (!prevMeld) return new Set();
           return new Set(meldToCards(prevMeld, suit).map(c => c.id));
       })();
@@ -375,7 +375,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                 moves.appendToMeld(target, selectedCardIdsArray()); setSelectedCards(new Set());
               }
             }}
-            style={{ position: 'relative', display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: hasNewCards ? '2px solid #50fa7b' : `2px solid ${borderColor}`, boxShadow: hasNewCards ? '0 0 10px rgba(80,250,123,0.5)' : 'none', cursor: (isMyTurn && isMyTeam && (selectedCount > 0 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default' }}>
+            style={{ position: 'relative', display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: `2px solid ${borderColor}`, boxShadow: 'none', cursor: (isMyTurn && isMyTeam && (selectedCount > 0 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default' }}>
             {renderedCards.map((card, i) => {
               const isNewCard = hasNewCards && !prevRendered.has(card.id);
               return (
