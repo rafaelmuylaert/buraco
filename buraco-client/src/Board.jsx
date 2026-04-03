@@ -43,8 +43,8 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor 
       </div>
       <div style={{ fontSize: '2.4em', opacity: 0.25 }}>{card.suit}</div>
       {deckColor && <div style={{ position: 'absolute', bottom: 0, left: 0, width: 0, height: 0,
-        borderStyle: 'solid', borderWidth: '0 0 12px 12px',
-        borderColor: `transparent transparent transparent ${deckColor}`,
+        borderStyle: 'solid', borderWidth: '0 12px 12px 0',
+        borderColor: `transparent transparent ${deckColor} transparent`,
         borderBottomLeftRadius: '4px' }} />}
     </div>
   );
