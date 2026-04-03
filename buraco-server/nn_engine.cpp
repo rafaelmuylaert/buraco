@@ -429,13 +429,13 @@ static int find_seq_candidates(
     //m[1] = existingMeld ? existingMeld[2] : 0;
     // Ranks 2-K
     for (int mi=0; mi<=13; mi++) { //meld index 0(A-lo),1(A-hi),2-13-rank
-        int mr = mi==0?0:mi==1?14:mi-1; //meld rank 0(A) to 13(A)
+        int mr = mi==0?0:mi==1?13:mi-1; //meld rank 0(A) to 13(A)
         int cr = mi==0?0:mi==1?0:mi-1; //card rank 0(A) to 12(K)
         int already_in_meld = (existingMeld && existingMeld[mi]) ? 1 : 0;
         if (already_in_meld) {
             m[mr]=1;
-            if(mi<mstart)mstart=mi;
-            mend=mi;
+            if(mi<mstart)mstart=mr;
+            mend=mr;
         }
         else if (sb_rank(cr) > 0 && !already_in_meld) { from_hand[mr]=1; m[mr]=1; }
     }
