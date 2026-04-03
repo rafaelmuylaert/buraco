@@ -93,33 +93,28 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
   const meldSnapshotRef = React.useRef(null);
   const [newMeldCards, setNewMeldCards] = useState({}); // { 'runner-N': count, 'seq-SUIT-N': count }
 
-  // Client-side deck color tracker for melds — keyed by 'seq-SUIT-INDEX-cardpos' and 'runner-INDEX-cardpos'
-  // Populated when cards are played to the table, purely cosmetic, not in game state
-  const meldDeckColorsRef = React.useRef({}); // { 'seq-S-I': [deckColor, ...], 'runner-I': [deckColor, ...] }
+  // Client-side deck color tracker for melds only — hand cards use id directly
+  const meldDeckColorsRef = React.useRef({});
 
-  // Build a deckColor lookup from current hand: cardType -> [deckColor per instance]
   const getHandDeckColors = () => {
     const lookup = {};
     const flat = G.cards[playerID] || [];
     for (let i = 0; i < 54; i++) {
       const cnt = flat[i] || 0;
-      if (cnt > 0) lookup[i] = Array.from({ length: cnt }, (_, j) => intToCardObj(i + 54 * j).deckColor);
+      for (let j = 0; j < cnt; j++) lookup[i] = [...(lookup[i] || []), intToCardObj(i + 54 * j).deckColor];
     }
     return lookup;
   };
 
-  // Intercept meld moves to record deck colors before cards leave hand
   const playMeldWithTracking = (cardIdsArray) => {
     const handColors = getHandDeckColors();
     const used = {};
     const deckColors = cardIdsArray.map(id => {
       const type = id % 54;
       if (!used[type]) used[type] = 0;
-      const color = (handColors[type] || [])[used[type]] || '#0a3d62';
-      used[type]++;
+      const color = (handColors[type] || [])[used[type]++] || '#0a3d62';
       return color;
     });
-    // Key will be assigned after move — store pending
     meldDeckColorsRef.current._pending = deckColors;
     moves.playMeld(cardIdsArray);
   };
@@ -130,17 +125,14 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
     const deckColors = cardIdsArray.map(id => {
       const type = id % 54;
       if (!used[type]) used[type] = 0;
-      const color = (handColors[type] || [])[used[type]] || '#0a3d62';
-      used[type]++;
+      const color = (handColors[type] || [])[used[type]++] || '#0a3d62';
       return color;
     });
     const key = target.type === 'runner' ? `runner-${target.index}` : `seq-${target.suit}-${target.index}`;
-    const existing = meldDeckColorsRef.current[key] || [];
-    meldDeckColorsRef.current[key] = [...existing, ...deckColors];
+    meldDeckColorsRef.current[key] = [...(meldDeckColorsRef.current[key] || []), ...deckColors];
     moves.appendToMeld(target, cardIdsArray);
   };
 
-  // After playMeld, assign pending colors to the new meld slot
   const prevTableRef = React.useRef(null);
   useEffect(() => {
     if (!G?.table) return;
@@ -152,23 +144,16 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
         const myTeamId = G.teams[playerID];
         for (let s = 1; s <= 4; s++) {
           const currLen = (G.table[myTeamId][0][s] || []).length;
-          const prevLen = (prev[myTeamId]?.[0]?.[s] || []).length;
-          if (currLen > prevLen) {
-            meldDeckColorsRef.current[`seq-${s}-${currLen - 1}`] = pending;
-            break;
-          }
+          const prevLen = (prev[s] || 0);
+          if (currLen > prevLen) { meldDeckColorsRef.current[`seq-${s}-${currLen - 1}`] = pending; break; }
         }
         const currRun = (G.table[myTeamId][1] || []).length;
-        const prevRun = (prev[myTeamId]?.[1] || []).length;
-        if (currRun > prevRun) meldDeckColorsRef.current[`runner-${currRun - 1}`] = pending;
+        if (currRun > (prev.runners || 0)) meldDeckColorsRef.current[`runner-${currRun - 1}`] = pending;
       }
     }
-    // snapshot current table shallowly — avoid JSON.stringify on potentially typed arrays
-    const snap = {};
-    for (const tid of [0, 1]) {
-      snap[tid] = { 0: {}, 1: [...(G.table[tid][1] || [])] };
-      for (let s = 1; s <= 4; s++) snap[tid][0][s] = [...(G.table[tid][0][s] || [])];
-    }
+    const myTeamId = G.teams[playerID];
+    const snap = { runners: (G.table[myTeamId][1] || []).length };
+    for (let s = 1; s <= 4; s++) snap[s] = (G.table[myTeamId][0][s] || []).length;
     prevTableRef.current = snap;
   }, [G?.table]);
 

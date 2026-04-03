@@ -131,8 +131,8 @@ export function handToCards(G, playerID){
   for (let i = 0; i < 54; i++) {
       const cnt = myFlat[i] || 0;
       for (let j = 0; j < cnt; j++){
-        let cardID = i + (54 * j);
-        handCardObjs.push({ ...intToCardObj(cardID), id: cardID });
+        const cardID = i + (54 * j);
+        handCardObjs.push(intToCardObj(cardID));
       }
   }
   return handCardObjs;
