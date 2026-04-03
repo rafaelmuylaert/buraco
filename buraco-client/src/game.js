@@ -101,8 +101,8 @@ const getColor = s => (s%2) === 0 ? 'red' : 'black';
 export function intToCardObj(c) {
     const s = getSuit(c);
     const r = getRank(c);
-    const deckIndex = Math.floor(c / 54);
-    return { rank: s === 5 ? 'JOKER' : getRankChar(r), suit: getSuitChar(s), color: getColor(s), id: c, deckColor: deckIndex === 0 ? '#0a3d62' : '#6b0f1a' };
+    const deckColor = Math.floor(c / 54) === 0 ? '#0a3d62' : '#6b0f1a';
+    return { rank: s === 5 ? 'JOKER' : getRankChar(r), suit: getSuitChar(s), color: getColor(s), id: c, deckColor };
 }
 
 //rank is zerobased
@@ -131,8 +131,8 @@ export function handToCards(G, playerID){
   for (let i = 0; i < 54; i++) {
       const cnt = myFlat[i] || 0;
       for (let j = 0; j < cnt; j++){
-        const cardID = i + (54 * j);
-        handCardObjs.push(intToCardObj(cardID));
+        let cardID = i + (54 * j);
+        handCardObjs.push({ ...intToCardObj(cardID), id: `${cardID}` });
       }
   }
   return handCardObjs;
@@ -446,8 +446,8 @@ export function hasCard(G, p, card) {
 function buildDeck(rules) {
     let deck = [];
     for (let i = 0; i < 52; i++) deck.push(i);
-    for (let i = 54; i < 106; i++) deck.push(i);
-    if (!rules.noJokers) for (let i = 0; i < 2; i++) deck.push(53+54*i);
+    for (let i = 0; i < 52; i++) deck.push(i);
+    if (!rules.noJokers) for (let i = 0; i < 2; i++) deck.push(53);
     return deck;
 }
 
