@@ -130,6 +130,7 @@ function runMatch(genomes, rules, fixedDeck, swapTeams = false) {
             console.log(`[DIAG] reason=${gameover?.reason} moves=${moveCount} melds=${meldCount}`);
             console.log(`[DIAG] t0: table=${t0.table} hand=${t0.hand} morto=${t0.mortoPenalty} total=${t0.total}`);
             console.log(`[DIAG] t1: table=${t1.table} hand=${t1.hand} morto=${t1.mortoPenalty} total=${t1.total} diff=${diff}`);
+            console.log('[SCORE]', JSON.stringify(scores));
         }
         return diff;
     } catch (e) {
