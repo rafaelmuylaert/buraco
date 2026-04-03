@@ -48,7 +48,7 @@ function makeIface(S, p) {
 
 // worker.js
 
-function runMatch(genomes, rules, fixedDeck, swapTeams = false) {
+function runMatch(genomes, rules, fixedDeck) {
     const numPlayers = rules.numPlayers || 4;
     const fakeRandom = { Shuffle: arr => fixedDeck ? [...fixedDeck] : shuffle(arr) };
 
@@ -96,11 +96,7 @@ function runMatch(genomes, rules, fixedDeck, swapTeams = false) {
                 S.lastDrawnCard = null;
             }
 
-            if (isWasmReady()) {
-                // swapTeams XORs which DNA offset is used for each team
-                const isTeam0 = S.teams[p] === 0;
-                setActiveTeam((isTeam0 ^ swapTeams) ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
-            }
+            if (isWasmReady()) setActiveTeam(0);
 
             const myTeam  = S.teams[p];
             const oppTeam = myTeam === 0 ? 1 : 0;
@@ -175,9 +171,11 @@ async function processJob(matches, rules) {
 
         // Match 1: A=team0, B=team1 (no swap)
         // Match 2: B=team0, A=team1 (swap — XORs offset, no DNA reload)
-        const g1 = runMatch(genomes1, rules, pairDeck, false);
-        const g2 = runMatch(genomes2, rules, pairDeck, true);
+        if (isWasmReady()) loadMatchDNA(gA, gB);
+        const g1 = runMatch(genomes1, rules, pairDeck);
 
+        if (isWasmReady()) loadMatchDNA(gB, gA);
+        const g2 = runMatch(genomes2, rules, pairDeck);
         results.push([g1 - g2, g2 - g1, Math.abs(g1), Math.abs(g2)]);
     }
     return {
