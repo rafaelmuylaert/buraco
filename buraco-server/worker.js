@@ -10,7 +10,6 @@ import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers,
 
 
 await initWasm();
-console.log(`[WASM] team1DnaOffset=${getTeam1DnaOffset()} totalDnaSize=${AI_CONFIG.TOTAL_DNA_SIZE}`);
 setScoreFunctions(null, null, null, (isSeq, teamIdx, suit0, slotIdx, meldArray) => {
     if (isSeq) updateSeqMeld(teamIdx, suit0, slotIdx, meldArray);
     else updateRunMeld(teamIdx, slotIdx, meldArray);

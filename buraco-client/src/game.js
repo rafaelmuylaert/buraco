@@ -101,7 +101,8 @@ const getColor = s => (s%2) === 0 ? 'red' : 'black';
 export function intToCardObj(c) {
     const s = getSuit(c);
     const r = getRank(c);
-    return { rank: s === 5 ? 'JOKER' : getRankChar(r), suit: getSuitChar(s), color: getColor(s), id: c };
+    const deckIndex = Math.floor(c / 54);
+    return { rank: s === 5 ? 'JOKER' : getRankChar(r), suit: getSuitChar(s), color: getColor(s), id: c, deckColor: deckIndex === 0 ? '#0a3d62' : '#6b0f1a' };
 }
 
 //rank is zerobased
@@ -445,8 +446,8 @@ export function hasCard(G, p, card) {
 function buildDeck(rules) {
     let deck = [];
     for (let i = 0; i < 52; i++) deck.push(i);
-    for (let i = 0; i < 52; i++) deck.push(i);
-    if (!rules.noJokers) for (let i = 0; i < 2; i++) deck.push(53);
+    for (let i = 54; i < 106; i++) deck.push(i);
+    if (!rules.noJokers) for (let i = 0; i < 2; i++) deck.push(53+54*i);
     return deck;
 }
 
@@ -595,10 +596,6 @@ export function calculateFinalScores(G) {
   const endGameBonusAmt    = G.rules?.endGameBonus       ?? 100;
   const scoreCardPoints    = G.rules?.scoreCardPoints    !== false;
   const scoreHandPenalty   = G.rules?.scoreHandPenalty   !== false;
-  if (_scoresDiagCount < 1) {
-    _scoresDiagCount++;
-    console.log(`[SCORES DIAG] scoreCardPoints=${scoreCardPoints} scoreHandPenalty=${scoreHandPenalty} mortoPenalty=${mortoPenaltyAmt} dirty=${dirtyCanastraBonus} clean=${cleanCanastraBonus} meldSizeBonus=${G.rules?.meldSizeBonus} cardPointValues=${JSON.stringify(G.rules?.cardPointValues)}`);
-  }
 
   let scores = [{ table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 }, { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 }];
   for (const teamId of [0, 1]) {

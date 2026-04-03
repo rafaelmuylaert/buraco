@@ -42,14 +42,15 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle }) => {
         <span style={{ fontSize: '1.0em' }}>{card.suit}</span>
       </div>
       <div style={{ fontSize: '2.4em', opacity: 0.25 }}>{card.suit}</div>
+      {card.deckColor && <div style={{ position: 'absolute', bottom: '3px', left: '3px', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: card.deckColor, opacity: 0.8 }} />}
     </div>
   );
 };
 
-const CardBack = ({ label, count, onClick }) => (
+const CardBack = ({ label, count, onClick, deckColor }) => (
   <div onClick={onClick} style={{
     border: '2px solid white', borderRadius: '8px', width: '60px', height: '90px', margin: '2px',
-    backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px)',
+    backgroundColor: deckColor || '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px)',
     boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'white', cursor: onClick ? 'pointer' : 'default', textAlign: 'center'
   }}>
     <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>{label}</span>
@@ -86,6 +87,86 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
   // Track melds snapshot at end of my last turn to highlight opponent additions
   const meldSnapshotRef = React.useRef(null);
   const [newMeldCards, setNewMeldCards] = useState({}); // { 'runner-N': count, 'seq-SUIT-N': count }
+
+  // Client-side deck color tracker for melds — keyed by 'seq-SUIT-INDEX-cardpos' and 'runner-INDEX-cardpos'
+  // Populated when cards are played to the table, purely cosmetic, not in game state
+  const meldDeckColorsRef = React.useRef({}); // { 'seq-S-I': [deckColor, ...], 'runner-I': [deckColor, ...] }
+
+  // Build a deckColor lookup from current hand: cardType -> [deckColor per instance]
+  const getHandDeckColors = () => {
+    const lookup = {};
+    const flat = G.cards[playerID] || [];
+    for (let i = 0; i < 54; i++) {
+      const cnt = flat[i] || 0;
+      if (cnt > 0) lookup[i] = Array.from({ length: cnt }, (_, j) => intToCardObj(i + 54 * j).deckColor);
+    }
+    return lookup;
+  };
+
+  // Intercept meld moves to record deck colors before cards leave hand
+  const playMeldWithTracking = (cardIdsArray) => {
+    const handColors = getHandDeckColors();
+    const used = {};
+    const deckColors = cardIdsArray.map(id => {
+      const type = id % 54;
+      if (!used[type]) used[type] = 0;
+      const color = (handColors[type] || [])[used[type]] || '#0a3d62';
+      used[type]++;
+      return color;
+    });
+    // Key will be assigned after move — store pending
+    meldDeckColorsRef.current._pending = deckColors;
+    moves.playMeld(cardIdsArray);
+  };
+
+  const appendToMeldWithTracking = (target, cardIdsArray) => {
+    const handColors = getHandDeckColors();
+    const used = {};
+    const deckColors = cardIdsArray.map(id => {
+      const type = id % 54;
+      if (!used[type]) used[type] = 0;
+      const color = (handColors[type] || [])[used[type]] || '#0a3d62';
+      used[type]++;
+      return color;
+    });
+    const key = target.type === 'runner' ? `runner-${target.index}` : `seq-${target.suit}-${target.index}`;
+    const existing = meldDeckColorsRef.current[key] || [];
+    meldDeckColorsRef.current[key] = [...existing, ...deckColors];
+    moves.appendToMeld(target, cardIdsArray);
+  };
+
+  // After playMeld, assign pending colors to the new meld slot
+  const prevTableRef = React.useRef(null);
+  useEffect(() => {
+    if (!G || !meldDeckColorsRef.current._pending) return;
+    const pending = meldDeckColorsRef.current._pending;
+    delete meldDeckColorsRef.current._pending;
+    // Find the newly added meld by comparing with previous table
+    const prev = prevTableRef.current;
+    if (!prev) return;
+    const myTeamId = G.teams[playerID];
+    // Check sequences
+    for (let s = 1; s <= 4; s++) {
+      const currSeqs = G.table[myTeamId][0][s] || [];
+      const prevSeqs = prev[myTeamId][0][s] || [];
+      if (currSeqs.length > prevSeqs.length) {
+        const newIdx = currSeqs.length - 1;
+        meldDeckColorsRef.current[`seq-${s}-${newIdx}`] = pending;
+        return;
+      }
+    }
+    // Check runners
+    const currRunners = G.table[myTeamId][1] || [];
+    const prevRunners = prev[myTeamId][1] || [];
+    if (currRunners.length > prevRunners.length) {
+      meldDeckColorsRef.current[`runner-${currRunners.length - 1}`] = pending;
+    }
+  }, [G?.table]);
+
+  // Snapshot table for new meld detection
+  useEffect(() => {
+    if (G?.table) prevTableRef.current = JSON.parse(JSON.stringify(G.table));
+  }, [G?.table]);
 
   const snapshotTable = (table) => {
     const snap = {};
@@ -309,6 +390,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       const borderColor = status === 'clean' ? '#ffd700' : (status === 'dirty' ? '#c0c0c0' : 'transparent');
       const hasNewCards = !!newMeldCards[key];
       const renderedCards = meldToCards(meldGroup, suit);
+      const meldDeckColors = meldDeckColorsRef.current[key] || [];
 
       const prevRendered = (() => {
           if (!hasNewCards || !meldSnapshotRef.current) return new Set();
@@ -334,14 +416,14 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
               if (!G.hasDrawn && isClosedDiscard && G.discardPile.length > 0) {
                 moves.pickUpDiscard(selectedCardIdsArray(), { type: 'append', meldTarget: target }); setSelectedCards(new Set());
               } else if (selectedCount > 0) {
-                moves.appendToMeld(target, selectedCardIdsArray()); setSelectedCards(new Set());
+                appendToMeldWithTracking(target, selectedCardIdsArray()); setSelectedCards(new Set());
               }
             }}
             style={{ position: 'relative', display: 'flex', flexDirection: isRunner ? 'column' : 'row', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '8px', border: `2px solid ${borderColor}`, boxShadow: 'none', cursor: (isMyTurn && isMyTeam && (selectedCount > 0 || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default' }}>
             {renderedCards.map((card, i) => {
               const isNewCard = hasNewCards && !prevRendered.has(card.id);
               return (
-                <Card key={card.id} card={card} isNewlyDrawn={isNewCard} customStyle={{
+                <Card key={card.id} card={{ ...card, deckColor: meldDeckColors[i] || card.deckColor }} isNewlyDrawn={isNewCard} customStyle={{
                   marginLeft: (!isRunner && i > 0) ? `-${CARD_W - 14}px` : '0',
                   marginTop: (isRunner && i > 0) ? `-${CARD_H - 18}px` : '0',
                   zIndex: i
@@ -375,7 +457,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                   if (!G.hasDrawn && isClosedDiscard && G.discardPile.length > 0) {
                     moves.pickUpDiscard(selectedCardIdsArray(), { type: 'new' }); setSelectedCards(new Set());
                   } else if (G.hasDrawn && selectedCount >= 3) {
-                    moves.playMeld(selectedCardIdsArray()); setSelectedCards(new Set());
+                    playMeldWithTracking(selectedCardIdsArray()); setSelectedCards(new Set());
                   }
                 }}
                 style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && ((G.hasDrawn && selectedCount >= 3) || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default', color: '#888' }}>
@@ -415,7 +497,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
               <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>Jogo</span>
             </div>
           ) : (
-            <CardBack label="Comprar" count={deckCount} onClick={isMyTurn && !G.hasDrawn ? () => moves.drawCard() : undefined} />
+            <CardBack label="Comprar" count={deckCount} deckColor={G.deck.length > 0 ? intToCardObj(G.deck[G.deck.length - 1]).deckColor : '#0a3d62'} onClick={isMyTurn && !G.hasDrawn ? () => moves.drawCard() : undefined} />
           )}
         </div>
         
