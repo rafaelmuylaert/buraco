@@ -434,7 +434,7 @@ static int find_seq_candidates(
         int already_in_meld = (existingMeld && existingMeld[mi]) ? 1 : 0;
         if (already_in_meld) {
             m[mr]=1;
-            if(mi<mstart)mstart=mr;
+            if(mr<mstart)mstart=mr;
             mend=mr;
         }
         else if (sb_rank(cr) > 0 && !already_in_meld) { from_hand[mr]=1; m[mr]=1; }
