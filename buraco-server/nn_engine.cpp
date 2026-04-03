@@ -619,6 +619,7 @@ static void sim_init(uint8_t* sim, int player, int topDiscard) {
 }
 
 static int plan_turn() {
+    clear_meld_overrides();
     double _tp0 = now();
     int player = g_player;
     g_move_count = 0;
