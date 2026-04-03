@@ -273,7 +273,7 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
         m[0] = 1; m[1] = 1;
     } else if (aces === 1) {
             if      ((m[13] === 1 && m[0] === 0) || m[1] === 1 ) {m[0] = 0; m[1] = 1;} 
-            else if (m[3]  === 1 || m[0] ===1 ) {m[0] = 1; m[1] = 0;}
+            else if (m[3]  === 1 || m[2] === 1 || m[0] ===1 ) {m[0] = 1; m[1] = 0;}
             else                  {m[0] = 0; m[1] = 1;}
     } else {
         m[0] = 0; m[1] = 0;
