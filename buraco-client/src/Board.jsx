@@ -148,31 +148,28 @@ const wasMyTurnRef = React.useRef(false);
         meldSnapshotRef.current = snapshotTable(G.table);
         setNewMeldCards({});
     } else if (isMyTurn && !wasMyTurnRef.current) {
-        // my turn just started — diff against snapshot
-        if (meldSnapshotRef.current) {
-            const highlights = {};
-            for (const teamId of [0, 1]) {
-                const prev = meldSnapshotRef.current[teamId];
-                if (!prev) continue;
-                const curr = G.table[teamId];
-                for (let s = 1; s <= 4; s++) {
-                    (curr[0][s] || []).forEach((meld, i) => {
-                        const prevMeld = (prev.seqs[s] || []).find(pm =>
-                            getMeldLength(pm) < getMeldLength(meld) &&
-                            pm.every((v, idx) => !v || meld[idx])
-                        );
-                        const prevLen = prevMeld ? getMeldLength(prevMeld) : 0;
-                        if (getMeldLength(meld) > prevLen) highlights[`seq-${s}-${i}`] = getMeldLength(meld) - prevLen;
-                    });
-                }
-                (curr[1] || []).forEach((meld, i) => {
-                    const prevLen = prev.runners[i] ? getMeldLength(prev.runners[i]) : 0;
-                    if (getMeldLength(meld) > prevLen) highlights[`runner-${i}`] = getMeldLength(meld) - prevLen;
-                });
-            }
-            setNewMeldCards(highlights);
-        }
-    }
+      if (meldSnapshotRef.current) {
+          const highlights = {};
+          for (const teamId of [0, 1]) {
+              const prev = meldSnapshotRef.current[teamId];
+              if (!prev) continue;
+              const curr = G.table[teamId];
+              for (let s = 1; s <= 4; s++) {
+                  (curr[0][s] || []).forEach((meld, i) => {
+                      const prevLen = prev.seqs[s]?.[i] ? getMeldLength(prev.seqs[s][i]) : 0;
+                      if (getMeldLength(meld) > prevLen) highlights[`seq-${s}-${i}`] = getMeldLength(meld) - prevLen;
+                  });
+              }
+              (curr[1] || []).forEach((meld, i) => {
+                  const prevLen = prev.runners[i] ? getMeldLength(prev.runners[i]) : 0;
+                  if (getMeldLength(meld) > prevLen) highlights[`runner-${i}`] = getMeldLength(meld) - prevLen;
+              });
+          }
+          setNewMeldCards(highlights);
+          meldSnapshotRef.current = snapshotTable(G.table);
+      }
+  }
+
 
     wasMyTurnRef.current = isMyTurn;
 }, [ctx?.currentPlayer]);
@@ -353,14 +350,15 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
 
       const prevRendered = (() => {
           if (!hasNewCards || !meldSnapshotRef.current) return new Set();
-          const teamSnap = meldSnapshotRef.current[teamId];  // use teamId directly
+          const teamSnap = meldSnapshotRef.current[teamId];
           if (!teamSnap) return new Set();
           const prevMeld = isRunner
               ? teamSnap.runners?.[index]
-              : (teamSnap.seqs?.[suit] || []).find(pm => pm.every((v, idx) => !v || meldGroup[idx]));
+              : teamSnap.seqs?.[suit]?.[index];
           if (!prevMeld) return new Set();
           return new Set(meldToCards(prevMeld, suit).map(c => c.id));
       })();
+
 
 
 
