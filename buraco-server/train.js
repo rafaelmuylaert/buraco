@@ -342,7 +342,7 @@ export const TrainerService = {
                     for (let j = i + 1; j < candidates.length; j++)
                         pairs.push({ i, j, dnaA: toBuffer(candidates[i].genome), dnaB: toBuffer(candidates[j].genome) });
 
-                const results = await runMatchBatch(pairs.map(p => ({ dnaA: p.dnaA, dnaB: p.dnaB })), rules);
+                const results = await runMatchBatch(pairs.map(p => ({ dnaA: p.dnaA, dnaB: p.dnaB })), { ...rules, finalscorelog: true });
                 results.forEach(([sA], idx) => {
                     wins[pairs[idx].i] += sA;
                     wins[pairs[idx].j] -= sA;
