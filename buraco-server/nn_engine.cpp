@@ -474,8 +474,8 @@ static int find_seq_candidates(
     //dbg_str(" caw="); dbg_int(can_add_wild);
     dbg_str(existingMeld ? ">>>>Append - " : ">>>>New    - ");
     dbg_str("Wild="); dbg_suit(w14>0 ? w14 : w15==1 ? suit : 0); 
-    dbg_str("- m[");
-    for(int i=0;i<14;i++) if(from_hand[i]) {dbg_card(i+suit0*13); }
+    dbg_str("- New[");
+    for(int i=0;i<14;i++) if(from_hand[i]) {dbg_card((i%13)+suit0*13); }
     
     if (existingMeld){
         dbg_str("] - Existing[");
@@ -555,15 +555,16 @@ static int find_seq_candidates(
             int hi = (pos==13 && m[13]) ? pos : pos-1;
             int local_wilds = wilds_avail;
             if (existingMeld && pos >= mstart && pos <= mend) local_wilds = 0;
-
-            if (cgap > 0 && cnogap > 0 && local_wilds) {
-                int lo = hi - cnogap - cgap;
-                if (lo < 0) lo = 0;
-                emit(lo, hi, true);
-            }
-            if (cgap >= 3) {
-                int lo = hi - cgap + 1;
-                emit(lo, hi, false);
+            else{
+                if (cgap > 0 && cnogap > 0 && local_wilds) {
+                    int lo = hi - cnogap - cgap;
+                    if (lo < 0) lo = 0;
+                    emit(lo, hi, true);
+                }
+                if (cgap >= 3) {
+                    int lo = hi - cgap + 1;
+                    emit(lo, hi, false);
+                }
             }
             cnogap = cgap;
             cgap = 0;
