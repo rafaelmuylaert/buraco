@@ -22,7 +22,7 @@ class ErrorBoundary extends React.Component {
 // Card dimensions used for overlap calculations
 const CARD_W = 46, CARD_H = 60;
 
-const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle }) => {
+const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor }) => {
   return (
     <div onClick={onClick} style={{
       position: 'relative',
@@ -42,14 +42,18 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle }) => {
         <span style={{ fontSize: '1.0em' }}>{card.suit}</span>
       </div>
       <div style={{ fontSize: '2.4em', opacity: 0.25 }}>{card.suit}</div>
+      {deckColor && <div style={{ position: 'absolute', bottom: 0, left: 0, width: 0, height: 0,
+        borderStyle: 'solid', borderWidth: '0 0 12px 12px',
+        borderColor: `transparent transparent transparent ${deckColor}`,
+        borderBottomLeftRadius: '4px' }} />}
     </div>
   );
 };
 
-const CardBack = ({ label, count, onClick }) => (
+const CardBack = ({ label, count, onClick, deckColor }) => (
   <div onClick={onClick} style={{
     border: '2px solid white', borderRadius: '8px', width: '60px', height: '90px', margin: '2px',
-    backgroundColor: '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px)',
+    backgroundColor: deckColor || '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px)',
     boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'white', cursor: onClick ? 'pointer' : 'default', textAlign: 'center'
   }}>
     <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>{label}</span>
@@ -85,7 +89,38 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
 
   // Track melds snapshot at end of my last turn to highlight opponent additions
   const meldSnapshotRef = React.useRef(null);
-  const [newMeldCards, setNewMeldCards] = useState({}); // { 'runner-N': count, 'seq-SUIT-N': count }
+  const [newMeldCards, setNewMeldCards] = useState({});
+
+  // Random deck assignment: deckAssignment[cardType 0-53] = '#0a3d62' or '#6b0f1a'
+  // Initialized once per component mount (i.e. per game session)
+  const deckAssignmentRef = React.useRef(null);
+  if (!deckAssignmentRef.current) {
+    const colors = ['#0a3d62', '#6b0f1a'];
+    deckAssignmentRef.current = Array.from({ length: 54 }, () => colors[Math.random() < 0.5 ? 0 : 1]);
+  }
+  const dc = (cardType) => deckAssignmentRef.current[cardType % 54];
+  const dcFlip = (cardType) => dc(cardType) === '#0a3d62' ? '#6b0f1a' : '#0a3d62';
+
+  // Count how many of a card type are visible (hand + discard + table)
+  const visibleCount = React.useMemo(() => {
+    const counts = new Array(54).fill(0);
+    // all players' hands
+    for (const p of Object.keys(G.cards || {})) {
+      const flat = G.cards[p] || [];
+      for (let i = 0; i < 54; i++) counts[i] += flat[i] || 0;
+    }
+    // discard pile
+    for (const c of (G.discardPile || [])) counts[c % 54]++;
+    // table melds — meldToCardIDs reconstructs from rank/suit, all in range 0-53
+    for (const teamId of [0, 1]) {
+      for (let s = 1; s <= 4; s++)
+        for (const m of (G.table[teamId][0][s] || []))
+          if (m) for (const c of meldToCards(m, s)) counts[c.id % 54]++;
+      for (const m of (G.table[teamId][1] || []))
+        if (m) for (const c of meldToCards(m, 0)) counts[c.id % 54]++;
+    }
+    return counts;
+  }, [G.cards, G.discardPile, G.table]);
 
   const snapshotTable = (table) => {
     const snap = {};
@@ -341,7 +376,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
             {renderedCards.map((card, i) => {
               const isNewCard = hasNewCards && !prevRendered.has(card.id);
               return (
-                <Card key={card.id} card={card} isNewlyDrawn={isNewCard} customStyle={{
+                <Card key={card.id} card={card} deckColor={dc(card.id)} isNewlyDrawn={isNewCard} customStyle={{
                   marginLeft: (!isRunner && i > 0) ? `-${CARD_W - 14}px` : '0',
                   marginTop: (isRunner && i > 0) ? `-${CARD_H - 18}px` : '0',
                   zIndex: i
@@ -415,7 +450,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
               <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>Jogo</span>
             </div>
           ) : (
-            <CardBack label="Comprar" count={deckCount} onClick={isMyTurn && !G.hasDrawn ? () => moves.drawCard() : undefined} />
+            <CardBack label="Comprar" count={deckCount} deckColor={G.deck.length > 0 ? (visibleCount[G.deck[G.deck.length-1] % 54] > 0 ? dcFlip(G.deck[G.deck.length-1]) : dc(G.deck[G.deck.length-1])) : '#0a3d62'} onClick={isMyTurn && !G.hasDrawn ? () => moves.drawCard() : undefined} />
           )}
         </div>
         
@@ -426,11 +461,11 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
               G.rules?.openDiscardView ? (
                 chunkedDiscard.map((row, rIdx) => (
                   <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-22px' : '0' }}>
-                    {row.map((c, i) => <Card key={c.id} card={c} customStyle={{ marginLeft: i > 0 ? '-37px' : '0' }} />)}
+                    {row.map((c, i) => <Card key={c.id} card={c} deckColor={dc(c.id)} customStyle={{ marginLeft: i > 0 ? '-37px' : '0' }} />)}
                   </div>
                 ))
               ) : (
-                <Card card={topDiscard} />
+                <Card card={topDiscard} deckColor={topDiscard ? dc(topDiscard.id) : undefined} />
               )
             ) : (
               <div style={{ border: '2px dashed #40916c', width: '60px', height: '90px', borderRadius: '8px', textAlign: 'center', lineHeight: '90px', color: '#888', margin: '0 auto' }}>Vazio</div>
@@ -531,7 +566,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
             {handCardObjs.map(card => {
-              return <Card key={card.id} card={card} isSelected={isCardSelected(card)} isNewlyDrawn={isNewlyDrawn(card)} onClick={() => toggleCardSelection(card.id)} />;
+              return <Card key={card.id} card={card} deckColor={dc(card.id)} isSelected={isCardSelected(card)} isNewlyDrawn={isNewlyDrawn(card)} onClick={() => toggleCardSelection(card.id)} />;
             })}
           </div>
         </div>
