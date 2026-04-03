@@ -283,7 +283,7 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
     
     
     const gaps = _checkGaps(m);
-    if (gaps === -1) {console.log("[GAME.JS] INVALID MOVE: Failed gap check", cardIds, m); return null;}
+    if (gaps === -1) {console.log("[GAME.JS] INVALID MOVE: Failed gap check", cardIds ,"==>", [...existingMeld], m); return null;}
 
     // ── 7. Length check ──────────────────────────────────────────────────────
     let len = 0;
