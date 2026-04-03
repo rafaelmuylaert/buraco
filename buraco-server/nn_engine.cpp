@@ -122,6 +122,8 @@ static uint8_t g_cand_append_cc  [MAX_SEQ_CANDS][CAND_CC_SIZE];
 static uint8_t g_cand_append_suit[MAX_SEQ_CANDS];
 static uint8_t g_cand_append_slot[MAX_SEQ_CANDS];
 static int     g_num_append_cands;
+static uint8_t g_meld_override[4][MAX_SEQ_SLOTS][16];
+static uint8_t g_meld_override_valid[4][MAX_SEQ_SLOTS];
 
 // Timing accumulators (milliseconds, reset via JS export)
 extern "C" { extern double now(); }
@@ -236,11 +238,11 @@ static void build_h1(float* h1, int h1sz, const float* W, int inSz) {
     for (int s = 0; s < 5; s++) {
         const uint8_t* m;
         if (g_layerkey == 2) {
-            int flat_suit = s >> 1;   // suits 0-3 across 5 slots: 0,0,1,1,2
-            int flat_slot = s & 1;    // slot within suit
-            m = g_seq_melds[g_my_team][flat_suit < 4 ? flat_suit : 3][flat_slot < MAX_SEQ_SLOTS ? flat_slot : 0];
+            int flat_suit = s >> 1;
+            int flat_slot = s & 1;
+            m = get_seq_meld_effective(g_my_team, flat_suit < 4 ? flat_suit : 3, flat_slot < MAX_SEQ_SLOTS ? flat_slot : 0);
         } else {
-            m = g_seq_melds[g_my_team][suit_idx][s < MAX_SEQ_SLOTS ? s : 0];
+            m = get_seq_meld_effective(g_my_team, suit_idx, s < MAX_SEQ_SLOTS ? s : 0);
         }
         accum_u8(h1, h1sz, inSz, W, off, m, 0, 16); off += 16;
     }
@@ -347,6 +349,18 @@ static inline int is_runner_allowed(int rank) {
     if (!g_runners_allowed) return 0;
     if (g_runners_allowed == 0xFF) return 1;
     return (g_runners_allowed >> rank) & 1;
+}
+
+static void clear_meld_overrides() {
+    for (int s=0; s<4; s++)
+        for (int sl=0; sl<MAX_SEQ_SLOTS; sl++)
+            g_meld_override_valid[s][sl] = 0;
+}
+
+static const uint8_t* get_seq_meld_effective(int team, int suit0, int slot) {
+    if (team == g_my_team && g_meld_override_valid[suit0][slot])
+        return g_meld_override[suit0][slot];
+    return g_seq_melds[team][suit0][slot];
 }
 
 // Check gaps in a seq meld [0..15]. Returns gap count.
@@ -690,7 +704,7 @@ static int plan_turn() {
                 if (usesTop) {
                     int existSlot = g_cand_append_slot[ci];
                     int existSuit = g_cand_append_suit[ci];
-                    const uint8_t* em = g_seq_melds[g_my_team][existSuit-1][existSlot];
+                    const uint8_t* em = get_seq_meld_effective(g_my_team, s-1, slot);
                     int topMeldSlot = (td_rank==1)?0:td_rank;
                     if (topMeldSlot<16 && em[topMeldSlot]) usesTop=0;
                 }
@@ -789,6 +803,35 @@ static int plan_turn() {
             int cnt=pickupCC[bestPickup][j]; if(!cnt) continue;
             for(int n=0;n<cnt;n++) sim_remove_card(sim, (j==52)?54:j);
         }
+
+        // Update meld bitmap so phase 1 appends don't re-use the same meld slot
+        if (pickupCandType[bestPickup] == 2) {
+            // Append override
+            int ps    = pickupTarget[bestPickup][0] - 1;  // suit0
+            int pslot = pickupTarget[bestPickup][1];
+            for (int j = 0; j < 16; j++)
+                g_meld_override[ps][pslot][j] = g_cand_append_meld[bestPickup][j] ? 255 : 0;
+            g_meld_override[ps][pslot][14] = g_cand_append_meld[bestPickup][14];  // raw suit value
+            g_meld_override_valid[ps][pslot] = 1;
+        } else if (pickupCandType[bestPickup] == 1) {
+            // New meld override — find first empty slot for this suit
+            int ps = td_suit - 1;
+            for (int slot = 0; slot < MAX_SEQ_SLOTS; slot++) {
+                if (!g_meld_override_valid[ps][slot]) {
+                    int empty = 1;
+                    for (int j = 0; j < 16; j++) if (g_seq_melds[g_my_team][ps][slot][j]) { empty=0; break; }
+                    if (empty) {
+                        // need the meld index — track pickupMeldIdx as discussed
+                        int ci = pickupMeldIdx[bestPickup];
+                        for (int j = 0; j < 16; j++)
+                            g_meld_override[ps][slot][j] = g_cand_seq_meld[ci][j] ? 255 : 0;
+                        g_meld_override[ps][slot][14] = g_cand_seq_meld[ci][14];
+                        g_meld_override_valid[ps][slot] = 1;
+                        break;
+                    }
+                }
+            }
+        }
     }
      double _tp1 = now();
      g_t_phase0 += _tp1 - _tp0;
@@ -810,7 +853,7 @@ static int plan_turn() {
     g_num_append_cands = 0;
     for(int s=1;s<=4;s++)
         for(int slot=0;slot<MAX_SEQ_SLOTS;slot++) {
-            const uint8_t* em = g_seq_melds[g_my_team][s-1][slot];
+            const uint8_t* em = get_seq_meld_effective(g_my_team, s-1, slot);
             int hasCards=0; for(int j=0;j<16;j++) if(em[j]){hasCards=1;break;}
             if (!hasCards) continue;
             g_num_append_cands = find_seq_candidates(sim, s, p1_wild0type, p1_hasWild, em, slot, g_num_append_cands);
