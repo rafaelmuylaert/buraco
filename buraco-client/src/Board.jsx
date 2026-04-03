@@ -100,38 +100,39 @@ function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null,
 
   const wasMyTurnRef = React.useRef(false);
   useEffect(() => {
-    if (!G || !ctx || gameover) return;
-    if (isMyTurn && !wasMyTurnRef.current) {
-      if (meldSnapshotRef.current) {
-        const highlights = {};
-        const oppTeamId = G.teams[playerID] === 0 ? 1 : 0;
-        const prev = meldSnapshotRef.current[oppTeamId];
-        const curr = G.table[oppTeamId];
-        for (let s = 1; s <= 4; s++) {
-          const prevSeqs = prev.seqs[s] || [];
-          const currSeqs = curr[0][s] || [];
-            currSeqs.forEach((meld, i) => {
-              const prevMeld = prevSeqs.find(pm => getMeldLength(pm) < getMeldLength(meld) && pm.every((v, idx) => !v || meld[idx]));
-              const prevLen = prevMeld ? getMeldLength(prevMeld) : 0;
-              const currLen = getMeldLength(meld);
-              if (currLen > prevLen) highlights[`seq-${s}-${i}`] = currLen - prevLen;
-            });
+      if (!G || !ctx || gameover) return;
+      if (isMyTurn && !wasMyTurnRef.current) {
+          setNewMeldCards({});  // clear immediately when my turn starts
+          if (meldSnapshotRef.current) {
+              const highlights = {};
+              const oppTeamId = G.teams[playerID] === 0 ? 1 : 0;
+              const prev = meldSnapshotRef.current[oppTeamId];
+              const curr = G.table[oppTeamId];
+              for (let s = 1; s <= 4; s++) {
+                  const prevSeqs = prev.seqs[s] || [];
+                  const currSeqs = curr[0][s] || [];
+                  currSeqs.forEach((meld, i) => {
+                      const prevMeld = prevSeqs.find(pm => getMeldLength(pm) < getMeldLength(meld) && pm.every((v, idx) => !v || meld[idx]));
+                      const prevLen = prevMeld ? getMeldLength(prevMeld) : 0;
+                      const currLen = getMeldLength(meld);
+                      if (currLen > prevLen) highlights[`seq-${s}-${i}`] = currLen - prevLen;
+                  });
+              }
+              (curr[1] || []).forEach((meld, i) => {
+                  const prevLen = prev.runners[i] ? getMeldLength(prev.runners[i]) : 0;
+                  const currLen = getMeldLength(meld);
+                  if (currLen > prevLen) highlights[`runner-${i}`] = currLen - prevLen;
+              });
+              setNewMeldCards(highlights);
           }
-
-        (curr[1] || []).forEach((meld, i) => {
-          const prevLen = prev.runners[i] ? getMeldLength(prev.runners[i]) : 0;
-          const currLen = getMeldLength(meld);
-          if (currLen > prevLen) highlights[`runner-${i}`] = currLen - prevLen;
-        });
-        setNewMeldCards(highlights);
       }
-    }
-    if (!isMyTurn && wasMyTurnRef.current) {
-      meldSnapshotRef.current = snapshotTable(G.table);
-      setNewMeldCards({});
-    }
-    wasMyTurnRef.current = isMyTurn;
+      if (!isMyTurn && wasMyTurnRef.current) {
+          meldSnapshotRef.current = snapshotTable(G.table);
+          setNewMeldCards({});
+      }
+      wasMyTurnRef.current = isMyTurn;
   }, [isMyTurn, ctx?.currentPlayer]);
+
 
   useEffect(() => {
     if (ctx && G && !gameover && ctx.phase === 'waitingRoom' && G.players && !G.players.includes(playerID)) {
