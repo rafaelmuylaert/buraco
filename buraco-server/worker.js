@@ -6,10 +6,11 @@ import {
 } from './game.js';
 import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers,
          buildTurnMoveList, runTurn, getCppTimings, setUsingWasmBackedBuffers,
-         updateSeqMeld, updateRunMeld } from './wasm_loader.js';
+         updateSeqMeld, updateRunMeld, getTeam1DnaOffset  } from './wasm_loader.js';
 
 
 await initWasm();
+console.log(`[WASM] team1DnaOffset=${getTeam1DnaOffset()} totalDnaSize=${AI_CONFIG.TOTAL_DNA_SIZE}`);
 setScoreFunctions(null, null, null, (isSeq, teamIdx, suit0, slotIdx, meldArray) => {
     if (isSeq) updateSeqMeld(teamIdx, suit0, slotIdx, meldArray);
     else updateRunMeld(teamIdx, slotIdx, meldArray);

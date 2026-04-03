@@ -66,6 +66,8 @@ function _refreshViews() {
     }
 }
 
+export function getTeam1DnaOffset() { return _team1DnaOffset; }
+
 export async function initWasm() {
     const wasmPath = path.join(__dirname, 'nn_engine.wasm');
     if (!fs.existsSync(wasmPath)) return false;
