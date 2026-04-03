@@ -159,23 +159,18 @@ async function processJob(matches, rules) {
     for (const { dnaA, dnaB } of matches) {
         const pairDeck = rules.fixedDeck ? _fixedDeck : shuffle([..._baseDeck]);
 
-        // Load DNA once for both matches in the pair
-        if (isWasmReady()) {
-            const gA = prepareGenome(dnaA instanceof SharedArrayBuffer ? new Float32Array(dnaA) : new Float32Array(dnaA));
-            const gB = prepareGenome(dnaB instanceof SharedArrayBuffer ? new Float32Array(dnaB) : new Float32Array(dnaB));
-            loadMatchDNA(gA, gB);
-        }
+        const gA = prepareGenome(dnaA instanceof SharedArrayBuffer ? new Float32Array(dnaA) : new Float32Array(dnaA));
+        const gB = prepareGenome(dnaB instanceof SharedArrayBuffer ? new Float32Array(dnaB) : new Float32Array(dnaB));
 
         const genomes1 = { '0': dnaA, '1': dnaB, '2': dnaA, '3': dnaB };
         const genomes2 = { '0': dnaB, '1': dnaA, '2': dnaB, '3': dnaA };
 
-        // Match 1: A=team0, B=team1 (no swap)
-        // Match 2: B=team0, A=team1 (swap — XORs offset, no DNA reload)
         if (isWasmReady()) loadMatchDNA(gA, gB);
         const g1 = runMatch(genomes1, rules, pairDeck);
 
         if (isWasmReady()) loadMatchDNA(gB, gA);
         const g2 = runMatch(genomes2, rules, pairDeck);
+
         results.push([g1 - g2, g2 - g1, Math.abs(g1), Math.abs(g2)]);
     }
     return {
@@ -184,6 +179,7 @@ async function processJob(matches, rules) {
         cppTimings: getCppTimings(),
     };
 }
+
 
 if (workerData.matches.length === 0) {
     parentPort.on('message', async ({ type, matches, rules, deck }) => {
