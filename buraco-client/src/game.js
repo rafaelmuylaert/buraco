@@ -101,8 +101,7 @@ const getColor = s => (s%2) === 0 ? 'red' : 'black';
 export function intToCardObj(c) {
     const s = getSuit(c);
     const r = getRank(c);
-    const deckColor = Math.floor(c / 54) === 0 ? '#0a3d62' : '#6b0f1a';
-    return { rank: s === 5 ? 'JOKER' : getRankChar(r), suit: getSuitChar(s), color: getColor(s), id: c, deckColor };
+    return { rank: s === 5 ? 'JOKER' : getRankChar(r), suit: getSuitChar(s), color: getColor(s), id: c };
 }
 
 //rank is zerobased
