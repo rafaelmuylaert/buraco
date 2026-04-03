@@ -251,7 +251,7 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
             else {console.log("[GAME.JS] INVALID MOVE: Too many aces"); return null;}
         } else {
             // Natural card (3-K): fix suit, place in rank slot
-            if (m[r] !== 0) {console.log("[GAME.JS] INVALID MOVE: Card collision", r, m); return null;}  // collision: 3-K can only appear once
+            if (m[r] !== 0) {console.log("[GAME.JS] INVALID MOVE: Card collision", r, getSuitChar(s), [...existingMeld], cardIds); return null;}  // collision: 3-K can only appear once
             m[r]++;
         }
     }

@@ -467,8 +467,8 @@ static int find_seq_candidates(
         if(existingMeld[0]) {dbg_card(0+suit0*13); }
         for(int i=2;i<13;i++) if(existingMeld[i]) {dbg_card((i-1)+suit0*13); }
         if(existingMeld[13]) {dbg_card(0+suit0*13); }
-        if(existingMeld[14]) {dbg_card(2+existingMeld[14]*13); }
-        if(existingMeld[15]) {dbg_card(2+suit0*13); }
+        if(existingMeld[14]) {dbg_card(1+existingMeld[14]*13); }
+        if(existingMeld[15]) {dbg_card(1+suit0*13); }
 
     }
     dbg_str("]\n");
