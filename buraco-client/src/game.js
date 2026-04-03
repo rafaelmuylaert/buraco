@@ -206,7 +206,7 @@ const maxSeqRank = m => m[1] ? 14 : (() => { let i = 13; while (i >= 2 && !m[i])
 
 const _checkGaps = (m) => {
     const min = minSeqRank(m), max = maxSeqRank(m);
-    if (min > max) return 0;
+    if (min > max) return -1;
     let gaps = 0;
     let i=0;
     for (i = min; i <= max; i++) if (!_pos(m, i)){
@@ -222,10 +222,10 @@ export function seqSuit(cardIds) {
 }
 
 function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
-    if (!existingMeld && cardIds.length < 3) return null;
+    if (!existingMeld && cardIds.length < 3) {console.log("[GAME.JS] INVALID MOVE: Meld too small"); return null; }
     const m = existingMeld ? [...existingMeld] : new Array(16).fill(0);
     if (suit == 0){ suit = seqSuit(cardIds)}
-    if (suit == 0) return null;
+    if (suit == 0) {console.log("[GAME.JS] INVALID MOVE: Meld suit cant be determined"); return null;} 
 
     // Promote m[2] to wild
     if (m[2] == 1) { m[15]++; m[2] = 0; }
@@ -239,18 +239,19 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
             const isSameSuit2 = (s == suit);  // loose equality handles string/number mismatch
             if (isSameSuit2) { m[15]++; }
             else if (m[14]==0) { m[14] = s; }
-            else {return null;}
-            if (m[15] + (m[14] !== 0 ? 1 : 0) > 2) {return null;}
+            else {console.log("[GAME.JS] INVALID MOVE: Too many wilds"); return null; }
+            if (m[15] + (m[14] !== 0 ? 1 : 0) > 2) {console.log("[GAME.JS] INVALID MOVE: Too many wilds"); return null;}
         } 
         else if (s !== suit){  // loose equality
+            console.log("[GAME.JS] INVALID MOVE: Unsuited card"); 
             return null;
         }
         else if (r === 1) {
             if(aces < 2) aces++;
-            else return null; 
+            else {console.log("[GAME.JS] INVALID MOVE: Too many aces"); return null;}
         } else {
             // Natural card (3-K): fix suit, place in rank slot
-            if (m[r] !== 0) return null;  // collision: 3-K can only appear once
+            if (m[r] !== 0) {console.log("[GAME.JS] INVALID MOVE: Card collision"); return null;}  // collision: 3-K can only appear once
             m[r]++;
         }
     }
@@ -282,7 +283,7 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
     
     
     const gaps = _checkGaps(m);
-    if (gaps === -1) return null;
+    if (gaps === -1) {console.log("[GAME.JS] INVALID MOVE: Failed gap check"); return null;}
 
     // ── 7. Length check ──────────────────────────────────────────────────────
     let len = 0;
@@ -290,7 +291,7 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
     len += m[15];
     len += (m[14] !== 0 ? 1 : 0);
 
-    if (len  > 14) return null;
+    if (len  > 14) {console.log("[GAME.JS] INVALID MOVE: Meld too big"); return null;}
 
     // ── 8. Natural-2 demotion ────────────────────────────────────────────────
     // A same-suit nat-2 acting as wild should be demoted back to m[2] only when
@@ -506,23 +507,23 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
 // target: null (new meld) | { type: 'seq', suit, index } | { type: 'runner', index }
 // Hand: { cardType: count } — card types to use from hand (+ topDiscard if provided), or list of ids
 export function moveMeld(G, p, Hand, target = null, addCards = 0, topDiscard = null) {
-    if (!G.hasDrawn && topDiscard === null) { if (G.rules?.debugLog) console.log('moveMeld fail: not drawn'); return false; }
+    if (!G.hasDrawn && topDiscard === null) { if (G.rules?.debugLog) console.log('[GAME.JS] INVALID MOVE: moveMeld fail: not drawn'); return false; }
     const teamId = G.teams[p];
     const selectedHandIds = Array.isArray(Hand) ? Hand : countsToIds(Hand);
 
     const needCounts = {};
     for (const c of selectedHandIds) needCounts[c] = (needCounts[c] || 0) + 1;
     for (const [c, n] of Object.entries(needCounts))
-        if ((G.cards[p][+c] || 0) < n) { if (G.rules?.debugLog) console.log('moveMeld fail: missing card', c, 'have', G.cards[p][+c], 'need', n); return false; }
+        if ((G.cards[p][+c] || 0) < n) { if (G.rules?.debugLog) console.log('[GAME.JS] INVALID MOVE: moveMeld fail: missing card', c, 'have', G.cards[p][+c], 'need', n); return false; }
 
     const allCardIds = topDiscard !== null ? [...selectedHandIds, topDiscard] : selectedHandIds;
     const existingMeld = target === null ? null
         : target.type === 'runner' ? G.table[teamId][1][target.index]
         : (G.table[teamId][0][target.suit] || [])[target.index];
-    if (target !== null && !existingMeld) { if (G.rules?.debugLog) console.log('moveMeld fail: no existing meld', target); return false; }
+    if (target !== null && !existingMeld) { if (G.rules?.debugLog) console.log('[GAME.JS] INVALID MOVE: moveMeld fail: no existing meld', target); return false; }
 
     const parsed = parseMeld(allCardIds, G.rules, existingMeld, target?.suit ? parseInt(target.suit) : 0);
-    if (!parsed) { if (G.rules?.debugLog) console.log('moveMeld fail: parseMeld returned null', allCardIds); return false; }
+    if (!parsed) { if (G.rules?.debugLog) console.log('[GAME.JS] INVALID MOVE: moveMeld fail: parseMeld returned null', allCardIds); return false; }
 
     const newHandSize = G.handSizes[p] + addCards - selectedHandIds.length;
     const isRunner = parsed.length === 6;
@@ -530,7 +531,7 @@ export function moveMeld(G, p, Hand, target = null, addCards = 0, topDiscard = n
     const wasClean = existingMeld ? isMeldClean(existingMeld) : false;
     const willBeClean = isMeldClean(parsed);
     const addCleancount = willBeClean !== wasClean ? (willBeClean ? 1 : -1) : 0;
-    if (newHandSize < 2 && !mortoSafe(G, teamId, addCleancount)) return false;
+    if (newHandSize < 2 && !mortoSafe(G, teamId, addCleancount)) {console.log('[GAME.JS] INVALID MOVE: moveMeld fail: Mortosafe check'); return false;}
 
     // Remove cards from hand bitmap
     cardsRemoveCards(G, p, selectedHandIds);
