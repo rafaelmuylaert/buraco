@@ -410,8 +410,8 @@ static int find_seq_candidates(
     auto sb_wild2 = [&](int s) -> uint8_t { return sim[(s-1)*13 + 1]; };        // wild-2 of suit s
     auto sb_joker = [&]() -> uint8_t { return sim[52]; };
 
-    //uint8_t m[14] = {0};
-    //uint8_t from_hand[14] = {0};
+    uint8_t m[14] = {};
+    uint8_t from_hand[14] = {};
 
     int mstart = 14, mend = -1;
     // Ace
@@ -428,8 +428,8 @@ static int find_seq_candidates(
     //m[1] = existingMeld ? existingMeld[2] : 0;
     // Ranks 2-K
     for (int mi=0; mi<=13; mi++) { //meld index 0(A-lo),1(A-hi),2-13-rank
-        int mr = mi==0?0:mi==1?14:r-1; //meld rank 0(A) to 13(A)
-        int cr = mi==0?0:mi==1?0:r-1; //card rank 0(A) to 12(K)
+        int mr = mi==0?0:mi==1?14:mi-1; //meld rank 0(A) to 13(A)
+        int cr = mi==0?0:mi==1?0:mi-1; //card rank 0(A) to 12(K)
         int already_in_meld = (existingMeld && existingMeld[mi]) ? 1 : 0;
         if (already_in_meld) {
             m[mr]=1;
