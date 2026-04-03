@@ -535,8 +535,8 @@ const App = () => {
       lastRound.assignments.forEach(a => {
         const matchRecord = history.find(h => h.matchID === a.matchID);
         if (matchRecord) {
-          const s0 = getScoreTotal(matchRecord.scores.team0);
-          const s1 = getScoreTotal(matchRecord.scores.team1);
+          const s0 = getScoreTotal(matchRecord.scores[0]);
+          const s1 = getScoreTotal(matchRecord.scores[1]);
           if (s0 >= s1) eligiblePlayers.push(...a.team0);
           else eligiblePlayers.push(...a.team1);
         }
@@ -599,8 +599,8 @@ const App = () => {
       r.assignments.forEach(a => {
         const matchRecord = history.find(h => h.matchID === a.matchID);
         if (matchRecord) {
-          const s0 = getScoreTotal(matchRecord.scores.team0);
-          const s1 = getScoreTotal(matchRecord.scores.team1);
+          const s0 = getScoreTotal(matchRecord.scores[0]);
+          const s1 = getScoreTotal(matchRecord.scores[1]);
           a.team0.forEach(p => {
             if(stats[p]) {
               stats[p].points += s0;
