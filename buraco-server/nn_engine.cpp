@@ -124,6 +124,7 @@ static uint8_t g_cand_append_slot[MAX_SEQ_CANDS];
 static int     g_num_append_cands;
 static uint8_t g_meld_override[4][MAX_SEQ_SLOTS][16];
 static uint8_t g_meld_override_valid[4][MAX_SEQ_SLOTS];
+int pickupAppendIdx[MAX_SEQ_CANDS+1];  // index into g_cand_append_meld/cc/suit/slot
 
 // Timing accumulators (milliseconds, reset via JS export)
 extern "C" { extern double now(); }
@@ -711,6 +712,7 @@ static int plan_turn() {
                 }
                 if (!usesTop) continue;
                 pickupCandType[nPickup] = 2;
+                pickupAppendIdx[nPickup] = ci;  // store the g_cand_append_* index
                 for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[nPickup][i]=g_cand_append_cc[ci][i];
                 if (td_alloff<53 && pickupCC[nPickup][td_alloff]>0) pickupCC[nPickup][td_alloff]--;
                 pickupTarget[nPickup][0] = g_cand_append_suit[ci];
@@ -807,14 +809,15 @@ static int plan_turn() {
 
         // Update meld bitmap so phase 1 appends don't re-use the same meld slot
         if (pickupCandType[bestPickup] == 2) {
-            // Append override
-            int ps    = pickupTarget[bestPickup][0] - 1;  // suit0
+            int ci    = pickupAppendIdx[bestPickup];
+            int ps    = pickupTarget[bestPickup][0] - 1;
             int pslot = pickupTarget[bestPickup][1];
             for (int j = 0; j < 16; j++)
-                g_meld_override[ps][pslot][j] = g_cand_append_meld[bestPickup][j] ? 255 : 0;
-            g_meld_override[ps][pslot][14] = g_cand_append_meld[bestPickup][14];  // raw suit value
+                g_meld_override[ps][pslot][j] = g_cand_append_meld[ci][j];
+            g_meld_override[ps][pslot][14] = g_cand_append_meld[ci][14];
             g_meld_override_valid[ps][pslot] = 1;
-        } else if (pickupCandType[bestPickup] == 1) {
+        }
+        else if (pickupCandType[bestPickup] == 1) {
             // New meld override — find first empty slot for this suit
             int ps = td_suit - 1;
             for (int slot = 0; slot < MAX_SEQ_SLOTS; slot++) {
@@ -825,7 +828,7 @@ static int plan_turn() {
                         // need the meld index — track pickupMeldIdx as discussed
                         int ci = pickupMeldIdx[bestPickup];
                         for (int j = 0; j < 16; j++)
-                            g_meld_override[ps][slot][j] = g_cand_seq_meld[ci][j] ? 255 : 0;
+                        g_meld_override[ps][slot][j] = g_cand_seq_meld[ci][j] ? 255 : 0;
                         g_meld_override[ps][slot][14] = g_cand_seq_meld[ci][14];
                         g_meld_override_valid[ps][slot] = 1;
                         break;
