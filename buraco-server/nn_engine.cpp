@@ -406,36 +406,37 @@ static int find_seq_candidates(
     int nSeq
 ) {
     double _t0 = now(); 
-    auto sb_rank = [&](int r) -> uint8_t { return sim[(suit-1)*13 + (r-1)]; };  // r=1..13
+    auto sb_rank = [&](int r) -> uint8_t { return sim[(suit-1)*13 + r]; };  // r=1..13
     auto sb_wild2 = [&](int s) -> uint8_t { return sim[(s-1)*13 + 1]; };        // wild-2 of suit s
     auto sb_joker = [&]() -> uint8_t { return sim[52]; };
 
-    uint8_t m[14] = {0};
-    uint8_t from_hand[14] = {0};
+    //uint8_t m[14] = {0};
+    //uint8_t from_hand[14] = {0};
 
     int mstart = 14, mend = -1;
     // Ace
-    if (existingMeld && (existingMeld[0])) {
-        m[0]=1;
-        mstart=0;
-    }
-    if (existingMeld && (existingMeld[1])) {
-        m[13]=1;
-        mend=13;
-    }
-    if (sb_rank(1) > 0) { if (!m[0]) from_hand[0]=1; m[0]=1; from_hand[13]=1; m[13]=1;}
+    //if (existingMeld && (existingMeld[0])) {
+    //    m[0]=1;
+    //    mstart=0;
+    //}
+    //if (existingMeld && (existingMeld[1])) {
+    //    m[13]=1;
+    //    mend=13;
+    //}
+    //if (sb_rank(1) > 0) { if (!m[0]){from_hand[0]=1; m[0]=1;} if(!m[13]){from_hand[13]=1; m[13]=1;}
 
-    m[1] = existingMeld ? existingMeld[2] : 0;
+    //m[1] = existingMeld ? existingMeld[2] : 0;
     // Ranks 2-K
-    for (int r=3; r<=13; r++) {
-        int mi = r-1;
-        int already_in_meld = (existingMeld && existingMeld[r]) ? 1 : 0;
+    for (int mi=0; mi<=13; mi++) { //meld index 0(A-lo),1(A-hi),2-13-rank
+        int mr = mi==0?0:mi==1?14:r-1; //meld rank 0(A) to 13(A)
+        int cr = mi==0?0:mi==1?0:r-1; //card rank 0(A) to 12(K)
+        int already_in_meld = (existingMeld && existingMeld[mi]) ? 1 : 0;
         if (already_in_meld) {
-            m[mi]=1;
+            m[mr]=1;
             if(mi<mstart)mstart=mi;
-            if(mi>mend)mend=mi;
+            mend=mi;
         }
-        if (sb_rank(r) > 0 && !already_in_meld) { from_hand[mi]=1; m[mi]=1; }
+        else if (sb_rank(cr) > 0 && !already_in_meld) { from_hand[mr]=1; m[mr]=1; }
     }
 
     // Wild slots from existing meld, promote nat2 if both free
@@ -458,7 +459,7 @@ static int find_seq_candidates(
     dbg_str(existingMeld ? ">>>>Append - " : ">>>>New    - ");
     dbg_str("Wild="); dbg_suit(w14>0 ? w14 : w15==1 ? suit : 0); 
     dbg_str(" m[");
-    for(int i=0;i<14;i++) if(m[i]) {dbg_int(i+1); dbg_suit(suit); dbg_char(from_hand[i]?'h':'e');}
+    for(int i=0;i<14;i++) if(m[i]) {dbg_char(from_hand[i]?'h':'e');dbg_card(i+suit*13); }
     dbg_str("]\n");
     
 
@@ -521,10 +522,8 @@ static int find_seq_candidates(
     int cgap = 0, cnogap = 0;
     int wilds_avail = can_add_wild;
 
-    // Handle ace (pos 0 in pseudocode maps to m[0])
-    if (m[0]) cgap++;
 
-    for (int pos=1; pos<=13 && nSeq<MAX_SEQ_CANDS; pos++) {
+    for (int pos=0; pos<=13 && nSeq<MAX_SEQ_CANDS; pos++) {
         if (m[pos]) cgap++;
         if (!m[pos] || pos==13) {
             int hi = (pos==13 && m[13]) ? pos : pos-1;
