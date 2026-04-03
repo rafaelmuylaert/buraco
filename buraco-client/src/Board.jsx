@@ -61,7 +61,7 @@ export function BuracoBoard(props) {
   return <ErrorBoundary><BuracoBoardInner {...props} /></ErrorBoundary>;
 }
 
-function BuracoBoardInner({ ctx, G, moves, playerID, matchID, tournament = null, tournamentStandings = null }) {
+function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament = null, tournamentStandings = null }) {
   // State: Set of uids instead of {cardType: count}
   const [selectedCards, setSelectedCards] = useState(new Set());
 
@@ -523,7 +523,12 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
         <div style={{ flexShrink: 0 }}>{renderTeamTable(oppTeam, "Mesa Deles", false)}</div>
         <div style={{ flexShrink: 0 }}>{renderTeamTable(myTeam, "Nossa Mesa", true)}</div>
         <div style={{ flexShrink: 0 }}>
-          <h2 style={{ fontSize: '1.2em', margin: '0 0 10px 0' }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '0 0 10px 0' }}>
+            <h2 style={{ fontSize: '1.2em', margin: 0 }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
+            {G.rules?.allowUndo && isMyTurn && G.hasDrawn && (
+              <button onClick={() => { undo(); setSelectedCards(new Set()); }} style={{ padding: '4px 10px', background: '#ffb86c', color: '#000', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8em' }}>↩ Desfazer</button>
+            )}
+          </div>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
             {handCardObjs.map(card => {
               return <Card key={card.id} card={card} isSelected={isCardSelected(card)} isNewlyDrawn={isNewlyDrawn(card)} onClick={() => toggleCardSelection(card.id)} />;

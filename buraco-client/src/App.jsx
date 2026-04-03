@@ -175,14 +175,14 @@ const App = () => {
     targetPoints: 3000,
     maxRounds: 3,
     botName: '',
-    rules: { discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true, cardPointValues: { joker: 50, two: 20, ace: 15, high: 10, low: 5 }, meldSizeBonus: false }
+    rules: { discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true, cardPointValues: { joker: 50, two: 20, ace: 15, high: 10, low: 5 }, meldSizeBonus: false, allowUndo: false }
   });
 
   const [newTourney, setNewTourney] = useState({ 
     name: '', type: 'team', format: 'points', targetPoints: 3000, maxRounds: 3, 
     players: 'João, Maria, Pedro, Ana',
     botName: '',
-    rules: { numPlayers: 4, discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true, cardPointValues: { joker: 50, two: 20, ace: 15, high: 10, low: 5 }, meldSizeBonus: false }
+    rules: { numPlayers: 4, discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true, cardPointValues: { joker: 50, two: 20, ace: 15, high: 10, low: 5 }, meldSizeBonus: false, allowUndo: false }
   });
 
   const [availableBots, setAvailableBots] = useState([]);
@@ -1015,6 +1015,7 @@ const App = () => {
               <label><input type="checkbox" checked={newTourney.rules.noJokers} onChange={e => { const r = {...newTourney.rules, noJokers: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Sem Curingas (Jokers)</label>
               <label><input type="checkbox" checked={newTourney.rules.openDiscardView} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
               <label><input type="checkbox" checked={newTourney.rules.showKnownCards} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas (Async)</label>
+              <label><input type="checkbox" checked={!!newTourney.rules.allowUndo} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, allowUndo: e.target.checked}})} /> Permitir Desfazer Jogada</label>
               <div>
                 <div style={{fontSize:'0.85em', color:'#aaa', marginBottom:'4px'}}>Valor das cartas:</div>
                 <div style={{display:'flex', flexWrap:'wrap', gap:'4px'}}>
@@ -1081,6 +1082,7 @@ const App = () => {
               <label><input type="checkbox" checked={quickGameConfig.rules.noJokers} onChange={e => { const r = {...quickGameConfig.rules, noJokers: e.target.checked}; setQuickGameConfig(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Sem Curingas (Jokers)</label>
               <label><input type="checkbox" checked={quickGameConfig.rules.openDiscardView} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
               <label><input type="checkbox" checked={quickGameConfig.rules.showKnownCards} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas Memorizadas (Para Bot/Async)</label>
+              <label><input type="checkbox" checked={!!quickGameConfig.rules.allowUndo} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, allowUndo: e.target.checked}})} /> Permitir Desfazer Jogada</label>
               <div>
                 <div style={{fontSize:'0.85em', color:'#aaa', marginBottom:'4px'}}>Valor das cartas:</div>
                 <div style={{display:'flex', flexWrap:'wrap', gap:'6px'}}>
