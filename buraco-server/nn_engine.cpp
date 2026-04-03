@@ -204,6 +204,17 @@ static void accum_suit(float* h1, int h1sz, int inSz,
     if (jv) { float fv = (float)jv * g_inp_scale; for (int o = 0; o < h1sz; o++) h1[o] += fv * W[o * inSz + inOff + 17]; }
 }
 
+static void clear_meld_overrides() {
+    for (int s=0; s<4; s++)
+        for (int sl=0; sl<MAX_SEQ_SLOTS; sl++)
+            g_meld_override_valid[s][sl] = 0;
+}
+
+static const uint8_t* get_seq_meld_effective(int team, int suit0, int slot) {
+    if (team == g_my_team && g_meld_override_valid[suit0][slot])
+        return g_meld_override[suit0][slot];
+    return g_seq_melds[team][suit0][slot];
+}
 // Build h1 directly from structured buffers — no g_inp staging
 static void build_h1(float* h1, int h1sz, const float* W, int inSz) {
     for (int o = 0; o < h1sz; o++) h1[o] = 0.0f;
@@ -351,17 +362,7 @@ static inline int is_runner_allowed(int rank) {
     return (g_runners_allowed >> rank) & 1;
 }
 
-static void clear_meld_overrides() {
-    for (int s=0; s<4; s++)
-        for (int sl=0; sl<MAX_SEQ_SLOTS; sl++)
-            g_meld_override_valid[s][sl] = 0;
-}
 
-static const uint8_t* get_seq_meld_effective(int team, int suit0, int slot) {
-    if (team == g_my_team && g_meld_override_valid[suit0][slot])
-        return g_meld_override[suit0][slot];
-    return g_seq_melds[team][suit0][slot];
-}
 
 // Check gaps in a seq meld [0..15]. Returns gap count.
 static int check_gaps(const uint8_t* m) {
@@ -648,6 +649,7 @@ static int plan_turn() {
     int pickupCandType[MAX_SEQ_CANDS+1];
     uint8_t pickupCC[MAX_SEQ_CANDS+1][CAND_CC_SIZE];
     uint8_t pickupTarget[MAX_SEQ_CANDS+1][2];  // [suit, slot] for append pickups
+    int pickupMeldIdx[MAX_SEQ_CANDS+1];  // add this
     for(int i=0;i<MAX_SEQ_CANDS+1;i++) { pickupTarget[i][0]=0; pickupTarget[i][1]=0; }
     int nPickup = 0;
     pickupCandType[0] = 0;
@@ -679,12 +681,9 @@ static int plan_turn() {
             g_num_seq_cands = nSeq;
             for(int ci=0; ci<g_num_seq_cands && nPickup<MAX_SEQ_CANDS+1; ci++) {
                 int usesTop = (td_alloff<53) ? g_cand_seq_cc[ci][td_alloff] : 0;
-                //dbg_str("appCI="); dbg_int(ci); dbg_str(" usesTop="); dbg_int(usesTop);
-                //dbg_str(" td="); dbg_card(td_alloff);
-                //dbg_str(" cc[td]="); dbg_int(g_cand_append_cc[ci][td_alloff]);
-                //dbg_str("\n");
                 if (!usesTop) continue;
                 pickupCandType[nPickup] = 1;
+                pickupMeldIdx[nPickup] = ci;  // add this
                 for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[nPickup][i]=g_cand_seq_cc[ci][i];
                 if (td_alloff<53 && pickupCC[nPickup][td_alloff]>0) pickupCC[nPickup][td_alloff]--;
                 nPickup++;
@@ -694,7 +693,7 @@ static int plan_turn() {
             g_num_append_cands = 0;
             for(int s=1;s<=4;s++)
                 for(int slot=0;slot<MAX_SEQ_SLOTS;slot++) {
-                    const uint8_t* em = g_seq_melds[g_my_team][s-1][slot];
+                    const uint8_t* em = get_seq_meld_effective(g_my_team, s-1, slot);
                     int hasCards=0; for(int j=0;j<16;j++) if(em[j]){hasCards=1;break;}
                     if (!hasCards) continue;
                     g_num_append_cands = find_seq_candidates(sim, s, wild0type, hasWild, em, slot, g_num_append_cands);
@@ -704,7 +703,7 @@ static int plan_turn() {
                 if (usesTop) {
                     int existSlot = g_cand_append_slot[ci];
                     int existSuit = g_cand_append_suit[ci];
-                    const uint8_t* em = get_seq_meld_effective(g_my_team, s-1, slot);
+                    const uint8_t* em = get_seq_meld_effective(g_my_team, existSuit-1, existSlot);
                     int topMeldSlot = (td_rank==1)?0:td_rank;
                     if (topMeldSlot<16 && em[topMeldSlot]) usesTop=0;
                 }
