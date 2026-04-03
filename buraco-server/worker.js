@@ -127,16 +127,18 @@ function runMatch(genomes, rules, fixedDeck, swapTeams = false) {
             const t0 = scores[0], t1 = scores[1];
             const meldCount = Object.values(S.table[0][0]).flat().length + S.table[0][1].length
                            + Object.values(S.table[1][0]).flat().length + S.table[1][1].length;
-            console.log(`[DIAG] reason=${gameover?.reason} moves=${moveCount} melds=${meldCount}`);
-            console.log(`[DIAG] t0: table=${t0.table} hand=${t0.hand} morto=${t0.mortoPenalty} total=${t0.total}`);
-            console.log(`[DIAG] t1: table=${t1.table} hand=${t1.hand} morto=${t1.mortoPenalty} total=${t1.total} diff=${diff}`);
+            console.log(`[SCORE] reason=${gameover?.reason} moves=${moveCount} melds=${meldCount}`);
+            console.log(`[SCORE] t0: table=${t0.table} hand=${t0.hand} morto=${t0.mortoPenalty} total=${t0.total}`);
+            console.log(`[SCORE] t1: table=${t1.table} hand=${t1.hand} morto=${t1.mortoPenalty} total=${t1.total} diff=${diff}`);
             console.log('[SCORE]', JSON.stringify(scores[0]));
             console.log('[SCORE]', JSON.stringify(scores[1]));
             
         }
-        if (G.rules?.finalscorelog) {
+        if (rules.finalscorelog) {
+            console.log(`[SCORE] reason=${gameover?.reason}`);
             console.log('[SCORE]', JSON.stringify(scores[0]));
             console.log('[SCORE]', JSON.stringify(scores[1]));
+            console.log(`[SCORE] diff=${diff}`);
         }
         return diff;
     } catch (e) {
