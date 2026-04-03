@@ -480,6 +480,7 @@ static int find_seq_candidates(
         int new_cards = 0;
         for (int i=lo;i<=hi;i++) if(m[i] && from_hand[i]) new_cards++;
         if (existingMeld && new_cards == 0) return 0;
+        if (lo==0 && hi ==13 && !gaps && (w14!=0 || w15!=0)) return 0; //abort emmiting melds if too big
 
         // For appends: new hand cards must be adjacent to existing meld boundary
         if (existingMeld && (lo>mstart || hi<mend)) return 0;
@@ -545,7 +546,7 @@ static int find_seq_candidates(
                 if (lo < 0) lo = 0;
                 emit(lo, hi, true);
             }
-            if (cgap >= 3 && (cgap + existingMeld[15] + existingMeld[14]>1?1:0)<=14) {
+            if (cgap >= 3) {
                 int lo = hi - cgap + 1;
                 emit(lo, hi, false);
             }
