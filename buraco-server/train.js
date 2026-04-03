@@ -30,11 +30,34 @@ function mutate(genome, mutationRate = 0.05, mutationStrength = 0.1) {
     return mutated;
 }
 
-function breed(parentA, parentB) {
+// Node-level crossover: for each node in each layer, pick all its weights
+// from one parent, weighted by score difference
+function breedNodeLevel(parentA, parentB, scoreA, scoreB) {
     const child = new Float32Array(parentA.length);
-    for (let i = 0; i < child.length; i++) {
-        const alpha = Math.random();
-        child[i] = alpha * parentA[i] + (1 - alpha) * parentB[i];
+    const pA = Math.max(scoreA - scoreB + 1, 0.1); // prob of picking A
+    const pB = Math.max(scoreB - scoreA + 1, 0.1);
+    const total = pA + pB;
+    const probA = pA / total;
+
+    // Walk through each sub-network's layers
+    let off = 0;
+    for (const key of ['PICKUP', 'MELD', 'RUNNER', 'DISCARD']) {
+        const layers = AI_CONFIG[key + '_LAYER_SIZES'];
+        for (let l = 0; l < layers.length - 1; l++) {
+            const inSz = layers[l];
+            const outSz = layers[l + 1];
+            // For each output node: copy all inSz weights + 1 bias from one parent
+            for (let o = 0; o < outSz; o++) {
+                const src = Math.random() < probA ? parentA : parentB;
+                // weights for this node: off + o*inSz .. off + o*inSz + inSz-1
+                const wStart = off + o * inSz;
+                for (let i = 0; i < inSz; i++) child[wStart + i] = src[wStart + i];
+                // bias: off + outSz*inSz + o
+                const bIdx = off + outSz * inSz + o;
+                child[bIdx] = src[bIdx];
+            }
+            off += inSz * outSz + outSz;
+        }
     }
     return mutate(child, 0.05, 0.05);
 }
@@ -287,43 +310,60 @@ export const TrainerService = {
         const fmt = ms => ms < 60000 ? `${(ms/1000).toFixed(1)}s` : `${Math.floor(ms/60000)}m${((ms%60000)/1000).toFixed(0)}s`;
 
         const runIslandGeneration = async (pop) => {
-            const finalists = await runPlayoffTournament(pop, rules);
-            const statPairs = [], statMeta = [];
-            for (let i = 0; i < finalists.length; i++)
-                for (let j = i + 1; j < finalists.length; j++) {
-                    statPairs.push({ dnaA: toBuffer(finalists[i]), dnaB: toBuffer(finalists[j]) });
-                    statMeta.push([i, j]);
-                }
-            const allDiffs = [];
-            const finalistScores = new Array(finalists.length).fill(0);
-            if (statPairs.length > 0) {
-                const results = await runMatchBatch(statPairs, rules);
-                results.forEach(([sA, , rawA, rawB], idx) => {
-                    const [i, j] = statMeta[idx];
-                    allDiffs.push(rawA, rawB);
-                    finalistScores[i] += sA;
-                    finalistScores[j] -= sA;
-                });
-            } else { allDiffs.push(0); }
-            const rankedFinalists = finalists
-                .map((f, i) => ({ genome: f, score: finalistScores[i] }))
-                .sort((a, b) => b.score - a.score)
-                .map(x => x.genome);
-
-            const clones = rankedFinalists.slice(0, 2).map(f => new Float32Array(f));
-            const mutations = rankedFinalists.slice(1).map(f => mutate(f, 0.05, 0.1));
-            const crossbreeds = [];
-            while (crossbreeds.length < pop.length - clones.length - mutations.length) {
-                const pick = () => rankedFinalists[Math.floor(Math.random() * Math.random() * rankedFinalists.length)];
-                crossbreeds.push(breed(pick(), pick()));
+        const finalists = await runPlayoffTournament(pop, rules);
+        const statPairs = [], statMeta = [];
+        for (let i = 0; i < finalists.length; i++)
+            for (let j = i + 1; j < finalists.length; j++) {
+                statPairs.push({ dnaA: toBuffer(finalists[i]), dnaB: toBuffer(finalists[j]) });
+                statMeta.push([i, j]);
             }
-            return {
-                nextPop: [...clones, ...mutations, ...crossbreeds],
-                rankedFinalists,
-                bestDiff: Math.max(...allDiffs),
-                avgDiff: allDiffs.reduce((a, b) => a + b, 0) / allDiffs.length
-            };
+        const allDiffs = [];
+        const finalistScores = new Array(finalists.length).fill(0);
+        if (statPairs.length > 0) {
+            const results = await runMatchBatch(statPairs, rules);
+            results.forEach(([sA, , rawA, rawB], idx) => {
+                const [i, j] = statMeta[idx];
+                allDiffs.push(rawA, rawB);
+                finalistScores[i] += sA;
+                finalistScores[j] -= sA;
+            });
+        } else { allDiffs.push(0); }
+
+        const rankedFinalists = finalists
+            .map((f, i) => ({ genome: f, score: finalistScores[i] }))
+            .sort((a, b) => b.score - a.score)
+            .map(x => x.genome);
+        const rankedScores = [...finalistScores].sort((a, b) => b - a);
+
+        // 1 clone of best
+        const nextPop = [new Float32Array(rankedFinalists[0])];
+
+        // mutate all finalists
+        for (const f of rankedFinalists) nextPop.push(mutate(f, 0.05, 0.1));
+
+        // all pairwise crosses
+        const crosses = [];
+        for (let i = 0; i < rankedFinalists.length; i++)
+            for (let j = i + 1; j < rankedFinalists.length; j++)
+                crosses.push(breedNodeLevel(rankedFinalists[i], rankedFinalists[j], rankedScores[i], rankedScores[j]));
+        for (const c of crosses) nextPop.push(c);
+
+        // hybrids of (best, each cross) until full
+        let ci = 0;
+        while (nextPop.length < pop.length) {
+            const cross = crosses[ci % crosses.length];
+            nextPop.push(breedNodeLevel(rankedFinalists[0], cross, rankedScores[0], rankedScores[0] * 0.5));
+            ci++;
+        }
+
+        return {
+            nextPop,
+            rankedFinalists,
+            bestDiff: Math.max(...allDiffs),
+            avgDiff: allDiffs.reduce((a, b) => a + b, 0) / allDiffs.length
         };
+    };
+
 
         const runChampionTournament = async (roundGen = 0) => {
             if (championTournamentRunning) return;
