@@ -406,7 +406,8 @@ static int find_seq_candidates(
     int nSeq
 ) {
     double _t0 = now(); 
-    auto sb_rank = [&](int r) -> uint8_t { return sim[(suit-1)*13 + r]; };  // r=1..13
+    int suit0 = (suit-1);
+    auto sb_rank = [&](int r) -> uint8_t { return sim[suit0*13 + r]; };  // r=1..13
     auto sb_wild2 = [&](int s) -> uint8_t { return sim[(s-1)*13 + 1]; };        // wild-2 of suit s
     auto sb_joker = [&]() -> uint8_t { return sim[52]; };
 
@@ -458,10 +459,19 @@ static int find_seq_candidates(
     //dbg_str(" caw="); dbg_int(can_add_wild);
     dbg_str(existingMeld ? ">>>>Append - " : ">>>>New    - ");
     dbg_str("Wild="); dbg_suit(w14>0 ? w14 : w15==1 ? suit : 0); 
-    dbg_str(" m[");
-    for(int i=0;i<14;i++) if(m[i]) {dbg_char(from_hand[i]?'h':'e');dbg_card(i+suit*13); }
-    dbg_str("]\n");
+    dbg_str("- m[");
+    for(int i=0;i<14;i++) if(from_hand[i]) {dbg_card(i+suit0*13); }
     
+    if (existingMeld){
+        dbg_str("] - Existing[");
+        if(existingMeld[0]) {dbg_card(0+suit0*13); }
+        for(int i=2;i<13;i++) if(existingMeld[i]) {dbg_card((i-1)+suit0*13); }
+        if(existingMeld[13]) {dbg_card(0+suit0*13); }
+        if(existingMeld[14]) {dbg_card(2+existingMeld[14]*13); }
+        if(existingMeld[15]) {dbg_card(2+suit0*13); }
+
+    }
+    dbg_str("]\n");
 
     int run_start = -1, prev_end = -1, prev_start = -1;
 
