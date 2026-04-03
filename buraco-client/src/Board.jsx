@@ -42,7 +42,12 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle }) => {
         <span style={{ fontSize: '1.0em' }}>{card.suit}</span>
       </div>
       <div style={{ fontSize: '2.4em', opacity: 0.25 }}>{card.suit}</div>
-      {card.deckColor && <div style={{ position: 'absolute', bottom: '3px', left: '3px', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: card.deckColor, opacity: 0.8 }} />}
+      {card.deckColor && (
+        <div style={{ position: 'absolute', bottom: 0, left: 0, width: 0, height: 0,
+          borderStyle: 'solid', borderWidth: '0 0 12px 12px',
+          borderColor: `transparent transparent transparent ${card.deckColor}`,
+          borderBottomLeftRadius: '4px', opacity: 0.9 }} />
+      )}
     </div>
   );
 };
@@ -138,34 +143,33 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
   // After playMeld, assign pending colors to the new meld slot
   const prevTableRef = React.useRef(null);
   useEffect(() => {
-    if (!G || !meldDeckColorsRef.current._pending) return;
+    if (!G?.table) return;
     const pending = meldDeckColorsRef.current._pending;
-    delete meldDeckColorsRef.current._pending;
-    // Find the newly added meld by comparing with previous table
-    const prev = prevTableRef.current;
-    if (!prev) return;
-    const myTeamId = G.teams[playerID];
-    // Check sequences
-    for (let s = 1; s <= 4; s++) {
-      const currSeqs = G.table[myTeamId][0][s] || [];
-      const prevSeqs = prev[myTeamId][0][s] || [];
-      if (currSeqs.length > prevSeqs.length) {
-        const newIdx = currSeqs.length - 1;
-        meldDeckColorsRef.current[`seq-${s}-${newIdx}`] = pending;
-        return;
+    if (pending) {
+      delete meldDeckColorsRef.current._pending;
+      const prev = prevTableRef.current;
+      if (prev) {
+        const myTeamId = G.teams[playerID];
+        for (let s = 1; s <= 4; s++) {
+          const currLen = (G.table[myTeamId][0][s] || []).length;
+          const prevLen = (prev[myTeamId]?.[0]?.[s] || []).length;
+          if (currLen > prevLen) {
+            meldDeckColorsRef.current[`seq-${s}-${currLen - 1}`] = pending;
+            break;
+          }
+        }
+        const currRun = (G.table[myTeamId][1] || []).length;
+        const prevRun = (prev[myTeamId]?.[1] || []).length;
+        if (currRun > prevRun) meldDeckColorsRef.current[`runner-${currRun - 1}`] = pending;
       }
     }
-    // Check runners
-    const currRunners = G.table[myTeamId][1] || [];
-    const prevRunners = prev[myTeamId][1] || [];
-    if (currRunners.length > prevRunners.length) {
-      meldDeckColorsRef.current[`runner-${currRunners.length - 1}`] = pending;
+    // snapshot current table shallowly — avoid JSON.stringify on potentially typed arrays
+    const snap = {};
+    for (const tid of [0, 1]) {
+      snap[tid] = { 0: {}, 1: [...(G.table[tid][1] || [])] };
+      for (let s = 1; s <= 4; s++) snap[tid][0][s] = [...(G.table[tid][0][s] || [])];
     }
-  }, [G?.table]);
-
-  // Snapshot table for new meld detection
-  useEffect(() => {
-    if (G?.table) prevTableRef.current = JSON.parse(JSON.stringify(G.table));
+    prevTableRef.current = snap;
   }, [G?.table]);
 
   const snapshotTable = (table) => {

@@ -132,7 +132,7 @@ export function handToCards(G, playerID){
       const cnt = myFlat[i] || 0;
       for (let j = 0; j < cnt; j++){
         let cardID = i + (54 * j);
-        handCardObjs.push({ ...intToCardObj(cardID), id: `${cardID}` });
+        handCardObjs.push({ ...intToCardObj(cardID), id: cardID });
       }
   }
   return handCardObjs;
