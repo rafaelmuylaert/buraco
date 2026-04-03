@@ -525,7 +525,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
         <div style={{ flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '0 0 10px 0' }}>
             <h2 style={{ fontSize: '1.2em', margin: 0 }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
-            {G.rules?.allowUndo && isMyTurn && G.hasDrawn && (
+            {G.rules?.allowUndo && isMyTurn && G.hasDrawn && (G.lastMoveType !== 'draw') && (
               <button onClick={() => { undo(); setSelectedCards(new Set()); }} style={{ padding: '4px 10px', background: '#ffb86c', color: '#000', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8em' }}>↩ Desfazer</button>
             )}
           </div>

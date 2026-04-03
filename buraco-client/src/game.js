@@ -475,6 +475,7 @@ export function moveDrawCard(G, p) {
     if (G.deck.length === 0) return false;
     const card = G.deck.pop();
     G.lastDrawnCard = card;
+    G.lastMoveType = 'draw';
     cardsAddCards(G, p, [card]);
     G.hasDrawn = true;
     return true;
@@ -497,6 +498,7 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
     G.discardPile = [];
     G.hasDrawn = true;
     G.lastDrawnCard = pickedUp;
+    G.lastMoveType = 'pickup';
     tryPickupMorto(G, p);
     return true;
 }
@@ -541,6 +543,7 @@ export function moveMeld(G, p, Hand, target = null, addCards = 0, topDiscard = n
         else G.table[teamId][0][suit][target.index] = parsed;
     }
     G.cleanMelds[teamId] += addCleancount;
+    G.lastMoveType = target === null ? 'meld' : 'append';
     // Sync updated meld into WASM meld table buffers ////          ======================================================   Those should be the same indexes
     if (_updateMeld) {
         if (isRunner) {
@@ -663,7 +666,7 @@ export const BuracoGame = {
     if (numPlayers === 2) { teams = [0, 1]; teamPlayers = [[0], [1]]; }
     else { teams = [0, 1, 0, 1]; teamPlayers = [[0, 2], [1, 3]]; }
     const table = [[[],[[],[],[],[]]], [[],[[],[],[],[]]]];
-    return { rules, deck: initialDeck, discardPile: [firstDiscard], pots, cards, knownCards, handSizes, hasDrawn: false, lastDrawnCard: null, teams, teamPlayers, teamMortos: { 0: false, 1: false }, isExhausted: false, table, cleanMelds: [0, 0] };
+    return { rules, deck: initialDeck, discardPile: [firstDiscard], pots, cards, knownCards, handSizes, hasDrawn: false, lastDrawnCard: null, lastMoveType: null, teams, teamPlayers, teamMortos: { 0: false, 1: false }, isExhausted: false, table, cleanMelds: [0, 0] };
   },
 
   moves: {
