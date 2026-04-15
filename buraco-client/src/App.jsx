@@ -593,13 +593,14 @@ const App = () => {
     typeof teamScore === 'number' ? teamScore : (teamScore?.total || 0);
 
   const getLeaderboard = (t) => {
-    console.log('[LEADERBOARD]', matchRecord.matchID, matchRecord.scores);
+    
     let stats = {};
     t.players.forEach(p => stats[p] = { points: 0, v: 0, e: 0, d: 0 });
     t.rounds.forEach(r => {
       r.assignments.forEach(a => {
         const matchRecord = history.find(h => h.matchID === a.matchID);
         if (matchRecord) {
+          console.log('[LEADERBOARD]', matchRecord.matchID, matchRecord.scores);
           const s0 = getScoreTotal(matchRecord.scores[0]);
           const s1 = getScoreTotal(matchRecord.scores[1]);
           a.team0.forEach(p => {
