@@ -378,6 +378,6 @@ setInterval(async () => {
     } catch(e) {
         console.error('[HISTORY] Poll error:', e.message);
     }
-}, 10000);
+}, 5000);
 
 
