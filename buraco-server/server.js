@@ -346,3 +346,30 @@ server.router.post('/api/bots/debug-match', async (ctx) => {
 server.run({ port: 8000, host: '0.0.0.0' }, () => {
   console.log(`Server running on port 8000...`);
 });
+
+// In server.js, after server.run():
+setInterval(async () => {
+    try {
+        const { matches } = await gameDB.listMatches('buraco');
+        const history = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
+        const savedIDs = new Set(history.map(h => h.matchID));
+        
+        for (const matchID of matches) {
+            if (savedIDs.has(matchID)) continue;
+            const data = await gameDB.fetch(matchID, { state: true });
+            if (!data?.state?.ctx?.gameover) continue;
+            const gameover = data.state.ctx.gameover;
+            if (!gameover?.scores) continue;
+            history.unshift({
+                matchID,
+                date: new Date().toLocaleString(),
+                scores: gameover.scores
+            });
+            savedIDs.add(matchID);
+            console.log(`[HISTORY] Auto-saved result for match ${matchID}`);
+        }
+        fs.writeFileSync(historyFile, JSON.stringify(history));
+    } catch(e) {
+        console.error('[HISTORY] Poll error:', e.message);
+    }
+}, 10000);  // every 10 seconds
