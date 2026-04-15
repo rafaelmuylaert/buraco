@@ -351,12 +351,15 @@ server.run({ port: 8000, host: '0.0.0.0' }, () => {
 setInterval(async () => {
     try {
         const result = await gameDB.listMatches('buraco');
-        const matchList = result?.matches || [];
+        const matchList = Array.isArray(result) ? result : (result?.matches || []);
+        if (matchList.length === 0) return;
+        
         const history = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
         const savedIDs = new Set(history.map(h => h.matchID));
+        let changed = false;
 
         for (const match of matchList) {
-            const matchID = match.id || match.matchID;
+            const matchID = typeof match === 'string' ? match : (match.id || match.matchID);
             if (!matchID || savedIDs.has(matchID)) continue;
             const data = await gameDB.fetch(matchID, { state: true });
             if (!data?.state?.ctx?.gameover) continue;
@@ -368,11 +371,13 @@ setInterval(async () => {
                 scores: gameover.scores
             });
             savedIDs.add(matchID);
+            changed = true;
             console.log(`[HISTORY] Auto-saved result for match ${matchID}`);
         }
-        fs.writeFileSync(historyFile, JSON.stringify(history));
+        if (changed) fs.writeFileSync(historyFile, JSON.stringify(history));
     } catch(e) {
         console.error('[HISTORY] Poll error:', e.message);
     }
 }, 10000);
+
 
