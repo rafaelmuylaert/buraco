@@ -662,7 +662,7 @@ export const BuracoGame = {
     let teams = []; let teamPlayers = [];
     if (numPlayers === 2) { teams = [0, 1]; teamPlayers = [[0], [1]]; }
     else { teams = [0, 1, 0, 1]; teamPlayers = [[0, 2], [1, 3]]; }
-    const table = [[[],[[],[],[],[]]], [[],[[],[],[],[]]]];
+    const table = [[[],[]], [[],[]]];
     return { rules, deck: initialDeck, discardPile: [firstDiscard], pots, cards, knownCards, handSizes, hasDrawn: false, lastDrawnCard: null, lastMoveType: null, teams, teamPlayers, teamMortos: { 0: false, 1: false }, isExhausted: false, table, cleanMelds: [0, 0] };
   },
 
