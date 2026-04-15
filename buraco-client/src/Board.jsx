@@ -74,6 +74,10 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
   // Persist the last seen gameover across remounts (ReconnectingClient resets key on reconnect)
   const storageKey = matchID ? `gameover_${matchID}_${playerID}` : null;
     const lastGameoverRef = React.useRef(null);
+    React.useEffect(() => {
+    lastGameoverRef.current = null;
+    if (storageKey) sessionStorage.removeItem(storageKey);
+    }, [matchID]);
   if (ctx?.gameover) {
     lastGameoverRef.current = ctx.gameover;
     if (storageKey) sessionStorage.setItem(storageKey, JSON.stringify(ctx.gameover));
