@@ -350,12 +350,14 @@ server.run({ port: 8000, host: '0.0.0.0' }, () => {
 // In server.js, after server.run():
 setInterval(async () => {
     try {
-        const { matches } = await gameDB.listMatches('buraco');
+        const result = await gameDB.listMatches('buraco');
+        const matchList = result?.matches || [];
         const history = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
         const savedIDs = new Set(history.map(h => h.matchID));
-        
-        for (const matchID of matches) {
-            if (savedIDs.has(matchID)) continue;
+
+        for (const match of matchList) {
+            const matchID = match.id || match.matchID;
+            if (!matchID || savedIDs.has(matchID)) continue;
             const data = await gameDB.fetch(matchID, { state: true });
             if (!data?.state?.ctx?.gameover) continue;
             const gameover = data.state.ctx.gameover;
@@ -372,4 +374,5 @@ setInterval(async () => {
     } catch(e) {
         console.error('[HISTORY] Poll error:', e.message);
     }
-}, 10000);  // every 10 seconds
+}, 10000);
+
