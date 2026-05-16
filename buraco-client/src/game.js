@@ -386,14 +386,15 @@ export function parseMeld(cardIds, rules, existingMeld = null, meldSuit = 0) {
     let suitrank = null;
     if(!existingMeld) {
         suitrank = newsuitorrank(cardIds);
-        if(!suitrank === null) return null;
+        console.log("[GAME.JS] New game: ",newsuitorrank);
+        if(!suitrank === null) {console.log("[GAME.JS] INVALID MOVE: Suitrank returned null"); return null;}
         if(suitrank.rank !== null) return cardsToRunnerSlots(cardIds, null, rules);
         else if(suitrank.suit !== null) cardsToSeqSlots(cardIds, null, suitrank.suit);
-        return null;
+        console.log("[GAME.JS] INVALID MOVE: new meld failed"); return null;
     }
     else if (!isSeq(existingMeld)) return cardsToRunnerSlots(cardIds, existingMeld, rules);
     else return cardsToSeqSlots(cardIds, existingMeld, meldSuit);
-    return null;
+    console.log("[GAME.JS] INVALID MOVE: existing meld failed"); return null;
 }
 
 
