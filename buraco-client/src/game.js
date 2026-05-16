@@ -382,6 +382,7 @@ function isRunnerAllowed(rules, rank) {
 
 // parseMeld accepts an array of card IDs 
 export function parseMeld(cardIds, rules, existingMeld = null, meldSuit = 0) {
+    console.log("[GAME.JS] Parsing meld...");
     let suitrank = null;
     if(!existingMeld) {
         suitrank = newsuitorrank(cardIds);
