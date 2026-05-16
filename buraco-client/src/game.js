@@ -240,7 +240,7 @@ function newsuitorrank(cardIds){
                 }
             } 
             else{
-                return null;
+                {console.log("[GAME.JS] INVALID MOVE: Too many wilds"); return null;}
             }
         } 
         else if (suit === null && rank === null){  // loose equality
@@ -248,7 +248,7 @@ function newsuitorrank(cardIds){
             rank = r;
         }
         else if(r !== rank && s !== suit){
-            return null;
+            {console.log("[GAME.JS] Unsuited cards"); return null;}
         }
         else if (r !== rank) {
             rank = null;
