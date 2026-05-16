@@ -210,7 +210,7 @@ const _checkGaps = (m) => {
     let gaps = 0;
     let i=0;
     for (i = min; i <= max; i++) if (!_pos(m, i)){
-        if (gaps !== 0 || (m[14] !== 0 && m[15] !== 0)) return -1;
+        if (gaps !== 0 || (m[14] === 0 && m[15] === 0)) return -1;
         else gaps = i;
     };
     return gaps;
