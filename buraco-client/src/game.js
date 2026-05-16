@@ -221,6 +221,45 @@ export function seqSuit(cardIds) {
     return 0;
 }
 
+function newsuitorrank(cardIds){
+    if(cardIds.length < 3) return null;
+    let suit = null;
+    let rank = null;
+    let wilds = null;
+    let suitedwilds = false;
+    for (const c of cardIds) {
+        const s = getSuit(c), r = getRank(c);
+        if (s === 5 || r === 2) {
+            // Determine suit context: same-suit 2 = natural wild candidate; everything else = foreign
+            if (wilds === null) wilds = s;
+            else if (!suitedwilds){
+                if (s === suit){suitedwilds = true;}
+                if (wilds === suit) {
+                    suitedwilds = true;
+                    wilds = s;
+                }
+            } 
+            else{
+                return null;
+            }
+        } 
+        else if (suit === null && rank === null){  // loose equality
+            suit = s;
+            rank = r;
+        }
+        else if(r !== rank && s !== suit){
+            return null;
+        }
+        else if (r !== rank) {
+            rank = null;
+        } 
+        else if (s !== suit){
+            suit = null;
+        }
+    }
+    return {suit: suit, rank: rank}
+}
+
 function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
     if (!existingMeld && cardIds.length < 3) {console.log("[GAME.JS] INVALID MOVE: Meld too small"); return null; }
     const m = existingMeld ? [...existingMeld] : new Array(16).fill(0);
@@ -343,11 +382,16 @@ function isRunnerAllowed(rules, rank) {
 
 // parseMeld accepts an array of card IDs 
 export function parseMeld(cardIds, rules, existingMeld = null, meldSuit = 0) {
-    if (!existingMeld && cardIds.length < 3) return null;
-    if (existingMeld && !isSeq(existingMeld)) return cardsToRunnerSlots(cardIds, existingMeld, rules);
-    const seq = cardsToSeqSlots(cardIds, existingMeld, meldSuit);
-    if (seq) return seq;
-    if (!existingMeld) return cardsToRunnerSlots(cardIds, null, rules);
+    let suitrank = null;
+    if(!existingMeld) {
+        suitrank = newsuitorrank(cardIds);
+        if(!suitrank === null) return null;
+        if(suitrank.rank !== null) return cardsToRunnerSlots(cardIds, null, rules);
+        else if(suitrank.suit !== null) cardsToSeqSlots(cardIds, null, suitrank.suit);
+        return null;
+    }
+    else if (!isSeq(existingMeld)) return cardsToRunnerSlots(cardIds, existingMeld, rules);
+    else return cardsToSeqSlots(cardIds, existingMeld, meldSuit);
     return null;
 }
 
