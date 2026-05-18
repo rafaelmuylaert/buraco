@@ -240,7 +240,8 @@ function newsuitorrank(cardIds){
                 }
             } 
             else{
-                {console.log("[GAME.JS] INVALID MOVE: Too many wilds"); return null;}
+                //console.log("[GAME.JS] INVALID MOVE: Too many wilds"); 
+                return null;
             }
         } 
         else if (suit === null && rank === null){  // loose equality
@@ -248,7 +249,8 @@ function newsuitorrank(cardIds){
             rank = r;
         }
         else if(r !== rank && s !== suit){
-            {console.log("[GAME.JS] Unsuited cards"); return null;}
+            //console.log("[GAME.JS] Unsuited cards"); 
+            return null;
         }
         else if (r !== rank) {
             rank = null;
@@ -382,11 +384,11 @@ function isRunnerAllowed(rules, rank) {
 
 // parseMeld accepts an array of card IDs 
 export function parseMeld(cardIds, rules, existingMeld = null, meldSuit = 0) {
-    console.log("[GAME.JS] Parsing meld...");
+    //console.log("[GAME.JS] Parsing meld...");
     let suitrank = null;
     if(!existingMeld) {
         suitrank = newsuitorrank(cardIds);
-        console.log("[GAME.JS] New game: ",suitrank);
+        //console.log("[GAME.JS] New game: ",suitrank);
         if(!suitrank === null) {console.log("[GAME.JS] INVALID MOVE: Suitrank returned null"); return null;}
         if(suitrank.rank !== null) return cardsToRunnerSlots(cardIds, null, rules);
         else if(suitrank.suit !== null) return cardsToSeqSlots(cardIds, null, suitrank.suit);
