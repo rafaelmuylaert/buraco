@@ -382,7 +382,7 @@ static int check_gaps(const uint8_t* m) {
     }
     return gaps;
 }
-#error "REBUILD TEST"
+
 // ── Debug log buffer ─────────────────────────────────────────────────────────
 #define DBG_BUF_SIZE 4096
 static char g_dbg_buf[DBG_BUF_SIZE];
