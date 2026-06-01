@@ -2,7 +2,8 @@
 
 let getLastDbgLog = () => '';
 try {
-    const wasm = await import('./wasm_loader.js');
+    const path = './wasm_loader' + '.js';
+    const wasm = await import(/* @vite-ignore */ path);
     if (wasm.getLastDbgLog) getLastDbgLog = wasm.getLastDbgLog;
 } catch(e) {}
 // SEQ_POINTS indexed by rank slot: [0]=A-low, [1]=A-high, [2]=nat2, [3]=3 ... [13]=K
