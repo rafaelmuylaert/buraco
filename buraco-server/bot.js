@@ -1,9 +1,9 @@
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
-import { BuracoGame, AI_CONFIG, getAndResetTimings } from './game.js';
+import { setDbgLogFn, BuracoGame, AI_CONFIG, getAndResetTimings } from './game.js';
 import { getLastDbgLog, initWasm, syncCardsToWasm, buildTurnMoveList, loadMatchDNA,
          setActiveTeam, isWasmReady, runTurn } from './wasm_loader.js';
-
+setDbgLogFn(getLastDbgLog);
 await initWasm();
 
 const SERVER_URL = 'http://buraco-server:8000';

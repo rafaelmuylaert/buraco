@@ -1,11 +1,8 @@
 
 
-let getLastDbgLog = () => '';
-try {
-    const path = './wasm_loader' + '.js';
-    const wasm = await import(/* @vite-ignore */ path);
-    if (wasm.getLastDbgLog) getLastDbgLog = wasm.getLastDbgLog;
-} catch(e) {}
+let _getDbgLog = null;
+export function setDbgLogFn(fn) { _getDbgLog = fn; }
+
 // SEQ_POINTS indexed by rank slot: [0]=A-low, [1]=A-high, [2]=nat2, [3]=3 ... [13]=K
 const SEQ_POINTS_NEW = [15, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10];
 
@@ -347,8 +344,11 @@ function cardsToSeqSlots(cardIds, existingMeld = null, suit = 0) {
     
     
     const gaps = _checkGaps(m);
-    if (gaps === -1) {console.log("[GAME.JS] INVALID MOVE: Failed gap check", cardIds ,"==>", [...existingMeld], m); return null;}
-
+    if (gaps === -1) {
+        console.log("[GAME.JS] INVALID MOVE: Failed gap check", cardIds, "==>", [...existingMeld], m);
+        if (_getDbgLog) console.log(_getDbgLog());
+        return null;
+    }
     // ── 7. Length check ──────────────────────────────────────────────────────
     let len = 0;
     for (let r = 0; r <= 13; r++) len += m[r];
