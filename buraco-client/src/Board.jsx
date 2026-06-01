@@ -484,7 +484,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
               const label = ti === 0 ? 'Nós' : 'Eles';
               const hasMorto = G.teamMortos[team];
               // Show icon only if this team's morto is still in the pot (not yet picked up)
-              const mortoAvailable = !hasMorto && G.pots.length > ti;
+              const mortoAvailable = G.pots.length > ti;
               return (
                 <div key={team} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <span style={{ fontSize: '0.7em', color: hasMorto ? '#50fa7b' : '#888', fontWeight: 'bold' }}>{label}: {hasMorto ? '✅' : '❌'}</span>
