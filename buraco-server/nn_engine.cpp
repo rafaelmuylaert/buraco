@@ -521,6 +521,9 @@ static int find_seq_candidates(
                 dst[14]=(uint8_t)(wild0type==54?5:wild0type/13+1);
             }
         }
+        // Reject if gaps exceed available wilds
+        int wildCount = (dst[14] ? 1 : 0) + (dst[15] ? 1 : 0);
+        if (check_gaps(dst) > wildCount) return 0;
 
         dbg_str(">>>> emit["); dbg_int(lo + 1); dbg_suit(suit); dbg_str("-"); dbg_int(hi + 1); dbg_suit(suit); dbg_str("]\n");
 
@@ -548,14 +551,15 @@ static int find_seq_candidates(
     // wilds=false when gap is inside existing meld range (wild already consumed there)
     int cgap = 0, cnogap = 0;
     int wilds_avail = can_add_wild;
-
-
     for (int pos=0; pos<=13 && nSeq<MAX_SEQ_CANDS; pos++) {
         if (m[pos]) cgap++;
         if (!m[pos] || pos==13) {
             int hi = (pos==13 && m[13]) ? pos : pos-1;
             int local_wilds = wilds_avail;
-            if (existingMeld && pos >= mstart && pos <= mend) {local_wilds = 0; cnogap = 0;}
+            if (existingMeld && pos >= mstart && pos <= mend) {
+                local_wilds = 0;
+                cnogap = 0;  // ← RESET: don't carry stale run count across meld interior
+            }
             else{
                 if (cgap > 0 && cnogap > 0 && local_wilds) {
                     int lo = hi - cnogap - cgap;
@@ -566,8 +570,8 @@ static int find_seq_candidates(
                     int lo = hi - cgap + 1;
                     emit(lo, hi, false);
                 }
+                cnogap = cgap;
             }
-            cnogap = cgap;
             cgap = 0;
         }
     }
