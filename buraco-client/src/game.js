@@ -1,11 +1,29 @@
 
 
-
+import { getLastDbgLog } from './wasm_loader.js';
 // SEQ_POINTS indexed by rank slot: [0]=A-low, [1]=A-high, [2]=nat2, [3]=3 ... [13]=K
 const SEQ_POINTS_NEW = [15, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10];
 
+
 // ── Timing accumulators ───────────────────────────────────────────────────────
 const _timings = { buildSegments: 0, forwardPass: 0, getAllValidMelds: 0, getAllValidAppends: 0, planTurn: 0, planTurnCalls: 0 };
+function makeIface(client) {
+  const check = (result, label) => {
+    if (result === 'INVALID_MOVE') {
+      console.log(`[BOT] *** INVALID MOVE on ${label} ***`);
+      console.log(getLastDbgLog());
+    }
+  };
+  return {
+    hasDrawn: () => client.getState()?.G?.hasDrawn ?? false,
+    draw:     () => check(client.moves.drawCard(), 'draw'),
+    pickup:   (cc, tgt) => check(client.moves.pickUpDiscard(cc, tgt), 'pickup'),
+    meld:     (cc) => check(client.moves.playMeld(cc), 'meld'),
+    append:   (tgt, cc) => check(client.moves.appendToMeld(tgt, cc), `append ${JSON.stringify(tgt)}`),
+    discard:  (id) => check(client.moves.discardCard(id), 'discard'),
+    exhaust:  () => client.moves.declareExhausted(),
+  };
+}
 export function getAndResetTimings() {
     const snap = { ..._timings };
     _timings.buildSegments = 0;
