@@ -1,7 +1,7 @@
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import { BuracoGame, AI_CONFIG, getAndResetTimings } from './game.js';
-import { initWasm, syncCardsToWasm, buildTurnMoveList, loadMatchDNA,
+import { getLastDbgLog, initWasm, syncCardsToWasm, buildTurnMoveList, loadMatchDNA,
          setActiveTeam, isWasmReady, runTurn } from './wasm_loader.js';
 
 await initWasm();

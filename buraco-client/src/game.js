@@ -1,10 +1,10 @@
 
 
-import { getLastDbgLog } from './wasm_loader.js';
+
 // SEQ_POINTS indexed by rank slot: [0]=A-low, [1]=A-high, [2]=nat2, [3]=3 ... [13]=K
 const SEQ_POINTS_NEW = [15, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10];
 
-
+const getLastDbgLog = "";
 // ── Timing accumulators ───────────────────────────────────────────────────────
 const _timings = { buildSegments: 0, forwardPass: 0, getAllValidMelds: 0, getAllValidAppends: 0, planTurn: 0, planTurnCalls: 0 };
 function makeIface(client) {
