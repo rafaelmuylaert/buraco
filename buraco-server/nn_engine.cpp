@@ -555,7 +555,7 @@ static int find_seq_candidates(
         if (!m[pos] || pos==13) {
             int hi = (pos==13 && m[13]) ? pos : pos-1;
             int local_wilds = wilds_avail;
-            if (existingMeld && pos >= mstart && pos <= mend) local_wilds = 0;
+            if (existingMeld && pos >= mstart && pos <= mend) {local_wilds = 0; cnogap = 0;}
             else{
                 if (cgap > 0 && cnogap > 0 && local_wilds) {
                     int lo = hi - cnogap - cgap;
