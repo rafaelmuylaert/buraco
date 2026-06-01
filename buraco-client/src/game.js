@@ -27,9 +27,9 @@ export const AI_CONFIG = {
     SCALARS_FEATURES:      11,
     CARDS_FEATURES_SUIT:   18,  // per-suit: 13 rank counts + 5 wild counts
     CARDS_FEATURES_ALL:    54,  // all-suit: 52 card types + 0 + joker
-    HIDDEN_LAYERS:          2,
-    HIDDEN_WIDTH:          24,  // seq/pickup net hidden width
-    HIDDEN_WIDTH_RUNNER:   24,  // runner net hidden width
+    HIDDEN_LAYERS:          4,
+    HIDDEN_WIDTH:          48,  // seq/pickup net hidden width
+    HIDDEN_WIDTH_RUNNER:   48,  // runner net hidden width
     HIDDEN_WIDTH_DISCARD:  48,  // discard net hidden width
 
     // Seq/Pickup net (per-suit pass, seq candidates only)
