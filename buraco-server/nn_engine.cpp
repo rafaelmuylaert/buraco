@@ -432,19 +432,19 @@ static int find_seq_candidates(
 
     int mstart = 14, mend = -1;
     // Ace
-    //if (existingMeld && (existingMeld[0])) {
-    //    m[0]=1;
-    //    mstart=0;
-    //}
-    //if (existingMeld && (existingMeld[1])) {
-    //    m[13]=1;
-    //    mend=13;
-    //}
-    //if (sb_rank(1) > 0) { if (!m[0]){from_hand[0]=1; m[0]=1;} if(!m[13]){from_hand[13]=1; m[13]=1;}
+    if (existingMeld && (existingMeld[0])) {
+        m[0]=1;
+        mstart=0;
+    }
+    if (existingMeld && (existingMeld[1])) {
+        m[13]=1;
+        mend=13;
+    }
+    if (sb_rank(1) > 0) { if (!m[0]){from_hand[0]=1; m[0]=1;} if(!m[13]){from_hand[13]=1; m[13]=1;}
 
     //m[1] = existingMeld ? existingMeld[2] : 0;
     // Ranks 2-K
-    for (int mi=0; mi<=13; mi++) { //meld index 0(A-lo),1(A-hi),2-13-rank
+    for (int mi=2; mi<=13; mi++) { //meld index 0(A-lo),1(A-hi),2-13-rank
         int mr = mi==0?0:mi==1?13:mi-1; //meld rank 0(A) to 13(A)
         int cr = mi==0?0:mi==1?0:mi-1; //card rank 0(A) to 12(K)
         int already_in_meld = (existingMeld && existingMeld[mi]) ? 1 : 0;
@@ -453,13 +453,7 @@ static int find_seq_candidates(
             if(mr<mstart)mstart=mr;
             if(mr>mend) mend=mr;
         }
-        else if (cr!= 1 && sb_rank(cr) > 0 && !already_in_meld) {
-            if (cr == 0 && existingMeld && (existingMeld[0] || existingMeld[1])) {
-                // meld already has an Ace — don't add another
-            } else {
-                from_hand[mr]=1; m[mr]=1;
-            }
-        }
+        else if (cr!= 1 && sb_rank(cr) > 0 && !already_in_meld) { from_hand[mr]=1; m[mr]=1; }
     }
 
     // Wild slots from existing meld, promote nat2 if both free
