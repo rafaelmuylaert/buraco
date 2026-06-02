@@ -440,7 +440,7 @@ static int find_seq_candidates(
         m[13]=1;
         mend=13;
     }
-    if (sb_rank(1) > 0) { if (!m[0]){from_hand[0]=1; m[0]=1;} if(!m[13]){from_hand[13]=1; m[13]=1;}
+    if (sb_rank(1) > 0) { if (!m[0]){from_hand[0]=1; m[0]=1;} if(!m[13]){from_hand[13]=1; m[13]=1;}}
 
     //m[1] = existingMeld ? existingMeld[2] : 0;
     // Ranks 2-K
