@@ -952,34 +952,7 @@ static int plan_turn() {
         if (t==0) {
             add_move(1, MOVE_PLAY_MELD, 0,0,0, g_cand_seq_cc[idx]);
                 } else if (t==1) {
-            // Check collision: verify cc cards don't overlap existing meld slots
-            int ps    = g_cand_append_suit[idx] - 1;
-            int pslot = g_cand_append_slot[idx];
-            const uint8_t* curMeld = get_seq_meld_effective(g_my_team, ps, pslot);
-            int collision = 0;
-            for (int j = 0; j < CAND_CC_SIZE && !collision; j++) {
-                if (!cc[j]) continue;
-                // Map card index j to meld slot: rank = j%13, slot = (rank==0)?0:(rank+1)
-                int rank0 = j % 13;  // 0=A,1=2,2=3,...,12=K
-                int mslot = (rank0 == 0) ? 0 : rank0 + 1;  // A→0, 2→skip(wild), 3→3, ..., K→13
-                if (rank0 == 1) continue;  // 2s are wilds, not natural slots
-                if (mslot < 14 && curMeld[mslot]) { collision = 1; }
-            }
-            if (collision) {
-                // Undo sim removal — put cards back
-                for(int j=0;j<CAND_CC_SIZE;j++)
-                    for(int n=0;n<cc[j];n++) sim_add_card(sim, (j==52)?54:j);
-                continue;
-            }
-
             add_move(1, MOVE_APPEND, 1, g_cand_append_suit[idx], g_cand_append_slot[idx], g_cand_append_cc[idx]);
-
-            // Update override for subsequent candidates
-            for (int j = 0; j < 16; j++)
-                g_meld_override[ps][pslot][j] = g_cand_append_meld[idx][j] ? 255 : 0;
-            g_meld_override[ps][pslot][14] = g_cand_append_meld[idx][14];
-            g_meld_override_valid[ps][pslot] = 1;
-
         } else {
 
             int isApp=0, appSlot=0;
