@@ -558,7 +558,7 @@ static int find_seq_candidates(
             int local_wilds = wilds_avail;
             if (existingMeld && pos >= mstart && pos <= mend) {
                 local_wilds = 0;
-                cnogap = 0;  // ← RESET: don't carry stale run count across meld interior
+                //cnogap = 0;  // ← RESET: don't carry stale run count across meld interior
             }
             else{
                 if (cgap > 0 && cnogap > 0 && local_wilds) {
