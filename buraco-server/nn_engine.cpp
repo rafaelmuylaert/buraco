@@ -214,7 +214,10 @@ static void clear_meld_overrides() {
 static const uint8_t* get_seq_meld_effective(int team, int suit0, int slot) {
     if (team == g_my_team && g_meld_override_valid[suit0][slot])
         return g_meld_override[suit0][slot];
-    return g_seq_melds[team][suit0][slot];
+    else {
+        g_meld_override_valid[suit0][slot] = 1;
+        return g_seq_melds[team][suit0][slot];
+    }
 }
 // Build h1 directly from structured buffers — no g_inp staging
 static void build_h1(float* h1, int h1sz, const float* W, int inSz) {
