@@ -629,6 +629,18 @@ static void sim_init(uint8_t* sim, int player, int topDiscard) {
 
 static int plan_turn() {
     clear_meld_overrides();
+    // Dump all melds for my team
+    dbg_str("MELDS[");dbg_int(g_my_team);dbg_str("]:\n");
+    for(int s=0;s<4;s++) {
+        for(int sl=0;sl<MAX_SEQ_SLOTS;sl++) {
+            const uint8_t* em = g_seq_melds[g_my_team][s][sl];
+            int hasAny=0; for(int j=0;j<16;j++) if(em[j]){hasAny=1;break;}
+            if(!hasAny) continue;
+            dbg_str("  s=");dbg_int(s);dbg_str(" sl=");dbg_int(sl);dbg_str(" [");
+            for(int j=0;j<16;j++){dbg_int(em[j]);if(j<15)dbg_str(",");}
+            dbg_str("]\n");
+        }
+    }
     double _tp0 = now();
     int player = g_player;
     g_move_count = 0;
