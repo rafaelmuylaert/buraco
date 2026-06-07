@@ -630,6 +630,12 @@ static void sim_init(uint8_t* sim, int player, int topDiscard) {
 static int plan_turn() {
     clear_meld_overrides();
     // Dump all melds for my team
+    
+    double _tp0 = now();
+    int player = g_player;
+    g_move_count = 0;
+    dbg_reset();
+    dbg_str("\n\nBOT");dbg_int(g_player);dbg_str("\n");
     dbg_str("MELDS[");dbg_int(g_my_team);dbg_str("]:\n");
     for(int s=0;s<4;s++) {
         for(int sl=0;sl<MAX_SEQ_SLOTS;sl++) {
@@ -641,12 +647,6 @@ static int plan_turn() {
             dbg_str("]\n");
         }
     }
-    double _tp0 = now();
-    int player = g_player;
-    g_move_count = 0;
-    dbg_reset();
-    dbg_str("\n\nBOT");dbg_int(g_player);dbg_str("\n");
-    
     for(int i=0;i<MAX_PLANNED_MOVES;i++) for(int j=0;j<58;j++) g_move_list[i][j]=0;
 
     if (g_deck_len==0 && g_pots_len==0) {
