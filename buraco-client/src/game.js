@@ -618,6 +618,7 @@ export function moveMeld(G, p, Hand, target = null, addCards = 0, topDiscard = n
     G.lastMoveType = target === null ? 'meld' : 'append';
     // Sync updated meld into WASM meld table buffers ////          ======================================================   Those should be the same indexes
     if (_updateMeld) {
+        console.log('[GAME.JS] _updateMeld FIRING');
         if (isRunner) {
             const slot = target !== null ? target.index : G.table[teamId][1].length - 1;
             _updateMeld(false, teamId, 0, slot, parsed);
