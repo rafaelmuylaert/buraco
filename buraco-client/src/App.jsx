@@ -1187,7 +1187,16 @@ const App = () => {
                 return (
                   <div key={t.id} style={{ background: '#222', border: '1px solid #444', borderRadius: '10px', padding: '20px', width: '300px' }}>
                     <h3 style={{ margin: '0 0 10px 0', color: '#888' }}>{t.name}</h3>
-                    <div style={{ fontSize: '1.2em', color: '#ffd700', fontWeight: 'bold', marginBottom: '15px' }}>'' Vencedor: {winner?.[0]} ({winner?.[1]?.points} pts)</div>
+                    <div style={{ fontSize: '1.2em', color: '#ffd700', fontWeight: 'bold', marginBottom: '15px' }}>
+                      🏆 {(() => {
+                        const topPoints = standings[0]?.[1]?.points;
+                        const winners = standings.filter(([, st]) => st.points === topPoints);
+                        const names = winners.map(([name]) => name).join(', ');
+                        return winners.length > 1
+                          ? `Vencedores: ${names} (${topPoints} pts)`
+                          : `Vencedor: ${names} (${topPoints} pts)`;
+                      })()}
+                    </div>
                     <div style={{ fontSize: '0.9em', color: '#aaa' }}>
                       Formato: {t.format} <br/> Rodadas Totais: {t.rounds.length}
                     </div>
