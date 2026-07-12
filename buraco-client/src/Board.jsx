@@ -35,13 +35,14 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor 
       justifyContent: 'center', alignItems: 'center', margin: '2px',
       backgroundColor: 'white', color: card.color, 
       boxShadow: isNewlyDrawn && !isSelected ? '0 0 12px rgba(255, 204, 0, 0.8)' : '2px 2px 4px rgba(0,0,0,0.4)',
+      WebkitTextSizeAdjust: '100%',
       ...customStyle
     }}>
-      <div style={{ position: 'absolute', top: '3px', left: '3px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1' }}>
-        <span style={{ fontSize: '0.75em', fontWeight: 'bold' }}>{card.rank}</span>
-        <span style={{ fontSize: '1.0em' }}>{card.suit}</span>
+      <div style={{ position: 'absolute', top: '2px', left: '3px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1' }}>
+        <span style={{ fontSize: '9px', fontWeight: 'bold' }}>{card.rank}</span>
+        <span style={{ fontSize: '10px' }}>{card.suit}</span>
       </div>
-      <div style={{ fontSize: '2.4em', opacity: 0.25 }}>{card.suit}</div>
+      <div style={{ fontSize: '22px', opacity: 0.25 }}>{card.suit}</div>
       {deckColor && <div style={{ position: 'absolute', bottom: 0, left: 0, width: 0, height: 0,
         borderStyle: 'solid', borderWidth: '0 12px 12px 0',
         borderColor: `transparent transparent ${deckColor} transparent`,
@@ -49,6 +50,7 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor 
     </div>
   );
 };
+
 
 const CardBack = ({ label, count, onClick, deckColor }) => (
   <div onClick={onClick} style={{
@@ -68,6 +70,10 @@ export function BuracoBoard(props) {
 function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament = null, tournamentStandings = null }) {
   // State: Set of uids instead of {cardType: count}
   const [selectedCards, setSelectedCards] = useState(new Set());
+  const [gameOverMinimized, setGameOverMinimized] = useState(false);
+  const [popupPos, setPopupPos] = useState({ x: null, y: null });
+  const [dragging, setDragging] = useState(false);
+  const dragOffset = React.useRef({ x: 0, y: 0 });
 
   const isMyTurn = ctx.currentPlayer === playerID;
 
@@ -175,6 +181,17 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
       wasMyTurnRef.current = isMyTurn;
   }, [ctx?.currentPlayer]);
 
+  const onDragStart = (e) => {
+    if (e.target.tagName === 'BUTTON') return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    dragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    setDragging(true);
+  };
+  const onDragMove = (e) => {
+    if (!dragging) return;
+    setPopupPos({ x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y });
+  };
+  const onDragEnd = () => setDragging(false);
 
   const gameOverPopup = gameover ? (() => {
     const s0 = gameover.scores?.[0] ?? { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 };
@@ -194,9 +211,78 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
       else sessionStorage.setItem('quick_game_rematch', JSON.stringify({ rules: G.rules, numPlayers: G.rules.numPlayers, myName }));
       window.location.reload();
     };
+
+    // === UPDATED STANDINGS: apply this game's result to the pre-game standings ===
+    const updatedStandings = (() => {
+      if (!tournamentStandings) return null;
+      const score0 = s0.total ?? 0;
+      const score1 = s1.total ?? 0;
+      const team0Names_ = (G.teamPlayers[0] || []).map(p => G.rules?.assignments?.[p]);
+      const team1Names_ = (G.teamPlayers[1] || []).map(p => G.rules?.assignments?.[p]);
+      // Deep copy standings into a map
+      const map = {};
+      for (const [name, st] of tournamentStandings) {
+        map[name] = { ...st };
+      }
+      // Add this game's results
+      for (const name of team0Names_) {
+        if (name && map[name]) {
+          map[name].points += score0;
+          if (score0 > score1) map[name].v += 1;
+          else if (score0 === score1) map[name].e += 1;
+          else map[name].d += 1;
+        }
+      }
+      for (const name of team1Names_) {
+        if (name && map[name]) {
+          map[name].points += score1;
+          if (score1 > score0) map[name].v += 1;
+          else if (score1 === score0) map[name].e += 1;
+          else map[name].d += 1;
+        }
+      }
+      // Sort by points descending
+      return Object.entries(map).sort((a, b) => b[1].points - a[1].points);
+    })();
+
+    if (gameOverMinimized) {
+      return (
+        <button onClick={() => setGameOverMinimized(false)} style={{ position: 'fixed', bottom: '20px', right: '20px', zIndex: 1001, padding: '10px 16px', background: '#ffd700', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>
+          📊 Resultado
+        </button>
+      );
+    }
+
+    const onMouseDown = (e) => {
+      if (e.target.closest('button')) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      dragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      setDragging(true);
+    };
+    const onMouseMove = (e) => {
+      if (!dragging) return;
+      setPopupPos({ x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y });
+    };
+    const onMouseUp = () => setDragging(false);
+
+    const panelStyle = popupPos
+      ? { position: 'fixed', top: popupPos.y, left: popupPos.x, zIndex: 1001, maxWidth: '860px', width: '90%' }
+      : { maxWidth: '860px', width: '100%' };
+
     return (
-      <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-        <div style={{ background: '#1b4332', border: '2px solid #ffd700', borderRadius: '16px', padding: '30px', maxWidth: '860px', width: '100%', maxHeight: '90vh', overflowY: 'auto', color: 'white', fontFamily: 'sans-serif' }}>
+      <div
+        style={{ position: 'fixed', inset: 0, backgroundColor: popupPos ? 'transparent' : 'rgba(0,0,0,0.75)', pointerEvents: popupPos ? 'none' : 'auto', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+      >
+        <div
+          onMouseDown={onMouseDown}
+          style={{ ...panelStyle, pointerEvents: 'auto', background: '#1b4332', border: '2px solid #ffd700', borderRadius: '16px', padding: '30px', maxHeight: '90vh', overflowY: 'auto', color: 'white', fontFamily: 'sans-serif', cursor: dragging ? 'grabbing' : 'grab', userSelect: 'none' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-20px', position: 'relative', zIndex: 2 }}>
+            <button onClick={() => setGameOverMinimized(true)} style={{ background: 'transparent', border: 'none', color: '#ccc', fontSize: '1.5em', cursor: 'pointer', padding: '0 6px', lineHeight: 1 }} title="Minimizar">−</button>
+          </div>
           <div style={{ textAlign: 'center', marginBottom: '24px' }}>
             <h1 style={{ fontSize: '2.4em', color: '#ffd700', margin: '0 0 8px 0' }}>Fim de Jogo!</h1>
             <h2 style={{ margin: 0, color: '#ccc', fontSize: '1em' }}>Motivo: {gameover.reason}</h2>
@@ -218,12 +304,12 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ffd700', fontSize: '0.9em' }}><span>Bônus:</span><span>{s1.baterBonus}</span></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', fontSize: '1.2em', fontWeight: 'bold' }}><span>Total:</span><span>{s1.total}</span></div>
             </div>
-            {tournamentStandings && (
+            {updatedStandings && (
               <div style={{ background: '#222', padding: '16px', borderRadius: '12px', border: '2px solid #ffd700', minWidth: '220px' }}>
                 <h3 style={{ textAlign: 'center', color: '#ffd700', margin: '0 0 12px 0' }}>Classificação</h3>
                 <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '0.85em' }}>
                   <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Jogador</th><th>Pts</th><th>V-E-D</th></tr></thead>
-                  <tbody>{tournamentStandings.map(([pName, st]) => {
+                  <tbody>{updatedStandings.map(([pName, st]) => {
                     const isMe = G.rules?.assignments?.[playerID] === pName;
                     return (<tr key={pName} style={{ borderBottom: '1px solid #333', background: isMe ? 'rgba(255,215,0,0.2)' : 'transparent' }}>
                       <td style={{ padding: '5px 0', fontWeight: isMe ? 'bold' : 'normal' }}>{pName}</td>
@@ -247,6 +333,8 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
       </div>
     );
   })() : null;
+
+
 if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregando Mesa...</div>;
 
   if (!G.cards || !G.teams || !G.teamPlayers || !G.table) {
@@ -284,7 +372,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
   const LEFT_COL_W = 100;
   // In open discard view cards overlap: first card takes CARD_W, each additional takes (CARD_W - 37)px
   // Solve: CARD_W + (n-1)*(CARD_W-37) <= LEFT_COL_W - 12 (padding)
-  const CARD_OVERLAP_STEP = CARD_W - 37; // 9px per additional card
+  const CARD_OVERLAP_STEP = CARD_W - 32; // 14px per additional card
   const cardsPerDiscardRow = Math.max(1, Math.floor((LEFT_COL_W - 12 - CARD_W) / CARD_OVERLAP_STEP) + 1);
   const chunkedDiscard = [];
   if (G.discardPile && G.discardPile.length > 0) {
