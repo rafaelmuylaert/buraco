@@ -1,3 +1,30 @@
+// ─── Overview ──────────────────────────────────────────────────────────────────
+// wasm_loader.js — WebAssembly Neural Network Engine Interface
+//
+// This module loads and communicates with the nn_engine.wasm (C++ neural network)
+// to evaluate AI decisions for the Buraco card game. It provides a zero-copy
+// interface: JS writes game state directly into WASM memory buffers, and the C++
+// code reads/writes them in-place using SIMD-optimized forward passes.
+//
+// Main functions:
+//   initWasm()              — Loads nn_engine.wasm, validates exports, initializes memory views
+//   loadMatchDNA(a, b)      — Sets neural network weights for both teams (pickup/meld/runner/discard nets)
+//   planTurnWasm(G, p)      — Calls C++ plan_turn() to get all AI moves for a player's turn
+//   buildTurnMoveList(G, p) — Full turn executor: builds ordered move list from WASM output
+//   setTurnContext(p, t)    — Sets player/team context and scalar inputs for evaluation
+//   setMatchState(G, ...)   — Writes full game state into WASM match state buffers
+//   writeSeqCands/RunCands  — Encodes meld candidate data into WASM buffers
+//   updateSeqMeld/RunMeld   — Syncs meld table updates from game state into WASM buffers
+//   syncCardsToWasm(G, n)   — Copies card bitmaps from JS to WASM (used by bot.js)
+//   executeTurnMove(m, i)   — Fires a single move from the WASM move list via an interface object
+//   runTurn(queue, ...)      — Shared turn executor: processes moves one-by-one across ticks
+//   getCppTimings()         — Returns performance timing data from the C++ engine
+//
+// Architecture: Four separate neural networks (PICKUP, MELD, RUNNER, DISCARD)
+// share a single WASM module. Each evaluation (forward pass) scores candidate
+// actions. The C++ plan_turn() function does all three phases in one call.
+// ──────────────────────────────────────────────────────────────────────────────
+
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';

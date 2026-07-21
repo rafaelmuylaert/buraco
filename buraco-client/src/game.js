@@ -1,5 +1,37 @@
 
 
+// ─── Overview ──────────────────────────────────────────────────────────────────
+// game.js — Buraco Game Rules Engine (Boardgame.io Game Object)
+//
+// This module defines the complete Buraco card game rules as a Boardgame.io game
+// object, including game state initialization, move validation, meld parsing,
+// scoring, and AI scoring configuration. It's shared between the client (React)
+// and server (Node.js) via Boardgame.io.
+//
+// Main components:
+//   BuracoGame — Boardgame.io game definition:
+//     .setup()        — Initializes deck, deals cards, creates teams, sets up state
+//     .moves          — All valid player moves: drawCard, pickUpDiscard, playMeld,
+//                       appendToMeld, discardCard, declareExhausted
+//     .endIf()        — Game-over check: calls checkGameOver() to determine winner
+//     .ai.enumerate   — Returns empty array (AI runs externally via WASM)
+//
+// Helper functions:
+//   moveDrawCard/PickUpDiscard/Meld/DiscardCard — Core move implementations
+//   parseMeld/cardsToSeqSlots/cardsToRunnerSlots — Validates and encodes melds
+//   calculateMeldPoints/calculateFinalScores — Scoring for canasta/points
+//   checkGameOver — Determines if game is over (exhausted, bateu, etc.)
+//   seqSuit/isMeldClean/getMeldLength — Meld utility functions
+//   AI_CONFIG — Neural network architecture configuration for the WASM engine
+//   nn_size() — Computes network weight sizes from architecture parameters
+//
+// Key data formats:
+//   Cards: flat Uint8Array[54] — indices 0-51 = suits 1-4 (13 each), 52 = unused, 53 = joker
+//   Seq meld: m[16] — [A-low, A-high, nat2, 3..K, foreignWildSuit, nat2WildCount]
+//   Runner meld: m[6] — [rank, spadeCount, heartCount, diamondCount, clubCount, wildSuit]
+// ──────────────────────────────────────────────────────────────────────────────
+
+
 let _getDbgLog = null;
 export function setDbgLogFn(fn) { _getDbgLog = fn; }
 

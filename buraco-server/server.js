@@ -1,3 +1,25 @@
+// ─── Overview ──────────────────────────────────────────────────────────────────
+// server.js — Main Buraco Game Server
+//
+// This is the primary Node.js HTTP/WebSocket server for the Buraco platform.
+// It hosts Boardgame.io game instances, manages tournament orchestration,
+// AI bot training API, game history, and player management.
+//
+// Main responsibilities:
+//   1. Boardgame.io server — hosts the BuracoGame with FlatFile persistence to disk
+//   2. Game DB layer — proxy-wrapped FlatFile with corruption recovery (auto-deletes bad files)
+//   3. AI Training API — /api/bots/* routes for starting/stopping/querying genetic training
+//   4. Tournament API — /api/tournaments and /api/history for tournament management
+//   5. Admin API — /api/admin/* for kicking players, deleting matches, credential access
+//   6. Log streaming — /api/logs SSE endpoint for real-time debug log streaming
+//   7. Auto-history — background job polls for finished matches and saves results
+//   8. Ghost sweeper — on startup, deletes corrupted game files from disk
+//
+// Key architecture: Uses custom JSON parsing, CORS handling, and a database proxy
+// to gracefully handle disk corruption. Training runs in background worker threads
+// via TrainerService from train.js.
+// ──────────────────────────────────────────────────────────────────────────────
+
 import { Server, FlatFile } from 'boardgame.io/dist/cjs/server.js'; 
 import { BuracoGame } from './game.js';
 import { TrainerService } from './train.js';

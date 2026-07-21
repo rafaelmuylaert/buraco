@@ -1,3 +1,38 @@
+// ─── Overview ──────────────────────────────────────────────────────────────────
+// nn_engine.cpp — C++ Neural Network Engine (compiled to WebAssembly)
+//
+// This is the core AI inference engine for the Buraco bot. It contains four
+// fully-connected feedforward neural networks (PICKUP, MELD, RUNNER, DISCARD)
+// that score candidate game actions. The entire engine compiles to .wasm and
+// is loaded by wasm_loader.js at runtime.
+//
+// Architecture:
+//   - Four independent neural nets share memory but have separate weights
+//   - Networks evaluate sequences (runs within suit), runners (same rank across suits),
+//     discard picks, and card pickups from the discard pile
+//   - Forward pass uses SIMD (WebAssembly SIMD128) for matrix multiplication
+//   - Input is structured bitmaps (cards, known cards, discard, melds, scalars)
+//   - plan_turn() is the main entry: it scores ALL candidate actions in one call
+//
+// plan_turn() phases:
+//   Phase 0 (PICKUP): Score drawCard vs pickUpDiscard vs declareExhausted
+//     - Finds sequence candidates from hand+discard, scores with PICKUP net
+//   Phase 1 (MELD): Score playMeld vs appendToMeld vs playRunner
+//     - Finds all valid new melds and appends, scores with MELD/RUNNER nets
+//   Phase 2 (DISCARD): Score which card to discard
+//     - Scores each hand card with the DISCARD net, emits sorted
+//
+// Key data structures:
+//   g_cards2[g_player][card]    — Card bitmap (count of each card in hand)
+//   g_seq_melds[team][suit][slot][16] — Sequence meld representation
+//   g_run_melds[team][slot][6]    — Runner meld representation
+//   g_move_list[12][58]          — Planned moves output buffer
+//   g_out[64]                    — Network output buffer
+//
+// WASM exports: get_cards2, get_scalars, get_seq_meld, evaluate, configure,
+//   cpp_plan_turn, set_match_state, set_eval_context, configure_net_*, etc.
+// ──────────────────────────────────────────────────────────────────────────────
+
 #include <stdint.h>
 #include <stddef.h>
 #include <wasm_simd128.h>

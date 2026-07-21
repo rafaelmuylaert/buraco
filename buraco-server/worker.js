@@ -1,3 +1,26 @@
+// ─── Overview ──────────────────────────────────────────────────────────────────
+// worker.js — AI Match Simulation Worker
+//
+// This module runs as a Node.js Worker Thread (separate from main server process).
+// It simulates complete Buraco matches between two AI bots using the WASM neural
+// engine for move scoring. It receives match pairs from the training pipeline,
+// runs head-to-head matches bidirectionally (A vs B and B vs A), and returns
+// score differentials for the genetic algorithm.
+//
+// Main functions:
+//   runMatch(genomes, rules, fixedDeck)  — Simulates a complete match between two bots
+//   processJob(matches, rules)           — Processes a batch of match pairs, returns results
+//   prepareGenome(raw)                   — Normalizes a genome vector to expected size
+//   makeIface(S, p)                      — Builds action interface for direct state mutation
+//
+// Data flow: Main thread sends {matches: [{dnaA, dnaB}], rules} → worker processes
+//   each pair bidirectionally with optional fixed deck → returns score differentials.
+//
+// Key difference from bot.js: worker.js mutates game state directly (no network),
+// uses WASM-backed card buffers for zero-copy performance, and runs at full speed
+// (no per-tick delays) to maximize throughput for training.
+// ──────────────────────────────────────────────────────────────────────────────
+
 import { workerData, parentPort } from 'worker_threads';
 import {
     BuracoGame, AI_CONFIG,

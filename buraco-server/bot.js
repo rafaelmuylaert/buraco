@@ -1,3 +1,25 @@
+// ─── Overview ──────────────────────────────────────────────────────────────────
+// bot.js — AI Bot Runner for Buraco
+//
+// This module runs autonomous AI bots that join and play Buraco games by
+// polling the server's lobby. Each bot instance connects as a player client,
+// reads game state via Boardgame.io, and uses the WASM neural engine to make
+// decisions — processing one move per tick (1 second interval).
+//
+// Main functions:
+//   pollLobby()              — Polls /games/buraco every 5s to find unclaimed bot seats
+//   startBotClient(...)      — Creates a Boardgame.io Client, subscribes to state, starts AI loop
+//   makeIface(client)        — Builds an action interface (draw/pickup/meld/append/discard/exhaust)
+//   processQueue()           — At turn start: rebuilds WASM move list; then calls runTurn() for next move
+//   shutdown()               — Cleans up bot client when game ends
+//
+// Data flow: pollLobby → claims seat → connects → subscribes to state →
+//   detects turn start → syncCardsToWasm → loadMatchDNA → buildTurnMoveList →
+//   runTurn (one move per tick) → repeat
+//
+// Key: dnaCache maps bot names to Float32Array weight vectors loaded from /api/bots/weights/.
+// ──────────────────────────────────────────────────────────────────────────────
+
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import { setDbgLogFn, BuracoGame, AI_CONFIG, getAndResetTimings } from './game.js';

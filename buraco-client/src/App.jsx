@@ -1,3 +1,34 @@
+// ─── Overview ──────────────────────────────────────────────────────────────────
+// App.jsx — Buraco Client Application (React Router/Views)
+//
+// This is the main React application that manages the multi-view UI for the
+// Buraco platform. It handles three main views: Lounge (game room browser),
+// Tournaments (create/manage tournaments), and Admin (bot training dashboard).
+// The game view is rendered by Boardgame.io's Client component wrapping BuracoBoard.
+//
+// Main views:
+//   Lounge     — Browse active matches, join tables, quick game setup, reconnect
+//   Tournaments — Create tournaments with player lists, formats, and rule configs
+//   Admin      — AI bot training dashboard: start/stop training, manage bots, view islands
+//   Game       — Boardgame.io Client with BuracoBoard component
+//
+// Key state:
+//   matches, tournaments, history — loaded from server APIs
+//   quickGameConfig, trainBotConfig, newTourney — form state for creating games/tournaments
+//   availableBots, botInfoList — loaded from /api/bots/* endpoints
+//
+// Sub-components:
+//   ReconnectingClient — Boardgame.io Client with Socket.IO reconnection handling
+//   BotDebugPanel      — Full-screen debug overlay with SSE log streaming and tree parser
+//   LogTree            — Recursive tree-rendered log viewer (parsed from ">"-prefixed lines)
+//
+// Key flows:
+//   Quick Game: config → createMatch → joinMatch → setView('game')
+//   Tournament: config → create tournament → auto-generate rounds → poll history for completion
+//   Training: config → POST /api/bots/train → poll /api/bots/status → watch island progress
+//   Auto-join: sessionStorage → auto-join tournament next match after game-over
+// ──────────────────────────────────────────────────────────────────────────────
+
 import React, { useState, useEffect } from 'react';
 import { Client } from 'boardgame.io/react';
 import { SocketIO } from 'boardgame.io/multiplayer';

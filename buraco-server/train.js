@@ -1,3 +1,35 @@
+// ─── Overview ──────────────────────────────────────────────────────────────────
+// train.js — AI Genetic Training Pipeline
+//
+// This module implements the entire genetic algorithm for training Buraco AI bots.
+// It manages a pool of Worker Threads (one per CPU), runs island-based evolution,
+// and orchestrates champion tournaments to select the best bot.
+//
+// Main functions/services:
+//   TrainerService.startTraining(botName, rules, params)  — Starts a full training run
+//   TrainerService.stopTraining(botName)                  — Signals a training run to stop
+//   TrainerService.getBotWeights(botName)                 — Loads saved weights from disk
+//   TrainerService.getTrainingStatus(botName)             — Returns progress info
+//   runDebugMatch(dna, rules)                             — Runs a single debug match
+//   runMatchBatch(matchPairs, rules)                      — Dispatches matches to worker pool
+//   runPlayoffTournament(population, rules)               — Single-elimination bracket from population
+//   breedNodeLevel(parentA, parentB, scoreA, scoreB)      — Node-level crossover with weighted selection
+//   mutate(genome, rate, strength)                        — Gaussian random perturbation
+//   generateRandomGenome()                                — Xavier-initialized random weights
+//
+// Key architecture:
+//   - WorkerPool: Manages N worker threads (cpus()-1), dispatches match batches in chunks
+//   - Island evolution: Multiple independent populations evolve separately
+//   - Broadcast migration: Best of each island gets injected into other islands periodically
+//   - Champion tournament: Every N generations, all island elites compete head-to-head
+//   - Benchmark: Best bot is always tested against original random DNA
+//
+// Key terms:
+//   - Genome/DNA: Float32Array of all neural network weights for pickup/meld/runner/discard nets
+//   - Island: Independent population evolving separately (enables diversity)
+//   - Elite: Best genome from an island generation
+// ──────────────────────────────────────────────────────────────────────────────
+
 import fs from 'fs';
 import path from 'path';
 import { Worker } from 'worker_threads';

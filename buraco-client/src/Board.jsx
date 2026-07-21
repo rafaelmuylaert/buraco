@@ -1,3 +1,29 @@
+// ─── Overview ──────────────────────────────────────────────────────────────────
+// Board.jsx — Buraco Game Board UI (React Component)
+//
+// This module renders the visual game board for the Buraco card game using
+// Boardgame.io's board component. It handles card rendering, meld display,
+// player actions (click-to-select, click-to-play), deck/discard pile interaction,
+// and the game-over popup with tournament standings.
+//
+// Main components:
+//   ErrorBoundary        — Catches render crashes, shows "return to lobby" fallback
+//   Card                 — Individual playing card with suit, rank, selection, and deck color
+//   CardBack             — Deck face-down card with count label and pattern
+//   BuracoBoard          — Main board component (wraps BuracoBoardInner in ErrorBoundary)
+//   BuracoBoardInner     — Core game UI: handles all game state display and interaction
+//
+// Key UI features:
+//   - Left sidebar: deck, discard pile, morto status, player list, known cards tracker
+//   - Center: team tables for "Us" (bottom) and "Them" (top) with melds/canastas
+//   - Bottom: player's hand with card selection and highlighting
+//   - New meld highlighting: diff-snapshots to show opponent's card additions
+//   - Game-over popup: draggable panel showing final scores, tournament standings, next buttons
+//   - Deck assignment: random blue/red color per card type for card tracking
+//
+// Interaction flow: select cards → click meld area/discard/deck → Boardgame.io moves
+// ──────────────────────────────────────────────────────────────────────────────
+
 import React, { useState, useEffect } from 'react';
 import {isMeldClean, getMeldLength, calculateMeldPoints, meldToCards, handToCards, intToCardObj} from './game.js';
 
