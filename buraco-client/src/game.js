@@ -1180,17 +1180,18 @@ export function generateAllValidMelds(G, player, handSim, myTeam, topdiscard = n
             }
         }
     }
-if (G.rules?.debugLog) console.log("===================================================");
-if (G.rules?.debugLog) console.log("[GAME.JS] generateAllValidMelds G.cards:");
-if (G.rules?.debugLog) console.log(G.cards[player.toString()]);
-if (G.rules?.debugLog) console.log("[GAME.JS] generateAllValidMelds player:");
-if (G.rules?.debugLog) console.log(player);
-if (G.rules?.debugLog) console.log("[GAME.JS] generateAllValidMelds topdiscard:");
-if (G.rules?.debugLog) console.log(topdiscard);
-if (G.rules?.debugLog) console.log("[GAME.JS] generateAllValidMelds handSim:");
-if (G.rules?.debugLog) console.log(handSim);
-if (G.rules?.debugLog) console.log("[GAME.JS] generateAllValidMelds result:");
-if (G.rules?.debugLog) console.log(results);
+console.log("===================================================");
+console.log("[GAME.JS] generateAllValidMelds G.cards:");
+console.log(G.cards[player.toString()]);
+console.log("[GAME.JS] generateAllValidMelds player:");
+console.log(player);
+console.log("[GAME.JS] generateAllValidMelds topdiscard:");
+console.log(topdiscard);
+console.log("[GAME.JS] generateAllValidMelds handSim:");
+console.log(handSim);
+console.log("[GAME.JS] generateAllValidMelds result:");
+console.log(results);
+if (G.rules?.debugLog) console.log("End debug");
     return results;
 }
 
