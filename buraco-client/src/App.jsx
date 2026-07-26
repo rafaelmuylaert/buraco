@@ -529,6 +529,7 @@ const App = () => {
              quickGameTargetPoints: quickGameConfig.format === 'points' ? quickGameConfig.targetPoints : null,
              quickGameMaxRounds: quickGameConfig.format === 'rounds' ? quickGameConfig.maxRounds : null,
              assignments: assignmentsMap,
+             debugLog: true,
              targetBotName: targetBotName
          }
       });
