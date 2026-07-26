@@ -62,29 +62,30 @@ function mutate(genome, mutationRate = 0.05, mutationStrength = 0.1) {
     return mutated;
 }
 
-// Node-level crossover: for each node in each layer, pick all its weights
-// from one parent, weighted by score difference
 function breedNodeLevel(parentA, parentB, scoreA, scoreB) {
     const child = new Float32Array(parentA.length);
-    const pA = Math.max(scoreA - scoreB + 1, 0.1); // prob of picking A
+    const pA = Math.max(scoreA - scoreB + 1, 0.1);
     const pB = Math.max(scoreB - scoreA + 1, 0.1);
     const total = pA + pB;
     const probA = pA / total;
 
-    // Walk through each sub-network's layers
+    const nets = [
+        { dna: 'DNA_CURRENT', inp: 'NN_CURRENT_INPUTS', out: 'NN_CURRENT_OUTPUTS' },
+        { dna: 'DNA_SEQ',     inp: 'NN_SEQ_INPUTS',     out: 'NN_SEQ_OUTPUTS' },
+        { dna: 'DNA_RUN',     inp: 'NN_RUN_INPUTS',     out: 'NN_RUN_OUTPUTS' },
+        { dna: 'DNA_DISCARD', inp: 'NN_DISCARD_INPUTS', out: 'NN_DISCARD_OUTPUTS' },
+    ];
+
     let off = 0;
-    for (const key of ['PICKUP', 'MELD', 'RUNNER', 'DISCARD']) {
-        const layers = AI_CONFIG[key + '_LAYER_SIZES'];
+    for (const net of nets) {
+        const layers = [AI_CONFIG[net.inp], 48, 48, 48, 48, AI_CONFIG[net.out]];
         for (let l = 0; l < layers.length - 1; l++) {
             const inSz = layers[l];
             const outSz = layers[l + 1];
-            // For each output node: copy all inSz weights + 1 bias from one parent
             for (let o = 0; o < outSz; o++) {
                 const src = Math.random() < probA ? parentA : parentB;
-                // weights for this node: off + o*inSz .. off + o*inSz + inSz-1
                 const wStart = off + o * inSz;
                 for (let i = 0; i < inSz; i++) child[wStart + i] = src[wStart + i];
-                // bias: off + outSz*inSz + o
                 const bIdx = off + outSz * inSz + o;
                 child[bIdx] = src[bIdx];
             }
@@ -95,14 +96,29 @@ function breedNodeLevel(parentA, parentB, scoreA, scoreB) {
 }
 
 const generateRandomGenome = () => {
+    const nets = [
+        { dna: 'DNA_CURRENT', inp: 'NN_CURRENT_INPUTS', out: 'NN_CURRENT_OUTPUTS' },
+        { dna: 'DNA_SEQ',     inp: 'NN_SEQ_INPUTS',     out: 'NN_SEQ_OUTPUTS' },
+        { dna: 'DNA_RUN',     inp: 'NN_RUN_INPUTS',     out: 'NN_RUN_OUTPUTS' },
+        { dna: 'DNA_DISCARD', inp: 'NN_DISCARD_INPUTS', out: 'NN_DISCARD_OUTPUTS' },
+    ];
+
     const g = new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE);
     let off = 0;
-    for (const key of ['PICKUP', 'MELD', 'RUNNER', 'DISCARD']) {
-        const inSize = AI_CONFIG[key + '_INPUT_SIZE'];
-        const scale = 1 / Math.sqrt(inSize);
-        const end = off + AI_CONFIG['DNA_' + key];
-        for (let i = off; i < end; i++) g[i] = gaussianRandom() * scale;
-        off = end;
+    for (const net of nets) {
+        const layers = [AI_CONFIG[net.inp], 48, 48, 48, 48, AI_CONFIG[net.out]];
+        for (let l = 0; l < layers.length - 1; l++) {
+            const inSz = layers[l];
+            const outSz = layers[l + 1];
+            const scale = 1 / Math.sqrt(inSz);
+            const weightCount = inSz * outSz;
+            const biasCount = outSz;
+            const totalParams = weightCount + biasCount;
+            for (let i = 0; i < totalParams; i++) {
+                g[off + i] = gaussianRandom() * scale;
+            }
+            off += totalParams;
+        }
     }
     return g;
 };

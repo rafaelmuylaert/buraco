@@ -6,29 +6,34 @@
 // interface: JS writes game state directly into WASM memory buffers, and the C++
 // code reads/writes them in-place using SIMD-optimized forward passes.
 //
+// New Architecture (Two-Phase NN):
+//   NN_CURRENT  : Full game state (417 features → 24-dim state vector)
+//   NN_SEQ      : Scores sequence candidates (state vec + candidate → 1 output)
+//   NN_RUN      : Scores runner candidates (state vec + candidate → 1 output)
+//   NN_DISCARD  : Scores discards (state vec → 54 outputs)
+//
 // Main functions:
 //   initWasm()              — Loads nn_engine.wasm, validates exports, initializes memory views
-//   loadMatchDNA(a, b)      — Sets neural network weights for both teams (pickup/meld/runner/discard nets)
-//   planTurnWasm(G, p)      — Calls C++ plan_turn() to get all AI moves for a player's turn
+//   loadMatchDNA(a, b)      — Sets neural network weights for both teams
+//   runCurrentState(G, p, myT, oppT) — Runs NN_CURRENT to get 24-dim state vector
+//   scoreSeqCandidates(cands) — Batch scores sequence candidates
+//   scoreRunCandidates(cands) — Batch scores runner candidates
+//   scoreDiscards()          — Scores all 54 discard options
+//   planTurnWasm(G, p)      — Legacy: Calls C++ plan_turn() for backward compat
 //   buildTurnMoveList(G, p) — Full turn executor: builds ordered move list from WASM output
-//   setTurnContext(p, t)    — Sets player/team context and scalar inputs for evaluation
 //   setMatchState(G, ...)   — Writes full game state into WASM match state buffers
-//   writeSeqCands/RunCands  — Encodes meld candidate data into WASM buffers
+//   writeSeqCands/RunCands  — Legacy: Encodes meld candidate data into WASM buffers
 //   updateSeqMeld/RunMeld   — Syncs meld table updates from game state into WASM buffers
 //   syncCardsToWasm(G, n)   — Copies card bitmaps from JS to WASM (used by bot.js)
-//   executeTurnMove(m, i)   — Fires a single move from the WASM move list via an interface object
+//   executeTurnMove(m, i)   — Fires a single move from the WASM move list
 //   runTurn(queue, ...)      — Shared turn executor: processes moves one-by-one across ticks
 //   getCppTimings()         — Returns performance timing data from the C++ engine
-//
-// Architecture: Four separate neural networks (PICKUP, MELD, RUNNER, DISCARD)
-// share a single WASM module. Each evaluation (forward pass) scores candidate
-// actions. The C++ plan_turn() function does all three phases in one call.
 // ──────────────────────────────────────────────────────────────────────────────
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { AI_CONFIG, isMeldClean, seqSuit, addForwardPassTime, addPlanTurnTime, addWasmDiag, setScoreFunctions } from './game.js';
+import { AI_CONFIG, isMeldClean, seqSuit, addForwardPassTime, addPlanTurnTime, addWasmDiag, setScoreFunctions, generateAllValidMelds } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -50,9 +55,6 @@ let   _wasmRunCands    = null;  // Uint8Array[MAX_RUN_CANDS * RUN_CAND_FEATS]
 const _wasmSeqMelds = [[],[],[]];  // [team 0/1][suit 0-3][slot 0-4]
 const _wasmRunMelds = [[],[]];     // [team 0/1][slot 0-3]
 
-const _totalsPickup = new Float32Array(AI_CONFIG.PICKUP_CANDIDATES);
-const _totalsMeld   = new Float32Array(AI_CONFIG.MELD_CANDIDATES);
-
 let _team0DnaOffset = 0;
 let _team1DnaOffset = 0;
 let _activeTeamBase = 0;
@@ -67,6 +69,21 @@ const MAX_RUN_CANDS  = 2;
 const MAX_SEQ_SLOTS  = 5;
 const MAX_RUN_SLOTS  = 4;
 const CARDS_FLAT_SIZE = 54;
+const CURRENT_OUTPUT_SIZE = 24;
+const SEQ_CAND_ENCODE_SIZE = 33; // suit(1) + new_meld(16) + existing_meld(16)
+const RUN_CAND_ENCODE_SIZE = 11; // rank(1) + new_meld(5) + existing_meld(5)
+
+// Persistent state vector from NN_CURRENT
+let _vStateVec = null;
+
+// Shared memory views for two-phase candidate scoring
+let _vStateVecWasm = null;
+let _vSeqCandBatch = null;
+let _vRunCandBatch = null;
+let _wasmOwnTable = null;
+let _wasmOppTable = null;
+let _wasmDiscardFlat = null;
+let _wasmHandFlat = null;
 
 function _refreshViews() {
     const buf = _mem.buffer;
@@ -92,6 +109,25 @@ function _refreshViews() {
         for (let sl = 0; sl < MAX_RUN_SLOTS; sl++)
             _wasmRunMelds[t][sl] = new Uint8Array(buf, _ex.get_run_meld(t, sl), 6);
     }
+
+    // State vector view — reads NN_CURRENT output stored in WASM memory
+    _vStateVecWasm = new Float32Array(buf, _ex.get_out(), 24);
+
+    // Shared memory batches for candidate scoring
+    // Seq batch: state(96 bytes) + 20 candidates * 33 bytes = 756 bytes
+    const seqBatchPtr = _ex.get_max_weights() + 512; // offset past weights
+    _vSeqCandBatch = new Uint8Array(buf, seqBatchPtr, 96 + 20 * 33);
+
+    // Run batch: state(96 bytes) + 20 candidates * 11 bytes = 316 bytes
+    const runBatchPtr = seqBatchPtr + 96 + 20 * 33;
+    _vRunCandBatch = new Uint8Array(buf, runBatchPtr, 96 + 20 * 11);
+
+    // Card bitmap views for NN_CURRENT input
+    const cardBufPtr = runBatchPtr + 96 + 20 * 11;
+    _wasmOwnTable = new Uint8Array(buf, cardBufPtr, 54);
+    _wasmOppTable = new Uint8Array(buf, cardBufPtr + 54, 54);
+    _wasmDiscardFlat = new Uint8Array(buf, cardBufPtr + 108, 54);
+    _wasmHandFlat = new Uint8Array(buf, cardBufPtr + 162, 54);
 }
 
 export function getTeam1DnaOffset() { return _team1DnaOffset; }
@@ -107,15 +143,21 @@ export async function initWasm() {
         _ex  = instance.exports;
         _mem = _ex.memory;
 
-        const required = ['evaluate', 'configure', 'set_eval_context', 'set_inp_scale',
-                  'get_weights', 'get_out', 'get_layer_sizes_buf', 'get_max_weights',
-                  'get_cards2', 'get_knowncards2', 'get_discard2',
-                  'get_scalars', 'get_seq_meld', 'get_run_meld',
-                  'get_seq_cands', 'get_run_cands',
-                  'set_num_seq_cands', 'set_num_run_cands',
-                  'set_match_state', 'cpp_plan_turn', 'get_planned_move',
-                  'configure_net_pickup', 'configure_net_meld',
-                  'configure_net_runner', 'configure_net_discard'];
+        const required = ['run_current_state', 'configure_net_current', 'configure_net_seq',
+                          'configure_net_run', 'configure_net_discard',
+                          'score_seq_candidates', 'score_run_candidates', 'score_discard',
+                          'set_match_state', 'get_move_list', 'get_planned_move',
+                          'get_cards2', 'get_knowncards2', 'get_discard2', 'get_scalars',
+                          'get_seq_meld', 'get_run_meld', 'get_seq_cands', 'get_run_cands',
+                          'set_num_seq_cands', 'set_num_run_cands',
+                          'get_weights', 'get_out', 'get_layer_sizes_buf', 'get_max_weights',
+                          'set_inp_scale', 'clear_seq_cands_buf', 'clear_run_cands_buf',
+                          'evaluate', 'configure', 'set_eval_context', 'set_num_inputs',
+                          'get_hand_total', 'cpp_plan_turn',
+                          // timing compat
+                          'get_t_fsc', 'get_t_build_h1', 'get_t_fwd', 'get_t_phase0',
+                          'get_t_phase1', 'get_t_phase2', 'get_n_fsc', 'get_n_fwd',
+                          'get_n_turns', 'reset_timings', 'get_dbg_buf', 'get_dbg_len'];
 
         for (const fn of required) {
             if (!_ex[fn]) { console.warn(`[WASM] Missing: ${fn}`); _ex = null; return false; }
@@ -142,103 +184,274 @@ export function loadMatchDNA(dnaTeam0, dnaTeam1) {
     _vWeights.set(dnaTeam0, _team0DnaOffset);
     if (_team1DnaOffset > 0) _vWeights.set(dnaTeam1, _team1DnaOffset);
 
-    // Configure all 4 nets once — C++ plan_turn reads these directly
     const C = AI_CONFIG;
     const _setNet = (fn, layerSizes, woff) => {
         for (let i = 0; i < layerSizes.length; i++) _vLayerSizesBuf[i] = layerSizes[i];
         _ex[fn](layerSizes.length, woff);
     };
-    _setNet('configure_net_pickup',  C.PICKUP_LAYER_SIZES,  0);
-    _setNet('configure_net_meld',    C.MELD_LAYER_SIZES,    C.DNA_PICKUP);
-    _setNet('configure_net_runner',  C.RUNNER_LAYER_SIZES,  C.DNA_PICKUP + C.DNA_MELD);
-    _setNet('configure_net_discard', C.DISCARD_LAYER_SIZES, C.DNA_PICKUP + C.DNA_MELD + C.DNA_RUNNER);
+
+    // Layer sizes: [input, 48, 48, 48, 48, output]
+    _setNet('configure_net_current',   [C.NN_CURRENT_INPUTS,48,48,48,48,24], 0);
+    _setNet('configure_net_seq',       [C.NN_SEQ_INPUTS,48,48,48,48,1],      C.DNA_CURRENT);
+    _setNet('configure_net_run',       [C.NN_RUN_INPUTS,48,48,48,48,1],      C.DNA_CURRENT + C.DNA_SEQ);
+    _setNet('configure_net_discard',   [C.NN_DISCARD_INPUTS,48,48,48,48,54], C.DNA_CURRENT + C.DNA_SEQ + C.DNA_RUN);
 }
 
-
-export function setActiveTeam(teamBase) { _activeTeamBase = teamBase; }
-export function setMatchState(G, player, myTeam, oppTeam) {
-    if (!_ex) return;
-    const numP = G.rules.numPlayers || 4;
-    const hs = (p) => G.handSizes[p.toString()] ?? 0;
-    const myTeamIdx  = myTeam;
-    const oppTeamIdx = oppTeam;
-    // topDiscard/topDeck: card IDs are now direct, no % 52 needed:
-    const topDiscard = G.discardPile.length > 0 ? G.discardPile[G.discardPile.length-1] : 255;
-    const topDeck    = G.deck.length > 0 ? G.deck[G.deck.length-1] : 255;
-    const runnersAllowed = (() => {
-        const r = G.rules.runners;
-        if (!r || r === 'none') return 0;
-        if (r === 'any') return 0xFF;
-        if (r === 'aces_kings')  return (1<<1)|(1<<13);
-        if (r === 'aces_threes') return (1<<1)|(1<<3);
-        if (Array.isArray(r)) return r.reduce((a,v) => a|(1<<v), 0);
-        return 0;
-    })();
-
-    _ex.set_match_state(
-        hs('0'), hs('1'), hs('2'), hs('3'),
-        Math.min(G.deck.length, 65535),
-        Math.min(G.discardPile.length, 65535),
-        topDiscard,
-        topDeck,
-        G.pots.length,
-        G.hasDrawn ? 1 : 0,
-        G.teamMortos[0] ? 1 : 0,
-        G.teamMortos[1] ? 1 : 0,
-        G.cleanMelds[0] || 0,
-        G.cleanMelds[1] || 0,
-        numP,
-        (G.rules.discard === 'closed' || G.rules.discard === true) ? 1 : 0,
-        runnersAllowed
-    );
-
-    // Write scalars
-    const e = v => (v <= 0 ? 0 : v >= 1 ? 255 : (v * 255 + 0.5) | 0);
-    if (_wasmScalars) {
-        _wasmScalars[0] = e(hs(player.toString()) / 22);
-        _wasmScalars[1] = e(hs(((player+1)%numP).toString()) / 22);
-        _wasmScalars[2] = e(hs(((player+2)%numP).toString()) / 22);
-        _wasmScalars[3] = e(hs(((player+3)%numP).toString()) / 22);
-        _wasmScalars[4] = e(G.deck.length / 104);
-        _wasmScalars[5] = e(G.discardPile.length / 104);
-        _wasmScalars[6] = G.teamMortos[myTeam]  ? 255 : 0;
-        _wasmScalars[7] = G.teamMortos[oppTeam] ? 255 : 0;
-        _wasmScalars[8] = e(G.pots.length / 2);
-        _wasmScalars[9] = (G.cleanMelds[myTeam]  || 0) > 0 ? 255 : 0;
-        _wasmScalars[10]= (G.cleanMelds[oppTeam] || 0) > 0 ? 255 : 0;
-    }
-}
-// Returns { moveType, cardCounts, targetType, targetSuit, targetSlot }
-// moveType: 0=drawCard,1=pickUpDiscard,2=playMeld,3=appendToMeld,4=discardCard,5=declareExhausted
-export function planTurnWasm(G, player, myTeam, oppTeam) {
-    if (!_ex?.cpp_plan_turn) return null;
+// Returns 24-dim state vector from NN_CURRENT, or null if not ready
+export function runCurrentState(G, player, myTeam, oppTeam) {
+    if (!_ex?.run_current_state) return null;
     const pInt = parseInt(player);
-    const myTeamIdx  = myTeam;
-    setActiveTeam(myTeamIdx === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
-    _ex.set_eval_context(pInt, myTeamIdx, myTeamIdx===0?1:0, 0, 0);
+
+    // Set match state (game context)
     setMatchState(G, pInt, myTeam, oppTeam);
-    const count = _ex.cpp_plan_turn();
-    if (count === 0) return [];
-    const listPtr = _ex.get_move_list();
-    const buf = new Uint8Array(_mem.buffer, listPtr, count * 58);
-    const moves = [];
-    for (let i = 0; i < count; i++) {
-        const off = i * 58;
-        const cc = {};
-        for (let j = 0; j < 53; j++) if (buf[off+5+j] > 0) cc[j===52?54:j] = buf[off+5+j];
-        moves.push({
-            phase:      buf[off],
-            moveType:   buf[off+1],
-            targetType: buf[off+2],
-            targetSuit: buf[off+3],
-            targetSlot: buf[off+4],
-            discardCard: buf[off+1]===4 ? (buf[off+5]===54?54:buf[off+5]) : -1,
-            cardCounts: cc
-        });
+
+    // Flush card bitmaps for NN_CURRENT input
+    _flushCardBitmaps(G, pInt, myTeam, oppTeam);
+
+    // Run NN_CURRENT
+    _ex.run_current_state(pInt, myTeam, oppTeam);
+
+    // Read state vector from output buffer
+    const state = new Float32Array(24);
+    for (let i = 0; i < 24; i++) state[i] = _vOut[i];
+    _vStateVec = state;
+
+    // Also write to shared WASM memory for other nets
+    if (_vStateVecWasm) {
+        for (let i = 0; i < 24; i++) _vStateVecWasm[i] = state[i];
     }
-    return moves;
+
+    return state;
 }
 
+// Flush card bitmaps into WASM memory for NN_CURRENT input
+function _flushCardBitmaps(G, player, myTeam, oppTeam) {
+    if (!_wasmOwnTable) return;
+
+    // Clear buffers
+    _wasmOwnTable.fill(0);
+    _wasmOppTable.fill(0);
+    _wasmDiscardFlat.fill(0);
+    _wasmHandFlat.fill(0);
+
+    // Own hand from g_cards2 (already synced)
+    _wasmHandFlat.set(_wasmCards2[player] || []);
+
+    // Discard pile
+    for (const c of (G.discardPile || [])) {
+        const idx = c === 54 ? 52 : c;
+        if (idx < 54) _wasmDiscardFlat[idx]++;
+    }
+
+    // Own-table and opp-table card bitmaps from melds
+    for (let t = 0; t < 2; t++) {
+        const isOwn = (t === myTeam);
+        const buf = isOwn ? _wasmOwnTable : _wasmOppTable;
+        const target = isOwn ? G.table[myTeam] : G.table[oppTeam];
+
+        // Seq melds
+        for (let s = 1; s <= 4; s++) {
+            for (const meld of (target[0]?.[s] || [])) {
+                const ids = meldToCardIDs(meld, s);
+                for (const id of ids) {
+                    if (id >= 0 && id < 54) buf[id]++;
+                }
+            }
+        }
+        // Runners
+        for (const meld of (target[1] || [])) {
+            const ids = meldToCardIDs(meld, 0);
+            for (const id of ids) {
+                if (id >= 0 && id < 54) buf[id]++;
+            }
+        }
+    }
+}
+
+// Convert a meld slot array to card IDs (0-53 for specific cards, +54 for wilds)
+// Adapted from client/src/game.js meldToCardIDs()
+function meldToCardIDs(m, suit) {
+    let cards = [];
+    const WILD_SUIT_OFFSET = 1; // wild card at offset 1 from each rank
+
+    if (m[0] || m[1] || m[2]) {
+        // Sequence meld: [lowA, highA, r2, r3, ..., r13, wildForeign, wildNatural]
+        const isSeq = m.length >= 16;
+        if (isSeq) {
+            const WildSuit = m[14] ? m[14] : suit; // wildForeign = suit if no foreign
+            // Low A (slot 0)
+            if (m[0]) cards.push(getCardId(suit, 0));
+            // Ranks 2-13
+            for (let r = 2; r <= 13; r++) {
+                const cardIdx = r === 2 ? 1 : r - 1; // slotToRank mapping
+                if (m[r]) {
+                    cards.push(getCardId(suit, cardIdx));
+                } else if (m[14] && r === getGapIndex(m)) {
+                    cards.push(getCardId(WildSuit, WILD_SUIT_OFFSET));
+                }
+            }
+            // High A (slot 1)
+            if (m[1]) cards.push(getCardId(suit, 0));
+            // Edge wild if gap at 0 and wild available
+            if (getGapIndex(m) === 0 && m[14] && !m[0]) {
+                cards.push(getCardId(suit, WILD_SUIT_OFFSET));
+            }
+        }
+    } else if (m.length >= 6) {
+        // Runner meld: [rank, spadeCnt, heartCnt, diamondCnt, clubCnt, wildSuit]
+        const rank = m[0];
+        const wildSuit = m[5] || 0;
+        for (let s = 1; s <= 4; s++) {
+            const cnt = m[s] || 0;
+            for (let i = 0; i < cnt; i++) {
+                cards.push(getCardId(s, rank - 1));
+                if (i > 0) cards.push(getCardId(s, rank - 1) + 54 * Math.floor(i / 4));
+            }
+        }
+        if (wildSuit) {
+            cards.push(getCardId(wildSuit, WILD_SUIT_OFFSET));
+        }
+    }
+    return cards;
+}
+
+// Get the rank index that represents a gap in the meld
+function getGapIndex(m) {
+    for (let r = 2; r <= 13; r++) {
+        if (!m[r]) return r - 1; // 0 = Ace position, r-1 maps to rank position
+    }
+    return 0;
+}
+
+// Convert suit (1-4) and rank0 (0-12) to card ID (0-51), or special values for wilds
+function getCardId(suit, rank0) {
+    if (rank0 === WILD_CARD_RANK) return 52; // wild card index
+    if (rank0 < 0 || rank0 > 12) return 0;
+    if (suit < 1 || suit > 4) return 0;
+    return (suit - 1) * 13 + rank0;
+}
+
+const WILD_CARD_RANK = -1; // sentinel for wilds
+
+function _encodeSeqCandidate(cand) {
+    const encoded = new Uint8Array(SEQ_CAND_ENCODE_SIZE);
+    const s = cand.targetSuit || seqSuit(Object.keys(cand.cardCounts).map(Number));
+    encoded[0] = s || 1;
+
+    const newMeld = cand.parsedMeld;
+    if (newMeld && newMeld.length === 16) {
+        for (let i = 0; i < 14; i++) encoded[1 + i] = newMeld[i] ? 255 : 0;
+        encoded[1 + 14] = newMeld[14] ? 255 : 0;
+        encoded[1 + 15] = newMeld[15] ? 255 : 0;
+    }
+    if (cand.existingMeld && cand.existingMeld.length === 16) {
+        const off = 1 + 16;
+        for (let i = 0; i < 14; i++) encoded[off + i] = cand.existingMeld[i] ? 255 : 0;
+        encoded[off + 14] = cand.existingMeld[14] ? 255 : 0;
+        encoded[off + 15] = cand.existingMeld[15] ? 255 : 0;
+    }
+    return encoded;
+}
+
+function _encodeRunCandidate(cand) {
+    const encoded = new Uint8Array(RUN_CAND_ENCODE_SIZE);
+    const runnerMeld = cand.parsedMeld;
+    if (runnerMeld && runnerMeld.length === 6) {
+        encoded[0] = Math.round(runnerMeld[0] / 13 * 255);
+        for (let i = 0; i < 4; i++) encoded[1 + i] = Math.round((runnerMeld[i + 1] || 0) / 2 * 255);
+        if (cand.existingMeld && cand.existingMeld.length === 6) {
+            const off = 1 + 5;
+            for (let i = 0; i < 4; i++) encoded[off + i] = Math.round((cand.existingMeld[i + 1] || 0) / 2 * 255);
+        }
+    }
+    return encoded;
+}
+
+export function scoreSeqCandidates(candidates) {
+    if (!_ex || !candidates?.length) return [];
+    const ncands = Math.min(candidates.length, 20);
+
+    // Write state vector to WASM batch
+    if (_vStateVecWasm && _vStateVec) {
+        for (let i = 0; i < 24; i++) _vStateVecWasm[i] = _vStateVec[i];
+    }
+
+    // Encode candidates into WASM batch buffer
+    const stateBytes = new Uint8Array(_vSeqCandBatch.buffer, _vSeqCandBatch.byteOffset, 96);
+    if (_vStateVec) {
+        for (let i = 0; i < 24; i++) {
+            const f = _vStateVec[i];
+            const bytes = new Uint8Array(new Float32Array([f]).buffer);
+            stateBytes[i * 4]     = bytes[0];
+            stateBytes[i * 4 + 1] = bytes[1];
+            stateBytes[i * 4 + 2] = bytes[2];
+            stateBytes[i * 4 + 3] = bytes[3];
+        }
+    }
+
+    for (let c = 0; c < ncands; c++) {
+        const enc = _encodeSeqCandidate(candidates[c]);
+        const base = 96 + c * 33;
+        for (let i = 0; i < 33; i++) _vSeqCandBatch[base + i] = enc[i];
+    }
+
+    _ex.score_seq_candidates(ncands);
+
+    const scores = [];
+    for (let i = 0; i < ncands; i++) scores.push(_vOut[i]);
+    return scores;
+}
+
+export function scoreRunCandidates(candidates) {
+    if (!_ex || !candidates?.length) return [];
+    const ncands = Math.min(candidates.length, 20);
+
+    // Write state vector to WASM batch
+    if (_vStateVecWasm && _vStateVec) {
+        for (let i = 0; i < 24; i++) _vStateVecWasm[i] = _vStateVec[i];
+    }
+
+    const stateBytes = new Uint8Array(_vRunCandBatch.buffer, _vRunCandBatch.byteOffset, 96);
+    if (_vStateVec) {
+        for (let i = 0; i < 24; i++) {
+            const f = _vStateVec[i];
+            const bytes = new Uint8Array(new Float32Array([f]).buffer);
+            stateBytes[i * 4]     = bytes[0];
+            stateBytes[i * 4 + 1] = bytes[1];
+            stateBytes[i * 4 + 2] = bytes[2];
+            stateBytes[i * 4 + 3] = bytes[3];
+        }
+    }
+
+    for (let c = 0; c < ncands; c++) {
+        const enc = _encodeRunCandidate(candidates[c]);
+        const base = 96 + c * 11;
+        for (let i = 0; i < 11; i++) _vRunCandBatch[base + i] = enc[i];
+    }
+
+    _ex.score_run_candidates(ncands);
+
+    const scores = [];
+    for (let i = 0; i < ncands; i++) scores.push(_vOut[i]);
+    return scores;
+}
+
+export function scoreDiscards() {
+    if (!_ex || !_vStateVec) return null;
+
+    // Write state vector to WASM memory
+    if (_vStateVecWasm) {
+        for (let i = 0; i < 24; i++) _vStateVecWasm[i] = _vStateVec[i];
+    }
+
+    const C = AI_CONFIG;
+    const discardWoff = C.DNA_CURRENT + C.DNA_SEQ + C.DNA_RUN;
+    _ex.score_discard(discardWoff);
+
+    const logits = new Float32Array(54);
+    for (let i = 0; i < 54; i++) logits[i] = _vOut[i];
+    return logits;
+}
 
 // Called by planTurn once per turn to set player context and write scalars
 export function setTurnContext(player, myTeam, oppTeam, scalars) {
@@ -255,11 +468,8 @@ export function updateSeqMeld(teamIdx, suit0, slotIdx, meldArray) {
     const dst = _wasmSeqMelds[teamIdx][suit0][slotIdx];
     dst.fill(0);
     if (meldArray) {
-        // slots 0-13: binary presence (0 or 1) → store as 0/255
         for (let i = 0; i < 14 && i < meldArray.length; i++) dst[i] = meldArray[i] ? 255 : 0;
-        // slot 14: foreign wild suit (0=none, 1-5) → store raw value
         dst[14] = meldArray[14] || 0;
-        // slot 15: nat wild count (0 or 1) → store as 0/255
         dst[15] = meldArray[15] ? 255 : 0;
     }
 }
@@ -316,184 +526,173 @@ function _configureNet(layerSizes, netOffset) {
     _ex.configure(layerSizes.length, _activeTeamBase + netOffset);
 }
 
-function suitsToEvaluate(topDiscard) {
-    if (topDiscard === null) return [1,2,3,4];
-    const s = Math.floor((topDiscard % 55) / 13) + 1;
-    const r = ((topDiscard % 55) % 13) + 1;
-    if (s === 5 || r === 2) return [1,2,3,4];
-    return [s];
-}
-
-function suitsInCandidates(candidates) {
-    const seen = new Set();
-    for (const cand of candidates) {
-        if (!cand.parsedMeld || cand.parsedMeld.length === 6) continue;
-        const ids = cand.cardCounts ? Object.keys(cand.cardCounts).map(k => +k) : [];
-        const s = seqSuit(ids);
-        if (s >= 1 && s <= 4) seen.add(s);
-    }
-    return seen.size > 0 ? [...seen] : [1];
-}
-
-// layerKey → int: 0=PICKUP, 1=MELD, 2=RUNNER, 3=DISCARD
-const _layerKeyInt = { PICKUP: 0, MELD: 1, RUNNER: 2, DISCARD: 3 };
-
-function _scoreNet(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id,
-                   candidates, weights, topDiscard, layerKey, meldIdx) {
-    const netOffset = layerKey === 'PICKUP' ? 0
-                    : layerKey === 'MELD'   ? AI_CONFIG.DNA_PICKUP
-                    : layerKey === 'RUNNER' ? AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD
-                    :                         AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD + AI_CONFIG.DNA_RUNNER;
-    _configureNet(AI_CONFIG[layerKey + '_LAYER_SIZES'], netOffset);
-
-    const lkInt = _layerKeyInt[layerKey];
-
-    if (layerKey === 'RUNNER') {
-        writeRunCands(candidates, candidates.length);
-        _ex.set_eval_context(_activePlayer, _activeMyTeam, _activeOppTeam, 0, lkInt);
-        const t0 = performance.now(); _ex.evaluate(); addForwardPassTime(performance.now() - t0); addWasmDiag(1, 0);
-        const totals = new Float32Array(candidates.length);
-        for (let i = 0; i < candidates.length; i++) totals[i] = _vOut[i];
-        return totals;
-    }
-
-    const suits = layerKey === 'MELD' ? suitsInCandidates(candidates) : suitsToEvaluate(topDiscard);
-    const maxSlots = AI_CONFIG[layerKey + '_CANDIDATES'];
-    const totals = layerKey === 'PICKUP' ? _totalsPickup : _totalsMeld;
-    totals.fill(0, 0, candidates.length);
-
-    // Pre-classify runners vs seq
-    const runnerIndices = [];
-    const seqBySuit = { 1: [], 2: [], 3: [], 4: [] };
-    for (let i = 0; i < candidates.length; i++) {
-        const cand = candidates[i];
-        const isRunner = cand.parsedMeld?.length === 6;
-        if (isRunner || !cand.parsedMeld) { runnerIndices.push(i); continue; }
-        const s = seqSuit(cand.cardCounts ? Object.keys(cand.cardCounts).map(k => +k) : []);
-        if (s >= 1 && s <= 4) seqBySuit[s].push(i); else runnerIndices.push(i);
-    }
-    const suitsWithSeq = suits.filter(s => seqBySuit[s].length > 0);
-    const runnerSuit = suitsWithSeq.length > 0 ? suitsWithSeq[0] : suits[0];
-
-    // Reuse meldIdx seq melds to compute appendIdx
-    const myIdx = meldIdx || { my: { seqBySuit: {1:[],2:[],3:[],4:[]}, runners: [] } };
-
-    for (const suit of suits) {
-        const suitSeqMelds = myIdx.my?.seqBySuit?.[suit] || [];
-        const suitCands = [];
-        const suitIndices = [];
-
-        for (const i of seqBySuit[suit]) {
-            if (suitCands.length >= maxSlots) break;
-            const cand = candidates[i];
-            let appendIdx = cand.appendIdx;
-            if (cand.move === 'appendToMeld') {
-                const t = cand.args[0];
-                appendIdx = (t.type === 'seq' && t.suit === suit)
-                    ? suitSeqMelds.findIndex(e => e.index === t.index) + 1 : 0;
-            }
-            suitCands.push(appendIdx !== cand.appendIdx ? { ...cand, appendIdx } : cand);
-            suitIndices.push(i);
-        }
-        if (suit === runnerSuit) {
-            for (const i of runnerIndices) {
-                if (suitCands.length >= maxSlots) break;
-                suitCands.push(candidates[i]);
-                suitIndices.push(i);
-            }
-        }
-        if (suitCands.length === 0) continue;
-
-        writeSeqCands(suitCands, suitCands.length);
-        _ex.set_eval_context(_activePlayer, _activeMyTeam, _activeOppTeam, suit, lkInt);
-        const t0 = performance.now(); _ex.evaluate(); addForwardPassTime(performance.now() - t0); addWasmDiag(1, 0);
-        for (let i = 0; i < suitCands.length; i++) totals[suitIndices[i]] += _vOut[i];
-    }
-    return totals;
-}
-
-function _scoreDiscard(G, p, myTeam, oppTeam, opp1Id, partnerId, opp2Id, weights, meldIdx) {
-    _configureNet(AI_CONFIG.DISCARD_LAYER_SIZES, AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD + AI_CONFIG.DNA_RUNNER);
-    _ex.set_eval_context(_activePlayer, _activeMyTeam, _activeOppTeam, 0, 3);
-    const t0 = performance.now(); _ex.evaluate(); addForwardPassTime(performance.now() - t0); addWasmDiag(1, 0);
-    return new Float32Array(_vOut.buffer, _vOut.byteOffset, AI_CONFIG.DISCARD_CLASSES);
-}
-
 export function isWasmReady() { return _ex !== null; }
 
 
-// ── Shared turn executor ──────────────────────────────────────────────────────
-// Builds the full ordered move list from WASM output:
-//   [pickup candidates in score order] + [drawCard fallback]
-//   [meld/append moves with positive score, in score order]
-//   [discard candidates in score order] + [force-discard fallback]
-// Returns the list. Callers iterate it:
-//   - fire each move in order
-//   - once a pickup succeeds (hasPickedUp), skip remaining pickup moves
-//   - once a discard succeeds, stop (turn ends)
+// ── Two-phase NN turn executor ───────────────────────────────────────────────
 export function buildTurnMoveList(G, player, myTeam, oppTeam, silent = false) {
-    if (!_ex?.cpp_plan_turn) return null;
+    if (!_ex?.run_current_state) return null;
     const pInt = parseInt(player);
     const myTeamIdx = myTeam;
     setActiveTeam(myTeamIdx === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
-    _ex.set_eval_context(pInt, myTeamIdx, myTeamIdx === 0 ? 1 : 0, 0, 0);
-    setMatchState(G, pInt, myTeam, oppTeam);
-    const _pt0 = performance.now(); const count = _ex.cpp_plan_turn(); addPlanTurnTime(performance.now() - _pt0);
-    if (!silent && _ex.get_dbg_buf && _ex.get_dbg_len) { const len = _ex.get_dbg_len(); if (len > 0) console.log(new TextDecoder().decode(new Uint8Array(_mem.buffer, _ex.get_dbg_buf(), len))); }
-    _lastDbgLog = '';
-    if (_ex.get_dbg_buf && _ex.get_dbg_len) {
-        const len = _ex.get_dbg_len();
-        if (len > 0) _lastDbgLog = new TextDecoder().decode(new Uint8Array(_mem.buffer, _ex.get_dbg_buf(), len));
-    }
 
-    const listPtr = _ex.get_move_list();
-    const buf = new Uint8Array(_mem.buffer, listPtr, count * 58);
+    const _pt0 = performance.now();
 
+    // Phase 1: NN_CURRENT — encode full game state → 24-dim state vector
+    const stateVec = runCurrentState(G, pInt, myTeamIdx, oppTeam);
+    if (!stateVec) return null;
+
+    // Phase 2: Generate and score candidates using NN_SEQ, NN_RUN, NN_DISCARD
     const pickupMoves = [];
     const meldMoves = [];
     const discardMoves = [];
-    let hasDrawInPickup = false;
 
-    for (let i = 0; i < count; i++) {
-        const off = i * 58;
-        const phase    = buf[off];
-        const moveType = buf[off+1];
-        const tType    = buf[off+2];
-        const tSuit    = buf[off+3];
-        const tSlot    = buf[off+4];
-        const cc = {};
-        for (let j = 0; j < 53; j++) if (buf[off+5+j] > 0) cc[j === 52 ? 54 : j] = buf[off+5+j];
-
-        if (phase === 0) {
-            if (moveType === 0) { pickupMoves.push({ phase, moveType, cardCounts: cc }); hasDrawInPickup = true; }
-            else if (moveType === 1) {
-                const tgt = tType === 2 ? { type: 'append', meldTarget: { type: 'runner', index: tSlot } }
-                          : tType === 1 ? { type: 'append', meldTarget: { type: 'seq', suit: tSuit, index: tSlot } }
-                          : { type: 'new' };
-                pickupMoves.push({ phase, moveType, cardCounts: cc, pickupTarget: tgt });
-            }
-            else if (moveType === 5) pickupMoves.push({ phase, moveType, cardCounts: cc });
-        } else if (phase === 1) {
-            // Only positive-scored melds — C++ already sorted descending, all have score > 0 if included
-            meldMoves.push({ phase, moveType, targetType: tType, targetSuit: tSuit, targetSlot: tSlot, cardCounts: cc });
-        } else if (phase === 2) {
-            const discardCard = buf[off+5] === 54 ? 54 : buf[off+5];
-            discardMoves.push({ phase, moveType, discardCard, cardCounts: cc });
-        }
+    // ── Phase 0: draw or exhaust (no NN scoring needed for draw) ──────────
+    pickupMoves.push({ phase: 0, moveType: 0, cardCounts: {} });
+    if ((G.deck?.length || 0) === 0 && (G.pots?.length || 0) === 0) {
+        pickupMoves.push({ phase: 0, moveType: 5, cardCounts: {} });
     }
 
-    // Fallback: force-draw at bottom of pickup list if not already there
-    if (!hasDrawInPickup) pickupMoves.push({ phase: 0, moveType: 0, cardCounts: {}, _fallback: true });
-
-    // Fallback: force-discard (first card in hand) at bottom of discard list
+    // ── Candidate generation for melding ──────────────────────────────────
     const flat = G.cards?.[player.toString()] || G.cards?.[pInt] || [];
-    for (let i = 0; i < 53; i++) {
-        if ((flat[i] || 0) > 0) {
-            discardMoves.push({ phase: 2, moveType: 4, discardCard: i === 52 ? 54 : i, cardCounts: {}, _fallback: true });
-            break;
+    const handSim = new Uint8Array(flat);
+    const topDiscard = G.discardPile?.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
+    const allCands = generateAllValidMelds(G, pInt, handSim, myTeamIdx, topDiscard) || [];
+
+    // Separate seq/run meld candidates from append candidates
+    const seqMeldCands = allCands.filter(c => c.moveType === 'playMeld');
+    const runnerCands = allCands.filter(c => c.moveType === 'playRunner');
+    const seqAppendCands = allCands.filter(c => c.moveType === 'appendToMeld');
+    const runnerAppendCands = allCands.filter(c => c.moveType === 'appendRunner');
+
+    // ── Score and filter sequence meld candidates ─────────────────────────
+    if (seqMeldCands.length > 0) {
+        const seqScores = scoreSeqCandidates(seqMeldCands);
+        let bestIdx = -1;
+        let bestScore = -Infinity;
+        for (let i = 0; i < seqScores.length; i++) {
+            if (seqScores[i] > bestScore) {
+                bestScore = seqScores[i];
+                bestIdx = i;
+            }
+        }
+        if (bestIdx >= 0 && bestScore > -Infinity) {
+            const c = seqMeldCands[bestIdx];
+            meldMoves.push({
+                phase: 1, moveType: 2, targetType: 0,
+                targetSuit: c.targetSuit, targetSlot: 0,
+                cardCounts: c.cardCounts
+            });
         }
     }
 
+    // ── Score and filter runner (new runner) candidates ──────────────────
+    if (runnerCands.length > 0) {
+        const runScores = scoreRunCandidates(runnerCands);
+        let bestIdx = -1;
+        let bestScore = -Infinity;
+        for (let i = 0; i < runScores.length; i++) {
+            if (runScores[i] > bestScore) {
+                bestScore = runScores[i];
+                bestIdx = i;
+            }
+        }
+        if (bestIdx >= 0 && bestScore > -Infinity) {
+            const c = runnerCands[bestIdx];
+            meldMoves.push({
+                phase: 1, moveType: 2, targetType: 0,
+                targetSuit: 0, targetSlot: 0,
+                cardCounts: c.cardCounts
+            });
+        }
+    }
+
+    // ── Score and filter sequence append candidates ──────────────────────
+    if (seqAppendCands.length > 0) {
+        const seqScores = scoreSeqCandidates(seqAppendCands);
+        let bestIdx = -1;
+        let bestScore = -Infinity;
+        for (let i = 0; i < seqScores.length; i++) {
+            if (seqScores[i] > bestScore) {
+                bestScore = seqScores[i];
+                bestIdx = i;
+            }
+        }
+        if (bestIdx >= 0 && bestScore > -Infinity) {
+            const c = seqAppendCands[bestIdx];
+            meldMoves.push({
+                phase: 1, moveType: 3, targetType: 1,
+                targetSuit: c.targetSuit, targetSlot: c.targetSlot,
+                cardCounts: c.cardCounts
+            });
+        }
+    }
+
+    // ── Score and filter runner append candidates ────────────────────────
+    if (runnerAppendCands.length > 0) {
+        const runScores = scoreRunCandidates(runnerAppendCands);
+        let bestIdx = -1;
+        let bestScore = -Infinity;
+        for (let i = 0; i < runScores.length; i++) {
+            if (runScores[i] > bestScore) {
+                bestScore = runScores[i];
+                bestIdx = i;
+            }
+        }
+        if (bestIdx >= 0 && bestScore > -Infinity) {
+            const c = runnerAppendCands[bestIdx];
+            meldMoves.push({
+                phase: 1, moveType: 3, targetType: 2,
+                targetSuit: 0, targetSlot: c.targetSlot,
+                cardCounts: c.cardCounts
+            });
+        }
+    }
+
+    // ── Score and filter discard candidates (all hand cards) ─────────────
+    const discardCands = [];
+    for (let i = 0; i < 54; i++) {
+        const cnt = (flat[i] || 0);
+        if (cnt > 0) {
+            discardCands.push(i);
+        }
+    }
+    if (discardCands.length > 0) {
+        const logits = scoreDiscards();
+        if (logits) {
+            let bestIdx = -1;
+            let bestScore = -Infinity;
+            for (const cid of discardCands) {
+                if (logits[cid] > bestScore) {
+                    bestScore = logits[cid];
+                    bestIdx = cid;
+                }
+            }
+            if (bestIdx >= 0) {
+                discardMoves.push({
+                    phase: 2, moveType: 4,
+                    discardCard: bestIdx === 52 ? 54 : bestIdx,
+                    cardCounts: { [bestIdx]: 1 }
+                });
+            }
+        }
+    }
+
+    // Fallback: force-discard (first card in hand) if no discard selected
+    if (discardMoves.length === 0) {
+        for (let i = 0; i < 53; i++) {
+            if ((flat[i] || 0) > 0) {
+                discardMoves.push({
+                    phase: 2, moveType: 4,
+                    discardCard: i === 52 ? 54 : i,
+                    cardCounts: {}, _fallback: true
+                });
+                break;
+            }
+        }
+    }
+
+    addPlanTurnTime(performance.now() - _pt0);
     return [...pickupMoves, ...meldMoves, ...discardMoves];
 }
 
@@ -521,8 +720,6 @@ export function syncCardsToWasm(G, numPlayers) {
         const idx = c === 54 ? 52 : c;
         if (idx < 54) _wasmDiscard2[idx]++;
     }
-    // Sync meld tables — only when not using WASM-backed buffers (bot.js)
-    // Worker.js keeps melds in sync via _onUpdateMeld hook, skip full re-sync
     if (!_usingWasmBackedBuffers) {
         for (let t = 0; t < 2; t++) {
             const teamId = t;
@@ -563,15 +760,11 @@ export function getCppTimings() {
 }
 
 // ── Shared turn executor ───────────────────────────────────────────────────────
-// iface must provide:
-//   draw(), pickup(cc, target), meld(cc), append(tgt, cc), discard(cardId), exhaust()
-//   hasDrawn() -> bool, firstHandCard() -> cardId or -1
-// Returns true if turn ended (discard succeeded or exhausted).
 export function executeTurnMove(m, iface, log) {
     if (!m) return false;
 
     if (m.phase === 0) {
-        if (iface.hasDrawn()) return false; // already picked up, skip
+        if (iface.hasDrawn()) return false;
         if (m.moveType === 5) {
             log?.('declareExhausted'); iface.exhaust(); return true;
         } else if (m.moveType === 0) {
@@ -604,11 +797,8 @@ export function executeTurnMove(m, iface, log) {
     return false;
 }
 
-
-
 // Full turn executor: fires all moves in queue with hardcoded fallbacks from live gamestate
 export function executeTurn(getG, playerID, moves, iface, log) {
-    // Phase 0: pickup — fire in order until hasDrawn, then hardcoded fallback
     for (const m of moves.filter(m => m.phase === 0)) {
         if (iface.hasDrawn()) break;
         executeTurnMove(m, iface, log);
@@ -622,12 +812,10 @@ export function executeTurn(getG, playerID, moves, iface, log) {
         }
     }
 
-    // Phase 1: melds — fire all, ignore failures
     for (const m of moves.filter(m => m.phase === 1)) {
         executeTurnMove(m, iface, log);
     }
 
-    // Phase 2: discard — fire in order until !hasDrawn, then hardcoded fallback
     for (const m of moves.filter(m => m.phase === 2)) {
         if (!iface.hasDrawn()) break;
         executeTurnMove(m, iface, log);
@@ -647,24 +835,9 @@ export function executeTurn(getG, playerID, moves, iface, log) {
 }
 
 // ── runTurn ───────────────────────────────────────────────────────────────────
-// Shared turn logic used by both bot.js (one move per tick) and worker.js (sync loop).
-//
-// iface must provide:
-//   hasDrawn() -> bool
-//   draw(), pickup(cc, target), meld(cc), append(tgt, cc), discard(cardId), exhaust()
-//
-// getG() -> current G (live state for bot.js, direct S reference for worker.js)
-// queue: the move list built by buildTurnMoveList, mutated in place (moves shifted out)
-// log: optional (msg) => void, omit for worker.js to avoid spam
-//
-// Bot.js: call once per tick — fires one move and returns.
-// Worker.js: call in a while(!done) loop until turn ends.
-// Returns true when the turn is complete (discard or exhaust succeeded).
-
 export function runTurn(queue, getG, playerID, iface, log) {
     const G = getG();
 
-    // Phase 0: pickup — find next pickup move in queue, or hardcoded fallback
     if (!iface.hasDrawn()) {
         const idx = queue.findIndex(m => m.phase === 0);
         if (idx >= 0) {
@@ -672,7 +845,6 @@ export function runTurn(queue, getG, playerID, iface, log) {
             executeTurnMove(m, iface, log);
             return false;
         }
-        // No pickup moves left — hardcoded fallback
         if (G.deck.length === 0 && G.pots.length === 0) {
             log?.('declareExhausted [hardcoded fallback]');
             iface.exhaust();
@@ -683,7 +855,6 @@ export function runTurn(queue, getG, playerID, iface, log) {
         return false;
     }
 
-    // Phase 1: meld/append — fire next one if available
     const meldIdx = queue.findIndex(m => m.phase === 1);
     if (meldIdx >= 0) {
         const m = queue.splice(meldIdx, 1)[0];
@@ -691,7 +862,6 @@ export function runTurn(queue, getG, playerID, iface, log) {
         return false;
     }
 
-    // Phase 2: discard — fire next one if available
     const discIdx = queue.findIndex(m => m.phase === 2);
     if (discIdx >= 0) {
         const m = queue.splice(discIdx, 1)[0];
@@ -699,12 +869,10 @@ export function runTurn(queue, getG, playerID, iface, log) {
         return true;
     }
 
-    // No discard moves left — hardcoded fallback: try each card in hand in order across ticks
     const flat = G.cards?.[playerID.toString()] || [];
     for (let i = 0; i < 53; i++) {
         if ((flat[i] || 0) > 0) {
             const cardId = i === 52 ? 54 : i;
-            // Push remaining cards back as fallback moves so next tick tries the next card
             for (let j = i + 1; j < 53; j++)
                 if ((flat[j] || 0) > 0)
                     queue.push({ phase: 2, moveType: 4, discardCard: j === 52 ? 54 : j, _fallback: true });
@@ -716,3 +884,85 @@ export function runTurn(queue, getG, playerID, iface, log) {
     return false;
 }
 
+export function setActiveTeam(teamBase) { _activeTeamBase = teamBase; }
+export function setMatchState(G, player, myTeam, oppTeam) {
+    if (!_ex) return;
+    const numP = G.rules.numPlayers || 4;
+    const hs = (p) => G.handSizes[p.toString()] ?? 0;
+    const myTeamIdx  = myTeam;
+    const oppTeamIdx = oppTeam;
+    const topDiscard = G.discardPile.length > 0 ? G.discardPile[G.discardPile.length-1] : 255;
+    const topDeck    = G.deck.length > 0 ? G.deck[G.deck.length-1] : 255;
+    const runnersAllowed = (() => {
+        const r = G.rules.runners;
+        if (!r || r === 'none') return 0;
+        if (r === 'any') return 0xFF;
+        if (r === 'aces_kings')  return (1<<1)|(1<<13);
+        if (r === 'aces_threes') return (1<<1)|(1<<3);
+        if (Array.isArray(r)) return r.reduce((a,v) => a|(1<<v), 0);
+        return 0;
+    })();
+
+    _ex.set_match_state(
+        hs('0'), hs('1'), hs('2'), hs('3'),
+        Math.min(G.deck.length, 65535),
+        Math.min(G.discardPile.length, 65535),
+        topDiscard,
+        topDeck,
+        G.pots.length,
+        G.hasDrawn ? 1 : 0,
+        G.teamMortos[0] ? 1 : 0,
+        G.teamMortos[1] ? 1 : 0,
+        G.cleanMelds[0] || 0,
+        G.cleanMelds[1] || 0,
+        numP,
+        (G.rules.discard === 'closed' || G.rules.discard === true) ? 1 : 0,
+        runnersAllowed
+    );
+
+    const e = v => (v <= 0 ? 0 : v >= 1 ? 255 : (v * 255 + 0.5) | 0);
+    if (_wasmScalars) {
+        _wasmScalars[0] = e(hs(player.toString()) / 22);
+        _wasmScalars[1] = e(hs(((player+1)%numP).toString()) / 22);
+        _wasmScalars[2] = e(hs(((player+2)%numP).toString()) / 22);
+        _wasmScalars[3] = e(hs(((player+3)%numP).toString()) / 22);
+        _wasmScalars[4] = e(G.deck.length / 104);
+        _wasmScalars[5] = e(G.discardPile.length / 104);
+        _wasmScalars[6] = G.teamMortos[myTeam]  ? 255 : 0;
+        _wasmScalars[7] = G.teamMortos[oppTeam] ? 255 : 0;
+        _wasmScalars[8] = e(G.pots.length / 2);
+        _wasmScalars[9] = (G.cleanMelds[myTeam]  || 0) > 0 ? 255 : 0;
+        _wasmScalars[10]= (G.cleanMelds[oppTeam] || 0) > 0 ? 255 : 0;
+    }
+}
+
+// ─── Legacy WASM wrapper — not used in new two-phase flow ────────────────────
+// Kept for backward compatibility with existing bot.js callers
+export function planTurnWasm(G, player, myTeam, oppTeam) {
+    if (!_ex?.cpp_plan_turn) return null;
+    const pInt = parseInt(player);
+    const myTeamIdx  = myTeam;
+    setActiveTeam(myTeamIdx === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
+    _ex.set_eval_context(pInt, myTeamIdx, myTeamIdx===0?1:0, 0, 0);
+    setMatchState(G, pInt, myTeam, oppTeam);
+    const t0 = performance.now(); const count = _ex.cpp_plan_turn(); addPlanTurnTime(performance.now() - t0);
+    if (count === 0) return [];
+    const listPtr = _ex.get_move_list();
+    const buf = new Uint8Array(_mem.buffer, listPtr, count * 58);
+    const moves = [];
+    for (let i = 0; i < count; i++) {
+        const off = i * 58;
+        const cc = {};
+        for (let j = 0; j < 53; j++) if (buf[off+5+j] > 0) cc[j===52?54:j] = buf[off+5+j];
+        moves.push({
+            phase:      buf[off],
+            moveType:   buf[off+1],
+            targetType: buf[off+2],
+            targetSuit: buf[off+3],
+            targetSlot: buf[off+4],
+            discardCard: buf[off+1]===4 ? (buf[off+5]===54?54:buf[off+5]) : -1,
+            cardCounts: cc
+        });
+    }
+    return moves;
+}

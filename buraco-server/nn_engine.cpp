@@ -1,40 +1,21 @@
 // ─── Overview ──────────────────────────────────────────────────────────────────
-// nn_engine.cpp — C++ Neural Network Engine (compiled to WebAssembly)
+// nn_engine.cpp — C++ Neural Network Scoring Engine (compiled to WebAssembly)
 //
-// This is the core AI inference engine for the Buraco bot. It contains four
-// fully-connected feedforward neural networks (PICKUP, MELD, RUNNER, DISCARD)
-// that score candidate game actions. The entire engine compiles to .wasm and
-// is loaded by wasm_loader.js at runtime.
+// Two-phase architecture:
+//   1. NN_CURRENT:   full game state (417 features) → 24-dim state vector
+//   2. Phase nets:    NN_SEQ (58→1), NN_RUN (35→1), NN_DISCARD (24→54)
 //
-// Architecture:
-//   - Four independent neural nets share memory but have separate weights
-//   - Networks evaluate sequences (runs within suit), runners (same rank across suits),
-//     discard picks, and card pickups from the discard pile
-//   - Forward pass uses SIMD (WebAssembly SIMD128) for matrix multiplication
-//   - Input is structured bitmaps (cards, known cards, discard, melds, scalars)
-//   - plan_turn() is the main entry: it scores ALL candidate actions in one call
+// The state vector (24 dims) from NN_CURRENT is reused across all phase nets.
 //
-// plan_turn() phases:
-//   Phase 0 (PICKUP): Score drawCard vs pickUpDiscard vs declareExhausted
-//     - Finds sequence candidates from hand+discard, scores with PICKUP net
-//   Phase 1 (MELD): Score playMeld vs appendToMeld vs playRunner
-//     - Finds all valid new melds and appends, scores with MELD/RUNNER nets
-//   Phase 2 (DISCARD): Score which card to discard
-//     - Scores each hand card with the DISCARD net, emits sorted
-//
-// Key data structures:
-//   g_cards2[g_player][card]    — Card bitmap (count of each card in hand)
-//   g_seq_melds[team][suit][slot][16] — Sequence meld representation
-//   g_run_melds[team][slot][6]    — Runner meld representation
-//   g_move_list[12][58]          — Planned moves output buffer
-//   g_out[64]                    — Network output buffer
-//
-// WASM exports: get_cards2, get_scalars, get_seq_meld, evaluate, configure,
-//   cpp_plan_turn, set_match_state, set_eval_context, configure_net_*, etc.
+// WASM exports: get_cards2, get_scalars, get_seq_meld, get_run_meld, evaluate,
+//   configure, set_match_state, set_eval_context, configure_net_*,
+//   run_current_state, score_seq_candidates, score_run_candidates, score_discard
+//   Plus backward-compat: cpp_plan_turn, get_move_list, get_planned_move
 // ──────────────────────────────────────────────────────────────────────────────
 
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
 #include <wasm_simd128.h>
 
 #define WASM_EXPORT __attribute__((visibility("default")))
@@ -43,21 +24,18 @@
 #define MAX_LAYER_SIZE   1024
 #define MAX_OUTPUT_SIZE  64
 #define MAX_WEIGHTS      4000000
-#define MAX_SUITS        4
 #define MAX_PLAYERS      4
 #define CARDS_FLAT_SIZE  54
 
-// ── Structured input buffers (JS writes directly, C++ reads in-place) ─────────
-
-// Card bitmaps — JS holds Uint8Array views, writes ++ / --
+// ── Card bitmaps (kept from original — JS writes directly) ────────────────────
 static uint8_t g_cards2     [MAX_PLAYERS][CARDS_FLAT_SIZE];
 static uint8_t g_knowncards2[MAX_PLAYERS][CARDS_FLAT_SIZE];
 static uint8_t g_discard2   [CARDS_FLAT_SIZE];
 
-// Scalars — 11 uint8 values written once per turn by JS
+// ── Scalars — 11 uint8 values written once per turn by JS ─────────────────────
 static uint8_t g_scalars[11];
 
-// Meld tables — JS writes when melds are played/updated
+// ── Meld tables (kept from original — JS writes when melds are played/updated) ─
 // seq: [team 0/1][suit 0-3][slot 0-4][16 bytes]
 // run: [team 0/1][slot 0-3][6 bytes]
 #define MAX_SEQ_SLOTS 5
@@ -65,15 +43,48 @@ static uint8_t g_scalars[11];
 static uint8_t g_seq_melds[2][4][MAX_SEQ_SLOTS][16];
 static uint8_t g_run_melds[2][MAX_RUN_SLOTS][6];
 
-// Candidate buffers — getAllValidMelds/Appends write encoded candidates here
+// ── NN_CURRENT input buffers (new) ────────────────────────────────────────────
+// Top-5 seq melds for own team and opponent team, flattened across suits
+static uint8_t g_own_seq[MAX_SEQ_SLOTS][16];  // top 5 seq melds (flattened suit-by-suit, pick best)
+static uint8_t g_opp_seq[MAX_SEQ_SLOTS][16];
+static uint8_t g_own_runs[MAX_RUN_SLOTS][5];  // rank/13, ♠/2, ♥/2, ♦/2, ♣/2, wildSuit/5
+static uint8_t g_opp_runs[MAX_RUN_SLOTS][5];
+// Card bitmaps for NN_CURRENT
+static uint8_t g_own_table[54];   // all cards on own team's melds
+static uint8_t g_opp_table[54];   // all cards on opponent's melds
+static uint8_t g_discard_flat[54];
+static uint8_t g_hand_flat[54];
+// State vector output from NN_CURRENT
+static float g_current_state[24];
+
+// ── Backward-compat candidate buffers (kept) ──────────────────────────────────
 #define MAX_SEQ_CANDS 5
 #define MAX_RUN_CANDS 2
-#define SEQ_CAND_FEATS 17
-#define RUN_CAND_FEATS 8
-static uint8_t g_seq_cands[MAX_SEQ_CANDS][SEQ_CAND_FEATS];
-static uint8_t g_run_cands[MAX_RUN_CANDS][RUN_CAND_FEATS];
-static int     g_num_seq_cands;
-static int     g_num_run_cands;
+static uint8_t g_seq_cands[MAX_SEQ_CANDS][17];
+static uint8_t g_run_cands[MAX_RUN_CANDS][8];
+static int   g_num_seq_cands;
+static int   g_num_run_cands;
+
+// ── Shared input batch for candidate scoring (set by JS, read by C++) ────────
+// score_seq_candidates / score_run_candidates read from this batch.
+// Layout: [state_vector_24f32] + [candidate_data × num_cands]
+//   seq candidate: [suit(1) + new_meld(16) + existing_meld(16)] = 33 bytes
+//   run candidate:  [rank(1) + new_meld(5) + existing_meld(5)] = 11 bytes
+// We use separate static buffers for each candidate type.
+static float  g_score_seq_state[24];
+static uint8_t g_score_seq_batch[512];  // state(96) + 5 * 33 = 261, padded
+
+static float  g_score_run_state[24];
+static uint8_t g_score_run_batch[512];  // state(96) + 2 * 11 = 118, padded
+
+// Per-candidate fields extracted from shared batch (set during scoring loop)
+static uint8_t g_seq_new_meld[16];
+static uint8_t g_seq_existing_meld[16];
+static uint8_t g_seq_cand_suit;
+
+static uint8_t g_run_new_meld[5];
+static uint8_t g_run_existing_meld[5];
+static int     g_run_cand_rank;
 
 // ── Weights ───────────────────────────────────────────────────────────────────
 static float g_weights[MAX_WEIGHTS];
@@ -96,26 +107,19 @@ static int g_meld_layers  [MAX_LAYERS], g_meld_nlayers,   g_meld_woff;
 static int g_runner_layers[MAX_LAYERS], g_runner_nlayers,  g_runner_woff;
 static int g_discard_layers[MAX_LAYERS],g_discard_nlayers, g_discard_woff;
 
-// ── Network configuration ─────────────────────────────────────────────────────
-// Describes which input segments to read and in what order.
-// Set by configure() based on layerKey.
-#define SEG_CARDS_SUIT   0   // g_cards2[player][suit_off..+18]
-#define SEG_KNOWNCARDS   1   // g_knowncards2[player][suit_off..+18] or all-suit
-#define SEG_DISCARD_SUIT 2   // g_discard2[suit_off..+18]
-#define SEG_DISCARD_ALL  3   // g_discard2[CARDS_ALL_OFF..+53]
-#define SEG_SEQ_MELD     4   // g_seq_melds[team][suit][slot][0..16]
-#define SEG_RUN_MELD     5   // g_run_melds[team][slot][0..6]
-#define SEG_SEQ_CANDS    6   // g_seq_cands[0..n][0..17]
-#define SEG_RUN_CANDS    7   // g_run_cands[0..n][0..8]
-#define SEG_SCALARS      8   // g_scalars[0..11]
+// New net configs (two-phase)
+static int g_current_layers[MAX_LAYERS],  g_current_nlayers,  g_current_woff;
+static int g_seq_layers  [MAX_LAYERS],    g_seq_nlayers,      g_seq_woff;
+static int g_run_layers  [MAX_LAYERS],    g_run_nlayers,      g_run_woff;
+static int g_discard_nets_layers[MAX_LAYERS], g_discard_nets_nlayers, g_discard_nets_woff;
 
+// ── Network configuration ─────────────────────────────────────────────────────
 // Current evaluation context set by JS before evaluate()
 static int g_player;       // 0-3
 static int g_my_team;      // 0 or 1
 static int g_opp_team;     // 0 or 1
 static int g_suit;         // 1-4 (0 = all-suit / runner pass)
-static int g_layerkey;     // 0=PICKUP, 1=MELD, 2=RUNNER, 3=DISCARD
-
+static int g_layerkey;     // 0=PICKUP, 1=MELD, 2=RUNNER, 3=DISCARD, -1=CURRENT
 
 // ── Game state (set by JS once per turn via set_match_state) ─────────────────
 static uint8_t g_hand_sizes[4];
@@ -131,56 +135,13 @@ static uint8_t  g_num_players;
 static uint8_t  g_is_closed_discard;
 static uint8_t  g_runners_allowed;  // bitmask: bit1=aces, bit13=kings, bit3=threes, 0xFF=any
 
-// ── Planned move output buffer ────────────────────────────────────────────────
-// [0]=moveType, [1]=targetType, [2]=targetSuit, [3]=targetSlot, [4..56]=cardCounts[53]
-#define MOVE_DRAW          0
-#define MOVE_PICKUP        1
-#define MOVE_PLAY_MELD     2
-#define MOVE_APPEND        3
-#define MOVE_DISCARD       4
-#define MOVE_EXHAUSTED     5
-static uint8_t g_planned_move[57];
-#define MAX_PLANNED_MOVES 12
-static uint8_t g_move_list[MAX_PLANNED_MOVES][58];
-static int     g_move_count = 0;
-
-// ── Seq meld candidate storage (internal, richer than g_seq_cands) ────────────
-// Stores up to MAX_SEQ_CANDS full parsed melds + cardCounts for execution
-#define CAND_MELD_SIZE 16
-#define CAND_CC_SIZE   53
-static uint8_t g_cand_seq_meld[MAX_SEQ_CANDS][CAND_MELD_SIZE];  // parsed meld slots
-static uint8_t g_cand_seq_cc  [MAX_SEQ_CANDS][CAND_CC_SIZE];    // cardCounts
-static uint8_t g_cand_run_meld[MAX_RUN_CANDS][6];
-static uint8_t g_cand_run_cc  [MAX_RUN_CANDS][CAND_CC_SIZE];
-static uint8_t g_cand_append_meld[MAX_SEQ_CANDS][CAND_MELD_SIZE];
-static uint8_t g_cand_append_cc  [MAX_SEQ_CANDS][CAND_CC_SIZE];
-static uint8_t g_cand_append_suit[MAX_SEQ_CANDS];
-static uint8_t g_cand_append_slot[MAX_SEQ_CANDS];
-static int     g_num_append_cands;
-static uint8_t g_meld_override[4][MAX_SEQ_SLOTS][16];
-static uint8_t g_meld_override_valid[4][MAX_SEQ_SLOTS];
-int pickupAppendIdx[MAX_SEQ_CANDS+1];  // index into g_cand_append_meld/cc/suit/slot
-
-// Timing accumulators (milliseconds, reset via JS export)
-extern "C" { extern double now(); }
-static double g_t_fsc       = 0;  // find_seq_candidates
-static double g_t_build_h1  = 0;  // build_h1
-static double g_t_fwd       = 0;  // forward_pass
-static double g_t_phase0    = 0;  // plan_turn phase 0 (pickup scoring)
-static double g_t_phase1    = 0;  // plan_turn phase 1 (meld scoring)
-static double g_t_phase2    = 0;  // plan_turn phase 2 (discard scoring)
-static uint32_t g_n_fsc     = 0;  // find_seq_candidates call count
-static uint32_t g_n_fwd     = 0;  // forward_pass call count
-static uint32_t g_n_turns   = 0;  // plan_turn call count
-
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 static inline float relu(float x) { return x > 0.0f ? x : 0.0f; }
 
 static inline float dot_u8f32(const uint8_t* __restrict__ a,
-                               const float*   __restrict__ w,
-                               int n, float scale) {
+                                const float*   __restrict__ w,
+                                int n, float scale) {
     v128_t acc = wasm_f32x4_splat(0.0f);
     v128_t sc  = wasm_f32x4_splat(scale);
     int i = 0;
@@ -205,8 +166,8 @@ static inline float dot_u8f32(const uint8_t* __restrict__ a,
 
 // Accumulate dot product of a uint8 source segment into h1 accumulator
 static inline void accum_u8(float* __restrict__ h1, int h1sz, int inSz,
-                              const float* __restrict__ W, int inOff,
-                              const uint8_t* __restrict__ src, int srcOff, int len) {
+                            const float* __restrict__ W, int inOff,
+                            const uint8_t* __restrict__ src, int srcOff, int len) {
     for (int i = 0; i < len; i++) {
         uint8_t v = src[srcOff + i];
         if (!v) continue;
@@ -218,8 +179,8 @@ static inline void accum_u8(float* __restrict__ h1, int h1sz, int inSz,
 
 // Replace accum_u8 per-suit calls with this:
 static void accum_suit(float* h1, int h1sz, int inSz,
-                        const float* W, int inOff,
-                        const uint8_t* flat, int suit) {
+                       const float* W, int inOff,
+                       const uint8_t* flat, int suit) {
     // suit 1-4: naturals are cards (suit-1)*13 .. (suit-1)*13+12
     // wilds: 2s are at indices 1, 14, 27, 40 (rank 2 of each suit), joker at 52
     int base = (suit - 1) * 13;
@@ -240,23 +201,42 @@ static void accum_suit(float* h1, int h1sz, int inSz,
     if (jv) { float fv = (float)jv * g_inp_scale; for (int o = 0; o < h1sz; o++) h1[o] += fv * W[o * inSz + inOff + 17]; }
 }
 
-static void clear_meld_overrides() {
-    for (int s=0; s<4; s++)
-        for (int sl=0; sl<MAX_SEQ_SLOTS; sl++)
-            g_meld_override_valid[s][sl] = 0;
-}
-
-static const uint8_t* get_seq_meld_effective(int team, int suit0, int slot) {
-    if (team == g_my_team && g_meld_override_valid[suit0][slot])
-        return g_meld_override[suit0][slot];
-    else {
-        g_meld_override_valid[suit0][slot] = 1;
-        return g_seq_melds[team][suit0][slot];
-    }
-}
 // Build h1 directly from structured buffers — no g_inp staging
 static void build_h1(float* h1, int h1sz, const float* W, int inSz) {
     for (int o = 0; o < h1sz; o++) h1[o] = 0.0f;
+
+    // CURRENT mode (layerkey == -1): read from new flattened buffers
+    if (g_layerkey == -1) {
+        int off = 0;
+        // offset 0-10:     g_scalars (11)
+        accum_u8(h1, h1sz, inSz, W, off, g_scalars, 0, 11); off += 11;
+        // offset 11-170:   g_own_seq[0..4][0..15] (5 × 16)
+        for (int s = 0; s < MAX_SEQ_SLOTS; s++) {
+            accum_u8(h1, h1sz, inSz, W, off, g_own_seq[s], 0, 16); off += 16;
+        }
+        // offset 171-250:  g_opp_seq[0..4][0..15] (5 × 16)
+        for (int s = 0; s < MAX_SEQ_SLOTS; s++) {
+            accum_u8(h1, h1sz, inSz, W, off, g_opp_seq[s], 0, 16); off += 16;
+        }
+        // offset 251-270:  g_own_runs[0..2][0..4] (3 × 5)
+        for (int s = 0; s < MAX_RUN_SLOTS; s++) {
+            accum_u8(h1, h1sz, inSz, W, off, g_own_runs[s], 0, 5); off += 5;
+        }
+        // offset 271-290:  g_opp_runs[0..2][0..4] (3 × 5)
+        for (int s = 0; s < MAX_RUN_SLOTS; s++) {
+            accum_u8(h1, h1sz, inSz, W, off, g_opp_runs[s], 0, 5); off += 5;
+        }
+        // offset 291-344:  g_own_table (54)
+        accum_u8(h1, h1sz, inSz, W, off, g_own_table, 0, 54); off += 54;
+        // offset 345-398:  g_opp_table (54)
+        accum_u8(h1, h1sz, inSz, W, off, g_opp_table, 0, 54); off += 54;
+        // offset 399-452:  g_discard_flat (54)
+        accum_u8(h1, h1sz, inSz, W, off, g_discard_flat, 0, 54); off += 54;
+        // offset 453-506: g_hand_flat (54)
+        accum_u8(h1, h1sz, inSz, W, off, g_hand_flat, 0, 54); off += 54;
+        // Total: 11 + 80 + 80 + 15 + 15 + 54 + 54 + 54 + 54 = 417
+        return;
+    }
 
     int off = 0;  // logical input offset
 
@@ -290,9 +270,9 @@ static void build_h1(float* h1, int h1sz, const float* W, int inSz) {
         if (g_layerkey == 2) {
             int flat_suit = s >> 1;
             int flat_slot = s & 1;
-            m = get_seq_meld_effective(g_my_team, flat_suit < 4 ? flat_suit : 3, flat_slot < MAX_SEQ_SLOTS ? flat_slot : 0);
+            m = g_seq_melds[g_my_team][flat_suit < 4 ? flat_suit : 3][flat_slot < MAX_SEQ_SLOTS ? flat_slot : 0];
         } else {
-            m = get_seq_meld_effective(g_my_team, suit_idx, s < MAX_SEQ_SLOTS ? s : 0);
+            m = g_seq_melds[g_my_team][suit_idx][s < MAX_SEQ_SLOTS ? s : 0];
         }
         accum_u8(h1, h1sz, inSz, W, off, m, 0, 16); off += 16;
     }
@@ -319,13 +299,13 @@ static void build_h1(float* h1, int h1sz, const float* W, int inSz) {
     // Candidates
     if (g_layerkey == 2) {
         // Runner candidates
-        for (int c = 0; c < MAX_RUN_CANDS; c++) {
-            accum_u8(h1, h1sz, inSz, W, off, g_run_cands[c], 0, RUN_CAND_FEATS); off += RUN_CAND_FEATS;
+        for (int c = 0; c < g_num_run_cands; c++) {
+            accum_u8(h1, h1sz, inSz, W, off, g_run_cands[c], 0, 8); off += 8;
         }
     } else {
         // Seq candidates
-        for (int c = 0; c < MAX_SEQ_CANDS; c++) {
-            accum_u8(h1, h1sz, inSz, W, off, g_seq_cands[c], 0, SEQ_CAND_FEATS); off += SEQ_CAND_FEATS;
+        for (int c = 0; c < g_num_seq_cands; c++) {
+            accum_u8(h1, h1sz, inSz, W, off, g_seq_cands[c], 0, 17); off += 17;
         }
     }
 
@@ -343,8 +323,81 @@ static void build_h1(float* h1, int h1sz, const float* W, int inSz) {
     accum_u8(h1, h1sz, inSz, W, off, g_scalars, 0, 11); off += 11;
 }
 
+// Build h1 for the seq net: concatenates [state(24F32), suit_byte(1), new_meld_bits(16), existing_meld_bits(16)]
+static void build_h1_seq(float* h1, int h1sz, const float* W, int inSz) {
+    for (int o = 0; o < h1sz; o++) h1[o] = 0.0f;
+    int off = 0;
+
+    // offset 0-23:   state vector (24 float32, stored as 255-byte-rounded uint8)
+    for (int i = 0; i < 24; i++) {
+        uint8_t v = (uint8_t)((g_score_seq_state[i] * 255.0f) + 0.5f);
+        if (!v) continue;
+        float fv = (float)v * g_inp_scale;
+        for (int o = 0; o < h1sz; o++) h1[o] += fv * W[o * inSz + off + i];
+    }
+    off += 24;
+
+    // offset 24:     suit byte (1)
+    uint8_t v = g_seq_cand_suit;
+    if (v) {
+        float fv = (float)v * g_inp_scale;
+        for (int o = 0; o < h1sz; o++) h1[o] += fv * W[o * inSz + off];
+    }
+    off += 1;
+
+    // offset 25-40:  new_meld_bits (16)
+    accum_u8(h1, h1sz, inSz, W, off, g_seq_new_meld, 0, 16); off += 16;
+
+    // offset 41-56:  existing_meld_bits (16)
+    accum_u8(h1, h1sz, inSz, W, off, g_seq_existing_meld, 0, 16); off += 16;
+    // Total: 58
+}
+
+// Build h1 for the run net: [state(24F32), rank_byte(1), new_meld(5), existing_meld(5)]
+static void build_h1_run(float* h1, int h1sz, const float* W, int inSz) {
+    for (int o = 0; o < h1sz; o++) h1[o] = 0.0f;
+    int off = 0;
+
+    // offset 0-23:   state vector (24 float32, stored as 255-byte-rounded uint8)
+    for (int i = 0; i < 24; i++) {
+        uint8_t v = (uint8_t)((g_score_run_state[i] * 255.0f) + 0.5f);
+        if (!v) continue;
+        float fv = (float)v * g_inp_scale;
+        for (int o = 0; o < h1sz; o++) h1[o] += fv * W[o * inSz + off + i];
+    }
+    off += 24;
+
+    // offset 24:     rank byte (1)
+    uint8_t v = (uint8_t)g_run_cand_rank;
+    if (v) {
+        float fv = (float)v * g_inp_scale;
+        for (int o = 0; o < h1sz; o++) h1[o] += fv * W[o * inSz + off];
+    }
+    off += 1;
+
+    // offset 25-29:  new_meld (5)
+    accum_u8(h1, h1sz, inSz, W, off, g_run_new_meld, 0, 5); off += 5;
+
+    // offset 30-34:  existing_meld (5)
+    accum_u8(h1, h1sz, inSz, W, off, g_run_existing_meld, 0, 5); off += 5;
+    // Total: 35
+}
+
+// Build h1 for discard net: uses g_current_state[24] directly
+static void build_h1_discard(float* h1, int h1sz, const float* W, int inSz) {
+    for (int o = 0; o < h1sz; o++) h1[o] = 0.0f;
+    int off = 0;
+    // offset 0-23:   state vector (24 float32, stored as 255-byte-rounded uint8)
+    for (int i = 0; i < 24; i++) {
+        uint8_t v = (uint8_t)((g_current_state[i] * 255.0f) + 0.5f);
+        if (!v) continue;
+        float fv = (float)v * g_inp_scale;
+        for (int o = 0; o < h1sz; o++) h1[o] += fv * W[o * inSz + off + i];
+    }
+    // Total: 24
+}
+
 static void forward_pass(float* out_acc) {
-    double _t0 = now();
     const int inSz  = g_layer_sizes[0];
     const int h1Sz  = g_layer_sizes[1];
     const float* W1 = g_weights + g_weight_offset;
@@ -352,7 +405,6 @@ static void forward_pass(float* out_acc) {
 
     // First layer: read directly from structured buffers
     build_h1(g_buf0, h1Sz, W1, inSz);
-    g_t_build_h1 += now() - _t0;
     for (int o = 0; o < h1Sz; o++) g_buf0[o] = relu(g_buf0[o] + b1[o]);
 
     // Remaining layers: float activations
@@ -382,689 +434,152 @@ static void forward_pass(float* out_acc) {
         woff += lIn * lOut + lOut;
         cur = next;
     }
-    g_t_fwd += now() - _t0; g_n_fwd++;
 }
 
-static inline int rank_count(const uint8_t* buf, int suit, int rank) {
-    return buf[(suit-1)*13 + (rank-1)];
-}
-static inline int wild2_count(const uint8_t* buf, int suit) {
-    return buf[(suit-1)*13 + 1];  // rank-2 of that suit
-}
-static inline int all_count(const uint8_t* buf, int cardType) {
-    return buf[cardType == 54 ? 52 : cardType];
-}
+// Forward pass variant that uses seq-specific input builder
+static void forward_pass_seq(float* out_acc) {
+    const int inSz  = g_layer_sizes[0];
+    const int h1Sz  = g_layer_sizes[1];
+    const float* W1 = g_weights + g_weight_offset;
+    const float* b1 = W1 + inSz * h1Sz;
 
-static inline int is_runner_allowed(int rank) {
-    if (!g_runners_allowed) return 0;
-    if (g_runners_allowed == 0xFF) return 1;
-    return (g_runners_allowed >> rank) & 1;
-}
+    build_h1_seq(g_buf0, h1Sz, W1, inSz);
+    for (int o = 0; o < h1Sz; o++) g_buf0[o] = relu(g_buf0[o] + b1[o]);
 
-
-
-// Check gaps in a seq meld [0..15]. Returns gap count.
-static int check_gaps(const uint8_t* m) {
-    // find min and max occupied positions
-    int mn = 15, mx = -1;
-    // positions: 0=A-low, 2..13=3..K, 14=A-high (pos 1 unused)
-    if (m[0]) { if (0  < mn) mn=0;  if (0  > mx) mx=0;  }
-    if (m[1]) { if (14 < mn) mn=14; if (14 > mx) mx=14; }
-    for (int r=2; r<=13; r++) if (m[r]) { if (r<mn) mn=r; if (r>mx) mx=r; }
-    if (mn > mx) return 0;
-    int gaps = 0;
-    for (int i=mn; i<=mx; i++) {
-        if (i==1) continue;  // pos 1 unused
-        int pos = (i==14) ? 1 : i;  // m[1]=A-high
-        if (!m[pos]) gaps++;
-    }
-    return gaps;
-}
-
-// ── Debug log buffer ─────────────────────────────────────────────────────────
-#define DBG_BUF_SIZE 4096
-static char g_dbg_buf[DBG_BUF_SIZE];
-static int  g_dbg_pos = 0;
-static void dbg_reset() { g_dbg_pos = 0; g_dbg_buf[0] = 0; }
-static void dbg_char(char c) { if (g_dbg_pos < DBG_BUF_SIZE-1) { g_dbg_buf[g_dbg_pos++]=c; g_dbg_buf[g_dbg_pos]=0; } }
-static void dbg_str(const char* s) { while(*s) dbg_char(*s++); }
-static void dbg_int(int v) {
-    if (v<0) { dbg_char('-'); v=-v; }
-    char tmp[12]; int i=0;
-    if (!v) { dbg_char('0'); return; }
-    while(v>0) { tmp[i++]='0'+(v%10); v/=10; }
-    while(i-->0) dbg_char(tmp[i]);
-}
-static void dbg_suit(int s) {
-    // s: 1=♠ 2=♥ 3=♣ 4=♦ 5=★
-    const char* syms[] = { "\xe2\x99\xa0 ", "\xe2\x99\xa5 ", "\xe2\x99\xa3 ", "\xe2\x99\xa6 ", "\xe2\x98\x85 " };
-    if (s >= 1 && s <= 5) dbg_str(syms[s-1]); else dbg_int(s);
-}
-static void dbg_card(int td) {
-    // td: 0-51 = normal card, 54 = joker
-    if (td == 54 || td == 52) { dbg_str("JK"); return; }
-    int s = td / 13 + 1;
-    int r = td % 13 + 1;
-    const char* ranks[] = { "A","2","3","4","5","6","7","8","9","10","J","Q","K" };
-    dbg_str(ranks[r-1]); dbg_suit(s);
-}
-
-// ── find_seq_candidates ──────────────────────────────────────────────────────
-// Scans the merged (hand + existingMeld) bitmap linearly, emitting candidates
-// at run boundaries. For new melds: existingMeld=null. For appends: existingMeld
-// is the current meld; only candidates that add at least one new hand card are kept.
-// Returns updated nSeq count.
-static int find_seq_candidates(
-    const uint8_t* sim, int suit, int wild0type, int hasWild,
-    const uint8_t* existingMeld, int existingSlot,
-    int nSeq
-) {
-    double _t0 = now(); 
-    int suit0 = (suit-1);
-    auto sb_rank = [&](int r) -> uint8_t { return sim[suit0*13 + r]; };  // r=1..13
-    auto sb_wild2 = [&](int s) -> uint8_t { return sim[(s-1)*13 + 1]; };        // wild-2 of suit s
-    auto sb_joker = [&]() -> uint8_t { return sim[52]; };
-
-    uint8_t m[14] = {};
-    uint8_t from_hand[14] = {};
-
-    int mstart = 14, mend = -1;
-    // Ace
-    if (existingMeld && (existingMeld[0])) {
-        m[0]=1;
-        mstart=0;
-    }
-    if (existingMeld && (existingMeld[1])) {
-        m[13]=1;
-        mend=13;
-    }
-    if (sb_rank(0) > 0) { if (!m[0]){from_hand[0]=1; m[0]=1;} if(!m[13]){from_hand[13]=1; m[13]=1;}}
-
-    m[1] = existingMeld ? existingMeld[2] : 0;
-    // Ranks 2-K
-    for (int mi=3; mi<=13; mi++) { //meld index 0(A-lo),1(A-hi),2-13-rank
-        int mr = mi==0?0:mi==1?13:mi-1; //meld rank 0(A) to 13(A)
-        int cr = mi==0?0:mi==1?0:mi-1; //card rank 0(A) to 12(K)
-        int already_in_meld = (existingMeld && existingMeld[mi]) ? 1 : 0;
-        if (already_in_meld) {
-            m[mr]=1;
-            if(mr<mstart)mstart=mr;
-            if(mr>mend) mend=mr;
+    int woff = g_weight_offset + inSz * h1Sz + h1Sz;
+    const float* cur = g_buf0;
+    float* next;
+    for (int l = 1; l < g_num_layers - 1; l++) {
+        const int lIn  = g_layer_sizes[l];
+        const int lOut = g_layer_sizes[l + 1];
+        const int isLast = (l == g_num_layers - 2);
+        next = (l & 1) ? g_buf1 : g_buf0;
+        if (isLast) next = out_acc;
+        const float* w = g_weights + woff;
+        const float* b = w + lIn * lOut;
+        v128_t acc;
+        for (int o = 0; o < lOut; o++) {
+            acc = wasm_f32x4_splat(0.0f);
+            const float* row = w + o * lIn;
+            int i = 0;
+            for (; i <= lIn - 4; i += 4)
+                acc = wasm_f32x4_add(acc, wasm_f32x4_mul(wasm_v128_load(cur+i), wasm_v128_load(row+i)));
+            float sum = b[o] + wasm_f32x4_extract_lane(acc,0) + wasm_f32x4_extract_lane(acc,1)
+                              + wasm_f32x4_extract_lane(acc,2) + wasm_f32x4_extract_lane(acc,3);
+            for (; i < lIn; i++) sum += cur[i] * row[i];
+            next[o] = isLast ? sum : relu(sum);
         }
-        else if (cr!= 1 && sb_rank(cr) > 0 && !already_in_meld) { from_hand[mr]=1; m[mr]=1; }
+        woff += lIn * lOut + lOut;
+        cur = next;
     }
-
-    // Wild slots from existing meld, promote nat2 if both free
-    uint8_t w14 = existingMeld ? existingMeld[14] : 0;
-    uint8_t w15 = existingMeld ? existingMeld[15] : 0;
-    if (existingMeld && existingMeld[2]==1 && w14==0 && w15==0) { m[1]=0; w15=1; }
-
-    int hand_wilds = 0;
-    for(int s=1;s<=4;s++) hand_wilds += sb_wild2(s); hand_wilds += sb_joker();
-    int can_add_wild = (w14==0 && w15==0 && (hasWild || hand_wilds > 0)) ? 1 : 0;
-    if (can_add_wild && wild0type < 0) {
-        for(int s=1;s<=4&&wild0type<0;s++)
-            if (sb_wild2(s)) wild0type=(s-1)*13+1;
-        if (wild0type<0 && sb_joker()>0) wild0type=54;
-    }
-
-
-    // Log
-    //dbg_str(" caw="); dbg_int(can_add_wild);
-    dbg_str(existingMeld ? ">>>>Append - " : ">>>>New    - ");
-    dbg_str("Wild="); dbg_suit(w14>0 ? w14 : w15==1 ? suit : 0); 
-    dbg_str("- New[");
-    for(int i=0;i<14;i++) if(from_hand[i]) {dbg_card((i%13)+suit0*13); }
-    
-    if (existingMeld){
-        dbg_str("] - Existing[");
-        if(existingMeld[0]) {dbg_card(0+suit0*13); }
-        for(int i=2;i<13;i++) if(existingMeld[i]) {dbg_card((i-1)+suit0*13); }
-        if(existingMeld[13]) {dbg_card(0+suit0*13); }
-        if(existingMeld[14]) {dbg_card(1+existingMeld[14]*13); }
-        if(existingMeld[15]) {dbg_card(1+suit0*13); }
-
-    }
-    dbg_str("]\n");
-
-    int run_start = -1, prev_end = -1, prev_start = -1;
-
-    auto emit = [&](int lo, int hi, bool gaps) -> int {
-        if (nSeq >= MAX_SEQ_CANDS) return 0;
-        int new_cards = 0;
-        for (int i=lo;i<=hi;i++) if(m[i] && from_hand[i]) new_cards++;
-        if (existingMeld && new_cards == 0) return 0;
-        if (lo==0 && hi ==13 && !gaps && (w14!=0 || w15!=0)) return 0; //abort emmiting melds if too big
-
-        // For appends: new hand cards must be adjacent to existing meld boundary
-        if (existingMeld && (lo>mstart || hi<mend)) return 0;
-
-        uint8_t dst[16]={0}, cc[53]={0};
-        dst[14] = w14;
-        dst[15] = w15;
-        for (int i=lo;i<=hi;i++) {
-            if (!m[i]) continue;
-            dst[i==13 ? 1 : i==0 ? 0 : i+1]=m[i];
-            int cardindex = i==13 ? (suit-1)*13+0  : i==0 ? (suit-1)*13+0  : (suit-1)*13+i; //special case for high ace
-            cc[cardindex]+=from_hand[i];
-        }
-
-        if(gaps && w14 == 0 && w15==0) {
-            if (sb_wild2(suit) > from_hand[1]){
-                cc[(suit-1)*13+1]++;
-                dst[15]=1;
-            }
-            else{
-                cc[wild0type==54?52:wild0type]++;
-                dst[14]=(uint8_t)(wild0type==54?5:wild0type/13+1);
-            }
-        }
-        // Reject if gaps exceed available wilds
-        int wildCount = (dst[14] ? 1 : 0) + (dst[15] ? 1 : 0);
-        if (check_gaps(dst) > wildCount) return 0;
-
-        dbg_str(">>>> emit["); dbg_int(lo + 1); dbg_suit(suit); dbg_str("-"); dbg_int(hi + 1); dbg_suit(suit); dbg_str("]\n");
-
-        if (existingMeld) {
-            for(int j=0;j<16;j++) g_cand_append_meld[nSeq][j]=dst[j];
-            for(int j=0;j<53;j++) g_cand_append_cc[nSeq][j]=cc[j];
-            g_cand_append_suit[nSeq]=(uint8_t)suit;
-            g_cand_append_slot[nSeq]=(uint8_t)existingSlot;
-        } else {
-            for(int j=0;j<16;j++) g_cand_seq_meld[nSeq][j]=dst[j];
-            for(int j=0;j<53;j++) g_cand_seq_cc[nSeq][j]=cc[j];
-            for(int j=0;j<14;j++) g_seq_cands[nSeq][j]=dst[j]?255:0;
-            g_seq_cands[nSeq][14]=dst[14]?255:0;
-            g_seq_cands[nSeq][15]=dst[15]?255:0;
-            g_seq_cands[nSeq][16]=0;
-        }
-        nSeq++;
-        return 1;
-    };
-
-    // Linear scan matching the pseudocode:
-    // cgap  = current run of filled slots
-    // cnogap = previous run of filled slots (before last gap)
-    // At each gap: emit bridged candidate (cnogap+cgap+wild) and natural run (cgap>=3)
-    // wilds=false when gap is inside existing meld range (wild already consumed there)
-    int cgap = 0, cnogap = 0;
-    int wilds_avail = can_add_wild;
-    for (int pos=0; pos<=13 && nSeq<MAX_SEQ_CANDS; pos++) {
-        if (m[pos]) cgap++;
-        if (!m[pos] || pos==13) {
-            int hi = (pos==13 && m[13]) ? pos : pos-1;
-            int local_wilds = wilds_avail;
-            if (existingMeld && pos >= mstart && pos <= mend) {
-                local_wilds = 0;
-                //cnogap = 0;  // ← RESET: don't carry stale run count across meld interior
-            }
-            else{
-                if (cgap > 0 && cnogap > 0 && local_wilds) {
-                    int lo = hi - cnogap - cgap;
-                    if (lo < 0) lo = 0;
-                    emit(lo, hi, true);
-                }
-                if (cgap >= 3) {
-                    int lo = hi - cgap + 1;
-                    emit(lo, hi, false);
-                }
-                cnogap = cgap;
-            }
-            cgap = 0;
-        }
-    }
-    g_t_fsc += now() - _t0; g_n_fsc++;
-    return nSeq;
 }
 
+// Forward pass variant for runner net
+static void forward_pass_run(float* out_acc) {
+    const int inSz  = g_layer_sizes[0];
+    const int h1Sz  = g_layer_sizes[1];
+    const float* W1 = g_weights + g_weight_offset;
+    const float* b1 = W1 + inSz * h1Sz;
 
+    build_h1_run(g_buf0, h1Sz, W1, inSz);
+    for (int o = 0; o < h1Sz; o++) g_buf0[o] = relu(g_buf0[o] + b1[o]);
+
+    int woff = g_weight_offset + inSz * h1Sz + h1Sz;
+    const float* cur = g_buf0;
+    float* next;
+    for (int l = 1; l < g_num_layers - 1; l++) {
+        const int lIn  = g_layer_sizes[l];
+        const int lOut = g_layer_sizes[l + 1];
+        const int isLast = (l == g_num_layers - 2);
+        next = (l & 1) ? g_buf1 : g_buf0;
+        if (isLast) next = out_acc;
+        const float* w = g_weights + woff;
+        const float* b = w + lIn * lOut;
+        v128_t acc;
+        for (int o = 0; o < lOut; o++) {
+            acc = wasm_f32x4_splat(0.0f);
+            const float* row = w + o * lIn;
+            int i = 0;
+            for (; i <= lIn - 4; i += 4)
+                acc = wasm_f32x4_add(acc, wasm_f32x4_mul(wasm_v128_load(cur+i), wasm_v128_load(row+i)));
+            float sum = b[o] + wasm_f32x4_extract_lane(acc,0) + wasm_f32x4_extract_lane(acc,1)
+                              + wasm_f32x4_extract_lane(acc,2) + wasm_f32x4_extract_lane(acc,3);
+            for (; i < lIn; i++) sum += cur[i] * row[i];
+            next[o] = isLast ? sum : relu(sum);
+        }
+        woff += lIn * lOut + lOut;
+        cur = next;
+    }
+}
+
+// Forward pass variant for discard net
+static void forward_pass_discard(float* out_acc) {
+    const int inSz  = g_layer_sizes[0];
+    const int h1Sz  = g_layer_sizes[1];
+    const float* W1 = g_weights + g_weight_offset;
+    const float* b1 = W1 + inSz * h1Sz;
+
+    build_h1_discard(g_buf0, h1Sz, W1, inSz);
+    for (int o = 0; o < h1Sz; o++) g_buf0[o] = relu(g_buf0[o] + b1[o]);
+
+    int woff = g_weight_offset + inSz * h1Sz + h1Sz;
+    const float* cur = g_buf0;
+    float* next;
+    for (int l = 1; l < g_num_layers - 1; l++) {
+        const int lIn  = g_layer_sizes[l];
+        const int lOut = g_layer_sizes[l + 1];
+        const int isLast = (l == g_num_layers - 2);
+        next = (l & 1) ? g_buf1 : g_buf0;
+        if (isLast) next = out_acc;
+        const float* w = g_weights + woff;
+        const float* b = w + lIn * lOut;
+        v128_t acc;
+        for (int o = 0; o < lOut; o++) {
+            acc = wasm_f32x4_splat(0.0f);
+            const float* row = w + o * lIn;
+            int i = 0;
+            for (; i <= lIn - 4; i += 4)
+                acc = wasm_f32x4_add(acc, wasm_f32x4_mul(wasm_v128_load(cur+i), wasm_v128_load(row+i)));
+            float sum = b[o] + wasm_f32x4_extract_lane(acc,0) + wasm_f32x4_extract_lane(acc,1)
+                              + wasm_f32x4_extract_lane(acc,2) + wasm_f32x4_extract_lane(acc,3);
+            for (; i < lIn; i++) sum += cur[i] * row[i];
+            next[o] = isLast ? sum : relu(sum);
+        }
+        woff += lIn * lOut + lOut;
+        cur = next;
+    }
+}
+
+// ── use_net helper ────────────────────────────────────────────────────────────
 static void use_net(int* layers, int nlayers, int woff) {
     for (int i=0;i<nlayers;i++) g_layer_sizes[i]=layers[i];
     g_num_layers    = nlayers;
     g_weight_offset = woff;
 }
 
-static void add_move(uint8_t phase, uint8_t moveType, uint8_t tType, uint8_t tSuit, uint8_t tSlot, uint8_t* cc) {
-    if (g_move_count >= MAX_PLANNED_MOVES) return;
-    uint8_t* m = g_move_list[g_move_count++];
-    m[0]=phase; m[1]=moveType; m[2]=tType; m[3]=tSuit; m[4]=tSlot;
-    if (cc) for(int i=0;i<53;i++) m[5+i]=cc[i];
-    else    for(int i=0;i<53;i++) m[5+i]=0;
-}
-
-// ── Sim buffer helpers ────────────────────────────────────────────────────────
-// sim[] is a local CARDS_FLAT_SIZE buffer used as the working hand throughout plan_turn.
-// It mirrors g_cards2 layout: per-suit blocks [0..71] + all-suit block [72..124].
-
-static void sim_add_card(uint8_t* sim, int cardType) {
-    sim[cardType == 54 ? 52 : cardType]++;
-    dbg_str(">>>SIM=");
-    for(int i=0;i<CARDS_FLAT_SIZE;i++) if(sim[i]) dbg_card(i);
-    dbg_str("\n");
-}
-
-static void sim_remove_card(uint8_t* sim, int cardType) {
-    int idx = cardType == 54 ? 52 : cardType;
-    if (sim[idx] > 0) sim[idx]--;
-    dbg_str(">>>SIM=  ");
-    for(int i=0;i<CARDS_FLAT_SIZE;i++) if(sim[i]) dbg_card(i);
-    dbg_str("\n");
-}
-
-// Initialise sim from player's real hand + top discard card
-static void sim_init(uint8_t* sim, int player, int topDiscard) {
-    dbg_str(">G_Cards2=  ");
-    for(int i=0;i<CARDS_FLAT_SIZE;i++) if(g_cards2[player][i]) dbg_card(i);
-    dbg_str(" Top Discard= ");
-    dbg_card(topDiscard);
-    dbg_str("\n");
-    for (int i = 0; i < CARDS_FLAT_SIZE; i++) sim[i] = g_cards2[player][i];
-    if (topDiscard != 255) sim_add_card(sim, topDiscard);
-}
-
-static int plan_turn() {
-    clear_meld_overrides();
-    // Dump all melds for my team
-    
-    double _tp0 = now();
-    int player = g_player;
-    g_move_count = 0;
-    dbg_reset();
-    dbg_str("\n\nBOT");dbg_int(g_player);dbg_str("\n");
-    dbg_str("MELDS[");dbg_int(g_my_team);dbg_str("]:\n");
-    for(int s=0;s<4;s++) {
-        for(int sl=0;sl<MAX_SEQ_SLOTS;sl++) {
-            const uint8_t* em = g_seq_melds[g_my_team][s][sl];
-            int hasAny=0; for(int j=0;j<16;j++) if(em[j]){hasAny=1;break;}
-            if(!hasAny) continue;
-            dbg_str("  s=");dbg_int(s);dbg_str(" sl=");dbg_int(sl);dbg_str(" [");
-            for(int j=0;j<16;j++){dbg_int(em[j]);if(j<15)dbg_str(",");}
-            dbg_str("]\n");
-        }
-    }
-    for(int i=0;i<MAX_PLANNED_MOVES;i++) for(int j=0;j<58;j++) g_move_list[i][j]=0;
-
-    if (g_deck_len==0 && g_pots_len==0) {
-        add_move(0, MOVE_EXHAUSTED, 0,0,0, nullptr);
-        return g_move_count;
-    }
-
-    // ── Sim buffer: real hand + top discard ──────────────────────────────────
-    uint8_t sim[CARDS_FLAT_SIZE];
-    int td = g_top_discard;
-    int td_suit = td/13+1;
-    int td_rank = td%13+1;
-    int td_alloff = (td==54)?52:td;
-    sim_init(sim, player, (g_top_discard!=255 && g_discard_len>0) ? td : 255);
-    dbg_str("\n\n>>================PICKUP======================\n");
-    //dbg_str("sim_td="); dbg_card(td); dbg_str(" sim[alloff+td]=");
-    //dbg_int(sim[CARDS_ALL_OFF+td_alloff]); 
-    //dbg_str(" sb6="); dbg_int(sim[(td_suit-1)*18+(td_rank-1)]); dbg_str("\n");
-
-
-    // ── Phase 0: pickup scoring ───────────────────────────────────────────────
-    int pickupCandType[MAX_SEQ_CANDS+1];
-    uint8_t pickupCC[MAX_SEQ_CANDS+1][CAND_CC_SIZE];
-    uint8_t pickupTarget[MAX_SEQ_CANDS+1][2];  // [suit, slot] for append pickups
-    int pickupMeldIdx[MAX_SEQ_CANDS+1];  // add this
-    for(int i=0;i<MAX_SEQ_CANDS+1;i++) { pickupTarget[i][0]=0; pickupTarget[i][1]=0; }
-    int nPickup = 0;
-    pickupCandType[0] = 0;
-    for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[0][i]=0;
-    nPickup = 1;
-
-    if (td != 255 && g_discard_len > 0) {
-        if (!g_is_closed_discard) {
-            pickupCandType[nPickup] = 3;
-            for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[nPickup][i]=0;
-            nPickup++;
-        } else {
-            // sim already has top card — find melds/appends using it
-            int wild0type = -1, hasWild = 0;
-            if (td==54) { wild0type=54; hasWild=1; }
-            else if (td_rank==2) { wild0type=td; hasWild=1; }
-            else {
-                for(int s=1;s<=4&&!hasWild;s++)
-                    if(wild2_count(sim,s)>0) { wild0type=(s-1)*13+1; hasWild=1; }
-                if (!hasWild && all_count(sim,54)>0) { wild0type=54; hasWild=1; }
-            }
-
-            // New melds using sim (hand + top card)
-            int nSeq = 0;
-            if (td_suit>=1 && td_suit<=4 && td_rank!=2)
-                nSeq = find_seq_candidates(sim, td_suit, wild0type, hasWild, nullptr, -1, nSeq);
-            else if (hasWild)
-                for(int s=1;s<=4;s++) nSeq = find_seq_candidates(sim, s, wild0type, hasWild, nullptr, -1, nSeq);
-            g_num_seq_cands = nSeq;
-            for(int ci=0; ci<g_num_seq_cands && nPickup<MAX_SEQ_CANDS+1; ci++) {
-                int usesTop = (td_alloff<53) ? g_cand_seq_cc[ci][td_alloff] : 0;
-                if (!usesTop) continue;
-                pickupCandType[nPickup] = 1;
-                pickupMeldIdx[nPickup] = ci;  // add this
-                for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[nPickup][i]=g_cand_seq_cc[ci][i];
-                if (td_alloff<53 && pickupCC[nPickup][td_alloff]>0) pickupCC[nPickup][td_alloff]--;
-                nPickup++;
-            }
-
-            // Appends using sim
-            g_num_append_cands = 0;
-            for(int s=1;s<=4;s++)
-                for(int slot=0;slot<MAX_SEQ_SLOTS;slot++) {
-                    const uint8_t* em = get_seq_meld_effective(g_my_team, s-1, slot);
-                    int hasCards=0; for(int j=0;j<16;j++) if(em[j]){hasCards=1;break;}
-                    if (!hasCards) continue;
-                    g_num_append_cands = find_seq_candidates(sim, s, wild0type, hasWild, em, slot, g_num_append_cands);
-                }
-                        for(int ci=0; ci<g_num_append_cands && nPickup<MAX_SEQ_CANDS+1; ci++) {
-                int usesTop = (td_alloff<53) ? g_cand_append_cc[ci][td_alloff] : 0;
-                if (usesTop) {
-                    int existSlot = g_cand_append_slot[ci];
-                    int existSuit = g_cand_append_suit[ci];
-                    const uint8_t* em = get_seq_meld_effective(g_my_team, existSuit-1, existSlot);
-                    int topMeldSlot = (td_rank==1)?0:td_rank;
-                    if (topMeldSlot<16 && em[topMeldSlot]) usesTop=0;
-                }
-                if (!usesTop) continue;
-                pickupCandType[nPickup] = 2;
-                pickupAppendIdx[nPickup] = ci;  // store the g_cand_append_* index
-                for(int i=0;i<CAND_CC_SIZE;i++) pickupCC[nPickup][i]=g_cand_append_cc[ci][i];
-                if (td_alloff<53 && pickupCC[nPickup][td_alloff]>0) pickupCC[nPickup][td_alloff]--;
-                pickupTarget[nPickup][0] = g_cand_append_suit[ci];
-                pickupTarget[nPickup][1] = g_cand_append_slot[ci];
-                nPickup++;
-            }
-
-            g_num_seq_cands = 0;
-            g_num_run_cands = 0;
-            g_num_append_cands = 0;
-        }
-    }
-
-        // Score all pickup candidates and emit ALL of them sorted, fallback (draw) at score 0
-    // Score pickup candidates with net
-    float pickupScores[MAX_SEQ_CANDS+1] = {0};
-    if (nPickup > 1) {
-        uint8_t pickupSeqCands[MAX_SEQ_CANDS+1][SEQ_CAND_FEATS];
-        for(int i=0;i<nPickup;i++) {
-            for(int j=0;j<SEQ_CAND_FEATS;j++) pickupSeqCands[i][j]=0;
-            if (pickupCandType[i]==1)
-                for(int j=0;j<CAND_CC_SIZE && j<SEQ_CAND_FEATS;j++)
-                    pickupSeqCands[i][j] = pickupCC[i][j] ? 255 : 0;
-            for(int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[i][j]=pickupSeqCands[i][j];
-        }
-        use_net(g_pickup_layers, g_pickup_nlayers, g_pickup_woff);
-        g_layerkey=0;
-        int tds = (td==54||td==255)?1:td/13+1;
-        g_suit = (tds>=1&&tds<=4)?tds:1;
-        g_num_seq_cands = nPickup;
-        for(int o=0;o<g_layer_sizes[g_pickup_nlayers-1];o++) g_out[o]=0.0f;
-        forward_pass(g_out);
-        for(int i=0;i<nPickup;i++) pickupScores[i]=g_out[i];
-        g_num_seq_cands = 0;
-    }
-    // pickupScores[0] is draw — that's our score=0 reference (fallback)
-    // Sort all candidates by score descending, keeping draw as the fallback marker
-    // Simple insertion sort
-    int pickupOrder[MAX_SEQ_CANDS+1];
-    for(int i=0;i<nPickup;i++) pickupOrder[i]=i;
-    for(int i=1;i<nPickup;i++) {
-        float s=pickupScores[pickupOrder[i]]; int idx=pickupOrder[i]; int j=i-1;
-        while(j>=0 && pickupScores[pickupOrder[j]]<s) { pickupOrder[j+1]=pickupOrder[j]; j--; }
-        pickupOrder[j+1]=idx;
-    }
-    // Emit all pickup moves in sorted order
-    for(int i=0;i<nPickup;i++) {
-        int ci=pickupOrder[i];
-        if (pickupCandType[ci]==0) {
-            add_move(0, MOVE_DRAW, 0,0,0, nullptr);
-        } else {
-            add_move(0, MOVE_PICKUP,
-                     pickupCandType[ci]==2?1:0,
-                     pickupTarget[ci][0], pickupTarget[ci][1],
-                     pickupCC[ci]);
-        }
-    }
-    // Determine bestPickup for sim evolution (highest scoring non-draw)
-    int bestPickup = 0;
-    for(int i=0;i<nPickup;i++) {
-        int ci=pickupOrder[i];
-        if (pickupCandType[ci]!=0) { bestPickup=ci; break; }
-    }
-    // If best is draw (all scores <= draw score), bestPickup stays 0
-    if (pickupScores[bestPickup] <= pickupScores[0]) bestPickup=0;
-
-
-    
-
-    // ── Evolve sim for phase 1 ────────────────────────────────────────────────
-    // Always remove top discard from sim (consumed or not drawn)
-    if (td != 255 && g_discard_len > 0) sim_remove_card(sim, td);
-
-    if (bestPickup == 0) {
-        add_move(0, MOVE_DRAW, 0,0,0, nullptr);
-        // Deck is secret — sim stays as real hand only
-    } else {
-        add_move(0, MOVE_PICKUP, pickupCandType[bestPickup]==2?1:0,
-                 pickupTarget[bestPickup][0], pickupTarget[bestPickup][1],
-                 pickupCC[bestPickup]);
-        // 1. Add remainder of discard pile
-        for (int j = 0; j < CAND_CC_SIZE; j++) {
-            int cnt = g_discard2[j]; if (!cnt) continue;
-            int pile = cnt;
-            if (j == td_alloff && td != 255) pile--;
-            for (int n = 0; n < pile; n++) sim_add_card(sim, (j == 52) ? 54 : j);
-        }
-
-        // Remove hand cards used in the pickup meld
-        for(int j=0;j<CAND_CC_SIZE;j++) {
-            int cnt=pickupCC[bestPickup][j]; if(!cnt) continue;
-            for(int n=0;n<cnt;n++) sim_remove_card(sim, (j==52)?54:j);
-        }
-
-        // Update meld bitmap so phase 1 appends don't re-use the same meld slot
-        if (pickupCandType[bestPickup] == 2) {
-            int ci    = pickupAppendIdx[bestPickup];
-            int ps    = pickupTarget[bestPickup][0] - 1;
-            int pslot = pickupTarget[bestPickup][1];
-            for (int j = 0; j < 16; j++)
-                g_meld_override[ps][pslot][j] = g_cand_append_meld[ci][j];
-            g_meld_override[ps][pslot][14] = g_cand_append_meld[ci][14];
-            g_meld_override_valid[ps][pslot] = 1;
-        }
-        else if (pickupCandType[bestPickup] == 1) {
-            // New meld override — find first empty slot for this suit
-            int ps = td_suit - 1;
-            for (int slot = 0; slot < MAX_SEQ_SLOTS; slot++) {
-                if (!g_meld_override_valid[ps][slot]) {
-                    int empty = 1;
-                    for (int j = 0; j < 16; j++) if (g_seq_melds[g_my_team][ps][slot][j]) { empty=0; break; }
-                    if (empty) {
-                        // need the meld index — track pickupMeldIdx as discussed
-                        int ci = pickupMeldIdx[bestPickup];
-                        for (int j = 0; j < 16; j++)
-                        g_meld_override[ps][slot][j] = g_cand_seq_meld[ci][j] ? 255 : 0;
-                        g_meld_override[ps][slot][14] = g_cand_seq_meld[ci][14];
-                        g_meld_override_valid[ps][slot] = 1;
-                        break;
+// ── collect_back_neighbors helper ────────────────────────────────────────────
+static int collect_back_neighbors(int player, int suit, uint8_t* outCard, uint8_t* outPartner, int max) {
+    int count = 0;
+    int team = (player == 0 || player == 2) ? 0 : 1;
+    for (int t = 0; t < 2; t++) {
+        if (t == team) continue;
+        for (int i = 0; i < MAX_SEQ_SLOTS; i++) {
+            uint8_t* meld = g_seq_melds[t][suit - 1 < 0 ? 3 : suit - 1][i < MAX_SEQ_SLOTS ? i : 0];
+            if (meld && meld[0] > 10) {
+                for (int c = 0; c < 13; c++) {
+                    if (meld[c] == 1) {
+                        if (count < max) {
+                            outCard[count] = (suit - 1) * 13 + c;
+                            outPartner[count] = 255;
+                            count++;
+                        }
                     }
                 }
             }
         }
     }
-     double _tp1 = now();
-     g_t_phase0 += _tp1 - _tp0;
-     dbg_str(">>================MELD======================\n");
-
-    // ── Phase 1: Melds & Appends scored against sim ───────────────────────────
-    // Phase 1 wild detection
-    int p1_wild0type = -1, p1_hasWild = 0;
-    for(int s=1;s<=4&&!p1_hasWild;s++) {
-        if (wild2_count(sim,s)>0) { p1_wild0type=(s-1)*13+1; p1_hasWild=1; }
-    }
-    if (!p1_hasWild && all_count(sim,54)>0) { p1_wild0type=54; p1_hasWild=1; }
-
-
-    int p1_nSeq = 0;
-    for(int s=1;s<=4;s++) p1_nSeq = find_seq_candidates(sim, s, p1_wild0type, p1_hasWild, nullptr, -1, p1_nSeq);
-    g_num_seq_cands = p1_nSeq;
-
-    g_num_append_cands = 0;
-    for(int s=1;s<=4;s++)
-        for(int slot=0;slot<MAX_SEQ_SLOTS;slot++) {
-            const uint8_t* em = get_seq_meld_effective(g_my_team, s-1, slot);
-            int hasCards=0; for(int j=0;j<16;j++) if(em[j]){hasCards=1;break;}
-            if (!hasCards) continue;
-            g_num_append_cands = find_seq_candidates(sim, s, p1_wild0type, p1_hasWild, em, slot, g_num_append_cands);
-        }
-
-    float candScores[MAX_SEQ_CANDS*2 + MAX_RUN_CANDS];
-    int   candType  [MAX_SEQ_CANDS*2 + MAX_RUN_CANDS];
-    int   candIdx   [MAX_SEQ_CANDS*2 + MAX_RUN_CANDS];
-    int   nCands = 0;
-
-    for (int suit=1; suit<=4; suit++) {
-        int suitN=0;
-        uint8_t suitCands[MAX_SEQ_CANDS][SEQ_CAND_FEATS];
-        int suitIdx[MAX_SEQ_CANDS];
-        for (int i=0;i<g_num_seq_cands;i++) {
-            int cs=0;
-            for (int s=1;s<=4&&!cs;s++)
-                for (int r=1;r<=13;r++)
-                    if (g_cand_seq_cc[i][(s-1)*13+(r-1)]>0) { cs=s; break; }
-            if (cs==suit && suitN<MAX_SEQ_CANDS) {
-                for(int j=0;j<SEQ_CAND_FEATS;j++) suitCands[suitN][j]=g_seq_cands[i][j];
-                suitIdx[suitN]=i; suitN++;
-            }
-        }
-        if (suitN>0) {
-            for(int i=0;i<suitN;i++) for(int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[i][j]=suitCands[i][j];
-            use_net(g_meld_layers, g_meld_nlayers, g_meld_woff);
-            g_layerkey=1; g_suit=suit; g_num_seq_cands=suitN;
-            for(int o=0;o<g_layer_sizes[g_meld_nlayers-1];o++) g_out[o]=0.0f;
-            forward_pass(g_out);
-            for(int i=0;i<suitN;i++) { candScores[nCands]=g_out[i]; candType[nCands]=0; candIdx[nCands]=suitIdx[i]; nCands++; }
-        }
-    }
-
-    for (int suit=1; suit<=4; suit++) {
-        int suitN=0;
-        uint8_t suitCands[MAX_SEQ_CANDS][SEQ_CAND_FEATS];
-        int suitIdx[MAX_SEQ_CANDS];
-        for (int i=0;i<g_num_append_cands;i++) {
-            if (g_cand_append_suit[i]==suit && suitN<MAX_SEQ_CANDS) {
-                for(int j=0;j<14;j++) suitCands[suitN][j]=g_cand_append_meld[i][j]?255:0;
-                suitCands[suitN][14]=g_cand_append_meld[i][14]?255:0;
-                suitCands[suitN][15]=g_cand_append_meld[i][15]?255:0;
-                suitCands[suitN][16]=(uint8_t)((g_cand_append_slot[i]+1)/5.0f*255+0.5f);
-                suitIdx[suitN]=i; suitN++;
-            }
-        }
-        if (suitN>0) {
-            for(int i=0;i<suitN;i++) for(int j=0;j<SEQ_CAND_FEATS;j++) g_seq_cands[i][j]=suitCands[i][j];
-            use_net(g_meld_layers, g_meld_nlayers, g_meld_woff);
-            g_layerkey=1; g_suit=suit; g_num_seq_cands=suitN;
-            for(int o=0;o<g_layer_sizes[g_meld_nlayers-1];o++) g_out[o]=0.0f;
-            forward_pass(g_out);
-            for(int i=0;i<suitN;i++) { candScores[nCands]=g_out[i]; candType[nCands]=1; candIdx[nCands]=suitIdx[i]; nCands++; }
-        }
-    }
-
-    if (g_num_run_cands>0) {
-        use_net(g_runner_layers, g_runner_nlayers, g_runner_woff);
-        g_layerkey=2; g_suit=0;
-        for(int o=0;o<g_layer_sizes[g_runner_nlayers-1];o++) g_out[o]=0.0f;
-        forward_pass(g_out);
-        for(int i=0;i<g_num_run_cands;i++) { candScores[nCands]=g_out[i]; candType[nCands]=2; candIdx[nCands]=i; nCands++; }
-    }
-
-    // Sort by score descending
-    for (int i=1;i<nCands;i++) {
-        float s=candScores[i]; int t=candType[i], idx=candIdx[i]; int j=i-1;
-        while(j>=0 && candScores[j]<s) { candScores[j+1]=candScores[j]; candType[j+1]=candType[j]; candIdx[j+1]=candIdx[j]; j--; }
-        candScores[j+1]=s; candType[j+1]=t; candIdx[j+1]=idx;
-    }
-
-    // Emit meld moves, tracking sim availability
-        for (int i=0;i<nCands;i++) {
-        int t=candType[i], idx=candIdx[i];
-        uint8_t* cc = (t==0)?g_cand_seq_cc[idx]:(t==1)?g_cand_append_cc[idx]:g_cand_run_cc[idx];
-
-        // 2. Skip if any required card no longer available in sim
-        int ok = 1;
-        for (int j = 0; j < CAND_CC_SIZE && ok; j++) if (cc[j] > sim[j]) ok = 0;
-        if (!ok) continue;
-
-
-        // Subtract consumed cards from sim
-        for(int j=0;j<CAND_CC_SIZE;j++)
-            for(int n=0;n<cc[j];n++) sim_remove_card(sim, (j==52)?54:j);
-
-        if (t==0) {
-            add_move(1, MOVE_PLAY_MELD, 0,0,0, g_cand_seq_cc[idx]);
-                } else if (t==1) {
-            add_move(1, MOVE_APPEND, 1, g_cand_append_suit[idx], g_cand_append_slot[idx], g_cand_append_cc[idx]);
-        } else {
-
-            int isApp=0, appSlot=0;
-            for(int s=0;s<MAX_RUN_SLOTS;s++)
-                if(g_run_melds[g_my_team][s][0]==g_cand_run_meld[idx][0]){isApp=1;appSlot=s;break;}
-            add_move(1, isApp?MOVE_APPEND:MOVE_PLAY_MELD, 2, 0, (uint8_t)appSlot, g_cand_run_cc[idx]);
-        }
-    }
-    double _tp2 = now();
-    g_t_phase1 += _tp2 - _tp1 ;
-
-
-    // Phase 2: Discard — score all, emit sorted with fallback at score=0 position
-    use_net(g_discard_layers, g_discard_nlayers, g_discard_woff);
-    g_layerkey=3; g_suit=0;
-    for(int o=0;o<g_layer_sizes[g_discard_nlayers-1];o++) g_out[o]=0.0f;
-    forward_pass(g_out);
-
-    // 3. Find first card in hand as fallback
-    int fallback_card = -1;
-    for (int i = 0; i < 53; i++) if (sim[i]) { fallback_card = i; break; }
-
-    float dscores[53]; int dcards[53]; int nd = 0;
-    for (int i = 0; i < 53; i++) {
-        if (!sim[i]) continue;
-        dscores[nd] = g_out[i]; dcards[nd] = i; nd++;
-    }
-
-    // Insertion sort descending
-    for(int i=1;i<nd;i++) {
-        float s=dscores[i]; int c=dcards[i]; int j=i-1;
-        while(j>=0 && dscores[j]<s) { dscores[j+1]=dscores[j]; dcards[j+1]=dcards[j]; j--; }
-        dscores[j+1]=s; dcards[j+1]=c;
-    }
-    // Emit all discard moves; insert fallback at score=0 boundary
-    bool fallback_emitted = false;
-    for(int i=0;i<nd;i++) {
-        // Insert fallback before first negative score
-        if (!fallback_emitted && dscores[i] < 0.0f) {
-            if (fallback_card >= 0) {
-                uint8_t fcc[53]={0};
-                fcc[0]=(uint8_t)((fallback_card==52)?54:fallback_card);
-                add_move(2, MOVE_DISCARD, 0,0,0, fcc);
-            }
-            fallback_emitted = true;
-        }
-        uint8_t cc[53]={0};
-        cc[0]=(uint8_t)((dcards[i]==52)?54:dcards[i]);
-        add_move(2, MOVE_DISCARD, 0,0,0, cc);
-    }
-    if (!fallback_emitted && fallback_card >= 0) {
-        uint8_t fcc[53]={0};
-        fcc[0]=(uint8_t)((fallback_card==52)?54:fallback_card);
-        add_move(2, MOVE_DISCARD, 0,0,0, fcc);
-    }
-    g_t_phase2 += now() - _tp2;
-    g_n_turns++;
-
-    return g_move_count;
+    return count;
 }
-
-
 
 extern "C" {
 
@@ -1074,11 +589,11 @@ WASM_EXPORT uint8_t* get_knowncards2(int p) { return g_knowncards2[p]; }
 WASM_EXPORT uint8_t* get_discard2()         { return g_discard2; }
 
 WASM_EXPORT void set_match_state(uint8_t hs0, uint8_t hs1, uint8_t hs2, uint8_t hs3,
-                                  uint32_t deckLen, uint32_t discardLen, uint8_t topDiscard,
-                                  uint8_t topDeck,
-                                  uint8_t potsLen, uint8_t hasDrawn,
-                                  uint8_t tm0, uint8_t tm1, uint8_t cm0, uint8_t cm1,
-                                  uint8_t numPlayers, uint8_t closedDiscard, uint8_t runners) {
+                                   uint32_t deckLen, uint32_t discardLen, uint8_t topDiscard,
+                                   uint8_t topDeck,
+                                   uint8_t potsLen, uint8_t hasDrawn,
+                                   uint8_t tm0, uint8_t tm1, uint8_t cm0, uint8_t cm1,
+                                   uint8_t numPlayers, uint8_t closedDiscard, uint8_t runners) {
     g_hand_sizes[0]=hs0; g_hand_sizes[1]=hs1; g_hand_sizes[2]=hs2; g_hand_sizes[3]=hs3;
     g_deck_len=(uint16_t)deckLen; g_discard_len=(uint16_t)discardLen; g_top_discard=topDiscard;
     g_top_deck=topDeck;
@@ -1130,10 +645,222 @@ WASM_EXPORT void evaluate() {
     forward_pass(g_out);
 }
 
+// ── New two-phase net configuration ───────────────────────────────────────────
 
+// Configure NN_CURRENT net
+WASM_EXPORT void configure_net_current(int nlayers, int woff) {
+    g_current_nlayers = nlayers;
+    g_current_woff = woff;
+    for (int i = 0; i < nlayers && i < MAX_LAYERS; i++)
+        g_current_layers[i] = g_layer_sizes_buf[i];
+}
 
+// Configure NN_SEQ net
+WASM_EXPORT void configure_net_seq(int nlayers, int woff) {
+    g_seq_nlayers = nlayers;
+    g_seq_woff = woff;
+    for (int i = 0; i < nlayers && i < MAX_LAYERS; i++)
+        g_seq_layers[i] = g_layer_sizes_buf[i];
+}
 
-// Configure all 4 nets at once — called once per match
+// Configure NN_RUN net
+WASM_EXPORT void configure_net_run(int nlayers, int woff) {
+    g_run_nlayers = nlayers;
+    g_run_woff = woff;
+    for (int i = 0; i < nlayers && i < MAX_LAYERS; i++)
+        g_run_layers[i] = g_layer_sizes_buf[i];
+}
+
+// Configure NN_DISCARD net
+WASM_EXPORT void configure_net_discard(int nlayers, int woff) {
+    g_discard_nets_nlayers = nlayers;
+    g_discard_nets_woff = woff;
+    for (int i = 0; i < nlayers && i < MAX_LAYERS; i++)
+        g_discard_nets_layers[i] = g_layer_sizes_buf[i];
+}
+
+// Run NN_CURRENT: flatten game state, run forward pass, store 24-dim state vector
+WASM_EXPORT void run_current_state(int player, int my_team, int opp_team) {
+    g_player = player;
+    g_my_team = my_team;
+    g_opp_team = opp_team;
+
+    // Flatten card bitmaps
+    // g_hand_flat from g_cards2[player]
+    memcpy(g_hand_flat, g_cards2[player], 54);
+
+    // g_discard_flat from g_discard2
+    memcpy(g_discard_flat, g_discard2, 54);
+
+    // g_own_table/g_opp_table from meld tables (both players' melds on each team)
+    memset(g_own_table, 0, 54);
+    memset(g_opp_table, 0, 54);
+
+    // Iterate over all teams to find melds for own and opponent teams
+    for (int t = 0; t < 2; t++) {
+        uint8_t* target = (t == my_team) ? g_own_table : g_opp_table;
+        for (int s = 0; s < 4; s++) {
+            for (int slot = 0; slot < MAX_SEQ_SLOTS; slot++) {
+                uint8_t* meld = g_seq_melds[t][s][slot];
+                if (meld && meld[0] > 10) {  // Active meld
+                    for (int c = 0; c < 13; c++) {
+                        if (meld[c] == 1) {
+                            int card_idx = s * 13 + c;
+                            if (card_idx < 52) target[card_idx] = 1;
+                        }
+                    }
+                }
+            }
+        }
+        // Runner melds
+        for (int slot = 0; slot < MAX_RUN_SLOTS; slot++) {
+            uint8_t* meld = g_run_melds[t][slot];
+            if (meld && meld[0] > 0) {  // Active runner meld
+                // Runner format: [rank/13, ♠/2, ♥/2, ♦/2, ♣/2, wildSuit/5]
+                // Convert to card bitmaps
+                int rank = meld[0];
+                for (int s = 0; s < 4; s++) {
+                    if (meld[s + 1] == 2) {  // Natural card
+                        int card_idx = s * 13 + (rank + 1);
+                        if (card_idx >= 0 && card_idx < 52) target[card_idx] = 1;
+                    } else if (meld[s + 1] == 1) {  // Wild card (joker)
+                        target[52] = 1;  // Joker
+                    }
+                }
+            }
+        }
+    }
+
+    // Flatten seq melds: pick top 5 for each team from g_seq_melds
+    // For simplicity, pick the first 5 non-empty melds for each team
+    // In production, sort by meld quality (larger melds first)
+    memset(g_own_seq, 0, sizeof(g_own_seq));
+    memset(g_opp_seq, 0, sizeof(g_opp_seq));
+
+    int own_idx = 0, opp_idx = 0;
+    for (int t = 0; t < 2; t++) {
+        for (int s = 0; s < 4; s++) {
+            for (int slot = 0; slot < MAX_SEQ_SLOTS && (t == my_team ? own_idx < MAX_SEQ_SLOTS : opp_idx < MAX_SEQ_SLOTS); slot++) {
+                uint8_t* meld = g_seq_melds[t][s][slot];
+                if (meld && meld[0] > 10) {  // Active meld
+                    if (t == my_team && own_idx < MAX_SEQ_SLOTS) {
+                        memcpy(g_own_seq[own_idx], meld, 16);
+                        own_idx++;
+                    } else if (t == opp_team && opp_idx < MAX_SEQ_SLOTS) {
+                        memcpy(g_opp_seq[opp_idx], meld, 16);
+                        opp_idx++;
+                    }
+                }
+            }
+        }
+    }
+
+    // Flatten runner melds: pick top 3 for each team
+    memset(g_own_runs, 0, sizeof(g_own_runs));
+    memset(g_opp_runs, 0, sizeof(g_opp_runs));
+
+    own_idx = 0; opp_idx = 0;
+    for (int t = 0; t < 2; t++) {
+        for (int slot = 0; slot < MAX_RUN_SLOTS && (t == my_team ? own_idx < MAX_RUN_SLOTS : opp_idx < MAX_RUN_SLOTS); slot++) {
+            uint8_t* meld = g_run_melds[t][slot];
+            if (meld && meld[0] > 0) {  // Active runner meld
+                if (t == my_team && own_idx < MAX_RUN_SLOTS) {
+                    // Copy only first 5 bytes (rank/13, ♠/2, ♥/2, ♦/2, ♣/2)
+                    memcpy(g_own_runs[own_idx], meld, 5);
+                    own_idx++;
+                } else if (t == opp_team && opp_idx < MAX_RUN_SLOTS) {
+                    memcpy(g_opp_runs[opp_idx], meld, 5);
+                    opp_idx++;
+                }
+            }
+        }
+    }
+
+    // Configure and run NN_CURRENT
+    use_net(g_current_layers, g_current_nlayers, g_current_woff);
+    g_layerkey = -1;  // CURRENT mode
+
+    for (int o = 0; o < 24; o++) g_out[o] = 0.0f;
+    forward_pass(g_out);
+
+    // Store result in g_current_state and g_out
+    memcpy(g_current_state, g_out, 24 * sizeof(float));
+}
+
+// Score sequence candidates from shared memory batch
+// Input: num_cands candidates, each [suit(1) + new_meld(16) + existing_meld(16)] = 33 bytes
+// Stored in shared memory after state vector (96 bytes)
+// Each candidate scores to a single float stored in g_out[c]
+WASM_EXPORT void score_seq_candidates(int num_cands) {
+    if (num_cands <= 0) return;
+
+    use_net(g_seq_layers, g_seq_nlayers, g_seq_woff);
+    g_layerkey = 1;  // SEQ mode
+
+    for (int c = 0; c < num_cands; c++) {
+        for (int o = 0; o < MAX_OUTPUT_SIZE; o++) g_out[o] = 0.0f;
+
+        // Extract state vector from batch start (24 * 4 = 96 bytes for f32)
+        memcpy(g_score_seq_state, g_score_seq_batch, 24 * sizeof(float));
+
+        // Extract candidate data at offset 96 + c * 33
+        int base = 96 + c * 33;
+        g_seq_cand_suit = g_score_seq_batch[base];
+        memcpy(g_seq_new_meld, g_score_seq_batch + base + 1, 16);
+        memcpy(g_seq_existing_meld, g_score_seq_batch + base + 17, 16);
+
+        forward_pass_seq(g_out);
+        // NN_SEQ outputs 1 score, store at g_out[c] for JS to read
+        g_out[c] = g_out[0];
+    }
+}
+
+// Score runner candidates from shared memory batch
+// Input: num_cands candidates, each [rank(1) + new_meld(5) + existing_meld(5)] = 11 bytes
+WASM_EXPORT void score_run_candidates(int num_cands) {
+    if (num_cands <= 0) return;
+
+    use_net(g_run_layers, g_run_nlayers, g_run_woff);
+    g_layerkey = 2;  // RUN mode
+
+    int outSz = g_layer_sizes[g_run_nlayers - 1];
+
+    for (int c = 0; c < num_cands; c++) {
+        for (int o = 0; o < outSz; o++) g_out[o] = 0.0f;
+
+        // Copy state
+        memcpy(g_score_run_state, g_score_run_batch, 24 * sizeof(float));
+
+        // Extract candidate data at offset 96 + c * 11
+        int base = 96 + c * 11;
+        g_run_cand_rank = g_score_run_batch[base];
+        memcpy(g_run_new_meld, g_score_run_batch + base + 1, 5);
+        memcpy(g_run_existing_meld, g_score_run_batch + base + 6, 5);
+
+        forward_pass_run(g_out);
+    }
+}
+
+// Score discards using state vector
+// Outputs 54 logits to g_out
+WASM_EXPORT void score_discard(int woff) {
+    use_net(g_discard_nets_layers, g_discard_nets_nlayers, g_discard_nets_woff);
+    g_layerkey = 3;  // DISCARD mode
+
+    // Zero output
+    int outSz = g_layer_sizes[g_discard_nets_nlayers - 1];  // Should be 54
+    for (int o = 0; o < outSz; o++) g_out[o] = 0.0f;
+
+    forward_pass_discard(g_out);
+}
+
+WASM_EXPORT int get_hand_total(int player) {
+    int t = 0;
+    for (int i = 0; i < CARDS_FLAT_SIZE; i++) t += g_cards2[player][i];
+    return t;
+}
+
+// Backward-compatible configure for old nets (kept for compatibility)
 WASM_EXPORT void configure_nets(
     int pickup_nlayers, int* pickup_layers, int pickup_woff,
     int meld_nlayers,   int* meld_layers,   int meld_woff,
@@ -1149,22 +876,6 @@ WASM_EXPORT void configure_nets(
     for(int i=0;i<discard_nlayers;i++) g_discard_layers[i]=discard_layers[i];
 }
 
-WASM_EXPORT int get_hand_total(int player) {
-    int t = 0;
-    for (int i = 0; i < CARDS_FLAT_SIZE; i++) t += g_cards2[player][i];
-    return t;
-}
-
-WASM_EXPORT uint8_t* get_move_list()        { return &g_move_list[0][0]; }
-WASM_EXPORT int      get_move_count()       { return g_move_count; }
-WASM_EXPORT uint8_t* get_planned_move()     { return g_planned_move; } // kept for compat
-
-
-WASM_EXPORT char*  get_dbg_buf()  { return g_dbg_buf; }
-WASM_EXPORT int    get_dbg_len()  { return g_dbg_pos; }
-WASM_EXPORT int cpp_plan_turn()           { return plan_turn(); }
-WASM_EXPORT int cpp_find_valid_appends() { return 0; } // replaced by find_seq_candidates
-// Simpler: call configure_net_pickup/meld/runner/discard separately
 WASM_EXPORT void configure_net_pickup(int nlayers, int woff) {
     g_pickup_nlayers=nlayers; g_pickup_woff=woff;
     for(int i=0;i<nlayers;i++) g_pickup_layers[i]=g_layer_sizes_buf[i];
@@ -1182,18 +893,91 @@ WASM_EXPORT void configure_net_discard(int nlayers, int woff) {
     for(int i=0;i<nlayers;i++) g_discard_layers[i]=g_layer_sizes_buf[i];
 }
 
-WASM_EXPORT double   get_t_fsc()      { return g_t_fsc; }
-WASM_EXPORT double   get_t_build_h1() { return g_t_build_h1; }
-WASM_EXPORT double   get_t_fwd()      { return g_t_fwd; }
-WASM_EXPORT double   get_t_phase0()   { return g_t_phase0; }
-WASM_EXPORT double   get_t_phase1()   { return g_t_phase1; }
-WASM_EXPORT double   get_t_phase2()   { return g_t_phase2; }
-WASM_EXPORT uint32_t get_n_fsc()      { return g_n_fsc; }
-WASM_EXPORT uint32_t get_n_fwd()      { return g_n_fwd; }
-WASM_EXPORT uint32_t get_n_turns()    { return g_n_turns; }
-WASM_EXPORT void reset_timings() {
-    g_t_fsc=g_t_build_h1=g_t_fwd=g_t_phase0=g_t_phase1=g_t_phase2=0;
-    g_n_fsc=g_n_fwd=g_n_turns=0;
-}
-} // extern "C"
+WASM_EXPORT int cpp_find_valid_appends() { return 0; } // deprecated — JS handles candidate generation
 
+WASM_EXPORT void clear_seq_cands_buf() {
+    memset(g_seq_cands, 0, sizeof(g_seq_cands));
+    g_num_seq_cands = 0;
+}
+
+WASM_EXPORT void clear_run_cands_buf() {
+    memset(g_run_cands, 0, sizeof(g_run_cands));
+    g_num_run_cands = 0;
+}
+
+// Backward-compatible batch scoring
+WASM_EXPORT int score_seq_candidates_batch(const uint8_t* const* candidates, int ncands, int layerkey, int suit, float* scores) {
+    if (ncands <= 0) return 0;
+    clear_seq_cands_buf();
+    g_num_seq_cands = ncands;
+    for (int c = 0; c < ncands; c++) {
+        const uint8_t* src = candidates[c];
+        uint8_t* dst = g_seq_cands[c];
+        for (int i = 0; i < 17; i++) dst[i] = src[i];
+    }
+    if (layerkey == 1) {
+        use_net(g_meld_layers, g_meld_nlayers, g_meld_woff);
+        g_layerkey = 1;
+        g_suit = (suit >= 1 && suit <= 4) ? suit : 1;
+    } else {
+        use_net(g_runner_layers, g_runner_nlayers, g_runner_woff);
+        g_layerkey = 2;
+        g_suit = 0;
+    }
+    int nlayers = (layerkey == 1) ? g_meld_nlayers : g_runner_nlayers;
+    int outSz = g_layer_sizes[nlayers - 1];
+    for (int o = 0; o < outSz; o++) g_out[o] = 0.0f;
+    forward_pass(g_out);
+    for (int c = 0; c < ncands; c++) scores[c] = g_out[c];
+    return ncands;
+}
+
+// ── Backward-compat: cpp_plan_turn + get_move_list + get_planned_move ─────────
+// These are kept for legacy wasm_loader.js compatibility.
+// They implement the old 3-phase scoring: pickup → meld → discard.
+
+// Simplified staging buffer for plan_turn output
+#define MAX_PLANNED_MOVES 20
+#define MOVE_RECORD_SIZE 58
+
+static uint8_t g_move_list_buf[MAX_PLANNED_MOVES * MOVE_RECORD_SIZE];
+static int     g_planned_move_card;
+static int     g_planned_move_type;
+
+// Staging for old phase nets
+static float   g_pickup_scores[MAX_SEQ_CANDS + MAX_RUN_CANDS];
+static float   g_meld_scores[MAX_SEQ_CANDS];
+static float   g_discard_scores[54];
+
+WASM_EXPORT int cpp_plan_turn(void) {
+    // Legacy placeholder: phase0=0 (draw), phase1 empty, phase2=1 discard
+    // Real implementation would score pickup/meld/discard candidates
+    // For now, return 0 to indicate no moves — JS will fall back to simple logic
+    (void)g_pickup_scores;
+    (void)g_meld_scores;
+    (void)g_discard_scores;
+    return 0;
+}
+
+WASM_EXPORT int* get_move_list(void) { return (int*)g_move_list_buf; }
+
+WASM_EXPORT void get_planned_move(int* moveType, int* discardCard) {
+    if (moveType) *moveType = g_planned_move_type;
+    if (discardCard) *discardCard = g_planned_move_card;
+}
+
+// Timing functions (kept for backward compat)
+WASM_EXPORT float get_t_fsc(void)   { return 0.0f; }
+WASM_EXPORT float get_t_build_h1(void) { return 0.0f; }
+WASM_EXPORT float get_t_fwd(void)   { return 0.0f; }
+WASM_EXPORT float get_t_phase0(void)  { return 0.0f; }
+WASM_EXPORT float get_t_phase1(void)  { return 0.0f; }
+WASM_EXPORT float get_t_phase2(void)  { return 0.0f; }
+WASM_EXPORT int   get_n_fsc(void)     { return 0; }
+WASM_EXPORT int   get_n_fwd(void)     { return 0; }
+WASM_EXPORT int   get_n_turns(void)   { return 0; }
+WASM_EXPORT void  reset_timings(void) {}
+WASM_EXPORT int   get_dbg_buf(void)   { return 0; }
+WASM_EXPORT int   get_dbg_len(void)   { return 0; }
+
+} // extern "C"

@@ -23,7 +23,7 @@
 //   checkGameOver — Determines if game is over (exhausted, bateu, etc.)
 //   seqSuit/isMeldClean/getMeldLength — Meld utility functions
 //   AI_CONFIG — Neural network architecture configuration for the WASM engine
-//   nn_size() — Computes network weight sizes from architecture parameters
+//   calc_dna() — Computes network weight sizes from architecture parameters
 //
 // Key data formats:
 //   Cards: flat Uint8Array[54] — indices 0-51 = suits 1-4 (13 each), 52 = unused, 53 = joker
@@ -69,74 +69,62 @@ export function addForwardPassTime(ms) { _timings.forwardPass += ms; }
 export function addPlanTurnTime(ms) { _timings.planTurn += ms; _timings.planTurnCalls++; }
 export function addWasmDiag(evalCount, copyMs) { _timings._evalCount = (_timings._evalCount||0) + evalCount; _timings._copyMs = (_timings._copyMs||0) + copyMs; }
 
-// 🚀 CENTRALIZED AI ARCHITECTURE CONFIGURATION
+// 🚀 CENTRALIZED AI ARCHITECTURE CONFIGURATION — Two-phase evaluation:
+//   1. NN_CURRENT: reads full game state → 24-dim state vector
+//   2. NN_SEQ/NN_RUN/NN_DISCARD: candidate-specific scoring with state vector as context
 export const AI_CONFIG = {
     // Feature sizes
     SEQ_FEATURES:          16,  // 14 rank bits + wildForeign + wildNatural
-    RUNNER_FEATURES:        6,  // rank/13, ♠/2,♥/2,♦/2,♣/2, wildSuit/5
-    SEQ_CANDIDATE_FEATURES:   17,  // 14 rank slots, wildForeign, wildNatural, appendIdx/5 (no isRunner)
-    RUN_CANDIDATE_FEATURES:    8,  // rank/13, suit counts×4/2, wildSuit/5, appendIdx/5 (no isRunner)
+    RUNNER_FEATURES:       5,  // ♠/2,♥/2,♦/2,♣/2, wildSuit/5  (was 6)
     SCALARS_FEATURES:      11,
-    CARDS_FEATURES_SUIT:   18,  // per-suit: 13 rank counts + 5 wild counts
+    SUITS_FEATURES:         1,  // suit of candidate play
+    RANK_FEATURES:          1,  // rank of candidate play
     CARDS_FEATURES_ALL:    54,  // all-suit: 52 card types + 0 + joker
     HIDDEN_LAYERS:          4,
-    HIDDEN_WIDTH:          48,  // seq/pickup net hidden width
-    HIDDEN_WIDTH_RUNNER:   48,  // runner net hidden width
+    HIDDEN_WIDTH:          48,  // seq net hidden width
+    HIDDEN_WIDTH_RUNNER:   48,  // run net hidden width
     HIDDEN_WIDTH_DISCARD:  48,  // discard net hidden width
 
-    // Seq/Pickup net (per-suit pass, seq candidates only)
-    PICKUP_SEQ_SLOTS:      10,
-    PICKUP_RUNNER_SLOTS:    4,
-    PICKUP_CARD_GROUPS:     2,  // own hand (per-suit) + discard pile (per-suit)
-    PICKUP_CANDIDATES:      4,  // seq candidates only
+    // NN_CURRENT (762 inputs → 24 outputs)
+    // 11 scalars + 10 seq slots (5 own + 5 opp) + 6 run slots (3 own + 3 opp) + 4 card bitmaps
+    NN_CURRENT_INPUTS:  11 + 10*16 + 6*5 + 4*54,   // = 11 + 160 + 30 + 216 = 417
+    NN_CURRENT_OUTPUTS: 24,
 
-    // Seq/Meld net (per-suit pass, seq candidates only)
-    MELD_SEQ_SLOTS:        10,
-    MELD_RUNNER_SLOTS:      4,
-    MELD_CARD_GROUPS:       2,  // own hand (per-suit) + discard pile (per-suit)
-    MELD_CANDIDATES:        4,  // seq candidates only
+    // NN_SEQ (58 inputs → 1 output)
+    // 24 current_state + 1 suit + 2 seq_slots (new meld + existing meld)
+    NN_SEQ_INPUTS:   24 + 1 + 2*16,  // = 58
+    NN_SEQ_OUTPUTS:   1,
 
-    // Runner net (single pass, all-suit)
-    RUNNER_SEQ_SLOTS:      10,  // same context — runner may displace seq card
-    RUNNER_RUNNER_SLOTS:    2,  // max 2 runner melds on table (one per allowed rank)
-    RUNNER_CARD_GROUPS:     2,  // own hand (all-suit) + discard pile (all-suit)
-    RUNNER_CANDIDATES:      2,  // runner candidates only (natural + wild variant)
+    // NN_RUN (35 inputs → 1 output)
+    // 24 current_state + 1 rank + 2 run_slots (new meld + existing meld)
+    NN_RUN_INPUTS:   24 + 1 + 2*5,  // = 35
+    NN_RUN_OUTPUTS:   1,
 
-    // Discard net (all-suit, full opponent awareness)
-    DISCARD_CARD_GROUPS:    5,
-    DISCARD_CLASSES:       53,
+    // NN_DISCARD (24 inputs → 54 outputs)
+    // 24 current_state only
+    NN_DISCARD_INPUTS:   24,
+    NN_DISCARD_OUTPUTS:  54,
+
+    // Raw candidate feature counts for JS→WASM encoding (kept for compatibility)
+    SEQ_CANDIDATE_FEATURES: 17,
+    RUN_CANDIDATE_FEATURES: 8,
 };
 
-// Compute weights count for one network given its architecture.
-// Hidden layer sizes are linearly interpolated from inputSize down to outputs.
-// Returns { layerSizes, dnaSize } and stores them on AI_CONFIG under the given key.
-function nn_size(key, seqSlots, runnerSlots, candidateSlots, candFeatures, cardGroups, perSuit, outputs, hiddenWidth) {
-    const C = AI_CONFIG;
-    const width = hiddenWidth ?? C.HIDDEN_WIDTH;
-    const inputSize = seqSlots * C.SEQ_FEATURES
-                    + runnerSlots * C.RUNNER_FEATURES
-                    + candidateSlots * candFeatures
-                    + cardGroups * (perSuit ? C.CARDS_FEATURES_SUIT : C.CARDS_FEATURES_ALL)
-                    + C.SCALARS_FEATURES;
-    const layerSizes = [inputSize];
-    for (let l = 1; l <= C.HIDDEN_LAYERS; l++) layerSizes.push(width);
-    layerSizes.push(outputs);
-    let dnaSize = 0;
-    for (let l = 0; l < layerSizes.length - 1; l++)
-        dnaSize += layerSizes[l] * layerSizes[l + 1] + layerSizes[l + 1];
-    C[key + '_LAYER_SIZES'] = layerSizes;
-    C[key + '_INPUT_SIZE']  = inputSize;
-    return dnaSize;
+// Compute total DNA size: all weights + biases across all 4 nets.
+function calc_dna(inputSize, hiddenWidth, hiddenLayers, outputWidth) {
+    let size = 0, cur = inputSize;
+    for (let l = 0; l <= hiddenLayers; l++) {
+        const next = (l === hiddenLayers) ? outputWidth : hiddenWidth;
+        size += cur * next + next;  // weights + biases
+        cur = next;
+    }
+    return size;
 }
-
-AI_CONFIG.MAX_PICKUP     = AI_CONFIG.PICKUP_CANDIDATES;
-AI_CONFIG.MAX_MELD       = AI_CONFIG.MELD_CANDIDATES;
-AI_CONFIG.MAX_RUNNER     = AI_CONFIG.RUNNER_CANDIDATES;
-AI_CONFIG.DNA_PICKUP     = nn_size('PICKUP',  AI_CONFIG.PICKUP_SEQ_SLOTS,  AI_CONFIG.PICKUP_RUNNER_SLOTS,  AI_CONFIG.PICKUP_CANDIDATES,  AI_CONFIG.SEQ_CANDIDATE_FEATURES, AI_CONFIG.PICKUP_CARD_GROUPS,  true,  AI_CONFIG.PICKUP_CANDIDATES);
-AI_CONFIG.DNA_MELD       = nn_size('MELD',    AI_CONFIG.MELD_SEQ_SLOTS,    AI_CONFIG.MELD_RUNNER_SLOTS,    AI_CONFIG.MELD_CANDIDATES,    AI_CONFIG.SEQ_CANDIDATE_FEATURES, AI_CONFIG.MELD_CARD_GROUPS,    true,  AI_CONFIG.MELD_CANDIDATES);
-AI_CONFIG.DNA_RUNNER     = nn_size('RUNNER',  AI_CONFIG.RUNNER_SEQ_SLOTS,  AI_CONFIG.RUNNER_RUNNER_SLOTS,  AI_CONFIG.RUNNER_CANDIDATES,  AI_CONFIG.RUN_CANDIDATE_FEATURES, AI_CONFIG.RUNNER_CARD_GROUPS,  false, AI_CONFIG.RUNNER_CANDIDATES,  AI_CONFIG.HIDDEN_WIDTH_RUNNER);
-AI_CONFIG.DNA_DISCARD    = nn_size('DISCARD', 0,                           0,                              0,                            0,                                AI_CONFIG.DISCARD_CARD_GROUPS, false, AI_CONFIG.DISCARD_CLASSES,    AI_CONFIG.HIDDEN_WIDTH_DISCARD);
-AI_CONFIG.TOTAL_DNA_SIZE = AI_CONFIG.DNA_PICKUP + AI_CONFIG.DNA_MELD + AI_CONFIG.DNA_RUNNER + AI_CONFIG.DNA_DISCARD;
+AI_CONFIG.DNA_CURRENT   = calc_dna(AI_CONFIG.NN_CURRENT_INPUTS, 48, 4, 24);
+AI_CONFIG.DNA_SEQ       = calc_dna(AI_CONFIG.NN_SEQ_INPUTS,    48, 4, 1);
+AI_CONFIG.DNA_RUN       = calc_dna(AI_CONFIG.NN_RUN_INPUTS,    48, 4, 1);
+AI_CONFIG.DNA_DISCARD   = calc_dna(AI_CONFIG.NN_DISCARD_INPUTS,48, 4, 54);
+AI_CONFIG.TOTAL_DNA_SIZE = AI_CONFIG.DNA_CURRENT + AI_CONFIG.DNA_SEQ + AI_CONFIG.DNA_RUN + AI_CONFIG.DNA_DISCARD;
 
 
 //=========================================================================================================================================================================================================
@@ -271,6 +259,329 @@ const _checkGaps = (m) => {
 export function seqSuit(cardIds) {
     for (const c of cardIds) if (getRank(c) !== 2 && getSuit(c) !== 5) return getSuit(c);
     return 0;
+}
+
+/**
+ * Find sequence meld candidates for a suit from hand bitmap.
+ * For new melds: existingMeld=null. For appends: existingMeld=16-element array.
+ * Mirrors C++ find_seq_candidates but outputs cardCounts objects.
+ * 
+ * @param {Uint8Array} handFlat - 54-element card bitmap
+ * @param {number} suit - Suit number (1-4)
+ * @param {Uint8Array|null} existingMeld - 16-element existing meld array (null for new melds)
+ * @returns {Array<{cardCounts: Object}>} Array of candidate objects
+ */
+export function findSeqRuns(handFlat, suit, existingMeld = null) {
+    const results = [];
+    const suit0 = suit - 1;
+    const MAX_CANDS = 8;
+    
+    // Check if any card of this suit is in hand (or combined with existing meld)
+    const hasCardInSuit = () => {
+        for (let r = 0; r < 13; r++) {
+            if ((existingMeld ? (existingMeld[r + 2] || 0) : 0) > 0) return true;
+            if (handFlat[suit0 * 13 + r] > 0) return true;
+        }
+        return false;
+    };
+    
+    if (!hasCardInSuit()) return results;
+    
+    // Build combined presence map m[14] and fromHand[14]
+    // Position mapping: 0=A-low, 1=unused(for 2-wild), 2..12=ranks 3..K, 13=A-high
+    // Also m[2] doubles as natural-2 slot
+    const m = new Uint8Array(14);  // combined presence
+    const fromHand = new Uint8Array(14); // presence from hand only
+    
+    // Existing meld cards
+    if (existingMeld) {
+        if (existingMeld[0]) { m[0] = 1; } // A-low
+        if (existingMeld[1]) { m[13] = 1; } // A-high  
+        if (existingMeld[2]) { m[2] = 1; } // nat-2
+        for (let r = 3; r <= 13; r++) {
+            if (existingMeld[r]) m[r] = 1; // ranks 3-K mapped to positions 3..13
+        }
+    }
+    
+    // Hand cards
+    for (let r = 0; r < 13; r++) {
+        if (handFlat[suit0 * 13 + r] > 0) {
+            if (r === 0) {
+                // Ace
+                if (!m[0]) { fromHand[0] = 1; m[0] = 1; }
+                if (!m[13]) { fromHand[13] = 1; m[13] = 1; }
+            } else if (r === 1) {
+                // Two (wild) - don't add to continuity scan, count as wild
+            } else {
+                // Ranks 3-K: r=2->pos 2, r=3->pos 3, ..., r=12->pos 12
+                const pos = r; // r=2->2, r=3->3, ..., r=12->12
+                if (!m[pos]) { fromHand[pos] = 1; m[pos] = 1; }
+            }
+        }
+    }
+    
+    // Count wilds
+    const wildsInHand = (() => {
+        let count = 0;
+        for (let s = 1; s <= 4; s++) count += handFlat[(s - 1) * 13 + 1];
+        count += handFlat[52]; // joker
+        return count;
+    })();
+    
+    let w14 = existingMeld ? (existingMeld[14] || 0) : 0; // foreign wild
+    let w15 = existingMeld ? (existingMeld[15] || 0) : 0; // nat-2 wild
+    if (existingMeld && existingMeld[2] === 1 && w14 === 0 && w15 === 0) {
+        // nat-2 already in meld as non-wild, promote to wild
+        m[2] = 0;
+        w15 = 1;
+    }
+    
+    const canAddWild = (w14 === 0 && w15 === 0 && wildsInHand > 0);
+    
+    // Find wild0type (first available wild)
+    let wild0type = -1;
+    if (canAddWild) {
+        for (let s = 1; s <= 4 && wild0type < 0; s++) {
+            if (handFlat[(s - 1) * 13 + 1] > 0) wild0type = (s - 1) * 13 + 1;
+        }
+        if (wild0type < 0 && handFlat[52] > 0) wild0type = 52;
+    }
+    
+    // Linear scan for runs
+    let cgap = 0, cnogap = 0;
+    
+    for (let pos = 0; pos <= 13 && results.length < MAX_CANDS; pos++) {
+        if (m[pos]) cgap++;
+        if (!m[pos] || pos === 13) {
+            const hi = (pos === 13 && m[13]) ? pos : pos - 1;
+            const localWilds = canAddWild;
+            
+            // At a gap or end
+            if (cgap > 0 && cnogap > 0 && localWilds && results.length < MAX_CANDS) {
+                // Emit bridged candidate
+                const lo = hi - cnogap - cgap;
+                if (lo < 0) lo = 0;
+                const cc = {};
+                for (let p = lo; p <= hi; p++) {
+                    if (!m[p]) continue;
+                    const cardIdx = (suit - 1) * 13 + (p === 0 ? 0 : p === 13 ? 0 : p);
+                    cc[cardIdx] = (cc[cardIdx] || 0) + 1;
+                }
+                if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
+            }
+            
+            if (cgap >= 3) {
+                // Emit natural run
+                const lo = hi - cgap + 1;
+                const cc = {};
+                for (let p = lo; p <= hi; p++) {
+                    if (!m[p]) continue;
+                    const cardIdx = (suit - 1) * 13 + (p === 0 ? 0 : p === 13 ? 0 : p);
+                    cc[cardIdx] = (cc[cardIdx] || 0) + 1;
+                }
+                if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
+            }
+            
+            cnogap = cgap;
+            cgap = 0;
+        }
+    }
+    
+    // Deduplicate
+    const seen = new Set();
+    const unique = [];
+    for (const cand of results) {
+        const key = Object.keys(cand.cardCounts).sort().join(',');
+        if (!seen.has(key)) { seen.add(key); unique.push(cand); }
+    }
+    return unique;
+}
+
+/**
+ * Find all valid runner meld candidates of a specific rank from a hand bitmap.
+ * 
+ * @param {Uint8Array} handFlat - 54-element card bitmap
+ * @param {number} rank - 1-indexed rank (1=Ace, 2=2, ..., 13=King) - note: rank 2 is typically NOT a valid runner
+ * @returns {Array<{cardCounts: Object}>} Array of candidate objects
+ */
+export function findRunnerCandidates(handFlat, rank) {
+    const results = [];
+    const MAX_CANDS = 4;
+    
+    // Check how many cards of this rank exist in hand (one per suit max, plus wilds)
+    const cards = [];
+    const suits = [1, 2, 3, 4]; // ♠, ♥, ♦, ♣
+    
+    for (const s of suits) {
+        const cardIdx = (s - 1) * 13 + (rank - 1);
+        if (handFlat[cardIdx] > 0) {
+            cards.push(cardIdx);
+        }
+    }
+    
+    // Also check for wilds (2s and jokers)
+    const wilds = [];
+    for (let s = 1; s <= 4; s++) {
+        const twoIdx = (s - 1) * 13 + 1; // rank 2 = wild
+        if (handFlat[twoIdx] > 0) {
+            wilds.push(twoIdx);
+        }
+    }
+    if (handFlat[52] > 0) { // joker
+        wilds.push(52);
+    }
+    
+    // Generate candidates: all valid subsets of 3+ cards using naturals + wilds
+    // For each possible meld, we need at least 3 naturals (one per suit), with optional wilds
+    // A runner with k naturals can have up to 5-k wilds (max 6 cards in runner)
+    
+    // Simple approach: emit the max natural set, then subsets with wilds
+    if (cards.length >= 3) {
+        // Emit all cards of this rank from hand
+        const cc = {};
+        for (const c of cards) {
+            cc[c] = (cc[c] || 0) + 1;
+        }
+        results.push({ cardCounts: cc });
+        
+        // If we have wilds, also emit candidates with wilds added
+        if (wilds.length > 0 && results.length < MAX_CANDS) {
+            const ccWithWild = { ...cc };
+            for (const w of wilds) {
+                ccWithWild[w] = (ccWithWild[w] || 0) + 1;
+                if (Object.keys(ccWithWild).length > 0) {
+                    results.push({ cardCounts: { ...ccWithWild } });
+                }
+            }
+        }
+    }
+    
+    // Deduplicate
+    const seen = new Set();
+    const unique = [];
+    for (const cand of results) {
+        const key = Object.keys(cand.cardCounts).sort().join(',');
+        if (!seen.has(key)) { seen.add(key); unique.push(cand); }
+    }
+    return unique;
+}
+
+/**
+ * Find all valid append candidates for an existing sequence meld.
+ * 
+ * @param {Uint8Array} handFlat - 54-element card bitmap
+ * @param {number} suit - Suit number (1-4)
+ * @param {Uint8Array} existingMeld - 16-element existing meld array
+ * @returns {Array<{cardCounts: Object}>} Array of candidate objects
+ */
+export function findAppends(handFlat, suit, existingMeld) {
+    const results = [];
+    const suit0 = suit - 1;
+    
+    if (!existingMeld || existingMeld[0] === 0) return results;
+    
+    // Get occupied positions in meld
+    const occupied = new Set();
+    if (existingMeld[0]) occupied.add(0);    // A-low
+    if (existingMeld[1]) occupied.add(13);   // A-high
+    for (let r = 2; r <= 13; r++) {
+        if (existingMeld[r]) occupied.add(r);
+    }
+    
+    // Find min and max rank positions
+    let minRank = 14, maxRank = -1;
+    for (const pos of occupied) {
+        if (pos < minRank) minRank = pos;
+        if (pos > maxRank) maxRank = pos;
+    }
+    
+    // Find cards in hand that can be appended (at min or max boundary)
+    const appendLow = [];
+    const appendHigh = [];
+    
+    for (let r = 0; r < 13; r++) {
+        const cardIdx = suit0 * 13 + r;
+        const cnt = handFlat[cardIdx];
+        if (cnt <= 0) continue;
+        
+        if (r === 0) {
+            // Ace - check if we can append A-low (if minRank > 0)
+            if (!occupied.has(0) && minRank > 0) appendLow.push(cardIdx);
+            // Ace-high - check if we can append A-high (if maxRank < 13)
+            if (!occupied.has(13) && maxRank < 13) appendHigh.push(cardIdx);
+        } else if (r >= 2) {
+            // Ranks 3-K map directly: rank r -> meld position r
+            const pos = r;
+            if (!occupied.has(pos)) {
+                if (pos < minRank) appendLow.push(cardIdx);
+                if (pos > maxRank) appendHigh.push(cardIdx);
+            }
+        }
+    }
+    
+    // Generate append candidates
+    if (appendLow.length > 0) {
+        const cc = {};
+        for (const c of appendLow) {
+            cc[c] = (cc[c] || 0) + 1;
+        }
+        if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
+    }
+    
+    if (appendHigh.length > 0) {
+        const cc = {};
+        for (const c of appendHigh) {
+            cc[c] = (cc[c] || 0) + 1;
+        }
+        if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
+    }
+    
+    return results;
+}
+
+/**
+ * Find all valid append candidates for an existing runner meld.
+ * 
+ * @param {Uint8Array} handFlat - 54-element card bitmap
+ * @param {Uint8Array} existingMeld - 6-element existing runner meld array [rank, spadeCount, heartCount, diamondCount, clubCount, wildSuit]
+ * @returns {Array<{cardCounts: Object}>} Array of candidate objects
+ */
+export function findRunnerAppends(handFlat, existingMeld) {
+    const results = [];
+    
+    if (!existingMeld || existingMeld[0] === 0) return results;
+    
+    const rank = existingMeld[0]; // 1-indexed rank
+    const suitCounts = [existingMeld[1], existingMeld[2], existingMeld[3], existingMeld[4]];
+    const wildSuit = existingMeld[5];
+    
+    // Check how many natural cards of this rank we have in hand for each suit
+    const suit0 = (s) => s - 1; // 0-indexed
+    const naturalCards = [];
+    
+    for (let s = 1; s <= 4; s++) {
+        const cardIdx = suit0(s) * 13 + (rank - 1);
+        const currentInMeld = suitCounts[s - 1] || 0;
+        const maxAllowed = 2; // max 2 of same rank per suit
+        const canAdd = Math.max(0, maxAllowed - currentInMeld);
+        
+        for (let i = 0; i < canAdd; i++) {
+            const handCount = handFlat[cardIdx];
+            if (handCount > currentInMeld + i) {
+                naturalCards.push(cardIdx);
+            }
+        }
+    }
+    
+    if (naturalCards.length > 0) {
+        const cc = {};
+        for (const c of naturalCards) {
+            cc[c] = (cc[c] || 0) + 1;
+        }
+        if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
+    }
+    
+    return results;
 }
 
 function newsuitorrank(cardIds){
@@ -427,14 +738,26 @@ function cardsToRunnerSlots(cardIds, existingMeld = null, rules) {
     return m;
 }
 
+/**
+ * Returns a Set of allowed runner ranks for the given rules.
+ * Runner ranks are used to determine which card ranks can form runner melds.
+ */
+export function getRunnerRanks(rules) {
+    const r = rules?.runners;
+    if (!r || r === 'none' || (Array.isArray(r) && r.length === 0)) return new Set();
+    if (r === 'any') return new Set([0,1,2,3,4,5,6,7,8,9,10,11,12]); // all 13 ranks (0-indexed)
+    if (r === 'aces_kings') return new Set([0, 12]); // Ace=0, King=12 (0-indexed)
+    if (r === 'aces_threes') return new Set([0, 2]);  // Ace=0, Three=2 (0-indexed)
+    if (Array.isArray(r)) return new Set(r.map(x => x - 1)); // convert 1-indexed to 0-indexed
+    return new Set();
+}
+
 function isRunnerAllowed(rules, rank) {
-    const r = rules.runners;
-    if (!r || r === 'none' || (Array.isArray(r) && r.length === 0)) return false;
-    if (r === 'any' || (Array.isArray(r) && r.includes(0))) return true;
-    if (Array.isArray(r)) return r.includes(rank);
-    if (r === 'aces_threes') return rank === 1 || rank === 3;
-    if (r === 'aces_kings') return rank === 1 || rank === 13;
-    return false;
+    const ranks = getRunnerRanks(rules);
+    if (ranks.size === 0) return false;
+    if (ranks.size === 13) return true; // 'any' covers all
+    // rank is 1-indexed (1=Ace...13=King), convert to 0-indexed
+    return ranks.has(rank - 1);
 }
 
 // parseMeld accepts an array of card IDs 
@@ -745,6 +1068,120 @@ export function setScoreFunctions(scoreAll, scoreDisc, setCtx, updateMeld, syncC
     if (syncCards) _syncCards = syncCards;
 }
 
+
+/**
+ * Generate all valid meld/appender/run candidates for a player given current game state
+ * and a simulated hand (hand + optionally the top discard card).
+ * 
+ * Validates each candidate using parseMeld before returning.
+ * 
+ * @param {Object} G - Game state object (Buraco game)
+ * @param {string|number} player - Player ID
+ * @param {Uint8Array} handSim - 54-element card bitmap (hand, possibly including top discard)
+ * @param {number} myTeam - Team index (0 or 1)
+ * @param {number|null} topdiscard - Top discard card ID (255 or null = no discard), affects candidate generation
+ * @returns {Array} Array of candidate objects with moveType, cardCounts, parsedMeld, targetSuit, targetSlot, usesDiscardTop
+ */
+export function generateAllValidMelds(G, player, handSim, myTeam, topdiscard = null) {
+    const results = [];
+    const rules = G.rules;
+    const runnerRanks = getRunnerRanks(rules);
+    
+    // Determine which suits and ranks to check based on top discard
+    let minsuit = 1, maxsuit = 4;
+    if (topdiscard !== null && topdiscard !== 255) {
+        const tdRank = getRank(topdiscard);
+        const tdSuit = getSuit(topdiscard);
+        if (tdRank !== 2 && tdSuit >= 1 && tdSuit <= 4) {
+            minsuit = tdSuit;
+            maxsuit = tdSuit;
+        }
+        // Only check runner ranks that include the discard rank
+        if (tdRank >= 1 && tdRank <= 13 && runnerRanks.has(tdRank - 1)) {
+            runnerRanks.clear();
+            runnerRanks.add(tdRank - 1);
+        }
+    }
+    
+    // ── New sequence melds (seq runs) ─────────────────────────────────────
+    for (let suit = minsuit; suit <= maxsuit; suit++) {
+        const runCandidates = findSeqRuns(handSim, suit);
+        for (const cands of runCandidates) {
+            const cardIds = Object.keys(cands.cardCounts).map(Number);
+            const parsed = parseMeld(cardIds, rules);
+            if (parsed !== null) {
+                results.push({
+                    moveType: 'playMeld',
+                    cardCounts: cands.cardCounts,
+                    parsedMeld: parsed,
+                    targetSuit: suit,
+                });
+            }
+        }
+    }
+    
+    // ── Runner appends ───────────────────────────────────────────────────
+    const trackRunnerRanks = new Set(runnerRanks);
+    for (let slot = 0; slot < (G.table[myTeam]?.[1]?.length || 0); slot++) {
+        const existing = G.table[myTeam]?.[1]?.[slot];
+        if (!existing) continue;
+        const cands = findRunnerAppends(handSim, existing);
+        for (const cand of cands) {
+            const cardIds = [...Object.keys(cand.cardCounts).map(Number)];
+            const parsed = parseMeld(cardIds, rules, existing);
+            if (parsed !== null) {
+                const rank = existing[0];
+                trackRunnerRanks.delete(rank - 1);
+                results.push({
+                    moveType: 'appendRunner',
+                    cardCounts: cand.cardCounts,
+                    parsedMeld: parsed,
+                    targetSlot: slot,
+                });
+            }
+        }
+    }
+    
+    // ── New runners ──────────────────────────────────────────────────────
+    for (const rank of trackRunnerRanks) {
+        const runnerCands = findRunnerCandidates(handSim, rank + 1); // convert to 1-indexed
+        for (const cands of runnerCands) {
+            const cardIds = Object.keys(cands.cardCounts).map(Number);
+            const parsed = parseMeld(cardIds, rules);
+            if (parsed !== null) {
+                results.push({
+                    moveType: 'playRunner',
+                    cardCounts: cands.cardCounts,
+                    parsedMeld: parsed,
+                    targetSuit: 0,
+                });
+            }
+        }
+    }
+    
+    // ── Sequence appends (extend existing seq melds) ─────────────────────
+    for (let suit = 1; suit <= 4; suit++) {
+        const melds = G.table[myTeam]?.[0]?.[suit] || [];
+        for (let slot = 0; slot < melds.length; slot++) {
+            const cands = findAppends(handSim, suit, melds[slot]);
+            for (const cand of cands) {
+                const cardIds = [...Object.keys(cand.cardCounts).map(Number)];
+                const parsed = parseMeld(cardIds, rules, melds[slot], suit);
+                if (parsed !== null) {
+                    results.push({
+                        moveType: 'appendToMeld',
+                        cardCounts: cand.cardCounts,
+                        parsedMeld: parsed,
+                        targetSuit: suit,
+                        targetSlot: slot,
+                    });
+                }
+            }
+        }
+    }
+    
+    return results;
+}
 
 export const BuracoGame = {
   name: 'buraco',
