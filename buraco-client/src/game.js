@@ -406,7 +406,7 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
     // Linear scan for runs
     let cgap = 0, cnogap = 0;
     
-    for (let pos2 = 1; pos2 <= 14; pos2++) {
+    for (let pos = 0; pos <= 13; pos++) {
         if (m[pos]) cgap++;
         if (!m[pos] || pos === 13) {
             const hi = (pos === 13 && m[13]) ? pos : pos - 1;
