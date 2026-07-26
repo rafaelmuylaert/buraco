@@ -314,7 +314,7 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
     //    return false;
     //};
     
-    if (!wildInHand && !hasCardInSuit(handflat, suit)) return results;
+    if (!wildInHand && !hasCardInSuit(handFlat, suit)) return results;
     
     // Build combined presence map m[14] and fromHand[14]
     // Position mapping: 0=A-low, 1=unused(for 2-wild), 2..12=ranks 3..K, 13=A-high
