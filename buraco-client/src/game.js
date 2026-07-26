@@ -368,11 +368,11 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
         }
     }
     
-    for (const cand of results) {
-        const keys = Object.keys(cand.cardCounts);
-        console.log(getSuitChar(suit));
-        console.log(getSuitChar(keys));
-    }
+    //for (const cand of results) {
+    //    const keys = Object.keys(cand.cardCounts);
+    //    console.log(getSuitChar(suit));
+    //    console.log(getSuitChar(keys));
+    //}
     return results;
 }
 
@@ -1091,18 +1091,18 @@ export function generateAllValidMelds(G, player, handSim, myTeam, topdiscard = n
             }
         }
     }
-console.log("===================================================");
-console.log("[GAME.JS] generateAllValidMelds G.cards:");
-console.log(G.cards[player.toString()]);
-console.log("[GAME.JS] generateAllValidMelds player:");
-console.log(player);
-console.log("[GAME.JS] generateAllValidMelds topdiscard:");
-console.log(topdiscard);
-console.log("[GAME.JS] generateAllValidMelds handSim:");
-console.log(handSim);
-console.log("[GAME.JS] generateAllValidMelds result:");
-console.log(results);
-if (G.rules?.debugLog) console.log("End debug");
+//console.log("===================================================");
+//console.log("[GAME.JS] generateAllValidMelds G.cards:");
+//console.log(G.cards[player.toString()]);
+//console.log("[GAME.JS] generateAllValidMelds player:");
+//console.log(player);
+//console.log("[GAME.JS] generateAllValidMelds topdiscard:");
+//console.log(topdiscard);
+//console.log("[GAME.JS] generateAllValidMelds handSim:");
+//console.log(handSim);
+//console.log("[GAME.JS] generateAllValidMelds result:");
+//console.log(results);
+//if (G.rules?.debugLog) console.log("End debug");
     return results;
 }
 
