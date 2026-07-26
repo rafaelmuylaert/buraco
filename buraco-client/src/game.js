@@ -269,100 +269,157 @@ export function seqSuit(cardIds) {
  * @param {Uint8Array|null} existingMeld - 16-element existing meld array (null for new melds)
  * @returns {Array<{cardCounts: Object}>} Array of candidate objects
  */
+function haswilds(handflat){
+    const wilds = [1, 14, 27, 40, 53];
+    let count = 0;
+    for (const w of wilds) count += handFlat[w];
+    return count;
+}
+function hasForeignWild(handflat, suit){
+    const natwild = (suit - 1)*13 + 1;
+    const wilds = [1, 14, 27, 40, 53];
+    for (const w of wilds) if(w !== natwild && handFlat[w]) return 1 + ((w-1)/13);
+    return null;
+}
+
+function hasCardInSuit(handflat, suit) {
+    suit0 = suit - 1;
+    for (let r = 0; r < 13; r++) {
+        if (handFlat[suit0 * 13 + r] > 0) return true;
+    }
+    return false;
+}
+function promoteNatWild(meld){
+    if(!meld) return new Uint8Array(16);
+    if (meld[2] === 1 && meld[14] === 0 && meld[15] === 0){
+        meld[2]= 0;
+        meld[15] = 1;
+    }
+    return meld;
+}
+
 export function findSeqRuns(handFlat, suit, existingMeld = null) {
     const results = [];
     const suit0 = suit - 1;
-    const MAX_CANDS = 8;
-    
+    const jokeridx = 53;
+    const natWild = 15;
+    const foreignWild = 14;
+    const wildInHand = hasForeignWild(handFlat, suit);
     // Check if any card of this suit is in hand (or combined with existing meld)
-    const hasCardInSuit = () => {
-        for (let r = 0; r < 13; r++) {
-            if ((existingMeld ? (existingMeld[r + 2] || 0) : 0) > 0) return true;
-            if (handFlat[suit0 * 13 + r] > 0) return true;
-        }
-        return false;
-    };
+    //const hasCardInSuit = () => {
+    //    for (let r = 0; r < 13; r++) {
+    //        if (handFlat[suit0 * 13 + r] > 0) return true;
+    //    }
+    //    if (wildsInHand > 0) return true;
+    //    return false;
+    //};
     
-    if (!hasCardInSuit()) return results;
+    if (!wildInHand && !hasCardInSuit(handflat, suit)) return results;
     
     // Build combined presence map m[14] and fromHand[14]
     // Position mapping: 0=A-low, 1=unused(for 2-wild), 2..12=ranks 3..K, 13=A-high
     // Also m[2] doubles as natural-2 slot
-    const m = new Uint8Array(14);  // combined presence
-    const fromHand = new Uint8Array(14); // presence from hand only
-    
+    //const m = new Uint8Array(14);  // combined presence
+    const fromHand = new Uint8Array(16); // presence from hand only
+
+    const em = promoteNatWild(existingMeld);
     // Existing meld cards
-    if (existingMeld) {
-        if (existingMeld[0]) { m[0] = 1; } // A-low
-        if (existingMeld[1]) { m[13] = 1; } // A-high  
-        if (existingMeld[2]) { m[2] = 1; } // nat-2
-        for (let r = 3; r <= 13; r++) {
-            if (existingMeld[r]) m[r] = 1; // ranks 3-K mapped to positions 3..13
-        }
+    //if (existingMeld) {
+    //    if (existingMeld[0]) { m[0] = 1; } // A-low
+    //    if (existingMeld[1]) { m[13] = 1; } // A-high  
+    //    //if (existingMeld[2]) { m[2] = 1; } // nat-2
+   //     for (let r = 3; r <= 13; r++) {
+   //         if (existingMeld[r]) m[r] = 1; // ranks 3-K mapped to positions 3..13
+    //    }
+   // }
+    const firstCardInSuit = suit0 * 13;
+    const handcards = [
+      ...handFlat.slice(firstCardInSuit, firstCardInSuit+12), // 3 to K
+      handFlat[firstCardInSuit], //Ace
+      wildInHand, //Foreign wild
+      handFlat[firstCardInSuit+1]>1?1:0 //Nat wild
+    ];
+
+    for (let r = 0; r < 16; r++){
+        if(!em[r]) em[r]=handcards[r];
     }
+    const m2 = promoteNatWild(em);
+    
+
     
     // Hand cards
-    for (let r = 0; r < 13; r++) {
-        if (handFlat[suit0 * 13 + r] > 0) {
-            if (r === 0) {
-                // Ace
-                if (!m[0]) { fromHand[0] = 1; m[0] = 1; }
-                if (!m[13]) { fromHand[13] = 1; m[13] = 1; }
-            } else if (r === 1) {
-                // Two (wild) - don't add to continuity scan, count as wild
-            } else {
-                // Ranks 3-K: r=2->pos 2, r=3->pos 3, ..., r=12->pos 12
-                const pos = r; // r=2->2, r=3->3, ..., r=12->12
-                if (!m[pos]) { fromHand[pos] = 1; m[pos] = 1; }
-            }
-        }
-    }
+    //for (let r = 0; r < 13; r++) {
+    //    if (handFlat[suit0 * 13 + r] > 0) {
+    //        if (r === 0) {
+    //            // Ace
+    //            if (!m[0]) { fromHand[0] = 1; m[0] = 1; }
+    //            if (!m[1]) { fromHand[13] = 1; m[1] = 1; }
+    //        } else if (r === 1) {
+    //            if (!m[natWild] && !m[foreignWild]) { fromhand[1]=1; m[natWild]=1;}
+    //            else if (!m[2]) { fromhand[1]=1; m[2]=1;}
+    //            // Two (wild) - don't add to continuity scan, count as wild
+    //        } else {
+    //            const pos = r + 1; // Ranks 3-K: r=2->pos 3, r=3->pos 4, ..., r=12->pos 13
+    //            if (!m[pos]) { fromHand[r] = 1; m[pos] = 1; }
+    //        }
+    //    }
+    // }
+
+    //if ( !m[foreignWild] && !m[2] && wildInHand) { fromhand[foreignWild]=1; m[foreignWild]=wildInHand;}
     
     // Count wilds
-    const wildsInHand = (() => {
-        let count = 0;
-        for (let s = 1; s <= 4; s++) count += handFlat[(s - 1) * 13 + 1];
-        count += handFlat[52]; // joker
-        return count;
-    })();
+    //const wildsInHand = (() => {
+    //    let count = 0;
+    //    for (let s = 0; s <= 3; s++) count += handFlat[s * 13 + 1];
+    //    count += handFlat[jokeridx]; // joker
+    //    return count;
+    //})();
+    //const wildsInHand = haswilds(handFlat);
+    const canAddWild = (m2[foreignWild] !== 0 && m2[natWild] !== 0);
+    //let w14 = existingMeld ? (existingMeld[14] || 0) : 0; // foreign wild
+    //let w15 = existingMeld ? (existingMeld[15] || 0) : 0; // nat-2 wild
+    //const canAddWild = (w14 === 0 && w15 === 0 && wildsInHand > 0);
+    //if (existingMeld && existingMeld[2] === 1 && w14 === 0 && w15 === 0) {
+    //    // nat-2 already in meld as non-wild, promote to wild
+    //    m[2] = 0;
+    //    w15 = 1;
+    //}
     
-    let w14 = existingMeld ? (existingMeld[14] || 0) : 0; // foreign wild
-    let w15 = existingMeld ? (existingMeld[15] || 0) : 0; // nat-2 wild
-    if (existingMeld && existingMeld[2] === 1 && w14 === 0 && w15 === 0) {
-        // nat-2 already in meld as non-wild, promote to wild
-        m[2] = 0;
-        w15 = 1;
-    }
     
-    const canAddWild = (w14 === 0 && w15 === 0 && wildsInHand > 0);
     
     // Find wild0type (first available wild)
-    let wild0type = -1;
-    if (canAddWild) {
-        for (let s = 1; s <= 4 && wild0type < 0; s++) {
-            if (handFlat[(s - 1) * 13 + 1] > 0) wild0type = (s - 1) * 13 + 1;
-        }
-        if (wild0type < 0 && handFlat[52] > 0) wild0type = 52;
-    }
+    //let wild0type = -1;
+    //if (canAddWild) {
+    //    if (handFlat[suit0 * 13 + 1] > 0) wild0type = suit0 * 13 + 1;
+    //    for (let s = 0; s <= 3 && wild0type < 0; s++) {
+    //        if (handFlat[s * 13 + 1] > 0) wild0type = s * 13 + 1;
+    //    }
+    //    if (wild0type < 0 && handFlat[jokeridx] > 0) wild0type = jokeridx;
+    //}
+    const m = [
+        m2[0],
+      ...m2.slice(2, 13), // 3 to K
+      m2[1]
+    ];
+ 
     
     // Linear scan for runs
     let cgap = 0, cnogap = 0;
     
-    for (let pos = 0; pos <= 13 && results.length < MAX_CANDS; pos++) {
+    for (let pos2 = 1; pos2 <= 14; pos2++) {
         if (m[pos]) cgap++;
         if (!m[pos] || pos === 13) {
             const hi = (pos === 13 && m[13]) ? pos : pos - 1;
-            const localWilds = canAddWild;
             
             // At a gap or end
-            if (cgap > 0 && cnogap > 0 && localWilds && results.length < MAX_CANDS) {
+            if (cgap > 0 && cnogap > 0 && canAddWild) {
                 // Emit bridged candidate
                 const lo = hi - cnogap - cgap;
                 if (lo < 0) lo = 0;
                 const cc = {};
                 for (let p = lo; p <= hi; p++) {
                     if (!m[p]) continue;
-                    const cardIdx = (suit - 1) * 13 + (p === 0 ? 0 : p === 13 ? 0 : p);
+                    const cardIdx = suit0 * 13 + (p === 0 ? 0 : p === 13 ? 0 : p);
                     cc[cardIdx] = (cc[cardIdx] || 0) + 1;
                 }
                 if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
@@ -386,13 +443,14 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
     }
     
     // Deduplicate
-    const seen = new Set();
-    const unique = [];
-    for (const cand of results) {
-        const key = Object.keys(cand.cardCounts).sort().join(',');
-        if (!seen.has(key)) { seen.add(key); unique.push(cand); }
-    }
-    return unique;
+    //const seen = new Set();
+    //const unique = [];
+    //for (const cand of results) {
+    //    const key = Object.keys(cand.cardCounts).sort().join(',');
+    //    if (!seen.has(key)) { seen.add(key); unique.push(cand); }
+    //}
+    //return unique;
+    return results;
 }
 
 /**
@@ -405,6 +463,8 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
 export function findRunnerCandidates(handFlat, rank) {
     const results = [];
     const MAX_CANDS = 4;
+    const jokeridx = 53;
+    const wilds = [1, 14, 27, 40, 53];
     
     // Check how many cards of this rank exist in hand (one per suit max, plus wilds)
     const cards = [];
@@ -425,8 +485,8 @@ export function findRunnerCandidates(handFlat, rank) {
             wilds.push(twoIdx);
         }
     }
-    if (handFlat[52] > 0) { // joker
-        wilds.push(52);
+    if (handFlat[jokeridx] > 0) { // joker
+        wilds.push(jokeridx);
     }
     
     // Generate candidates: all valid subsets of 3+ cards using naturals + wilds
@@ -1093,14 +1153,14 @@ export function generateAllValidMelds(G, player, handSim, myTeam, topdiscard = n
     if (topdiscard !== null && topdiscard !== 255) {
         const tdRank = getRank(topdiscard);
         const tdSuit = getSuit(topdiscard);
-        if (tdRank !== 2 && tdSuit >= 1 && tdSuit <= 4) {
+        if (tdRank !== 2 && tdSuit >= 0 && tdRank >= 0) {
             minsuit = tdSuit;
             maxsuit = tdSuit;
-        }
-        // Only check runner ranks that include the discard rank
-        if (tdRank >= 1 && tdRank <= 13 && runnerRanks.has(tdRank - 1)) {
-            runnerRanks.clear();
-            runnerRanks.add(tdRank - 1);
+            // Only check runner ranks that include the discard rank
+            if (runnerRanks.has(tdRank - 1)) {
+                runnerRanks.clear();
+                runnerRanks.add(tdRank - 1);
+            }
         }
     }
     
