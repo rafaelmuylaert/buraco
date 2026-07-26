@@ -557,7 +557,7 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, silent = false) {
     const flat = G.cards?.[player.toString()] || G.cards?.[pInt] || [];
     const handSim = new Uint8Array(flat);
     const topDiscard = G.discardPile?.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
-    const allCands = generateAllValidMelds(G, pInt, handSim, myTeamIdx, topDiscard) || [];
+    const allCands = generateAllValidMelds(G, pInt, myTeamIdx, topDiscard) || [];
 
     // Separate seq/run meld candidates from append candidates
     const seqMeldCands = allCands.filter(c => c.moveType === 'playMeld');
