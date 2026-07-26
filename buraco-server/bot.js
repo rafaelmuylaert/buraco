@@ -139,11 +139,11 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
 
   const processQueue = () => {
     if (stopped) return;
-    const currentState = client.getState();
+    let currentState = client.getState();
     if (!currentState || currentState.ctx.gameover) return;
-    const currentStateId = currentState._stateID;
+    let currentStateId = currentState._stateID;
     if (currentStateId !== lastStateId) return;
-    const lastStateId = currentStateId;
+    let lastStateId = currentStateId;
     const G = currentState.G;
     const myTeam = G.teams[playerID];
     const oppTeam = myTeam === 0 ? 1 : 0;
@@ -155,15 +155,25 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
     printState(G, botName)
     const td = !G.hasDrawn && G.discardPile?.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
     aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam, td) || [];
-    for (const m of aiQueue.pickups){
-        if currentStateId !== client.getState()._stateID break;
+    for (const m of aiQueue){
+        _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
+        currentState = client.getState();
+        currentStateId = currentState._stateID;
+        if (currentStateId !== lastStateId) break;
+    }
+    aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam, null) || [];
+    for (const m of aiQueue){
         _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
     }
-    for (const m of aiQueue.melds){
+    currentState = client.getState();
+    currentStateId = currentState._stateID;
+    lastStateId = currentStateId;
+    const discards = scoreDiscards();
+    for (const m of discards){
         _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
-    }
-    for (const m of aiQueue.discard){
-        _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
+        currentState = client.getState();
+        currentStateId = currentState._stateID;
+        if (currentStateId !== lastStateId) break;
     }
   };
   activeIntervals[clientKey] = setInterval(processQueue, 1000);
