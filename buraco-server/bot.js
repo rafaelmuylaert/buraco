@@ -24,7 +24,7 @@ import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import { setDbgLogFn, BuracoGame, AI_CONFIG, getAndResetTimings } from './game.js';
 import { getLastDbgLog, initWasm, syncCardsToWasm, buildTurnMoveList, loadMatchDNA,
-         setActiveTeam, isWasmReady, runTurn } from './wasm_loader.js';
+         setActiveTeam, isWasmReady, _executeTurnMove } from './wasm_loader.js';
 setDbgLogFn(getLastDbgLog);
 await initWasm();
 
@@ -189,8 +189,20 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       if (discards.length) console.log(`  discards(${discards.length}): ${discards.map(m => discardStr(m.discardCard)+(m._fallback?'[fb]':'')).join(', ')}`);
     }
 
-    runTurn(aiQueue, () => client.getState()?.G, playerID, makeIface(client),
-      (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
+    // Execute one move per tick based on phase state
+    if (aiQueue.length > 0) {
+      const iface = makeIface(client);
+      // Find the next move matching current phase state
+      let nextIdx = aiQueue.findIndex(m => {
+        if (_phaseState === 1 && m.phase === 0) return true;
+        if (_phaseState === 2 && (m.phase === 1 || m.phase === 2)) return true;
+        return false;
+      });
+      if (nextIdx >= 0) {
+        const m = aiQueue.splice(nextIdx, 1)[0];
+        _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
+      }
+    }
   };
 
   activeIntervals[clientKey] = setInterval(processQueue, 1000);
