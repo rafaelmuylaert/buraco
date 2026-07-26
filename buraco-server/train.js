@@ -510,7 +510,7 @@ export const TrainerService = {
                         const t = getPool().getAndResetTimings();
                         const cpp = t.cpp || {};
                         const mspt = cpp.n_turns > 0 ? (t.planTurn / cpp.n_turns).toFixed(2) : '?';
-                        console.log(`[${botName}] [TIMING/${SAVE_EVERY}gens] planTurn=${(t.planTurn||0).toFixed(0)}ms (${mspt}ms/turn) turns=${cpp.n_turns||0} fsc=${(cpp.fsc||0).toFixed(0)}ms(${cpp.n_fsc||0}) fwd=${(cpp.fwd||0).toFixed(0)}ms(${cpp.n_fwd||0}) p0=${(cpp.phase0||0).toFixed(0)}ms p1=${(cpp.phase1||0).toFixed(0)}ms p2=${(cpp.phase2||0).toFixed(0)}ms`);
+                        //console.log(`[${botName}] [TIMING/${SAVE_EVERY}gens] planTurn=${(t.planTurn||0).toFixed(0)}ms (${mspt}ms/turn) turns=${cpp.n_turns||0} fsc=${(cpp.fsc||0).toFixed(0)}ms(${cpp.n_fsc||0}) fwd=${(cpp.fwd||0).toFixed(0)}ms(${cpp.n_fwd||0}) p0=${(cpp.phase0||0).toFixed(0)}ms p1=${(cpp.phase1||0).toFixed(0)}ms p2=${(cpp.phase2||0).toFixed(0)}ms`);
 
                         const minBroadcastGen = Math.min(...islandBroadcastGen);
                         const roundGen = Math.floor(minBroadcastGen / SAVE_EVERY) * SAVE_EVERY;
