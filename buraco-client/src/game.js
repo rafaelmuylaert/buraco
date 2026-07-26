@@ -464,7 +464,7 @@ export function findRunnerCandidates(handFlat, rank) {
     const results = [];
     const MAX_CANDS = 4;
     const jokeridx = 53;
-    const wilds = [1, 14, 27, 40, 53];
+    //const wilds = [1, 14, 27, 40, 53];
     
     // Check how many cards of this rank exist in hand (one per suit max, plus wilds)
     const cards = [];
