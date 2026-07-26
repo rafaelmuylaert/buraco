@@ -15,7 +15,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <string.h>
+//#include <string.h>
 #include <wasm_simd128.h>
 
 #define WASM_EXPORT __attribute__((visibility("default")))
@@ -26,6 +26,24 @@
 #define MAX_WEIGHTS      4000000
 #define MAX_PLAYERS      4
 #define CARDS_FLAT_SIZE  54
+
+extern "C" {
+    void* memset(void* dest, int val, unsigned long count) {
+        unsigned char* ptr = (unsigned char*)dest;
+        while (count-- > 0) {
+            *ptr++ = (unsigned char)val;
+        }
+        return dest;
+    }
+    void* memcpy(void* dest, const void* src, unsigned long count) {
+        unsigned char* d = (unsigned char*)dest;
+        const unsigned char* s = (const unsigned char*)src;
+        while (count-- > 0) {
+            *d++ = *s++;
+        }
+        return dest;
+    }
+}
 
 // ── Card bitmaps (kept from original — JS writes directly) ────────────────────
 static uint8_t g_cards2     [MAX_PLAYERS][CARDS_FLAT_SIZE];
