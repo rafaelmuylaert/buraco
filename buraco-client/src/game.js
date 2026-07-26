@@ -452,7 +452,13 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
     //    if (!seen.has(key)) { seen.add(key); unique.push(cand); }
     //}
     //return unique;
-    console.log(results);
+    for (const cand of results) {
+        const keys = Object.keys(cand.cardCounts);
+        for(const key of keys){
+            console.log(getSuitChar(suit));
+            console.log(getRankChar(key));
+        }
+    }
     return results;
 }
 
@@ -527,78 +533,6 @@ export function findRunnerCandidates(handFlat, rank) {
     return unique;
 }
 
-/**
- * Find all valid append candidates for an existing sequence meld.
- * 
- * @param {Uint8Array} handFlat - 54-element card bitmap
- * @param {number} suit - Suit number (1-4)
- * @param {Uint8Array} existingMeld - 16-element existing meld array
- * @returns {Array<{cardCounts: Object}>} Array of candidate objects
- */
-export function findAppends(handFlat, suit, existingMeld) {
-    const results = [];
-    const suit0 = suit - 1;
-    
-    if (!existingMeld || existingMeld[0] === 0) return results;
-    
-    // Get occupied positions in meld
-    const occupied = new Set();
-    if (existingMeld[0]) occupied.add(0);    // A-low
-    if (existingMeld[1]) occupied.add(13);   // A-high
-    for (let r = 2; r <= 13; r++) {
-        if (existingMeld[r]) occupied.add(r);
-    }
-    
-    // Find min and max rank positions
-    let minRank = 14, maxRank = -1;
-    for (const pos of occupied) {
-        if (pos < minRank) minRank = pos;
-        if (pos > maxRank) maxRank = pos;
-    }
-    
-    // Find cards in hand that can be appended (at min or max boundary)
-    const appendLow = [];
-    const appendHigh = [];
-    
-    for (let r = 0; r < 13; r++) {
-        const cardIdx = suit0 * 13 + r;
-        const cnt = handFlat[cardIdx];
-        if (cnt <= 0) continue;
-        
-        if (r === 0) {
-            // Ace - check if we can append A-low (if minRank > 0)
-            if (!occupied.has(0) && minRank > 0) appendLow.push(cardIdx);
-            // Ace-high - check if we can append A-high (if maxRank < 13)
-            if (!occupied.has(13) && maxRank < 13) appendHigh.push(cardIdx);
-        } else if (r >= 2) {
-            // Ranks 3-K map directly: rank r -> meld position r
-            const pos = r;
-            if (!occupied.has(pos)) {
-                if (pos < minRank) appendLow.push(cardIdx);
-                if (pos > maxRank) appendHigh.push(cardIdx);
-            }
-        }
-    }
-    
-    // Generate append candidates
-    if (appendLow.length > 0) {
-        const cc = {};
-        for (const c of appendLow) {
-            cc[c] = (cc[c] || 0) + 1;
-        }
-        if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
-    }
-    
-    if (appendHigh.length > 0) {
-        const cc = {};
-        for (const c of appendHigh) {
-            cc[c] = (cc[c] || 0) + 1;
-        }
-        if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
-    }
-    
-    return results;
-}
 
 /**
  * Find all valid append candidates for an existing runner meld.
