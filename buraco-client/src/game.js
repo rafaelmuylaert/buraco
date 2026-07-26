@@ -1198,7 +1198,7 @@ export const BuracoGame = {
   name: 'buraco',
   setup: ({ random, ctx }, setupData) => {
     const numPlayers = ctx.numPlayers || 4; 
-    const rules = setupData || { numPlayers, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false };
+    const rules = setupData || { numPlayers, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false, debugLog: true, };
     const botGenomes = setupData?.botGenomes || {};
     let initialDeck = random.Shuffle(buildDeck(rules));
     const pots = [initialDeck.splice(0, 11), initialDeck.splice(0, 11)];
