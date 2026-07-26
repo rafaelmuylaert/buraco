@@ -155,6 +155,10 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
     printState(G, botName)
     const td = !G.hasDrawn && G.discardPile?.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
     aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam, td) || [];
+    for (const m of aiQueue.pickups){
+        if currentStateId !== client.getState()._stateID break;
+        _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
+    }
     for (const m of aiQueue.melds){
         _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
     }
