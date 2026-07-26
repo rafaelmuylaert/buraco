@@ -283,7 +283,7 @@ function hasForeignWild(handflat, suit){
 }
 
 function hasCardInSuit(handflat, suit) {
-    suit0 = suit - 1;
+    const suit0 = suit - 1;
     for (let r = 0; r < 13; r++) {
         if (handflat[suit0 * 13 + r] > 0) return true;
     }
