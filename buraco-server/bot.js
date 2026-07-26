@@ -63,6 +63,16 @@ function makeIface(client) {
   };
 }
 
+function printState(G, botName){
+    const td = !G.hasDrawn && G.discardPile?.length > 0 ? G.discardPile[G.discardPile.length - 1] : 'empty';
+    const flat = G.cards?.[playerID] || [];
+      const handCards = [];
+      for (let i = 0; i < 53; i++) {
+        const cnt = flat[i] || 0;
+        if (cnt > 0) { const cid = i===52?54:i; const s=cid===54?5:Math.floor(cid/13)+1; const r=cid===54?2:(cid%13)+1; for (let n=0;n<cnt;n++) handCards.push(getRankChar(r)+getSuitChar(s)); }
+      }
+      console.log(`[BOT] ${botName} | hasDrawn=${G.hasDrawn} hand=[${handCards.join(' ')}] | discard_top=${td}`);
+}
 async function pollLobby() {
   try {
     const res = await fetch(`${SERVER_URL}/games/buraco`);
@@ -112,7 +122,9 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
   let lastStateId = null;
   let stopped = false;
   let _phaseState = 0; // 0=not built, 1=phaseA built, 2=phaseB built
-
+  if (isWasmReady() && dnaCache[targetBotName]) {
+      loadMatchDNA(dnaCache[targetBotName], dnaCache[targetBotName]);
+  }
   const shutdown = () => {
     if (stopped) return;
     stopped = true;
@@ -121,6 +133,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
     delete activeBots[clientKey];
     try { client.stop(); } catch (_) {}
   };
+  const iface = makeIface(client);
 
   client.subscribe(state => { if (!state) return; if (state.ctx.gameover) shutdown(); });
 
@@ -128,83 +141,27 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
     if (stopped) return;
     const currentState = client.getState();
     if (!currentState || currentState.ctx.gameover) return;
-
     const currentStateId = currentState._stateID;
+    if (currentStateId !== lastStateId) return;
+    const lastStateId = currentStateId;
     const G = currentState.G;
-
+    const myTeam = G.teams[playerID];
+    const oppTeam = myTeam === 0 ? 1 : 0;
+    syncCardsToWasm(G, G.rules?.numPlayers || 4);
+    setActiveTeam(myTeam === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
     if (G.ctx?.currentPlayer !== playerID && currentState.ctx.currentPlayer !== playerID) {
-      aiQueue = []; lastStateId = currentStateId; _phaseState = 0; return;
+        aiQueue = []; lastStateId = currentStateId; return;
     }
-
-    // Phase A: before pickup (build move list with current hand, no cards drawn yet)
-    if (!G.hasDrawn && _phaseState === 0 && currentStateId !== lastStateId) {
-      lastStateId = currentStateId;
-      _phaseState = 1;
-
-      if (isWasmReady() && dnaCache[targetBotName]) {
-        const myTeam = G.teams[playerID];
-        const oppTeam = myTeam === 0 ? 1 : 0;
-        syncCardsToWasm(G, G.rules?.numPlayers || 4);
-        loadMatchDNA(myTeam === 0 ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE),
-                     myTeam === 1 ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE));
-        setActiveTeam(myTeam === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
-        const td = G.discardPile?.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
-        aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam, td) || [];
-      }
-    }
-
-    // Phase B: after pickup (rebuild move list with picked-up cards in hand)
-    if (G.hasDrawn && _phaseState === 1) {
-      _phaseState = 2;
-      const myTeam = G.teams[playerID];
-      const oppTeam = myTeam === 0 ? 1 : 0;
-      syncCardsToWasm(G, G.rules?.numPlayers || 4);
-      loadMatchDNA(myTeam === 0 ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE),
-                   myTeam === 1 ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE));
-      setActiveTeam(myTeam === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
-      aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam) || [];
-      // Flatten into array for runTurn compatibility
-      if (aiQueue.melds && aiQueue.discard) {
-        aiQueue = aiQueue.melds.concat(aiQueue.discard ? [aiQueue.discard] : []);
-      } else if (!aiQueue.melds) {
-        aiQueue = [];
-      }
-    }
-
-    // Debug logging
-    if (_phaseState >= 1) {
-      const flat = G.cards?.[playerID] || [];
-      const handCards = [];
-      for (let i = 0; i < 53; i++) {
-        const cnt = flat[i] || 0;
-        if (cnt > 0) { const cid = i===52?54:i; const s=cid===54?5:Math.floor(cid/13)+1; const r=cid===54?2:(cid%13)+1; for (let n=0;n<cnt;n++) handCards.push(getRankChar(r)+getSuitChar(s)); }
-      }
-      const topDiscard = G.discardPile?.length > 0 ? discardStr(G.discardPile[G.discardPile.length-1]) : 'empty';
-      console.log(`[BOT] ${botName} | hasDrawn=${G.hasDrawn} hand=[${handCards.join(' ')}] | discard_top=${topDiscard}`);
-      const pickups = aiQueue.filter(m => m.phase === 0);
-      const melds   = aiQueue.filter(m => m.phase === 1);
-      const discards = aiQueue.filter(m => m.phase === 2);
-      if (pickups.length) console.log(`  pickups(${pickups.length}): ${pickups.map(m => m.moveType===0?'draw':m.moveType===5?'exhaust':`pickup${ccStr(m.cardCounts)}`).join(', ')}`);
-      if (melds.length)   console.log(`  melds(${melds.length}): ${melds.map(m => `${m.moveType===2?'meld':'append'}${ccStr(m.cardCounts)}`).join(' | ')}`);
-      if (discards.length) console.log(`  discards(${discards.length}): ${discards.map(m => discardStr(m.discardCard)+(m._fallback?'[fb]':'')).join(', ')}`);
-    }
-
-    // Execute one move per tick based on phase state
-    if (aiQueue.length > 0) {
-      const iface = makeIface(client);
-      // Find the next move matching current phase state
-      let nextIdx = aiQueue.findIndex(m => {
-        if (_phaseState === 1 && m.phase === 0) return true;
-        if (_phaseState === 2 && (m.phase === 1 || m.phase === 2)) return true;
-        return false;
-      });
-      if (nextIdx >= 0) {
-        const m = aiQueue.splice(nextIdx, 1)[0];
+    printState(G, botName)
+    const td = !G.hasDrawn && G.discardPile?.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
+    aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam, td) || [];
+    for (const m of aiQueue.melds){
         _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
-      }
+    }
+    for (const m of aiQueue.discard){
+        _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
     }
   };
-
   activeIntervals[clientKey] = setInterval(processQueue, 1000);
 }
 
