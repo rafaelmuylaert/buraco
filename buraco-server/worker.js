@@ -28,8 +28,8 @@ import {
     checkGameOver, setScoreFunctions, getAndResetTimings
 } from './game.js';
 import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers,
-         buildTurnMoveList, runTurn, getCppTimings, setUsingWasmBackedBuffers,
-         updateSeqMeld, updateRunMeld, getTeam1DnaOffset  } from './wasm_loader.js';
+         buildTurnMoveList, getCppTimings, setUsingWasmBackedBuffers,
+         updateSeqMeld, updateRunMeld, getTeam1DnaOffset, _executeTurnMove } from './wasm_loader.js';
 
 
 await initWasm();
@@ -128,13 +128,35 @@ function runMatch(genomes, rules, fixedDeck) {
 
             const myTeam  = S.teams[p];
             const oppTeam = myTeam === 0 ? 1 : 0;
-            const moves = buildTurnMoveList(S, p, myTeam, oppTeam, !rules.debugLog) || [];
             const iface = makeIface(S, p);
 
-            let done = false;
-            let safety = 0;
-            while (!done && safety++ < 30) {
-                done = runTurn(moves, () => S, p, iface, null);
+            // Phase A: Pickup decisions (before any draw/pickup)
+            const td = S.discardPile.length > 0 ? S.discardPile[S.discardPile.length - 1] : null;
+            const pickupMoves = buildTurnMoveList(S, p, myTeam, oppTeam, td, !rules.debugLog) || [];
+            // Execute pickup moves in score order (highest score first)
+            for (const m of pickupMoves) {
+                if (m.phase === 0 && !S.hasDrawn) {
+                    _executeTurnMove(m, iface, rules.debugLog ? console.log : null);
+                }
+            }
+            // Fallback if still not drawn
+            if (!S.hasDrawn) {
+                if (S.deck.length === 0 && S.pots.length === 0) {
+                    iface.exhaust();
+                } else {
+                    iface.draw();
+                }
+            }
+
+            // Phase B: Post-pickup melding and discarding
+            const postMoves = buildTurnMoveList(S, p, myTeam, oppTeam, null, !rules.debugLog) || { melds: [], discard: null };
+            // Execute melds in score order
+            for (const m of (postMoves.melds || [])) {
+                _executeTurnMove(m, iface, null);
+            }
+            // Execute discard at end (ends the turn)
+            if (postMoves.discard) {
+                _executeTurnMove(postMoves.discard, iface, null);
             }
 
             ctx.currentPlayer = String((parseInt(p) + 1) % numPlayers);

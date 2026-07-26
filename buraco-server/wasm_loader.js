@@ -530,7 +530,10 @@ export function isWasmReady() { return _ex !== null; }
 
 
 // ── Two-phase NN turn executor ───────────────────────────────────────────────
-export function buildTurnMoveList(G, player, myTeam, oppTeam, silent = false) {
+// Two-phase turn builder:
+//   Phase A (topdiscard provided): Build pickup move list scored by NN
+//   Phase B (topdiscard null): Build post-pickup meld/discard list, sorted by score
+export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null, silent = false) {
     if (!_ex?.run_current_state) return null;
     const pInt = parseInt(player);
     const myTeamIdx = myTeam;
@@ -542,24 +545,68 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, silent = false) {
     const stateVec = runCurrentState(G, pInt, myTeamIdx, oppTeam);
     if (!stateVec) return null;
 
-    // Phase 2: Generate and score candidates using NN_SEQ, NN_RUN, NN_DISCARD
-    const pickupMoves = [];
-    const meldMoves = [];
-    const discardMoves = [];
+    if (topdiscard !== null && topdiscard !== undefined) {
+        // ── Phase A: Pickup decisions ──────────────────────────────────────
+        // Score pickup options: draw (default=0), exhaust (0), pick-up-discard (best meld score)
+        const pickupMoves = [];
 
-    // ── Phase 0: draw or exhaust (no NN scoring needed for draw) ──────────
-    pickupMoves.push({ phase: 0, moveType: 0, cardCounts: {} });
-    if ((G.deck?.length || 0) === 0 && (G.pots?.length || 0) === 0) {
-        pickupMoves.push({ phase: 0, moveType: 5, cardCounts: {} });
+        // Draw from deck — default score of 0
+        pickupMoves.push({ phase: 0, moveType: 0, cardCounts: {}, score: 0 });
+
+        // Exhaust — only when no deck and no pots
+        if ((G.deck?.length || 0) === 0 && (G.pots?.length || 0) === 0) {
+            pickupMoves.push({ phase: 0, moveType: 5, cardCounts: {}, score: 0 });
+        }
+
+        // Pick-up-discard — score based on best meld achievable with top discard
+        if (topdiscard !== null && topdiscard !== undefined && G.discardPile?.length > 0) {
+            const allCands = generateAllValidMelds(G, pInt, myTeamIdx, topdiscard) || [];
+            if (allCands.length > 0) {
+                // Score each candidate and find the best overall
+                let bestScore = -Infinity;
+                let bestCand = null;
+                for (const c of allCands) {
+                    let score;
+                    if (c.moveType === 'playMeld') {
+                        score = scoreSeqCandidates([c])[0];
+                    } else if (c.moveType === 'playRunner') {
+                        score = scoreRunCandidates([c])[0];
+                    } else if (c.moveType === 'appendToMeld') {
+                        score = scoreSeqCandidates([c])[0];
+                    } else if (c.moveType === 'appendRunner') {
+                        score = scoreRunCandidates([c])[0];
+                    }
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestCand = c;
+                    }
+                }
+                if (bestCand) {
+                    pickupMoves.push({
+                        phase: 0, moveType: 1,
+                        cardCounts: bestCand.cardCounts,
+                        score: bestScore,
+                        pickupTarget: { type: 'new' }
+                    });
+                }
+            }
+        }
+
+        // Sort pickup moves by score descending (pickup-discard if high score, else draw)
+        pickupMoves.sort((a, b) => b.score - a.score);
+        addPlanTurnTime(performance.now() - _pt0);
+        return pickupMoves;
     }
 
-    // ── Candidate generation for melding ──────────────────────────────────
-    const flat = G.cards?.[player.toString()] || G.cards?.[pInt] || [];
-    const handSim = new Uint8Array(flat);
-    const topDiscard = G.discardPile?.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
-    const allCands = generateAllValidMelds(G, pInt, myTeamIdx, topDiscard) || [];
+    // ── Phase B: Post-pickup melding and discarding ──────────────────────
+    // G.cards[player] now includes picked-up cards; topdiscard = null means
+    // generateAllValidMelds reads the full hand without narrowing by discard
+    const meldMoves = [];
+    let discardMove = null;
 
-    // Separate seq/run meld candidates from append candidates
+    const allCands = generateAllValidMelds(G, pInt, myTeamIdx, null) || [];
+
+    // Separate candidates by type
     const seqMeldCands = allCands.filter(c => c.moveType === 'playMeld');
     const runnerCands = allCands.filter(c => c.moveType === 'playRunner');
     const seqAppendCands = allCands.filter(c => c.moveType === 'appendToMeld');
@@ -567,133 +614,115 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, silent = false) {
 
     // ── Score and filter sequence meld candidates ─────────────────────────
     if (seqMeldCands.length > 0) {
-        const seqScores = scoreSeqCandidates(seqMeldCands);
-        let bestIdx = -1;
-        let bestScore = -Infinity;
-        for (let i = 0; i < seqScores.length; i++) {
-            if (seqScores[i] > bestScore) {
-                bestScore = seqScores[i];
-                bestIdx = i;
-            }
+        const scores = scoreSeqCandidates(seqMeldCands);
+        let bestIdx = 0;
+        let bestScore = scores[0];
+        for (let i = 1; i < scores.length; i++) {
+            if (scores[i] > bestScore) { bestScore = scores[i]; bestIdx = i; }
         }
-        if (bestIdx >= 0 && bestScore > -Infinity) {
-            const c = seqMeldCands[bestIdx];
-            meldMoves.push({
-                phase: 1, moveType: 2, targetType: 0,
-                targetSuit: c.targetSuit, targetSlot: 0,
-                cardCounts: c.cardCounts
-            });
-        }
+        const c = seqMeldCands[bestIdx];
+        meldMoves.push({
+            phase: 1, moveType: 2, targetType: 0,
+            targetSuit: c.targetSuit, targetSlot: 0,
+            cardCounts: c.cardCounts,
+            score: bestScore
+        });
     }
 
     // ── Score and filter runner (new runner) candidates ──────────────────
     if (runnerCands.length > 0) {
-        const runScores = scoreRunCandidates(runnerCands);
-        let bestIdx = -1;
-        let bestScore = -Infinity;
-        for (let i = 0; i < runScores.length; i++) {
-            if (runScores[i] > bestScore) {
-                bestScore = runScores[i];
-                bestIdx = i;
-            }
+        const scores = scoreRunCandidates(runnerCands);
+        let bestIdx = 0;
+        let bestScore = scores[0];
+        for (let i = 1; i < scores.length; i++) {
+            if (scores[i] > bestScore) { bestScore = scores[i]; bestIdx = i; }
         }
-        if (bestIdx >= 0 && bestScore > -Infinity) {
-            const c = runnerCands[bestIdx];
-            meldMoves.push({
-                phase: 1, moveType: 2, targetType: 0,
-                targetSuit: 0, targetSlot: 0,
-                cardCounts: c.cardCounts
-            });
-        }
+        const c = runnerCands[bestIdx];
+        meldMoves.push({
+            phase: 1, moveType: 2, targetType: 0,
+            targetSuit: 0, targetSlot: 0,
+            cardCounts: c.cardCounts,
+            score: bestScore
+        });
     }
 
     // ── Score and filter sequence append candidates ──────────────────────
     if (seqAppendCands.length > 0) {
-        const seqScores = scoreSeqCandidates(seqAppendCands);
-        let bestIdx = -1;
-        let bestScore = -Infinity;
-        for (let i = 0; i < seqScores.length; i++) {
-            if (seqScores[i] > bestScore) {
-                bestScore = seqScores[i];
-                bestIdx = i;
-            }
+        const scores = scoreSeqCandidates(seqAppendCands);
+        let bestIdx = 0;
+        let bestScore = scores[0];
+        for (let i = 1; i < scores.length; i++) {
+            if (scores[i] > bestScore) { bestScore = scores[i]; bestIdx = i; }
         }
-        if (bestIdx >= 0 && bestScore > -Infinity) {
-            const c = seqAppendCands[bestIdx];
-            meldMoves.push({
-                phase: 1, moveType: 3, targetType: 1,
-                targetSuit: c.targetSuit, targetSlot: c.targetSlot,
-                cardCounts: c.cardCounts
-            });
-        }
+        const c = seqAppendCands[bestIdx];
+        meldMoves.push({
+            phase: 1, moveType: 3, targetType: 1,
+            targetSuit: c.targetSuit, targetSlot: c.targetSlot,
+            cardCounts: c.cardCounts,
+            score: bestScore
+        });
     }
 
     // ── Score and filter runner append candidates ────────────────────────
     if (runnerAppendCands.length > 0) {
-        const runScores = scoreRunCandidates(runnerAppendCands);
-        let bestIdx = -1;
-        let bestScore = -Infinity;
-        for (let i = 0; i < runScores.length; i++) {
-            if (runScores[i] > bestScore) {
-                bestScore = runScores[i];
-                bestIdx = i;
-            }
+        const scores = scoreRunCandidates(runnerAppendCands);
+        let bestIdx = 0;
+        let bestScore = scores[0];
+        for (let i = 1; i < scores.length; i++) {
+            if (scores[i] > bestScore) { bestScore = scores[i]; bestIdx = i; }
         }
-        if (bestIdx >= 0 && bestScore > -Infinity) {
-            const c = runnerAppendCands[bestIdx];
-            meldMoves.push({
-                phase: 1, moveType: 3, targetType: 2,
-                targetSuit: 0, targetSlot: c.targetSlot,
-                cardCounts: c.cardCounts
-            });
-        }
+        const c = runnerAppendCands[bestIdx];
+        meldMoves.push({
+            phase: 1, moveType: 3, targetType: 2,
+            targetSuit: 0, targetSlot: c.targetSlot,
+            cardCounts: c.cardCounts,
+            score: bestScore
+        });
     }
 
-    // ── Score and filter discard candidates (all hand cards) ─────────────
+    // ── Score and filter discard candidates ──────────────────────────────
+    const flat = G.cards?.[player.toString()] || G.cards?.[pInt] || [];
     const discardCands = [];
     for (let i = 0; i < 54; i++) {
-        const cnt = (flat[i] || 0);
-        if (cnt > 0) {
-            discardCands.push(i);
-        }
+        if ((flat[i] || 0) > 0) discardCands.push(i);
     }
     if (discardCands.length > 0) {
         const logits = scoreDiscards();
         if (logits) {
-            let bestIdx = -1;
-            let bestScore = -Infinity;
+            let bestIdx = discardCands[0];
+            let bestScore = logits[bestIdx];
             for (const cid of discardCands) {
-                if (logits[cid] > bestScore) {
-                    bestScore = logits[cid];
-                    bestIdx = cid;
-                }
+                if (logits[cid] > bestScore) { bestScore = logits[cid]; bestIdx = cid; }
             }
-            if (bestIdx >= 0) {
-                discardMoves.push({
-                    phase: 2, moveType: 4,
-                    discardCard: bestIdx === 52 ? 54 : bestIdx,
-                    cardCounts: { [bestIdx]: 1 }
-                });
-            }
+            discardMove = {
+                phase: 2, moveType: 4,
+                discardCard: bestIdx === 52 ? 54 : bestIdx,
+                cardCounts: { [bestIdx]: 1 },
+                score: bestScore
+            };
         }
     }
 
     // Fallback: force-discard (first card in hand) if no discard selected
-    if (discardMoves.length === 0) {
+    if (!discardMove) {
         for (let i = 0; i < 53; i++) {
             if ((flat[i] || 0) > 0) {
-                discardMoves.push({
+                discardMove = {
                     phase: 2, moveType: 4,
                     discardCard: i === 52 ? 54 : i,
-                    cardCounts: {}, _fallback: true
-                });
+                    cardCounts: {}, _fallback: true,
+                    score: 0
+                };
                 break;
             }
         }
     }
 
+    // Sort meld moves by score descending
+    meldMoves.sort((a, b) => b.score - a.score);
+
     addPlanTurnTime(performance.now() - _pt0);
-    return [...pickupMoves, ...meldMoves, ...discardMoves];
+    return { melds: meldMoves, discard: discardMove };
 }
 
 export function getLastDbgLog() { return _lastDbgLog; }
@@ -759,19 +788,26 @@ export function getCppTimings() {
     return t;
 }
 
-// ── Shared turn executor ───────────────────────────────────────────────────────
-export function executeTurnMove(m, iface, log) {
+// ── Turn move executor ──────────────────────────────────────────────────────
+// Executes a single turn move. Used by both worker.js (full-speed) and bot.js (per-tick).
+// Returns: true if the move ended the turn (discard executed), false otherwise.
+export function _executeTurnMove(m, iface, log) {
     if (!m) return false;
 
     if (m.phase === 0) {
         if (iface.hasDrawn()) return false;
         if (m.moveType === 5) {
-            log?.('declareExhausted'); iface.exhaust(); return true;
+            log?.('declareExhausted');
+            iface.exhaust();
+            return true;
         } else if (m.moveType === 0) {
-            log?.(`drawCard${m._fallback?' [fallback]':''}`); iface.draw(); return false;
+            log?.(`drawCard${m._fallback ? ' [fallback]' : ''}`);
+            iface.draw();
+            return false;
         } else if (m.moveType === 1) {
             log?.(`pickUpDiscard ${JSON.stringify(m.cardCounts)}`);
-            iface.pickup(m.cardCounts, m.pickupTarget || { type: 'new' }); return false;
+            iface.pickup(m.cardCounts, m.pickupTarget || { type: 'new' });
+            return false;
         }
     }
 
@@ -790,97 +826,11 @@ export function executeTurnMove(m, iface, log) {
 
     if (m.phase === 2) {
         if (!iface.hasDrawn()) return false;
-        log?.(`discardCard(${m.discardCard})${m._fallback?' [fallback]':''}`);
-        iface.discard(m.discardCard); return true;
-    }
-
-    return false;
-}
-
-// Full turn executor: fires all moves in queue with hardcoded fallbacks from live gamestate
-export function executeTurn(getG, playerID, moves, iface, log) {
-    for (const m of moves.filter(m => m.phase === 0)) {
-        if (iface.hasDrawn()) break;
-        executeTurnMove(m, iface, log);
-    }
-    if (!iface.hasDrawn()) {
-        const G = getG();
-        if (G.deck.length === 0 && G.pots.length === 0) {
-            log?.('declareExhausted [hardcoded fallback]'); iface.exhaust();
-        } else {
-            log?.('drawCard [hardcoded fallback]'); iface.draw();
-        }
-    }
-
-    for (const m of moves.filter(m => m.phase === 1)) {
-        executeTurnMove(m, iface, log);
-    }
-
-    for (const m of moves.filter(m => m.phase === 2)) {
-        if (!iface.hasDrawn()) break;
-        executeTurnMove(m, iface, log);
-    }
-    if (iface.hasDrawn()) {
-        const G = getG();
-        const flat = G.cards?.[playerID] || [];
-        for (let i = 0; i < 53; i++) {
-            if ((flat[i] || 0) > 0) {
-                const cardId = i === 52 ? 54 : i;
-                log?.(`discardCard(${cardId}) [hardcoded fallback]`);
-                iface.discard(cardId);
-                break;
-            }
-        }
-    }
-}
-
-// ── runTurn ───────────────────────────────────────────────────────────────────
-export function runTurn(queue, getG, playerID, iface, log) {
-    const G = getG();
-
-    if (!iface.hasDrawn()) {
-        const idx = queue.findIndex(m => m.phase === 0);
-        if (idx >= 0) {
-            const m = queue.splice(idx, 1)[0];
-            executeTurnMove(m, iface, log);
-            return false;
-        }
-        if (G.deck.length === 0 && G.pots.length === 0) {
-            log?.('declareExhausted [hardcoded fallback]');
-            iface.exhaust();
-            return true;
-        }
-        log?.('drawCard [hardcoded fallback]');
-        iface.draw();
-        return false;
-    }
-
-    const meldIdx = queue.findIndex(m => m.phase === 1);
-    if (meldIdx >= 0) {
-        const m = queue.splice(meldIdx, 1)[0];
-        executeTurnMove(m, iface, log);
-        return false;
-    }
-
-    const discIdx = queue.findIndex(m => m.phase === 2);
-    if (discIdx >= 0) {
-        const m = queue.splice(discIdx, 1)[0];
-        executeTurnMove(m, iface, log);
+        log?.(`discardCard(${m.discardCard})${m._fallback ? ' [fallback]' : ''}`);
+        iface.discard(m.discardCard);
         return true;
     }
 
-    const flat = G.cards?.[playerID.toString()] || [];
-    for (let i = 0; i < 53; i++) {
-        if ((flat[i] || 0) > 0) {
-            const cardId = i === 52 ? 54 : i;
-            for (let j = i + 1; j < 53; j++)
-                if ((flat[j] || 0) > 0)
-                    queue.push({ phase: 2, moveType: 4, discardCard: j === 52 ? 54 : j, _fallback: true });
-            log?.(`discardCard(${cardId}) [hardcoded fallback]`);
-            iface.discard(cardId);
-            return true;
-        }
-    }
     return false;
 }
 

@@ -111,6 +111,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
   let aiQueue = [];
   let lastStateId = null;
   let stopped = false;
+  let _phaseState = 0; // 0=not built, 1=phaseA built, 2=phaseB built
 
   const shutdown = () => {
     if (stopped) return;
@@ -132,12 +133,13 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
     const G = currentState.G;
 
     if (G.ctx?.currentPlayer !== playerID && currentState.ctx.currentPlayer !== playerID) {
-      aiQueue = []; lastStateId = currentStateId; return;
+      aiQueue = []; lastStateId = currentStateId; _phaseState = 0; return;
     }
 
-    // Re-enumerate only at turn start
-    if (!G.hasDrawn && currentStateId !== lastStateId) {
+    // Phase A: before pickup (build move list with current hand, no cards drawn yet)
+    if (!G.hasDrawn && _phaseState === 0 && currentStateId !== lastStateId) {
       lastStateId = currentStateId;
+      _phaseState = 1;
 
       if (isWasmReady() && dnaCache[targetBotName]) {
         const myTeam = G.teams[playerID];
@@ -146,9 +148,31 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         loadMatchDNA(myTeam === 0 ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE),
                      myTeam === 1 ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE));
         setActiveTeam(myTeam === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
-        aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam) || [];
+        const td = G.discardPile?.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
+        aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam, td) || [];
       }
+    }
 
+    // Phase B: after pickup (rebuild move list with picked-up cards in hand)
+    if (G.hasDrawn && _phaseState === 1) {
+      _phaseState = 2;
+      const myTeam = G.teams[playerID];
+      const oppTeam = myTeam === 0 ? 1 : 0;
+      syncCardsToWasm(G, G.rules?.numPlayers || 4);
+      loadMatchDNA(myTeam === 0 ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE),
+                   myTeam === 1 ? dnaCache[targetBotName] : new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE));
+      setActiveTeam(myTeam === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
+      aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam) || [];
+      // Flatten into array for runTurn compatibility
+      if (aiQueue.melds && aiQueue.discard) {
+        aiQueue = aiQueue.melds.concat(aiQueue.discard ? [aiQueue.discard] : []);
+      } else if (!aiQueue.melds) {
+        aiQueue = [];
+      }
+    }
+
+    // Debug logging
+    if (_phaseState >= 1) {
       const flat = G.cards?.[playerID] || [];
       const handCards = [];
       for (let i = 0; i < 53; i++) {
