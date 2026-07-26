@@ -1,4 +1,3 @@
-
 // ─── Overview ──────────────────────────────────────────────────────────────────
 // game.js — Buraco Game Rules Engine (Boardgame.io Game Object)
 //
@@ -1178,8 +1177,8 @@ export function generateAllValidMelds(G, player, handSim, myTeam, topdiscard = n
             }
         }
     }
-    console.log("[GAME.JS] generateAllValidMelds result:");
-    console.log(results);
+//    console.log("[GAME.JS] generateAllValidMelds result:");
+//    console.log(results);
     return results;
 }
 
