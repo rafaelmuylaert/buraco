@@ -422,7 +422,8 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
                     const cardIdx = suit0 * 13 + (p === 0 ? 0 : p === 13 ? 0 : p);
                     cc[cardIdx] = (cc[cardIdx] || 0) + 1;
                 }
-                if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
+                ;if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
+                results.push({ cardCounts: cc });
             }
             
             if (cgap >= 3) {
@@ -434,7 +435,8 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
                     const cardIdx = (suit - 1) * 13 + (p === 0 ? 0 : p === 13 ? 0 : p);
                     cc[cardIdx] = (cc[cardIdx] || 0) + 1;
                 }
-                if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
+                ;if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
+                results.push({ cardCounts: cc });
             }
             
             cnogap = cgap;
