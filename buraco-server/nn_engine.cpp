@@ -15,7 +15,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <cstring>
+#include <string.h>
 #include <wasm_simd128.h>
 
 #define WASM_EXPORT __attribute__((visibility("default")))
