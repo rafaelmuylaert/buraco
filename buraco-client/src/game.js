@@ -450,6 +450,7 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
     //    if (!seen.has(key)) { seen.add(key); unique.push(cand); }
     //}
     //return unique;
+    console.log(results);
     return results;
 }
 
@@ -1224,7 +1225,7 @@ export function generateAllValidMelds(G, player, handSim, myTeam, topdiscard = n
     for (let suit = 1; suit <= 4; suit++) {
         const melds = G.table[myTeam]?.[0]?.[suit] || [];
         for (let slot = 0; slot < melds.length; slot++) {
-            const cands = findAppends(handSim, suit, melds[slot]);
+            const cands = findSeqRuns(handSim, suit, melds[slot]);
             for (const cand of cands) {
                 const cardIds = [...Object.keys(cand.cardCounts).map(Number)];
                 const parsed = parseMeld(cardIds, rules, melds[slot], suit);
