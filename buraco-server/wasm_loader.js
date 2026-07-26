@@ -463,7 +463,7 @@ export function setTurnContext(player, myTeam, oppTeam, scalars) {
 
 // Called by game.js when a meld is played/updated
 export function updateSeqMeld(teamIdx, suit0, slotIdx, meldArray) {
-    if (meldArray) console.log(`[SYNC] updateSeqMeld t=${teamIdx} s=0 sl=${slotIdx} m=[${meldArray}]`);
+    //if (meldArray) console.log(`[SYNC] updateSeqMeld t=${teamIdx} s=0 sl=${slotIdx} m=[${meldArray}]`);
     if (!_wasmSeqMelds[teamIdx]?.[suit0]?.[slotIdx]) return;
     const dst = _wasmSeqMelds[teamIdx][suit0][slotIdx];
     dst.fill(0);
