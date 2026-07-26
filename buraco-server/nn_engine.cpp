@@ -906,10 +906,10 @@ WASM_EXPORT void configure_net_runner(int nlayers, int woff) {
     g_runner_nlayers=nlayers; g_runner_woff=woff;
     for(int i=0;i<nlayers;i++) g_runner_layers[i]=g_layer_sizes_buf[i];
 }
-WASM_EXPORT void configure_net_discard(int nlayers, int woff) {
-    g_discard_nlayers=nlayers; g_discard_woff=woff;
-    for(int i=0;i<nlayers;i++) g_discard_layers[i]=g_layer_sizes_buf[i];
-}
+//WASM_EXPORT void configure_net_discard(int nlayers, int woff) {
+//    g_discard_nlayers=nlayers; g_discard_woff=woff;
+//    for(int i=0;i<nlayers;i++) g_discard_layers[i]=g_layer_sizes_buf[i];
+//}
 
 WASM_EXPORT int cpp_find_valid_appends() { return 0; } // deprecated — JS handles candidate generation
 
