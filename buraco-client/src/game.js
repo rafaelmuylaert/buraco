@@ -278,14 +278,14 @@ function haswilds(handflat){
 function hasForeignWild(handflat, suit){
     const natwild = (suit - 1)*13 + 1;
     const wilds = [1, 14, 27, 40, 53];
-    for (const w of wilds) if(w !== natwild && handFlat[w]) return 1 + ((w-1)/13);
+    for (const w of wilds) if(w !== natwild && handflat[w]) return 1 + ((w-1)/13);
     return null;
 }
 
 function hasCardInSuit(handflat, suit) {
     suit0 = suit - 1;
     for (let r = 0; r < 13; r++) {
-        if (handFlat[suit0 * 13 + r] > 0) return true;
+        if (handflat[suit0 * 13 + r] > 0) return true;
     }
     return false;
 }
