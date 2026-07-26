@@ -278,7 +278,7 @@ function haswilds(handflat){
 function hasForeignWild(handflat, suit){
     const natwild = (suit - 1)*13 + 1;
     const wilds = [1, 14, 27, 40, 53];
-    for (const w of wilds) if(w !== natwild && handflat[w]) return 1 + ((w-1)/13);
+    for (const w of wilds) if(w !== natwild && handflat[w]) return w;
     return null;
 }
 
@@ -308,7 +308,7 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
     if (!wildInHand && !hasCardInSuit(handFlat, suit)) return results;
     const em = promoteNatWild(existingMeld);
     const firstCardInSuit = suit0 * 13;
-    const handcards = [
+    const newMeld = [
       ...handFlat.slice(firstCardInSuit, firstCardInSuit+12), // 3 to K
       handFlat[firstCardInSuit], //Ace
       wildInHand, //Foreign wild
@@ -316,15 +316,21 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
     ];
 
     for (let r = 0; r < 16; r++){
-        if(!em[r]) em[r]=handcards[r];
+        if(!newMeld[r]) newMeld[r]=em[r];
     }
-    const m2 = promoteNatWild(em);
+    const m2 = promoteNatWild(newMeld);
     const canAddWild = (m2[foreignWild] !== 0 && m2[natWild] !== 0);
     const m = [
         m2[0],
       ...m2.slice(2, 13), // 3 to K
       m2[1]
     ];
+    const existing = [
+        em[0],
+      ...em.slice(2, 13), // 3 to K
+      em[1]
+    ];
+    
  
     
     // Linear scan for runs
@@ -342,9 +348,17 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
                 if (lo < 0) lo = 0;
                 const cc = {};
                 for (let p = lo; p <= hi; p++) {
-                    if (!m[p]) continue;
+                    if (!m[p] || existing[p]) continue;
                     const cardIdx = suit0 * 13 + (p === 0 ? 0 : p === 13 ? 0 : p);
                     cc[cardIdx] = (cc[cardIdx] || 0) + 1;
+                }
+                if(!em[natWild] && !em[foreignWild]){
+                    if(newMeld[natWild]){
+                        cc[suit0 * 13 + 1]=1;
+                    }
+                    else if(cc[wildInHand]){
+                        cc[wildInHand]=1;
+                    }
                 }
                 //if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
                 results.push({ cardCounts: cc });
@@ -355,7 +369,7 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
                 let lo = hi - cgap + 1;
                 const cc = {};
                 for (let p = lo; p <= hi; p++) {
-                    if (!m[p]) continue;
+                    if (!m[p] || existing[p]) continue;
                     const cardIdx = (suit - 1) * 13 + (p === 0 ? 0 : p === 13 ? 0 : p);
                     cc[cardIdx] = (cc[cardIdx] || 0) + 1;
                 }
