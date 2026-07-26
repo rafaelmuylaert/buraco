@@ -305,33 +305,8 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
     const natWild = 15;
     const foreignWild = 14;
     const wildInHand = hasForeignWild(handFlat, suit);
-    // Check if any card of this suit is in hand (or combined with existing meld)
-    //const hasCardInSuit = () => {
-    //    for (let r = 0; r < 13; r++) {
-    //        if (handFlat[suit0 * 13 + r] > 0) return true;
-    //    }
-    //    if (wildsInHand > 0) return true;
-    //    return false;
-    //};
-    
     if (!wildInHand && !hasCardInSuit(handFlat, suit)) return results;
-    
-    // Build combined presence map m[14] and fromHand[14]
-    // Position mapping: 0=A-low, 1=unused(for 2-wild), 2..12=ranks 3..K, 13=A-high
-    // Also m[2] doubles as natural-2 slot
-    //const m = new Uint8Array(14);  // combined presence
-    const fromHand = new Uint8Array(16); // presence from hand only
-
     const em = promoteNatWild(existingMeld);
-    // Existing meld cards
-    //if (existingMeld) {
-    //    if (existingMeld[0]) { m[0] = 1; } // A-low
-    //    if (existingMeld[1]) { m[13] = 1; } // A-high  
-    //    //if (existingMeld[2]) { m[2] = 1; } // nat-2
-   //     for (let r = 3; r <= 13; r++) {
-   //         if (existingMeld[r]) m[r] = 1; // ranks 3-K mapped to positions 3..13
-    //    }
-   // }
     const firstCardInSuit = suit0 * 13;
     const handcards = [
       ...handFlat.slice(firstCardInSuit, firstCardInSuit+12), // 3 to K
@@ -344,58 +319,7 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
         if(!em[r]) em[r]=handcards[r];
     }
     const m2 = promoteNatWild(em);
-    
-
-    
-    // Hand cards
-    //for (let r = 0; r < 13; r++) {
-    //    if (handFlat[suit0 * 13 + r] > 0) {
-    //        if (r === 0) {
-    //            // Ace
-    //            if (!m[0]) { fromHand[0] = 1; m[0] = 1; }
-    //            if (!m[1]) { fromHand[13] = 1; m[1] = 1; }
-    //        } else if (r === 1) {
-    //            if (!m[natWild] && !m[foreignWild]) { fromhand[1]=1; m[natWild]=1;}
-    //            else if (!m[2]) { fromhand[1]=1; m[2]=1;}
-    //            // Two (wild) - don't add to continuity scan, count as wild
-    //        } else {
-    //            const pos = r + 1; // Ranks 3-K: r=2->pos 3, r=3->pos 4, ..., r=12->pos 13
-    //            if (!m[pos]) { fromHand[r] = 1; m[pos] = 1; }
-    //        }
-    //    }
-    // }
-
-    //if ( !m[foreignWild] && !m[2] && wildInHand) { fromhand[foreignWild]=1; m[foreignWild]=wildInHand;}
-    
-    // Count wilds
-    //const wildsInHand = (() => {
-    //    let count = 0;
-    //    for (let s = 0; s <= 3; s++) count += handFlat[s * 13 + 1];
-    //    count += handFlat[jokeridx]; // joker
-    //    return count;
-    //})();
-    //const wildsInHand = haswilds(handFlat);
     const canAddWild = (m2[foreignWild] !== 0 && m2[natWild] !== 0);
-    //let w14 = existingMeld ? (existingMeld[14] || 0) : 0; // foreign wild
-    //let w15 = existingMeld ? (existingMeld[15] || 0) : 0; // nat-2 wild
-    //const canAddWild = (w14 === 0 && w15 === 0 && wildsInHand > 0);
-    //if (existingMeld && existingMeld[2] === 1 && w14 === 0 && w15 === 0) {
-    //    // nat-2 already in meld as non-wild, promote to wild
-    //    m[2] = 0;
-    //    w15 = 1;
-    //}
-    
-    
-    
-    // Find wild0type (first available wild)
-    //let wild0type = -1;
-    //if (canAddWild) {
-    //    if (handFlat[suit0 * 13 + 1] > 0) wild0type = suit0 * 13 + 1;
-    //    for (let s = 0; s <= 3 && wild0type < 0; s++) {
-    //        if (handFlat[s * 13 + 1] > 0) wild0type = s * 13 + 1;
-    //    }
-    //    if (wild0type < 0 && handFlat[jokeridx] > 0) wild0type = jokeridx;
-    //}
     const m = [
         m2[0],
       ...m2.slice(2, 13), // 3 to K
@@ -414,7 +338,7 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
             // At a gap or end
             if (cgap > 0 && cnogap > 0 && canAddWild) {
                 // Emit bridged candidate
-                const lo = hi - cnogap - cgap;
+                let lo = hi - cnogap - cgap;
                 if (lo < 0) lo = 0;
                 const cc = {};
                 for (let p = lo; p <= hi; p++) {
@@ -422,20 +346,20 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
                     const cardIdx = suit0 * 13 + (p === 0 ? 0 : p === 13 ? 0 : p);
                     cc[cardIdx] = (cc[cardIdx] || 0) + 1;
                 }
-                ;if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
+                //if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
                 results.push({ cardCounts: cc });
             }
             
             if (cgap >= 3) {
                 // Emit natural run
-                const lo = hi - cgap + 1;
+                let lo = hi - cgap + 1;
                 const cc = {};
                 for (let p = lo; p <= hi; p++) {
                     if (!m[p]) continue;
                     const cardIdx = (suit - 1) * 13 + (p === 0 ? 0 : p === 13 ? 0 : p);
                     cc[cardIdx] = (cc[cardIdx] || 0) + 1;
                 }
-                ;if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
+                //if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
                 results.push({ cardCounts: cc });
             }
             
@@ -444,20 +368,10 @@ export function findSeqRuns(handFlat, suit, existingMeld = null) {
         }
     }
     
-    // Deduplicate
-    //const seen = new Set();
-    //const unique = [];
-    //for (const cand of results) {
-    //    const key = Object.keys(cand.cardCounts).sort().join(',');
-    //    if (!seen.has(key)) { seen.add(key); unique.push(cand); }
-    //}
-    //return unique;
     for (const cand of results) {
         const keys = Object.keys(cand.cardCounts);
-        for(const key of keys){
-            console.log(getSuitChar(suit));
-            console.log(getRankChar(key));
-        }
+        console.log(getSuitChar(suit));
+        console.log(getSuitChar(keys));
     }
     return results;
 }
