@@ -118,9 +118,9 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
   activeBots[clientKey] = client;
   client.start();
 
-  let aiQueue = [];
+  let phaseQueue = [];
   let lastStateId = null;
-  let lastDiscardId = null;
+  let turnPhase = null; // null | 'pickup' | 'meld' | 'discard'
   let stopped = false;
   if (isWasmReady() && dnaCache[targetBotName]) {
       loadMatchDNA(dnaCache[targetBotName], dnaCache[targetBotName]);
@@ -143,24 +143,54 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
     if (!currentState || currentState.ctx.gameover) return;
     let currentStateId = currentState._stateID;
 
-    // Skip unless state changed (move succeeded) or a discard retry is pending
-    if (currentStateId === lastStateId && lastDiscardId === null) return;
+    // Skip unless state changed (previous move succeeded) or queued moves remain
+    if (currentStateId === lastStateId && phaseQueue.length === 0) return;
 
     const G = currentState.G;
 
     // Not our turn → reset
     if (currentState.ctx?.currentPlayer !== playerID) {
         lastStateId = currentStateId;
-        lastDiscardId = null;
+        phaseQueue = [];
+        turnPhase = null;
         return;
     }
 
     // State changed → previous move succeeded
     if (currentStateId !== lastStateId) {
         lastStateId = currentStateId;
-        lastDiscardId = null;
+        // Pickup phase done once we have a card
+        if (turnPhase === 'pickup') {
+            turnPhase = null;
+            phaseQueue = [];
+        }
     }
 
+    // Try next move from cache (skip negative-score melds)
+    while (phaseQueue.length > 0) {
+        const m = phaseQueue.shift();
+        if (turnPhase === 'meld' && m.score !== undefined && m.score < 0) continue;
+        _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
+        return;
+    }
+
+    // ── Queue exhausted: move to next phase ──
+    if (turnPhase === 'meld') {
+        // Melds exhausted → discard (reuse current WASM state, no extra forward pass)
+        phaseQueue = buildDiscardMoveList(G, playerID) || [];
+        turnPhase = 'discard';
+        if (phaseQueue.length > 0) {
+            _executeTurnMove(phaseQueue.shift(), iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
+        }
+        return;
+    }
+
+    if (turnPhase === 'discard') {
+        // All discards exhausted — nothing left to do this turn
+        return;
+    }
+
+    // ── turnPhase is null: generate moves for next phase (one forward pass) ──
     const myTeam = G.teams[playerID];
     const oppTeam = myTeam === 0 ? 1 : 0;
     syncCardsToWasm(G, G.rules?.numPlayers || 4);
@@ -168,33 +198,28 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
     runCurrentState(G, playerID, myTeam, oppTeam);
     printState(G, botName, playerID);
 
-    // Phase A: Pickup — send best candidate (one per tick)
     if (!G.hasDrawn) {
+        // Phase A: Pickup
         const td = G.discardPile?.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
-        aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam, td) || [];
-        for (const m of aiQueue) {
-            _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
-            return;
-        }
+        phaseQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam, td) || [];
+        turnPhase = 'pickup';
+    } else {
+        // Phase B: Melds
+        phaseQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam, null) || [];
+        turnPhase = 'meld';
+    }
+
+    if (phaseQueue.length > 0) {
+        _executeTurnMove(phaseQueue.shift(), iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
         return;
     }
 
-    // Phase B: Melds — send best candidate (one per tick)
-    aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam, null) || [];
-    for (const m of aiQueue) {
-        _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
-        return;
+    // No valid pickup/meld candidates → try discard immediately
+    phaseQueue = buildDiscardMoveList(G, playerID) || [];
+    turnPhase = 'discard';
+    if (phaseQueue.length > 0) {
+        _executeTurnMove(phaseQueue.shift(), iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
     }
-
-    // Phase C: Discard — skip previously failed attempt, send next best
-    const discards = buildDiscardMoveList(G, playerID);
-    for (const m of discards) {
-        if (m.discardCard === lastDiscardId) continue;
-        _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
-        lastDiscardId = m.discardCard;
-        return;
-    }
-    lastDiscardId = null;
   };
   activeIntervals[clientKey] = setInterval(processQueue, 1000);
 }
