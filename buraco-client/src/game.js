@@ -306,7 +306,7 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
     const foreignWild = 14;
     const wildInHand = hasForeignWild(handFlat, suit);
     if (!wildInHand && !hasCardInSuit(handFlat, suit)) return results;
-    const em = promoteNatWild(existingMeld);
+    const em = promoteNatWild(existingMeld ? [...existingMeld] : null);
     if(topdiscard){
         const discardSuit = getSuit(topdiscard);
         if(discardSuit === suit){
