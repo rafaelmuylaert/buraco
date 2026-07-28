@@ -206,7 +206,6 @@ export async function initWasm() {
     }
 }
 
-const _netConfigs = [];
 export function loadMatchDNA(dnaTeam0, dnaTeam1) {
     if (!_ex) return;
     if (_vWeights?.buffer !== _mem.buffer) _refreshViews();
@@ -214,14 +213,11 @@ export function loadMatchDNA(dnaTeam0, dnaTeam1) {
     if (_team1DnaOffset > 0) _vWeights.set(dnaTeam1, _team1DnaOffset);
 
     const C = AI_CONFIG;
-    _netConfigs.length = 0;
     const _setNet = (fn, layerSizes, woff) => {
-        _netConfigs.push({ woff, layers: [...layerSizes], fn });
         for (let i = 0; i < layerSizes.length; i++) _vLayerSizesBuf[i] = layerSizes[i];
         _ex[fn](layerSizes.length, woff);
     };
 
-    // Layer sizes: [input, 48, 48, 48, 48, output]
     _setNet('configure_net_current',   [C.NN_CURRENT_INPUTS,48,48,48,48,24], 0);
     _setNet('configure_net_seq',       [C.NN_SEQ_INPUTS,48,48,48,48,1],      C.DNA_CURRENT);
     _setNet('configure_net_run',       [C.NN_RUN_INPUTS,48,48,48,48,1],      C.DNA_CURRENT + C.DNA_SEQ);
@@ -231,10 +227,6 @@ export function loadMatchDNA(dnaTeam0, dnaTeam1) {
 export function reconfigureNets() {
     if (!_ex) return;
     _ex.set_team_base(_activeTeamBase);
-    for (const cfg of _netConfigs) {
-        for (let j = 0; j < cfg.layers.length; j++) _vLayerSizesBuf[j] = cfg.layers[j];
-        _ex[cfg.fn](cfg.layers.length, _activeTeamBase + cfg.woff);
-    }
 }
 
 // Returns 24-dim state vector from NN_CURRENT, or null if not ready
