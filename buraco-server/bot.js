@@ -149,7 +149,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
     const G = currentState.G;
 
     // Not our turn → reset
-    if (G.ctx?.currentPlayer !== playerID) {
+    if (currentState.ctx?.currentPlayer !== playerID) {
         lastStateId = currentStateId;
         lastDiscardId = null;
         return;
