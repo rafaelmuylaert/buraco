@@ -156,10 +156,12 @@ function runMatch(genomes, rules, fixedDeck) {
                 _executeTurnMove(m, iface, null);
             }
 
-            // Phase C: Discard (ends the turn)
+            // Phase C: Discard — try in score order until one succeeds
             const discardMoves = buildDiscardMoveList(S, p);
             for (const m of discardMoves) {
+                const before = S.discardPile.length;
                 _executeTurnMove(m, iface, null);
+                if (S.discardPile.length > before) break;
             }
 
             ctx.currentPlayer = String((parseInt(p) + 1) % numPlayers);

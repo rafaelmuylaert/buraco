@@ -535,7 +535,7 @@ export function isWasmReady() { return _ex !== null; }
 //   Phase B (topdiscard null): Returns meld/appender moves, all scored and sorted
 // Discard scoring is handled separately by buildDiscardMoveList.
 export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null) {
-    if (!_ex?.run_current_state) return null;
+    if (!_ex?.run_current_state) return [];
     const pInt = parseInt(player);
     const myTeamIdx = myTeam;
     const _pt0 = performance.now();
@@ -628,40 +628,27 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
 }
 
 // Build discard move list. Caller must have run runCurrentState beforehand.
-// Returns array with one discard move (the highest-scored card in hand).
+// Returns ALL cards in hand scored by NN, sorted by score descending.
+// Caller should iterate until one succeeds (first might be consumed by a meld).
 export function buildDiscardMoveList(G, player) {
-    const pInt = parseInt(player);
-    const flat = G.cards?.[player.toString()] || G.cards?.[pInt] || [];
+    const flat = G.cards?.[player] || G.cards?.[player.toString()] || [];
     const logits = scoreDiscards();
     if (!logits) return [];
 
-    let bestId = -1;
-    let bestScore = -Infinity;
+    const moves = [];
     for (let i = 0; i < 54; i++) {
-        if ((flat[i] || 0) > 0 && logits[i] > bestScore) {
-            bestScore = logits[i];
-            bestId = i;
+        if ((flat[i] || 0) > 0) {
+            moves.push({
+                phase: 2, moveType: 4,
+                discardCard: i === 52 ? 54 : i,
+                cardCounts: {},
+                score: logits[i]
+            });
         }
     }
 
-    if (bestId < 0) {
-        for (let i = 0; i < 53; i++) {
-            if ((flat[i] || 0) > 0) {
-                bestId = i;
-                bestScore = 0;
-                break;
-            }
-        }
-    }
-
-    if (bestId < 0) return [];
-
-    return [{
-        phase: 2, moveType: 4,
-        discardCard: bestId === 52 ? 54 : bestId,
-        cardCounts: {},
-        score: bestScore
-    }];
+    moves.sort((a, b) => b.score - a.score);
+    return moves;
 }
 
 export function getLastDbgLog() { return _lastDbgLog; }
