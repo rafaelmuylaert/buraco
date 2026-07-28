@@ -28,8 +28,8 @@ import {
     checkGameOver, setScoreFunctions, getAndResetTimings
 } from './game.js';
 import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers,
-         buildTurnMoveList, getCppTimings, setUsingWasmBackedBuffers,
-         updateSeqMeld, updateRunMeld, getTeam1DnaOffset, _executeTurnMove } from './wasm_loader.js';
+         buildTurnMoveList, buildDiscardMoveList, getCppTimings, setUsingWasmBackedBuffers,
+         updateSeqMeld, updateRunMeld, getTeam1DnaOffset, _executeTurnMove, runCurrentState } from './wasm_loader.js';
 
 
 await initWasm();
@@ -130,13 +130,15 @@ function runMatch(genomes, rules, fixedDeck) {
             const oppTeam = myTeam === 0 ? 1 : 0;
             const iface = makeIface(S, p);
 
+            // Once per turn: sync, build state vector, score candidates
+            runCurrentState(S, p, myTeam, oppTeam);
+
             // Phase A: Pickup decisions (before any draw/pickup)
             const td = S.discardPile.length > 0 ? S.discardPile[S.discardPile.length - 1] : null;
-            const pickupMoves = buildTurnMoveList(S, p, myTeam, oppTeam, td, !rules.debugLog) || [];
-            // Execute pickup moves in score order (highest score first)
+            const pickupMoves = buildTurnMoveList(S, p, myTeam, oppTeam, td) || [];
             for (const m of pickupMoves) {
                 if (m.phase === 0 && !S.hasDrawn) {
-                    _executeTurnMove(m, iface, rules.debugLog ? console.log : null);
+                    _executeTurnMove(m, iface, null);
                 }
             }
             // Fallback if still not drawn
@@ -148,15 +150,16 @@ function runMatch(genomes, rules, fixedDeck) {
                 }
             }
 
-            // Phase B: Post-pickup melding and discarding
-            const postMoves = buildTurnMoveList(S, p, myTeam, oppTeam, null, !rules.debugLog) || { melds: [], discard: null };
-            // Execute melds in score order
-            for (const m of (postMoves.melds || [])) {
+            // Phase B: Meld/appender moves (all sorted by score)
+            const meldMoves = buildTurnMoveList(S, p, myTeam, oppTeam, null) || [];
+            for (const m of meldMoves) {
                 _executeTurnMove(m, iface, null);
             }
-            // Execute discard at end (ends the turn)
-            if (postMoves.discard) {
-                _executeTurnMove(postMoves.discard, iface, null);
+
+            // Phase C: Discard (ends the turn)
+            const discardMoves = buildDiscardMoveList(S, p);
+            for (const m of discardMoves) {
+                _executeTurnMove(m, iface, null);
             }
 
             ctx.currentPlayer = String((parseInt(p) + 1) % numPlayers);

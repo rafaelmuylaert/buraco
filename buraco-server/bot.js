@@ -23,8 +23,8 @@
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import { setDbgLogFn, BuracoGame, AI_CONFIG, getAndResetTimings } from './game.js';
-import { getLastDbgLog, initWasm, syncCardsToWasm, buildTurnMoveList, loadMatchDNA,
-         setActiveTeam, isWasmReady, _executeTurnMove } from './wasm_loader.js';
+import { getLastDbgLog, initWasm, syncCardsToWasm, buildTurnMoveList, buildDiscardMoveList,
+         loadMatchDNA, setActiveTeam, isWasmReady, _executeTurnMove, runCurrentState } from './wasm_loader.js';
 setDbgLogFn(getLastDbgLog);
 await initWasm();
 
@@ -63,15 +63,15 @@ function makeIface(client) {
   };
 }
 
-function printState(G, botName){
-    const td = !G.hasDrawn && G.discardPile?.length > 0 ? G.discardPile[G.discardPile.length - 1] : 'empty';
+function printState(G, botName, playerID) {
+    const td = !G.hasDrawn && G.discardPile?.length > 0 ? discardStr(G.discardPile[G.discardPile.length - 1]) : 'empty';
     const flat = G.cards?.[playerID] || [];
-      const handCards = [];
-      for (let i = 0; i < 53; i++) {
+    const handCards = [];
+    for (let i = 0; i < 53; i++) {
         const cnt = flat[i] || 0;
         if (cnt > 0) { const cid = i===52?54:i; const s=cid===54?5:Math.floor(cid/13)+1; const r=cid===54?2:(cid%13)+1; for (let n=0;n<cnt;n++) handCards.push(getRankChar(r)+getSuitChar(s)); }
-      }
-      console.log(`[BOT] ${botName} | hasDrawn=${G.hasDrawn} hand=[${handCards.join(' ')}] | discard_top=${td}`);
+    }
+    console.log(`[BOT] ${botName} | hasDrawn=${G.hasDrawn} hand=[${handCards.join(' ')}] | discard_top=${td}`);
 }
 async function pollLobby() {
   try {
@@ -121,7 +121,6 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
   let aiQueue = [];
   let lastStateId = null;
   let stopped = false;
-  let _phaseState = 0; // 0=not built, 1=phaseA built, 2=phaseB built
   if (isWasmReady() && dnaCache[targetBotName]) {
       loadMatchDNA(dnaCache[targetBotName], dnaCache[targetBotName]);
   }
@@ -142,17 +141,18 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
     let currentState = client.getState();
     if (!currentState || currentState.ctx.gameover) return;
     let currentStateId = currentState._stateID;
-    if (currentStateId !== lastStateId) return;
-    let lastStateId = currentStateId;
+    if (currentStateId === lastStateId) return;
+    lastStateId = currentStateId;
     const G = currentState.G;
     const myTeam = G.teams[playerID];
     const oppTeam = myTeam === 0 ? 1 : 0;
     syncCardsToWasm(G, G.rules?.numPlayers || 4);
     setActiveTeam(myTeam === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
     if (G.ctx?.currentPlayer !== playerID && currentState.ctx.currentPlayer !== playerID) {
-        aiQueue = []; lastStateId = currentStateId; return;
+        aiQueue = []; return;
     }
-    printState(G, botName)
+    runCurrentState(G, playerID, myTeam, oppTeam);
+    printState(G, botName, playerID);
     const td = !G.hasDrawn && G.discardPile?.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
     aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam, td) || [];
     for (const m of aiQueue){
@@ -168,7 +168,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
     currentState = client.getState();
     currentStateId = currentState._stateID;
     lastStateId = currentStateId;
-    const discards = scoreDiscards();
+    const discards = buildDiscardMoveList(G, playerID);
     for (const m of discards){
         _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
         currentState = client.getState();

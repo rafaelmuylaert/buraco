@@ -361,15 +361,14 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
                 const cc = {};
                 for (let p = lo; p <= hi; p++) {
                     if (!m[p] || existing[p]) continue;
-                    const cardIdx = suit0 * 13 + (p === 0 ? 0 : p === 13 ? 0 : p);
+                    const cardIdx = suit0 * 13 + (p === 0 || p === 11 || p === 13 ? 0 : p === 12 ? 1 : p + 1);
                     cc[cardIdx] = (cc[cardIdx] || 0) + 1;
                 }
                 if(!em[natWild] && !em[foreignWild]){
-                    if(newMeld[natWild]){
-                        cc[suit0 * 13 + 1]=1;
-                    }
-                    else if(cc[wildInHand]){
-                        cc[wildInHand]=1;
+                    if(handFlat[firstCardInSuit + 1] > 0){
+                        cc[suit0 * 13 + 1] = (cc[suit0 * 13 + 1] || 0) + 1;
+                    } else if(wildInHand !== null){
+                        cc[wildInHand] = (cc[wildInHand] || 0) + 1;
                     }
                 }
                 //if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
@@ -382,10 +381,9 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
                 const cc = {};
                 for (let p = lo; p <= hi; p++) {
                     if (!m[p] || existing[p]) continue;
-                    const cardIdx = (suit - 1) * 13 + (p === 0 ? 0 : p === 13 ? 0 : p);
+                    const cardIdx = suit0 * 13 + (p === 0 || p === 11 || p === 13 ? 0 : p === 12 ? 1 : p + 1);
                     cc[cardIdx] = (cc[cardIdx] || 0) + 1;
                 }
-                //if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
                 results.push({ cardCounts: cc });
             }
             

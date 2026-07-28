@@ -529,57 +529,42 @@ function _configureNet(layerSizes, netOffset) {
 export function isWasmReady() { return _ex !== null; }
 
 
-// ── Two-phase NN turn executor ───────────────────────────────────────────────
-// Two-phase turn builder:
-//   Phase A (topdiscard provided): Build pickup move list scored by NN
-//   Phase B (topdiscard null): Build post-pickup meld/discard list, sorted by score
-export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null, silent = false) {
+// ── Simplified turn move builder ────────────────────────────────────────────
+// Caller is responsible for calling runCurrentState once before this.
+//   Phase A (topdiscard provided): Returns pickup moves (draw, exhaust, pickup-discard)
+//   Phase B (topdiscard null): Returns meld/appender moves, all scored and sorted
+// Discard scoring is handled separately by buildDiscardMoveList.
+export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null) {
     if (!_ex?.run_current_state) return null;
     const pInt = parseInt(player);
     const myTeamIdx = myTeam;
-    setActiveTeam(myTeamIdx === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
-
     const _pt0 = performance.now();
-
-    // Phase 1: NN_CURRENT — encode full game state → 24-dim state vector
-    const stateVec = runCurrentState(G, pInt, myTeamIdx, oppTeam);
-    if (!stateVec) return null;
 
     if (topdiscard !== null && topdiscard !== undefined) {
         // ── Phase A: Pickup decisions ──────────────────────────────────────
-        // Score pickup options: draw (default=0), exhaust (0), pick-up-discard (best meld score)
         const pickupMoves = [];
 
-        // Draw from deck — default score of 0
         pickupMoves.push({ phase: 0, moveType: 0, cardCounts: {}, score: 0 });
 
-        // Exhaust — only when no deck and no pots
         if ((G.deck?.length || 0) === 0 && (G.pots?.length || 0) === 0) {
             pickupMoves.push({ phase: 0, moveType: 5, cardCounts: {}, score: 0 });
         }
 
-        // Pick-up-discard — score based on best meld achievable with top discard
-        if (topdiscard !== null && topdiscard !== undefined && G.discardPile?.length > 0) {
+        if (G.discardPile?.length > 0) {
             const allCands = generateAllValidMelds(G, pInt, myTeamIdx, topdiscard) || [];
             if (allCands.length > 0) {
-                // Score each candidate and find the best overall
+                const seqCands = allCands.filter(c => c.moveType === 'playMeld' || c.moveType === 'appendToMeld');
+                const runCands = allCands.filter(c => c.moveType === 'playRunner' || c.moveType === 'appendRunner');
+                const seqScores = seqCands.length > 0 ? scoreSeqCandidates(seqCands) : [];
+                const runScores = runCands.length > 0 ? scoreRunCandidates(runCands) : [];
+
                 let bestScore = -Infinity;
                 let bestCand = null;
-                for (const c of allCands) {
-                    let score;
-                    if (c.moveType === 'playMeld') {
-                        score = scoreSeqCandidates([c])[0];
-                    } else if (c.moveType === 'playRunner') {
-                        score = scoreRunCandidates([c])[0];
-                    } else if (c.moveType === 'appendToMeld') {
-                        score = scoreSeqCandidates([c])[0];
-                    } else if (c.moveType === 'appendRunner') {
-                        score = scoreRunCandidates([c])[0];
-                    }
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestCand = c;
-                    }
+                for (let i = 0; i < seqCands.length; i++) {
+                    if (seqScores[i] > bestScore) { bestScore = seqScores[i]; bestCand = seqCands[i]; }
+                }
+                for (let i = 0; i < runCands.length; i++) {
+                    if (runScores[i] > bestScore) { bestScore = runScores[i]; bestCand = runCands[i]; }
                 }
                 if (bestCand) {
                     pickupMoves.push({
@@ -592,137 +577,91 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null,
             }
         }
 
-        // Sort pickup moves by score descending (pickup-discard if high score, else draw)
         pickupMoves.sort((a, b) => b.score - a.score);
         addPlanTurnTime(performance.now() - _pt0);
         return pickupMoves;
     }
 
-    // ── Phase B: Post-pickup melding and discarding ──────────────────────
-    // G.cards[player] now includes picked-up cards; topdiscard = null means
-    // generateAllValidMelds reads the full hand without narrowing by discard
-    const meldMoves = [];
-    let discardMove = null;
-
+    // ── Phase B: All meld/appender moves, scored and sorted ──────────────
     const allCands = generateAllValidMelds(G, pInt, myTeamIdx, null) || [];
 
-    // Separate candidates by type
-    const seqMeldCands = allCands.filter(c => c.moveType === 'playMeld');
-    const runnerCands = allCands.filter(c => c.moveType === 'playRunner');
-    const seqAppendCands = allCands.filter(c => c.moveType === 'appendToMeld');
-    const runnerAppendCands = allCands.filter(c => c.moveType === 'appendRunner');
+    const seqCands = allCands.filter(c => c.moveType === 'playMeld' || c.moveType === 'appendToMeld');
+    const runCands = allCands.filter(c => c.moveType === 'playRunner' || c.moveType === 'appendRunner');
 
-    // ── Score and filter sequence meld candidates ─────────────────────────
-    if (seqMeldCands.length > 0) {
-        const scores = scoreSeqCandidates(seqMeldCands);
-        let bestIdx = 0;
-        let bestScore = scores[0];
-        for (let i = 1; i < scores.length; i++) {
-            if (scores[i] > bestScore) { bestScore = scores[i]; bestIdx = i; }
-        }
-        const c = seqMeldCands[bestIdx];
+    let seqScores = [], runScores = [];
+    if (seqCands.length > 0) seqScores = scoreSeqCandidates(seqCands);
+    if (runCands.length > 0) runScores = scoreRunCandidates(runCands);
+
+    const meldMoves = [];
+
+    for (let i = 0; i < seqCands.length; i++) {
+        const c = seqCands[i];
+        const isAppend = c.moveType === 'appendToMeld';
         meldMoves.push({
-            phase: 1, moveType: 2, targetType: 0,
-            targetSuit: c.targetSuit, targetSlot: 0,
+            phase: 1,
+            moveType: isAppend ? 3 : 2,
+            targetType: isAppend ? 1 : 0,
+            targetSuit: c.targetSuit,
+            targetSlot: isAppend ? c.targetSlot : 0,
             cardCounts: c.cardCounts,
-            score: bestScore
+            score: seqScores[i]
         });
     }
 
-    // ── Score and filter runner (new runner) candidates ──────────────────
-    if (runnerCands.length > 0) {
-        const scores = scoreRunCandidates(runnerCands);
-        let bestIdx = 0;
-        let bestScore = scores[0];
-        for (let i = 1; i < scores.length; i++) {
-            if (scores[i] > bestScore) { bestScore = scores[i]; bestIdx = i; }
-        }
-        const c = runnerCands[bestIdx];
+    for (let i = 0; i < runCands.length; i++) {
+        const c = runCands[i];
+        const isAppend = c.moveType === 'appendRunner';
         meldMoves.push({
-            phase: 1, moveType: 2, targetType: 0,
-            targetSuit: 0, targetSlot: 0,
+            phase: 1,
+            moveType: isAppend ? 3 : 2,
+            targetType: isAppend ? 2 : 0,
+            targetSuit: 0,
+            targetSlot: isAppend ? c.targetSlot : 0,
             cardCounts: c.cardCounts,
-            score: bestScore
+            score: runScores[i]
         });
     }
 
-    // ── Score and filter sequence append candidates ──────────────────────
-    if (seqAppendCands.length > 0) {
-        const scores = scoreSeqCandidates(seqAppendCands);
-        let bestIdx = 0;
-        let bestScore = scores[0];
-        for (let i = 1; i < scores.length; i++) {
-            if (scores[i] > bestScore) { bestScore = scores[i]; bestIdx = i; }
-        }
-        const c = seqAppendCands[bestIdx];
-        meldMoves.push({
-            phase: 1, moveType: 3, targetType: 1,
-            targetSuit: c.targetSuit, targetSlot: c.targetSlot,
-            cardCounts: c.cardCounts,
-            score: bestScore
-        });
-    }
+    meldMoves.sort((a, b) => b.score - a.score);
+    addPlanTurnTime(performance.now() - _pt0);
+    return meldMoves;
+}
 
-    // ── Score and filter runner append candidates ────────────────────────
-    if (runnerAppendCands.length > 0) {
-        const scores = scoreRunCandidates(runnerAppendCands);
-        let bestIdx = 0;
-        let bestScore = scores[0];
-        for (let i = 1; i < scores.length; i++) {
-            if (scores[i] > bestScore) { bestScore = scores[i]; bestIdx = i; }
-        }
-        const c = runnerAppendCands[bestIdx];
-        meldMoves.push({
-            phase: 1, moveType: 3, targetType: 2,
-            targetSuit: 0, targetSlot: c.targetSlot,
-            cardCounts: c.cardCounts,
-            score: bestScore
-        });
-    }
-
-    // ── Score and filter discard candidates ──────────────────────────────
+// Build discard move list. Caller must have run runCurrentState beforehand.
+// Returns array with one discard move (the highest-scored card in hand).
+export function buildDiscardMoveList(G, player) {
+    const pInt = parseInt(player);
     const flat = G.cards?.[player.toString()] || G.cards?.[pInt] || [];
-    const discardCands = [];
+    const logits = scoreDiscards();
+    if (!logits) return [];
+
+    let bestId = -1;
+    let bestScore = -Infinity;
     for (let i = 0; i < 54; i++) {
-        if ((flat[i] || 0) > 0) discardCands.push(i);
-    }
-    if (discardCands.length > 0) {
-        const logits = scoreDiscards();
-        if (logits) {
-            let bestIdx = discardCands[0];
-            let bestScore = logits[bestIdx];
-            for (const cid of discardCands) {
-                if (logits[cid] > bestScore) { bestScore = logits[cid]; bestIdx = cid; }
-            }
-            discardMove = {
-                phase: 2, moveType: 4,
-                discardCard: bestIdx === 52 ? 54 : bestIdx,
-                cardCounts: { [bestIdx]: 1 },
-                score: bestScore
-            };
+        if ((flat[i] || 0) > 0 && logits[i] > bestScore) {
+            bestScore = logits[i];
+            bestId = i;
         }
     }
 
-    // Fallback: force-discard (first card in hand) if no discard selected
-    if (!discardMove) {
+    if (bestId < 0) {
         for (let i = 0; i < 53; i++) {
             if ((flat[i] || 0) > 0) {
-                discardMove = {
-                    phase: 2, moveType: 4,
-                    discardCard: i === 52 ? 54 : i,
-                    cardCounts: {}, _fallback: true,
-                    score: 0
-                };
+                bestId = i;
+                bestScore = 0;
                 break;
             }
         }
     }
 
-    // Sort meld moves by score descending
-    meldMoves.sort((a, b) => b.score - a.score);
+    if (bestId < 0) return [];
 
-    addPlanTurnTime(performance.now() - _pt0);
-    return { melds: meldMoves, discard: discardMove };
+    return [{
+        phase: 2, moveType: 4,
+        discardCard: bestId === 52 ? 54 : bestId,
+        cardCounts: {},
+        score: bestScore
+    }];
 }
 
 export function getLastDbgLog() { return _lastDbgLog; }
