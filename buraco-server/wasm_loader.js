@@ -781,15 +781,17 @@ export function getWasmCardBuffers() {
 // use WASM-backed buffers directly (runs in main process, not worker).
 export function syncCardsToWasm(G, numPlayers) {
     if (!_wasmCards2.length) return;
-    for (let i = 0; i < 4; i++) {
-        _wasmCards2[i].fill(0);
-        _wasmKnownCards2[i].fill(0);
-    }
     _wasmDiscard2.fill(0);
-    for (let i = 0; i < numPlayers; i++) {
-        const p = i.toString();
-        if (G.cards[p])      _wasmCards2[i].set(G.cards[p]);
-        if (G.knownCards[p]) _wasmKnownCards2[i].set(G.knownCards[p]);
+    if (!_usingWasmBackedBuffers) {
+        for (let i = 0; i < 4; i++) {
+            _wasmCards2[i].fill(0);
+            _wasmKnownCards2[i].fill(0);
+        }
+        for (let i = 0; i < numPlayers; i++) {
+            const p = i.toString();
+            if (G.cards[p])      _wasmCards2[i].set(G.cards[p]);
+            if (G.knownCards[p]) _wasmKnownCards2[i].set(G.knownCards[p]);
+        }
     }
     for (const c of (G.discardPile || [])) {
         const idx = c === 54 ? 52 : c;
