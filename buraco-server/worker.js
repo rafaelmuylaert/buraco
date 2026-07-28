@@ -27,10 +27,10 @@ import {
     moveDrawCard, moveDiscardCard, moveMeld, movePickUpDiscard,
     checkGameOver, setScoreFunctions, getAndResetTimings
 } from './game.js';
-import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers,
-         buildTurnMoveList, buildDiscardMoveList, getCppTimings, setUsingWasmBackedBuffers,
-         updateSeqMeld, updateRunMeld, getTeam1DnaOffset, _executeTurnMove, runCurrentState,
-         setDiagnosticLog, isDiagnosticLog, _fmtHand } from './wasm_loader.js';
+import { initWasm, loadMatchDNA, isWasmReady, getWasmCardBuffers,
+         getCppTimings, setUsingWasmBackedBuffers,
+         updateSeqMeld, updateRunMeld, getTeam1DnaOffset, runTurn,
+         setDiagnosticLog } from './wasm_loader.js';
 
 
 await initWasm();
@@ -64,15 +64,18 @@ function prepareGenome(raw) {
     return dna;
 }
 
+let _workerStateId = 0;
 function makeIface(S, p) {
     return {
+        getStateId: () => _workerStateId,
+        refreshState: () => {},
         hasDrawn: () => S.hasDrawn,
-        draw:     () => moveDrawCard(S, p),
-        pickup:   (cc, tgt) => movePickUpDiscard(S, p, cc, tgt),
-        meld:     (cc) => moveMeld(S, p, cc),
-        append:   (tgt, cc) => moveMeld(S, p, cc, tgt),
-        discard:  (id) => moveDiscardCard(S, p, id, true),
-        exhaust:  () => { S.isExhausted = true; },
+        draw:     () => { moveDrawCard(S, p); _workerStateId++; },
+        pickup:   (cc, tgt) => { movePickUpDiscard(S, p, cc, tgt); _workerStateId++; },
+        meld:     (cc) => { moveMeld(S, p, cc); _workerStateId++; },
+        append:   (tgt, cc) => { moveMeld(S, p, cc, tgt); _workerStateId++; },
+        discard:  (id) => { moveDiscardCard(S, p, id, true); _workerStateId++; },
+        exhaust:  () => { S.isExhausted = true; _workerStateId++; },
     };
 }
 
@@ -101,7 +104,6 @@ function runMatch(genomes, rules, fixedDeck) {
             S.knownCards[k] = wb.knownCards[+k];
         }
         setUsingWasmBackedBuffers(true);
-        // Clear all WASM meld tables for fresh match
         for (let t = 0; t < 2; t++) {
             for (let s = 0; s < 4; s++)
                 for (let sl = 0; sl < 5; sl++)
@@ -120,6 +122,10 @@ function runMatch(genomes, rules, fixedDeck) {
         return [k, prepareGenome(arr)];
     }));
 
+    const ifaces = [];
+    for (let i = 0; i < numPlayers; i++)
+        ifaces[i] = makeIface(S, i.toString());
+
     const ctx = { currentPlayer: '0', numPlayers };
 
     try {
@@ -128,55 +134,9 @@ function runMatch(genomes, rules, fixedDeck) {
 
         while (!gameover && moveCount < 2000) {
             const p = ctx.currentPlayer;
+            const iface = ifaces[parseInt(p)];
 
-            if (S.hasDrawn && (S.handSizes[p] ?? 0) === 0) {
-                S.hasDrawn = false;
-                S.lastDrawnCard = null;
-            }
-
-            if (isWasmReady()) setActiveTeam(0);
-
-            const myTeam  = S.teams[p];
-            const oppTeam = myTeam === 0 ? 1 : 0;
-            const iface = makeIface(S, p);
-
-            // Once per turn: sync, build state vector, score candidates
-            runCurrentState(S, p, myTeam, oppTeam);
-
-            // Phase A: Pickup decisions (before any draw/pickup)
-            const td = S.discardPile.length > 0 ? S.discardPile[S.discardPile.length - 1] : null;
-            const pickupMoves = buildTurnMoveList(S, p, myTeam, oppTeam, td) || [];
-            for (const m of pickupMoves) {
-                if (m.phase === 0 && !S.hasDrawn) {
-                    _executeTurnMove(m, iface, null);
-                }
-            }
-            // Fallback if still not drawn
-            if (!S.hasDrawn) {
-                if (S.deck.length === 0 && S.pots.length === 0) {
-                    iface.exhaust();
-                } else {
-                    iface.draw();
-                }
-            }
-            if (isDiagnosticLog()) {
-                const hand = S.cards?.[p] || [];
-                console.log(`  hand-after-pickup: [${_fmtHand(hand)}]`);
-            }
-
-            // Phase B: Meld/appender moves (all sorted by score)
-            const meldMoves = buildTurnMoveList(S, p, myTeam, oppTeam, null) || [];
-            for (const m of meldMoves) {
-                _executeTurnMove(m, iface, null);
-            }
-
-            // Phase C: Discard — try in score order until one succeeds
-            const discardMoves = buildDiscardMoveList(S, p);
-            for (const m of discardMoves) {
-                const before = S.discardPile.length;
-                _executeTurnMove(m, iface, null);
-                if (S.discardPile.length > before) break;
-            }
+            runTurn(S, p, iface);
 
             ctx.currentPlayer = String((parseInt(p) + 1) % numPlayers);
             S.hasDrawn = false;

@@ -113,6 +113,7 @@ static int   g_num_inputs;  // kept for API compat, unused in new path
 static int   g_layer_sizes[MAX_LAYERS];
 static int   g_num_layers;
 static int   g_weight_offset;
+static int   g_team_base = 0;
 
 static float g_inp_scale = 1.0f / 255.0f;
 
@@ -572,7 +573,7 @@ static void forward_pass_discard(float* out_acc) {
 static void use_net(int* layers, int nlayers, int woff) {
     for (int i=0;i<nlayers;i++) g_layer_sizes[i]=layers[i];
     g_num_layers    = nlayers;
-    g_weight_offset = woff;
+    g_weight_offset = g_team_base + woff;
 }
 
 // ── collect_back_neighbors helper ────────────────────────────────────────────
@@ -696,6 +697,8 @@ WASM_EXPORT void configure_net_discard(int nlayers, int woff) {
     for (int i = 0; i < nlayers && i < MAX_LAYERS; i++)
         g_discard_nets_layers[i] = g_layer_sizes_buf[i];
 }
+
+WASM_EXPORT void set_team_base(int base) { g_team_base = base; }
 
 // Run NN_CURRENT: flatten game state, run forward pass, store 24-dim state vector
 WASM_EXPORT void run_current_state(int player, int my_team, int opp_team) {

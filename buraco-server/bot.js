@@ -10,12 +10,12 @@
 //   pollLobby()              — Polls /games/buraco every 5s to find unclaimed bot seats
 //   startBotClient(...)      — Creates a Boardgame.io Client, subscribes to state, starts AI loop
 //   makeIface(client)        — Builds an action interface (draw/pickup/meld/append/discard/exhaust)
-//   processQueue()           — At turn start: rebuilds WASM move list; then calls runTurn() for next move
+//   processQueue()           — At turn start: rebuilds WASM move list; dispatches all phases
 //   shutdown()               — Cleans up bot client when game ends
 //
 // Data flow: pollLobby → claims seat → connects → subscribes to state →
-//   detects turn start → syncCardsToWasm → loadMatchDNA → buildTurnMoveList →
-//   runTurn (one move per tick) → repeat
+//   detects turn start → deep-copy G → runTurn → runCurrentState → buildTurnMoveList →
+//   executeTurnMove per phase → repeat (1s delay between turns)
 //
 // Key: dnaCache maps bot names to Float32Array weight vectors loaded from /api/bots/weights/.
 // ──────────────────────────────────────────────────────────────────────────────
@@ -23,15 +23,13 @@
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import { setDbgLogFn, BuracoGame, AI_CONFIG, getAndResetTimings } from './game.js';
-import { getLastDbgLog, initWasm, syncCardsToWasm, buildTurnMoveList, buildDiscardMoveList,
-         loadMatchDNA, setActiveTeam, isWasmReady, _executeTurnMove, runCurrentState } from './wasm_loader.js';
+import { getLastDbgLog, initWasm, loadMatchDNA, isWasmReady, runTurn } from './wasm_loader.js';
 setDbgLogFn(getLastDbgLog);
 await initWasm();
 
 const SERVER_URL = 'http://buraco-server:8000';
 const activeBots = {};
 const dnaCache = {};
-const activeIntervals = {};
 
 const getSuitChar = s => ['♠','♥','♦','♣','★'][s-1];
 const getRankChar = r => r===1?'A':r===11?'J':r===12?'Q':r===13?'K':r===14?'A':r.toString();
@@ -53,6 +51,8 @@ const discardStr = (cid) => {
 
 function makeIface(client) {
   return {
+    getStateId: () => client.getState()?._stateID ?? 0,
+    refreshState: (G) => { const state = client.getState(); if (state?.G) Object.assign(G, state.G); },
     hasDrawn: () => client.getState()?.G?.hasDrawn ?? false,
     draw:     () => client.moves.drawCard(),
     pickup:   (cc, tgt) => client.moves.pickUpDiscard(cc, tgt),
@@ -118,9 +118,6 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
   activeBots[clientKey] = client;
   client.start();
 
-  let phaseQueue = [];
-  let lastStateId = null;
-  let turnPhase = null; // null | 'pickup' | 'meld' | 'discard'
   let stopped = false;
   if (isWasmReady() && dnaCache[targetBotName]) {
       loadMatchDNA(dnaCache[targetBotName], dnaCache[targetBotName]);
@@ -129,7 +126,6 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
     if (stopped) return;
     stopped = true;
     console.log(`[BOT] Match ended. Shutting down ${botName}.`);
-    if (activeIntervals[clientKey]) { clearInterval(activeIntervals[clientKey]); delete activeIntervals[clientKey]; }
     delete activeBots[clientKey];
     try { client.stop(); } catch (_) {}
   };
@@ -137,91 +133,32 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
 
   client.subscribe(state => { if (!state) return; if (state.ctx.gameover) shutdown(); });
 
-  const processQueue = () => {
+  let lastTurnStateId = 0;
+  async function botTurnLoop() {
     if (stopped) return;
-    let currentState = client.getState();
-    if (!currentState || currentState.ctx.gameover) return;
-    let currentStateId = currentState._stateID;
-
-    // Skip unless state changed (previous move succeeded) or queued moves remain
-    if (currentStateId === lastStateId && phaseQueue.length === 0) return;
-
-    const G = currentState.G;
-
-    // Not our turn → reset
-    if (currentState.ctx?.currentPlayer !== playerID) {
-        lastStateId = currentStateId;
-        phaseQueue = [];
-        turnPhase = null;
+    try {
+      const state = client.getState();
+      if (!state || state.ctx.gameover) { shutdown(); return; }
+      if (state.ctx.currentPlayer !== playerID) {
+        setTimeout(botTurnLoop, 1000);
         return;
-    }
-
-    // State changed → previous move succeeded
-    if (currentStateId !== lastStateId) {
-        lastStateId = currentStateId;
-        // Pickup phase done once we have a card
-        if (turnPhase === 'pickup') {
-            turnPhase = null;
-            phaseQueue = [];
-        }
-    }
-
-    // Try next move from cache (skip negative-score melds)
-    while (phaseQueue.length > 0) {
-        const m = phaseQueue.shift();
-        if (turnPhase === 'meld' && m.score !== undefined && m.score < 0) continue;
-        _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
+      }
+      if (state._stateID <= lastTurnStateId) {
+        setTimeout(botTurnLoop, 1000);
         return;
-    }
+      }
+      lastTurnStateId = state._stateID;
 
-    // ── Queue exhausted: move to next phase ──
-    if (turnPhase === 'meld') {
-        // Melds exhausted → discard (reuse current WASM state, no extra forward pass)
-        phaseQueue = buildDiscardMoveList(G, playerID) || [];
-        turnPhase = 'discard';
-        if (phaseQueue.length > 0) {
-            _executeTurnMove(phaseQueue.shift(), iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
-        }
-        return;
+      const G = JSON.parse(JSON.stringify(state.G));
+      await runTurn(G, playerID, iface);
+    } catch (e) {
+      console.error(`[BOT] ${botName} error:`, e);
+      shutdown();
+      return;
     }
-
-    if (turnPhase === 'discard') {
-        // All discards exhausted — nothing left to do this turn
-        return;
-    }
-
-    // ── turnPhase is null: generate moves for next phase (one forward pass) ──
-    const myTeam = G.teams[playerID];
-    const oppTeam = myTeam === 0 ? 1 : 0;
-    syncCardsToWasm(G, G.rules?.numPlayers || 4);
-    setActiveTeam(myTeam === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
-    runCurrentState(G, playerID, myTeam, oppTeam);
-    printState(G, botName, playerID);
-
-    if (!G.hasDrawn) {
-        // Phase A: Pickup
-        const td = G.discardPile?.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
-        phaseQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam, td) || [];
-        turnPhase = 'pickup';
-    } else {
-        // Phase B: Melds
-        phaseQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam, null) || [];
-        turnPhase = 'meld';
-    }
-
-    if (phaseQueue.length > 0) {
-        _executeTurnMove(phaseQueue.shift(), iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
-        return;
-    }
-
-    // No valid pickup/meld candidates → try discard immediately
-    phaseQueue = buildDiscardMoveList(G, playerID) || [];
-    turnPhase = 'discard';
-    if (phaseQueue.length > 0) {
-        _executeTurnMove(phaseQueue.shift(), iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
-    }
-  };
-  activeIntervals[clientKey] = setInterval(processQueue, 1000);
+    setTimeout(botTurnLoop, 1000);
+  }
+  setTimeout(botTurnLoop, 1000);
 }
 
 console.log('🤖 Buraco Bot Runner online! Polling the lobby every 5 seconds...');

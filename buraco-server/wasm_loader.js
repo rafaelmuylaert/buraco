@@ -172,7 +172,7 @@ export async function initWasm() {
         _mem = _ex.memory;
 
         const required = ['run_current_state', 'configure_net_current', 'configure_net_seq',
-                          'configure_net_run', 'configure_net_discard',
+                          'configure_net_run', 'configure_net_discard', 'set_team_base',
                           'score_seq_candidates', 'score_run_candidates', 'score_discard',
                           'set_match_state', 'get_move_list', 'get_planned_move',
                           'get_cards2', 'get_knowncards2', 'get_discard2', 'get_scalars',
@@ -206,6 +206,7 @@ export async function initWasm() {
     }
 }
 
+const _netConfigs = [];
 export function loadMatchDNA(dnaTeam0, dnaTeam1) {
     if (!_ex) return;
     if (_vWeights?.buffer !== _mem.buffer) _refreshViews();
@@ -213,7 +214,9 @@ export function loadMatchDNA(dnaTeam0, dnaTeam1) {
     if (_team1DnaOffset > 0) _vWeights.set(dnaTeam1, _team1DnaOffset);
 
     const C = AI_CONFIG;
+    _netConfigs.length = 0;
     const _setNet = (fn, layerSizes, woff) => {
+        _netConfigs.push({ woff, layers: [...layerSizes], fn });
         for (let i = 0; i < layerSizes.length; i++) _vLayerSizesBuf[i] = layerSizes[i];
         _ex[fn](layerSizes.length, woff);
     };
@@ -223,6 +226,15 @@ export function loadMatchDNA(dnaTeam0, dnaTeam1) {
     _setNet('configure_net_seq',       [C.NN_SEQ_INPUTS,48,48,48,48,1],      C.DNA_CURRENT);
     _setNet('configure_net_run',       [C.NN_RUN_INPUTS,48,48,48,48,1],      C.DNA_CURRENT + C.DNA_SEQ);
     _setNet('configure_net_discard',   [C.NN_DISCARD_INPUTS,48,48,48,48,54], C.DNA_CURRENT + C.DNA_SEQ + C.DNA_RUN);
+}
+
+export function reconfigureNets() {
+    if (!_ex) return;
+    _ex.set_team_base(_activeTeamBase);
+    for (const cfg of _netConfigs) {
+        for (let j = 0; j < cfg.layers.length; j++) _vLayerSizesBuf[j] = cfg.layers[j];
+        _ex[cfg.fn](cfg.layers.length, _activeTeamBase + cfg.woff);
+    }
 }
 
 // Returns 24-dim state vector from NN_CURRENT, or null if not ready
@@ -257,6 +269,57 @@ export function runCurrentState(G, player, myTeam, oppTeam) {
     }
 
     return state;
+}
+
+// Runs a full turn (pickup → melds → discard) using the iface abstraction.
+// Both worker.js (synchronous direct mutation) and bot.js (async server)
+// use this same function — differing only in iface implementation.
+export async function runTurn(S, playerID, iface) {
+    const myTeam = S.teams[playerID];
+    const oppTeam = myTeam === 0 ? 1 : 0;
+
+    if (S.hasDrawn && (S.handSizes[playerID] ?? 0) === 0) {
+        S.hasDrawn = false;
+        S.lastDrawnCard = null;
+    }
+
+    syncCardsToWasm(S, S.rules?.numPlayers || 4);
+    setActiveTeam(myTeam === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
+    reconfigureNets();
+    runCurrentState(S, playerID, myTeam, oppTeam);
+
+    // Phase A: Pickup (try each candidate until hasDrawn)
+    if (!S.hasDrawn) {
+        const td = S.discardPile.length > 0 ? S.discardPile[S.discardPile.length - 1] : null;
+        const moves = buildTurnMoveList(S, playerID, myTeam, oppTeam, td) || [];
+        for (const m of moves) {
+            if (m.phase !== 0 || S.hasDrawn) continue;
+            _executeTurnMove(m, iface, null);
+            iface.refreshState(S);
+        }
+        if (!S.hasDrawn) {
+            if (S.deck.length === 0 && S.pots.length === 0) iface.exhaust();
+            else iface.draw();
+            iface.refreshState(S);
+        }
+    }
+
+    // Phase B: Execute all meld/appender moves, skipping negative scores
+    const meldMoves = buildTurnMoveList(S, playerID, myTeam, oppTeam, null) || [];
+    for (const m of meldMoves) {
+        if (m.score < 0) continue;
+        _executeTurnMove(m, iface, null);
+        iface.refreshState(S);
+    }
+
+    // Phase C: Discard — try in score order until discard pile grows
+    const discardMoves = buildDiscardMoveList(S, playerID) || [];
+    for (const m of discardMoves) {
+        const before = S.discardPile.length;
+        _executeTurnMove(m, iface, null);
+        iface.refreshState(S);
+        if (S.discardPile.length > before) break;
+    }
 }
 
 // Flush card bitmaps into WASM memory for NN_CURRENT input
