@@ -64,6 +64,7 @@ let _activeOppTeam  = 1;
 
 let _diagnosticLog = false;
 export function setDiagnosticLog(flag) { _diagnosticLog = !!flag; }
+export function isDiagnosticLog() { return _diagnosticLog; }
 const _suitChars = ['','♠','♥','♦','♣','★'];
 const _rankChars = ['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
 function _fmtCard(cid) {
@@ -87,6 +88,7 @@ function _fmtHand(flat) {
     }
     return out.join(' ') || '(empty)';
 }
+export { _fmtHand };
 
 const SEQ_CAND_FEATS = 17;
 const RUN_CAND_FEATS = 8;
@@ -614,7 +616,11 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
                         console.log(`  seq cand ${i}: cards=${_fmtCounts(seqCands[i].cardCounts)} score=${seqScores[i].toFixed(4)}`);
                     for (let i = 0; i < runCands.length; i++)
                         console.log(`  run cand ${i}: cards=${_fmtCounts(runCands[i].cardCounts)} score=${runScores[i].toFixed(4)}`);
-                    if (bestCand) console.log(`  BEST: pickup ${_fmtCounts(bestCand.cardCounts)} score=${bestScore.toFixed(4)}`);
+                    if (bestCand) {
+                        console.log(`  BEST: pickup ${_fmtCounts(bestCand.cardCounts)} score=${bestScore.toFixed(4)}`);
+                    } else {
+                        console.log('  BEST: (none) — will draw from deck');
+                    }
                 }
             }
         }

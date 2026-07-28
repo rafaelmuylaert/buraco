@@ -324,14 +324,16 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
       ...handFlat.slice(firstCardInSuit, firstCardInSuit+12), // 3 to K
       handFlat[firstCardInSuit], //Ace
       wildInHand, //Foreign wild
-      handFlat[firstCardInSuit+1]>1?1:0 //Nat wild
+      handFlat[firstCardInSuit+1]>0?1:0 //Nat wild
     ];
 
     for (let r = 0; r < 16; r++){
         if(!newMeld[r]) newMeld[r]=em[r];
     }
     const m2 = promoteNatWild(newMeld);
-    const canAddWild = (m2[foreignWild] !== 0 && m2[natWild] !== 0);
+    const hasNatWild = handFlat[firstCardInSuit + 1] > 0;
+    const hasForeignWild = wildInHand !== null && wildInHand !== false;
+    const canAddWild = hasNatWild || hasForeignWild;
     const m = [
         m2[0],
       ...m2.slice(2, 13), // 3 to K
@@ -382,6 +384,24 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
                     if (!m[p] || existing[p]) continue;
                     const cardIdx = suit0 * 13 + (p === 0 || p === 11 || p === 13 ? 0 : p === 12 ? 1 : p + 1);
                     cc[cardIdx] = (cc[cardIdx] || 0) + 1;
+                }
+                if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
+            }
+
+            if (canAddWild && cgap >= 2) {
+                let lo = hi - cgap + 1;
+                const cc = {};
+                for (let p = lo; p <= hi; p++) {
+                    if (!m[p] || existing[p]) continue;
+                    const cardIdx = suit0 * 13 + (p === 0 || p === 11 || p === 13 ? 0 : p === 12 ? 1 : p + 1);
+                    cc[cardIdx] = (cc[cardIdx] || 0) + 1;
+                }
+                if(!em[natWild] && !em[foreignWild]){
+                    if(handFlat[firstCardInSuit + 1] > 0){
+                        cc[suit0 * 13 + 1] = (cc[suit0 * 13 + 1] || 0) + 1;
+                    } else if(wildInHand !== null){
+                        cc[wildInHand] = (cc[wildInHand] || 0) + 1;
+                    }
                 }
                 if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
             }

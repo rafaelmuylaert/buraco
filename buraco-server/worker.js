@@ -30,7 +30,7 @@ import {
 import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers,
          buildTurnMoveList, buildDiscardMoveList, getCppTimings, setUsingWasmBackedBuffers,
          updateSeqMeld, updateRunMeld, getTeam1DnaOffset, _executeTurnMove, runCurrentState,
-         setDiagnosticLog } from './wasm_loader.js';
+         setDiagnosticLog, isDiagnosticLog, _fmtHand } from './wasm_loader.js';
 
 
 await initWasm();
@@ -86,6 +86,8 @@ function runMatch(genomes, rules, fixedDeck) {
         _diagnosticDone = true;
         setDiagnosticLog(true);
         console.log('\n========== DIAGNOSTIC MATCH ==========');
+    } else {
+        setDiagnosticLog(false);
     }
 
     const S = BuracoGame.setup({ random: fakeRandom, ctx: { numPlayers } }, { ...rules, numPlayers });
@@ -156,6 +158,10 @@ function runMatch(genomes, rules, fixedDeck) {
                 } else {
                     iface.draw();
                 }
+            }
+            if (isDiagnosticLog()) {
+                const hand = S.cards?.[p] || [];
+                console.log(`  hand-after-pickup: [${_fmtHand(hand)}]`);
             }
 
             // Phase B: Meld/appender moves (all sorted by score)
