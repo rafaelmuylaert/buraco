@@ -120,6 +120,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
 
   let aiQueue = [];
   let lastStateId = null;
+  let lastDiscardId = null;
   let stopped = false;
   if (isWasmReady() && dnaCache[targetBotName]) {
       loadMatchDNA(dnaCache[targetBotName], dnaCache[targetBotName]);
@@ -141,40 +142,59 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
     let currentState = client.getState();
     if (!currentState || currentState.ctx.gameover) return;
     let currentStateId = currentState._stateID;
-    if (currentStateId === lastStateId) return;
-    lastStateId = currentStateId;
+
+    // Skip unless state changed (move succeeded) or a discard retry is pending
+    if (currentStateId === lastStateId && lastDiscardId === null) return;
+
     const G = currentState.G;
+
+    // Not our turn → reset
+    if (G.ctx?.currentPlayer !== playerID) {
+        lastStateId = currentStateId;
+        lastDiscardId = null;
+        return;
+    }
+
+    // State changed → previous move succeeded
+    if (currentStateId !== lastStateId) {
+        lastStateId = currentStateId;
+        lastDiscardId = null;
+    }
+
     const myTeam = G.teams[playerID];
     const oppTeam = myTeam === 0 ? 1 : 0;
     syncCardsToWasm(G, G.rules?.numPlayers || 4);
     setActiveTeam(myTeam === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
-    if (G.ctx?.currentPlayer !== playerID && currentState.ctx.currentPlayer !== playerID) {
-        aiQueue = []; return;
-    }
     runCurrentState(G, playerID, myTeam, oppTeam);
     printState(G, botName, playerID);
-    const td = !G.hasDrawn && G.discardPile?.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
-    aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam, td) || [];
-    for (const m of aiQueue){
-        _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
-        currentState = client.getState();
-        currentStateId = currentState._stateID;
-        if (currentStateId !== lastStateId) break;
+
+    // Phase A: Pickup — send best candidate (one per tick)
+    if (!G.hasDrawn) {
+        const td = G.discardPile?.length > 0 ? G.discardPile[G.discardPile.length - 1] : null;
+        aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam, td) || [];
+        for (const m of aiQueue) {
+            _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
+            return;
+        }
+        return;
     }
+
+    // Phase B: Melds — send best candidate (one per tick)
     aiQueue = buildTurnMoveList(G, playerID, myTeam, oppTeam, null) || [];
-    for (const m of aiQueue){
+    for (const m of aiQueue) {
         _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
+        return;
     }
-    currentState = client.getState();
-    currentStateId = currentState._stateID;
-    lastStateId = currentStateId;
+
+    // Phase C: Discard — skip previously failed attempt, send next best
     const discards = buildDiscardMoveList(G, playerID);
-    for (const m of discards){
+    for (const m of discards) {
+        if (m.discardCard === lastDiscardId) continue;
         _executeTurnMove(m, iface, (msg) => console.log(`[BOT] ${botName} dispatching: ${msg}`));
-        currentState = client.getState();
-        currentStateId = currentState._stateID;
-        if (currentStateId !== lastStateId) break;
+        lastDiscardId = m.discardCard;
+        return;
     }
+    lastDiscardId = null;
   };
   activeIntervals[clientKey] = setInterval(processQueue, 1000);
 }
