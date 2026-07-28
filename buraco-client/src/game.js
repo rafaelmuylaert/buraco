@@ -332,8 +332,8 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
     }
     const m2 = promoteNatWild(newMeld);
     const hasNatWild = handFlat[firstCardInSuit + 1] > 0;
-    const hasForeignWild = wildInHand !== null && wildInHand !== false;
-    const canAddWild = hasNatWild || hasForeignWild;
+    const anyForeignWild = wildInHand !== null && wildInHand !== false;
+    const canAddWild = hasNatWild || anyForeignWild;
     const m = [
         m2[0],
       ...m2.slice(2, 13), // 3 to K
