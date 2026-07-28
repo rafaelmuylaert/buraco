@@ -62,6 +62,32 @@ let _activePlayer   = 0;
 let _activeMyTeam   = 0;
 let _activeOppTeam  = 1;
 
+let _diagnosticLog = false;
+export function setDiagnosticLog(flag) { _diagnosticLog = !!flag; }
+const _suitChars = ['','♠','♥','♦','♣','★'];
+const _rankChars = ['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+function _fmtCard(cid) {
+    if (cid === 54 || cid === 53) return 'Joker';
+    const s = Math.floor(cid / 13) + 1;
+    const r = (cid % 13) + 1;
+    return _rankChars[r] + _suitChars[s];
+}
+function _fmtCounts(cc) {
+    if (!cc || Object.keys(cc).length === 0) return '{}';
+    return '{' + Object.entries(cc).map(([k, v]) => {
+        const c = _fmtCard(+k);
+        return v > 1 ? `${c}x${v}` : c;
+    }).join(' ') + '}';
+}
+function _fmtHand(flat) {
+    const out = [];
+    for (let i = 0; i < 53; i++) {
+        const n = flat[i] || 0;
+        for (let j = 0; j < n; j++) out.push(_fmtCard(i));
+    }
+    return out.join(' ') || '(empty)';
+}
+
 const SEQ_CAND_FEATS = 17;
 const RUN_CAND_FEATS = 8;
 const MAX_SEQ_CANDS  = 5;
@@ -219,6 +245,13 @@ export function runCurrentState(G, player, myTeam, oppTeam) {
     // Also write to shared WASM memory for other nets
     if (_vStateVecWasm) {
         for (let i = 0; i < 24; i++) _vStateVecWasm[i] = state[i];
+    }
+
+    if (_diagnosticLog) {
+        const hand = G.cards?.[player] || G.cards?.[player.toString()] || [];
+        const td = G.discardPile?.length > 0 ? _fmtCard(G.discardPile[G.discardPile.length - 1]) : 'empty';
+        console.log(`\n=== TURN: player ${player} | hand=[${_fmtHand(hand)}] | discard_top=${td} ===`);
+        console.log(`STATE VECTOR (24 logits): ${state.map(v => v.toFixed(4)).join(', ')}`);
     }
 
     return state;
@@ -574,6 +607,15 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
                         pickupTarget: { type: 'new' }
                     });
                 }
+
+                if (_diagnosticLog) {
+                    console.log('--- PICKUP CANDIDATES (Phase A) ---');
+                    for (let i = 0; i < seqCands.length; i++)
+                        console.log(`  seq cand ${i}: cards=${_fmtCounts(seqCands[i].cardCounts)} score=${seqScores[i].toFixed(4)}`);
+                    for (let i = 0; i < runCands.length; i++)
+                        console.log(`  run cand ${i}: cards=${_fmtCounts(runCands[i].cardCounts)} score=${runScores[i].toFixed(4)}`);
+                    if (bestCand) console.log(`  BEST: pickup ${_fmtCounts(bestCand.cardCounts)} score=${bestScore.toFixed(4)}`);
+                }
             }
         }
 
@@ -623,6 +665,16 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
     }
 
     meldMoves.sort((a, b) => b.score - a.score);
+
+    if (_diagnosticLog) {
+        console.log('--- MELD CANDIDATES (Phase B, sorted) ---');
+        for (const m of meldMoves) {
+            const idxStr = m.moveType === 3 ? ` target=[${m.targetSuit},${m.targetSlot}]` : '';
+            const typeStr = m.moveType === 2 ? (m.targetType === 0 ? 'NEW MELD' : 'APPEND') : m.moveType === 3 ? 'APPEND' : 'NEW RUNNER';
+            console.log(`  ${typeStr}${idxStr} cards=${_fmtCounts(m.cardCounts)} score=${m.score.toFixed(4)}`);
+        }
+    }
+
     addPlanTurnTime(performance.now() - _pt0);
     return meldMoves;
 }
@@ -648,6 +700,13 @@ export function buildDiscardMoveList(G, player) {
     }
 
     moves.sort((a, b) => b.score - a.score);
+
+    if (_diagnosticLog) {
+        console.log('--- DISCARD CANDIDATES (sorted) ---');
+        for (const m of moves)
+            console.log(`  ${_fmtCard(m.discardCard)} score=${m.score.toFixed(4)}`);
+    }
+
     return moves;
 }
 

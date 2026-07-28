@@ -29,7 +29,8 @@ import {
 } from './game.js';
 import { initWasm, loadMatchDNA, setActiveTeam, isWasmReady, getWasmCardBuffers,
          buildTurnMoveList, buildDiscardMoveList, getCppTimings, setUsingWasmBackedBuffers,
-         updateSeqMeld, updateRunMeld, getTeam1DnaOffset, _executeTurnMove, runCurrentState } from './wasm_loader.js';
+         updateSeqMeld, updateRunMeld, getTeam1DnaOffset, _executeTurnMove, runCurrentState,
+         setDiagnosticLog } from './wasm_loader.js';
 
 
 await initWasm();
@@ -43,6 +44,7 @@ import { getLastDbgLog } from './wasm_loader.js';
 
 setDbgLogFn(getLastDbgLog);
 
+let _diagnosticDone = false;
 
 function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
@@ -79,6 +81,12 @@ function makeIface(S, p) {
 function runMatch(genomes, rules, fixedDeck) {
     const numPlayers = rules.numPlayers || 4;
     const fakeRandom = { Shuffle: arr => fixedDeck ? [...fixedDeck] : shuffle(arr) };
+
+    if (!_diagnosticDone) {
+        _diagnosticDone = true;
+        setDiagnosticLog(true);
+        console.log('\n========== DIAGNOSTIC MATCH ==========');
+    }
 
     const S = BuracoGame.setup({ random: fakeRandom, ctx: { numPlayers } }, { ...rules, numPlayers });
 
