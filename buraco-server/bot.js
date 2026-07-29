@@ -33,6 +33,11 @@ const SERVER_URL = 'http://buraco-server:8000';
 const activeBots = {};
 const dnaCache = {};
 
+const sleep = ms => {
+    const start = Date.now();
+    while (Date.now() - start < ms);
+};
+
 const getSuitChar = s => ['♠','♥','♦','♣','★'][s-1];
 const getRankChar = r => r===1?'A':r===11?'J':r===12?'Q':r===13?'K':r===14?'A':r.toString();
 const ccStr = (cc) => {
