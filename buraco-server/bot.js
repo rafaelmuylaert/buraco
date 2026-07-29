@@ -222,6 +222,16 @@ async function startBotClient(matchID, playerID, credentials, botName, targetBot
 
       const G = JSON.parse(JSON.stringify(state.G));
       runTurn(G, playerID, iface);
+
+      // Wait for our turn to fully end (server processes all queued moves).
+      // Moves are sent async; the server may respond with intermediate states
+      // (e.g. post-draw) that would otherwise trigger a re-entry.
+      const deadline = Date.now() + 10000;
+      while (Date.now() < deadline) {
+        const s = client.getState();
+        if (!s || s.ctx.gameover || s.ctx.currentPlayer !== playerID) break;
+        await sleep(500);
+      }
     } catch (e) {
       console.error(`[BOT] ${botName} error:`, e);
       shutdown();
