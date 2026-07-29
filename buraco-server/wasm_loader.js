@@ -722,8 +722,14 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
     const runCands = allCands.filter(c => c.moveType === 'playRunner' || c.moveType === 'appendRunner');
 
     let seqScores = [], runScores = [];
-    if (seqCands.length > 0) seqScores = scoreSeqCandidates(seqCands);
-    if (runCands.length > 0) runScores = scoreRunCandidates(runCands);
+    if (seqCands.length > 0) {
+        seqScores = scoreSeqCandidates(seqCands);
+        while (seqScores.length < seqCands.length) seqScores.push(-1);
+    }
+    if (runCands.length > 0) {
+        runScores = scoreRunCandidates(runCands);
+        while (runScores.length < runCands.length) runScores.push(-1);
+    }
 
     const meldMoves = [];
 
