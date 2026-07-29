@@ -666,11 +666,19 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
                     if (runScores[i] > bestScore) { bestScore = runScores[i]; bestCand = runCands[i]; }
                 }
                 if (bestCand) {
+                    let pickupTarget;
+                    if (bestCand.moveType === 'appendToMeld') {
+                        pickupTarget = { type: 'append', meldTarget: { type: 'seq', suit: bestCand.targetSuit, index: bestCand.targetSlot } };
+                    } else if (bestCand.moveType === 'appendRunner') {
+                        pickupTarget = { type: 'append', meldTarget: { type: 'runner', index: bestCand.targetSlot } };
+                    } else {
+                        pickupTarget = { type: 'new' };
+                    }
                     pickupMoves.push({
                         phase: 0, moveType: 1,
                         cardCounts: bestCand.cardCounts,
                         score: bestScore,
-                        pickupTarget: { type: 'new' }
+                        pickupTarget
                     });
                 }
 
@@ -695,7 +703,8 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
                         console.log(`  run cand ${i}:${extra} cards=${_fmtCounts(c.cardCounts)} score=${runScores[i].toFixed(4)}`);
                     }
                     if (bestCand) {
-                        console.log(`  BEST: pickup ${_fmtCounts(bestCand.cardCounts)} score=${bestScore.toFixed(4)}`);
+                        const tgtStr = pickupTarget.type === 'new' ? 'new meld' : `append->[s=${pickupTarget.meldTarget?.suit ?? ''},i=${pickupTarget.meldTarget?.index ?? '?'}]`;
+                        console.log(`  BEST: pickup ${_fmtCounts(bestCand.cardCounts)} ${tgtStr} score=${bestScore.toFixed(4)}`);
                     } else {
                         console.log('  BEST: (none) — will draw from deck');
                     }

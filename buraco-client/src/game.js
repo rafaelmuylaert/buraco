@@ -310,7 +310,7 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
     if(topdiscard){
         const discardSuit = getSuit(topdiscard);
         if(discardSuit === suit){
-            const discardrank = getRank(topdiscard) - 1;
+            const discardrank = getRank(topdiscard);
             if (em[discardrank] > 0) return results;
             em[discardrank] = 1;
         }
@@ -321,14 +321,19 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
     }
     const firstCardInSuit = suit0 * 13;
     const newMeld = [
-      ...handFlat.slice(firstCardInSuit, firstCardInSuit+12), // 3 to K
+      ...handFlat.slice(firstCardInSuit, firstCardInSuit+13), // A through K (13)
       handFlat[firstCardInSuit], //Ace
       wildInHand, //Foreign wild
       handFlat[firstCardInSuit+1]>0?1:0 //Nat wild
     ];
 
-    for (let r = 0; r < 16; r++){
-        if(!newMeld[r]) newMeld[r]=em[r];
+    // Merge existing meld into newMeld.
+    // em uses 1-indexed ranks: em[0]=loAce, em[1]=hiAce, em[2..13]=r2..rK, em[14]=foreignWildSuit, em[15]=natWild
+    // newMeld uses 0-based card indices: [0]=A, [1]=2, ..., [12]=K, [13]=A(dup), [14]=wildID, [15]=natWild
+    if (!newMeld[0])  newMeld[0]  = em[0] || em[1];
+    if (!newMeld[13]) newMeld[13] = em[1] || em[0];
+    for (let r = 2; r <= 13; r++) {
+        if (!newMeld[r - 1]) newMeld[r - 1] = em[r];
     }
     const m2 = promoteNatWild(newMeld);
     const hasNatWild = handFlat[firstCardInSuit + 1] > 0;
@@ -336,12 +341,12 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
     const canAddWild = hasNatWild || anyForeignWild;
     const m = [
         m2[0],
-      ...m2.slice(2, 13), // 3 to K
+      ...m2.slice(2, 14), // 3 to A(dup)
       m2[1]
     ];
     const existing = [
         em[0],
-      ...em.slice(2, 13), // 3 to K
+      ...em.slice(2, 14), // r2 to rK
       em[1]
     ];
     
@@ -363,7 +368,7 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
                 const cc = {};
                 for (let p = lo; p <= hi; p++) {
                     if (!m[p] || existing[p]) continue;
-                    const cardIdx = suit0 * 13 + (p === 0 || p === 11 || p === 13 ? 0 : p === 12 ? 1 : p + 1);
+                    const cardIdx = suit0 * 13 + (p === 0 || p === 12 ? 0 : p === 13 ? 1 : p + 1);
                     cc[cardIdx] = (cc[cardIdx] || 0) + 1;
                 }
                 if(!em[natWild] && !em[foreignWild]){
@@ -382,7 +387,7 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
                 const cc = {};
                 for (let p = lo; p <= hi; p++) {
                     if (!m[p] || existing[p]) continue;
-                    const cardIdx = suit0 * 13 + (p === 0 || p === 11 || p === 13 ? 0 : p === 12 ? 1 : p + 1);
+                    const cardIdx = suit0 * 13 + (p === 0 || p === 12 ? 0 : p === 13 ? 1 : p + 1);
                     cc[cardIdx] = (cc[cardIdx] || 0) + 1;
                 }
                 if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
@@ -393,7 +398,7 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
                 const cc = {};
                 for (let p = lo; p <= hi; p++) {
                     if (!m[p] || existing[p]) continue;
-                    const cardIdx = suit0 * 13 + (p === 0 || p === 11 || p === 13 ? 0 : p === 12 ? 1 : p + 1);
+                    const cardIdx = suit0 * 13 + (p === 0 || p === 12 ? 0 : p === 13 ? 1 : p + 1);
                     cc[cardIdx] = (cc[cardIdx] || 0) + 1;
                 }
                 if(!em[natWild] && !em[foreignWild]){
