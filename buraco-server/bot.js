@@ -191,12 +191,12 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
   const iface = makeIface(client, botName, playerID);
 
   client.subscribe(state => { if (!state) return; if (state.ctx.gameover) shutdown(); });
-
+  let state = client.getState();
   let lastTurnStateId = 0;
-  async function botTurnLoop() {
+  while (state && !state.ctx.gameover) {
     if (stopped) return;
     try {
-      const state = client.getState();
+      state = client.getState();
       if (!state || state.ctx.gameover) { shutdown(); return; }
       if (state.ctx.currentPlayer !== playerID) {
         setTimeout(botTurnLoop, 1000);
@@ -217,9 +217,9 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       shutdown();
       return;
     }
-    setTimeout(botTurnLoop, 1000);
+    await sleep(500);
   }
-  setTimeout(botTurnLoop, 1000);
+  //setTimeout(botTurnLoop, 1000);
 }
 
 console.log('🤖 Buraco Bot Runner online! Polling the lobby every 5 seconds...');
