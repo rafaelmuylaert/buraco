@@ -665,8 +665,8 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
                 for (let i = 0; i < runCands.length; i++) {
                     if (runScores[i] > bestScore) { bestScore = runScores[i]; bestCand = runCands[i]; }
                 }
+                let pickupTarget = { type: 'new' };
                 if (bestCand) {
-                    let pickupTarget;
                     if (bestCand.moveType === 'appendToMeld') {
                         pickupTarget = { type: 'append', meldTarget: { type: 'seq', suit: bestCand.targetSuit, index: bestCand.targetSlot } };
                     } else if (bestCand.moveType === 'appendRunner') {
