@@ -33,10 +33,7 @@ const SERVER_URL = 'http://buraco-server:8000';
 const activeBots = {};
 const dnaCache = {};
 
-const sleep = ms => {
-    const start = Date.now();
-    while (Date.now() - start < ms);
-};
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const getSuitChar = s => ['♠','♥','♦','♣','★'][s-1];
 const getRankChar = r => r===1?'A':r===11?'J':r===12?'Q':r===13?'K':r===14?'A':r.toString();
@@ -174,7 +171,7 @@ async function pollLobby() {
   } catch (e) {}
 }
 
-function startBotClient(matchID, playerID, credentials, botName, targetBotName) {
+async function startBotClient(matchID, playerID, credentials, botName, targetBotName) {
   const clientKey = `${matchID}_${playerID}`;
   if (activeBots[clientKey] && activeBots[clientKey] !== 'pending') return;
 
@@ -197,9 +194,9 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
 
   client.subscribe(state => { if (!state) return; if (state.ctx.gameover) shutdown(); });
 
-  // Wait for initial connection before entering synchronous loop
+  // Wait for initial connection
   let state;
-  while (!(state = client.getState())) sleep(500);
+  while (!(state = client.getState())) await sleep(500);
 
   let lastTurnStateId = 0;
   while (!state.ctx.gameover) {
@@ -207,11 +204,11 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       state = client.getState();
       if (!state || state.ctx.gameover) { shutdown(); return; }
       if (state.ctx.currentPlayer !== playerID) {
-        sleep(500);
+        await sleep(500);
         continue;
       }
       if (state._stateID <= lastTurnStateId) {
-        sleep(500);
+        await sleep(500);
         continue;
       }
       lastTurnStateId = state._stateID;
@@ -225,7 +222,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       shutdown();
       return;
     }
-    sleep(500);
+    await sleep(500);
   }
   shutdown();
 }
