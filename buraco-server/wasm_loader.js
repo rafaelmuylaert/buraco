@@ -882,7 +882,6 @@ export function _executeTurnMove(m, iface, log) {
     if (!m) return false;
 
     if (m.phase === 0) {
-        if (iface.hasDrawn()) return false;
         if (m.moveType === 5) {
             log?.('declareExhausted');
             iface.exhaust();
@@ -899,7 +898,6 @@ export function _executeTurnMove(m, iface, log) {
     }
 
     if (m.phase === 1) {
-        if (!iface.hasDrawn()) return false;
         if (m.moveType === 2) {
             log?.(`playMeld ${JSON.stringify(m.cardCounts)}`);
             iface.meld(m.cardCounts);
@@ -912,7 +910,6 @@ export function _executeTurnMove(m, iface, log) {
     }
 
     if (m.phase === 2) {
-        if (!iface.hasDrawn()) return false;
         log?.(`discardCard(${m.discardCard})${m._fallback ? ' [fallback]' : ''}`);
         iface.discard(m.discardCard);
         return true;
