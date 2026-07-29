@@ -193,7 +193,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
   client.subscribe(state => { if (!state) return; if (state.ctx.gameover) shutdown(); });
   let state = client.getState();
   let lastTurnStateId = 0;
-  while (state && !state.ctx.gameover) {
+  while (!state.ctx.gameover) {
     //if (stopped) return;
     try {
       state = client.getState();
