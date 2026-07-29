@@ -65,7 +65,7 @@ let _activeOppTeam  = 1;
 let _diagnosticLog = false;
 export function setDiagnosticLog(flag) { _diagnosticLog = !!flag; }
 export function isDiagnosticLog() { return _diagnosticLog; }
-const _suitChars = ['','♠','♥','♦','♣','★'];
+const _suitChars = ['','♠','♥','♣','♦','★'];
 const _rankChars = ['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
 function _fmtCard(cid) {
     if (cid === 54 || cid === 53) return 'Joker';
