@@ -207,7 +207,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
       if (state._stateID <= lastTurnStateId) {
         //setTimeout(botTurnLoop, 1000);
         //return;
-        await sleep(500);
+        sleep(500);
         continue;
       }
       lastTurnStateId = state._stateID;
