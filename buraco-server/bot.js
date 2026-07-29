@@ -23,9 +23,11 @@
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import { setDbgLogFn, BuracoGame, AI_CONFIG, getAndResetTimings } from './game.js';
-import { getLastDbgLog, initWasm, loadMatchDNA, isWasmReady, runTurn } from './wasm_loader.js';
+import { getLastDbgLog, initWasm, loadMatchDNA, isWasmReady, runTurn,
+         setDiagnosticLog } from './wasm_loader.js';
 setDbgLogFn(getLastDbgLog);
 await initWasm();
+setDiagnosticLog(true);
 
 const SERVER_URL = 'http://buraco-server:8000';
 const activeBots = {};
@@ -48,8 +50,30 @@ const discardStr = (cid) => {
     const r = cid === 54 ? 2 : (cid % 13) + 1;
     return getRankChar(r) + getSuitChar(s);
 };
+const getCardId = (suit, rankIdx) => (suit - 1) * 13 + rankIdx;
+const meldToStr = (meld, suit) => {
+    if (!meld || !meld.length) return '∅';
+    const ids = [];
+    if (meld.length >= 16) {
+        const WildSuit = meld[14] ? meld[14] : (suit || 0);
+        if (meld[0]) ids.push(getCardId(suit || 0, 0));
+        for (let r = 2; r <= 13; r++) {
+            const cardIdx = r === 2 ? 1 : r - 1;
+            if (meld[r]) ids.push(getCardId(suit || 0, cardIdx));
+            else if (meld[14]) ids.push(getCardId(WildSuit, 1));
+        }
+        if (meld[1]) ids.push(getCardId(suit || 0, 0));
+    } else if (meld.length >= 6) {
+        const rank = meld[0];
+        for (let s = 1; s <= 4; s++)
+            for (let i = 0; i < (meld[s] || 0); i++)
+                ids.push(getCardId(s, rank - 1));
+        if (meld[5]) ids.push(getCardId(meld[5], 1));
+    }
+    return ids.map(discardStr).join(' ');
+};
 
-function makeIface(client, botName) {
+function makeIface(client, botName, playerID) {
   return {
     getStateId: () => client.getState()?._stateID ?? 0,
     refreshState: (G) => {
@@ -70,7 +94,20 @@ function makeIface(client, botName) {
         client.moves.playMeld(cc);
     },
     append:   (tgt, cc) => {
-        console.log(`[BOT] ${botName} => appendToMeld tgt=${JSON.stringify(tgt)} cc=${ccStr(cc)}`);
+        const st = client.getState();
+        const G2 = st?.G;
+        let existingStr = '';
+        if (G2) {
+            const myTeam = G2.teams?.[playerID] ?? 0;
+            if (tgt.type === 'seq' || (tgt.suit !== undefined && tgt.suit !== 0)) {
+                const meld = G2.table?.[myTeam]?.[0]?.[tgt.suit]?.[tgt.index];
+                existingStr = meldToStr(meld, tgt.suit);
+            } else if (tgt.type === 'runner' || tgt.type === 'run') {
+                const meld = G2.table?.[myTeam]?.[1]?.[tgt.index];
+                existingStr = meldToStr(meld, 0);
+            }
+        }
+        console.log(`[BOT] ${botName} => appendToMeld target=[${existingStr}] cc=${ccStr(cc)}`);
         client.moves.appendToMeld(tgt, cc);
     },
     discard:  (id) => {
@@ -151,7 +188,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
     delete activeBots[clientKey];
     try { client.stop(); } catch (_) {}
   };
-  const iface = makeIface(client, botName);
+  const iface = makeIface(client, botName, playerID);
 
   client.subscribe(state => { if (!state) return; if (state.ctx.gameover) shutdown(); });
 

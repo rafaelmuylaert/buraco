@@ -358,6 +358,15 @@ function _flushCardBitmaps(G, player, myTeam, oppTeam) {
     }
 }
 
+// Format a meld array as readable card names
+function _fmtMeldArr(meld, suit) {
+    if (!meld) return '∅';
+    try {
+        const ids = meldToCardIDs(meld, suit || 0);
+        return ids.map(_fmtCard).join(' ');
+    } catch (_) { return '?'; }
+}
+
 // Convert a meld slot array to card IDs (0-53 for specific cards, +54 for wilds)
 // Adapted from client/src/game.js meldToCardIDs()
 function meldToCardIDs(m, suit) {
@@ -667,10 +676,24 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
 
                 if (_diagnosticLog) {
                     console.log('--- PICKUP CANDIDATES (Phase A) ---');
-                    for (let i = 0; i < seqCands.length; i++)
-                        console.log(`  seq cand ${i}: cards=${_fmtCounts(seqCands[i].cardCounts)} score=${seqScores[i].toFixed(4)}`);
-                    for (let i = 0; i < runCands.length; i++)
-                        console.log(`  run cand ${i}: cards=${_fmtCounts(runCands[i].cardCounts)} score=${runScores[i].toFixed(4)}`);
+                    for (let i = 0; i < seqCands.length; i++) {
+                        const c = seqCands[i];
+                        let extra = '';
+                        if (c.moveType === 'appendToMeld') {
+                            const meld = G.table?.[myTeamIdx]?.[0]?.[c.targetSuit]?.[c.targetSlot];
+                            extra = ` appendTo=[${_fmtMeldArr(meld, c.targetSuit)}]`;
+                        }
+                        console.log(`  seq cand ${i}:${extra} cards=${_fmtCounts(c.cardCounts)} score=${seqScores[i].toFixed(4)}`);
+                    }
+                    for (let i = 0; i < runCands.length; i++) {
+                        const c = runCands[i];
+                        let extra = '';
+                        if (c.moveType === 'appendRunner') {
+                            const meld = G.table?.[myTeamIdx]?.[1]?.[c.targetSlot];
+                            extra = ` appendTo=[${_fmtMeldArr(meld, 0)}]`;
+                        }
+                        console.log(`  run cand ${i}:${extra} cards=${_fmtCounts(c.cardCounts)} score=${runScores[i].toFixed(4)}`);
+                    }
                     if (bestCand) {
                         console.log(`  BEST: pickup ${_fmtCounts(bestCand.cardCounts)} score=${bestScore.toFixed(4)}`);
                     } else {
@@ -730,9 +753,18 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
     if (_diagnosticLog) {
         console.log('--- MELD CANDIDATES (Phase B, sorted) ---');
         for (const m of meldMoves) {
-            const idxStr = m.moveType === 3 ? ` target=[${m.targetSuit},${m.targetSlot}]` : '';
             const typeStr = m.moveType === 2 ? (m.targetType === 0 ? 'NEW MELD' : 'APPEND') : m.moveType === 3 ? 'APPEND' : 'NEW RUNNER';
-            console.log(`  ${typeStr}${idxStr} cards=${_fmtCounts(m.cardCounts)} score=${m.score.toFixed(4)}`);
+            let extra = '';
+            if (m.moveType === 3) {
+                if (m.targetType === 1) {
+                    const meld = G.table?.[myTeam]?.[0]?.[m.targetSuit]?.[m.targetSlot];
+                    extra = ` existing=[${_fmtMeldArr(meld, m.targetSuit)}]`;
+                } else {
+                    const meld = G.table?.[myTeam]?.[1]?.[m.targetSlot];
+                    extra = ` existing=[${_fmtMeldArr(meld, 0)}]`;
+                }
+            }
+            console.log(`  ${typeStr}${extra} cards=${_fmtCounts(m.cardCounts)} score=${m.score.toFixed(4)}`);
         }
     }
 
