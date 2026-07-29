@@ -346,8 +346,9 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
     ];
     const existing = [
         em[0],
-      ...em.slice(2, 14), // r2 to rK
-      em[1]
+      ...em.slice(3, 14), // r3 to rK (skipping r2, matching m which drops newMeld[1]=2)
+      em[1],
+      em[2]
     ];
     
  
