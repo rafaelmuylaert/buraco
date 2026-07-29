@@ -49,17 +49,39 @@ const discardStr = (cid) => {
     return getRankChar(r) + getSuitChar(s);
 };
 
-function makeIface(client) {
+function makeIface(client, botName) {
   return {
     getStateId: () => client.getState()?._stateID ?? 0,
-    refreshState: (G) => { const state = client.getState(); if (state?.G) Object.assign(G, state.G); },
+    refreshState: (G) => {
+        const state = client.getState();
+        if (state?.G) Object.assign(G, state.G);
+    },
     hasDrawn: () => client.getState()?.G?.hasDrawn ?? false,
-    draw:     () => client.moves.drawCard(),
-    pickup:   (cc, tgt) => client.moves.pickUpDiscard(cc, tgt),
-    meld:     (cc) => client.moves.playMeld(cc),
-    append:   (tgt, cc) => client.moves.appendToMeld(tgt, cc),
-    discard:  (id) => client.moves.discardCard(id),
-    exhaust:  () => client.moves.declareExhausted(),
+    draw:     () => {
+        console.log(`[BOT] ${botName} => drawCard`);
+        client.moves.drawCard();
+    },
+    pickup:   (cc, tgt) => {
+        console.log(`[BOT] ${botName} => pickUpDiscard cc=${ccStr(cc)} tgt=${JSON.stringify(tgt)}`);
+        client.moves.pickUpDiscard(cc, tgt);
+    },
+    meld:     (cc) => {
+        console.log(`[BOT] ${botName} => playMeld cc=${ccStr(cc)}`);
+        client.moves.playMeld(cc);
+    },
+    append:   (tgt, cc) => {
+        console.log(`[BOT] ${botName} => appendToMeld tgt=${JSON.stringify(tgt)} cc=${ccStr(cc)}`);
+        client.moves.appendToMeld(tgt, cc);
+    },
+    discard:  (id) => {
+        const cid = id === 54 ? 54 : id;
+        console.log(`[BOT] ${botName} => discardCard id=${id} (${discardStr(cid)})`);
+        client.moves.discardCard(id);
+    },
+    exhaust:  () => {
+        console.log(`[BOT] ${botName} => declareExhausted`);
+        client.moves.declareExhausted();
+    },
   };
 }
 
@@ -129,7 +151,7 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
     delete activeBots[clientKey];
     try { client.stop(); } catch (_) {}
   };
-  const iface = makeIface(client);
+  const iface = makeIface(client, botName);
 
   client.subscribe(state => { if (!state) return; if (state.ctx.gameover) shutdown(); });
 
@@ -148,6 +170,8 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
         return;
       }
       lastTurnStateId = state._stateID;
+
+      printState(state.G, botName, playerID);
 
       const G = JSON.parse(JSON.stringify(state.G));
       await runTurn(G, playerID, iface);
