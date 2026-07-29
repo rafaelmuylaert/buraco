@@ -32,6 +32,7 @@ setDiagnosticLog(true);
 const SERVER_URL = 'http://buraco-server:8000';
 const activeBots = {};
 const dnaCache = {};
+let _pollingLobby = false;
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -135,6 +136,8 @@ function printState(G, botName, playerID) {
     console.log(`[BOT] ${botName} | hasDrawn=${G.hasDrawn} hand=[${handCards.join(' ')}] | discard_top=${td}`);
 }
 async function pollLobby() {
+  if (_pollingLobby) return;
+  _pollingLobby = true;
   try {
     const res = await fetch(`${SERVER_URL}/games/buraco`);
     const data = await res.json();
@@ -168,7 +171,9 @@ async function pollLobby() {
         }
       }
     }
-  } catch (e) {}
+  } catch (e) {} finally {
+    _pollingLobby = false;
+  }
 }
 
 async function startBotClient(matchID, playerID, credentials, botName, targetBotName) {
@@ -228,4 +233,5 @@ async function startBotClient(matchID, playerID, credentials, botName, targetBot
 }
 
 console.log('🤖 Buraco Bot Runner online! Polling the lobby every 5 seconds...');
-setInterval(pollLobby, 5000);
+const poll = () => { pollLobby().then(() => setTimeout(poll, 5000)).catch(() => setTimeout(poll, 5000)); };
+poll();
