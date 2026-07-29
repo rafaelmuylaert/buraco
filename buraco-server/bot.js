@@ -194,31 +194,36 @@ function startBotClient(matchID, playerID, credentials, botName, targetBotName) 
   let state = client.getState();
   let lastTurnStateId = 0;
   while (state && !state.ctx.gameover) {
-    if (stopped) return;
+    //if (stopped) return;
     try {
       state = client.getState();
       if (!state || state.ctx.gameover) { shutdown(); return; }
       if (state.ctx.currentPlayer !== playerID) {
-        setTimeout(botTurnLoop, 1000);
-        return;
+        //setTimeout(botTurnLoop, 1000);
+        //return;
+        sleep(500);
+        continue;
       }
       if (state._stateID <= lastTurnStateId) {
-        setTimeout(botTurnLoop, 1000);
-        return;
+        //setTimeout(botTurnLoop, 1000);
+        //return;
+        await sleep(500);
+        continue;
       }
       lastTurnStateId = state._stateID;
 
       printState(state.G, botName, playerID);
 
       const G = JSON.parse(JSON.stringify(state.G));
-      await runTurn(G, playerID, iface);
+      runTurn(G, playerID, iface);
     } catch (e) {
       console.error(`[BOT] ${botName} error:`, e);
       shutdown();
       return;
     }
-    await sleep(500);
+    sleep(500);
   }
+  shutdown(); 
   //setTimeout(botTurnLoop, 1000);
 }
 
