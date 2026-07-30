@@ -630,6 +630,12 @@ WASM_EXPORT void     set_inp_scale(float s)   { g_inp_scale = s; }
 WASM_EXPORT uint8_t* get_seq_score_batch()    { return g_score_seq_batch; }
 WASM_EXPORT uint8_t* get_run_score_batch()    { return g_score_run_batch; }
 
+// Card bitmap flat array accessors for NN_CURRENT input
+WASM_EXPORT uint8_t* get_own_table()          { return g_own_table; }
+WASM_EXPORT uint8_t* get_opp_table()          { return g_opp_table; }
+WASM_EXPORT uint8_t* get_discard_flat_arr()   { return g_discard_flat; }
+WASM_EXPORT uint8_t* get_hand_flat_arr()      { return g_hand_flat; }
+
 // Set evaluation context before evaluate()
 WASM_EXPORT void set_eval_context(int player, int my_team, int opp_team, int suit, int layerkey) {
     g_player   = player;

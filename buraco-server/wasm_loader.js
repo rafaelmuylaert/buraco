@@ -150,12 +150,11 @@ function _refreshViews() {
     const runBatchPtr = _ex.get_run_score_batch();
     _vRunCandBatch = new Uint8Array(buf, runBatchPtr, 96 + 20 * 11);
 
-    // Card bitmap views for NN_CURRENT input
-    const cardBufPtr = seqBatchPtr + 96 + 20 * 33 + 96 + 20 * 11;
-    _wasmOwnTable = new Uint8Array(buf, cardBufPtr, 54);
-    _wasmOppTable = new Uint8Array(buf, cardBufPtr + 54, 54);
-    _wasmDiscardFlat = new Uint8Array(buf, cardBufPtr + 108, 54);
-    _wasmHandFlat = new Uint8Array(buf, cardBufPtr + 162, 54);
+    // Card bitmap views for NN_CURRENT input — using proper exports
+    _wasmOwnTable    = new Uint8Array(buf, _ex.get_own_table(), 54);
+    _wasmOppTable    = new Uint8Array(buf, _ex.get_opp_table(), 54);
+    _wasmDiscardFlat = new Uint8Array(buf, _ex.get_discard_flat_arr(), 54);
+    _wasmHandFlat    = new Uint8Array(buf, _ex.get_hand_flat_arr(), 54);
 }
 
 export function getTeam1DnaOffset() { return _team1DnaOffset; }
@@ -183,6 +182,7 @@ export async function initWasm() {
                           'evaluate', 'configure', 'set_eval_context', 'set_num_inputs',
                           'get_hand_total', 'cpp_plan_turn',
                           'get_seq_score_batch', 'get_run_score_batch',
+                        'get_own_table', 'get_opp_table', 'get_discard_flat_arr', 'get_hand_flat_arr',
                           // timing compat
                           'get_t_fsc', 'get_t_build_h1', 'get_t_fwd', 'get_t_phase0',
                           'get_t_phase1', 'get_t_phase2', 'get_n_fsc', 'get_n_fwd',
@@ -254,11 +254,33 @@ export function runCurrentState(G, player, myTeam, oppTeam) {
         for (let i = 0; i < 24; i++) _vStateVecWasm[i] = state[i];
     }
 
-    if (_diagnosticLog) {
+    // Always log state vector and first CURRENT weights
+    {
         const hand = G.cards?.[player] || G.cards?.[player.toString()] || [];
+        let handStr = '';
+        if (hand && hand.length > 0) {
+            const cards = [];
+            for (let i = 0; i < 54; i++) { if (hand[i]) cards.push(_fmtCard(i)); }
+            handStr = cards.join(',');
+        }
         const td = G.discardPile?.length > 0 ? _fmtCard(G.discardPile[G.discardPile.length - 1]) : 'empty';
-        console.log(`\n=== TURN: player ${player} | hand=[${_fmtHand(hand)}] | discard_top=${td} ===`);
-        console.log(`STATE VECTOR (24 logits): ${state.map(v => v.toFixed(4)).join(', ')}`);
+        const pd = G.discardPile?.length || 0;
+        const dl = G.deck?.length || 0;
+        console.log(`[RCS] p${player} team=${myTeam} opp=${oppTeam} hand=[${handStr}] td=${td} deck=${dl} discPile=${pd}`);
+        console.log(`[RCS] state: ${state.map(v => v.toFixed(4)).join(', ')}`);
+        if (_vWeights) {
+            const base = _activeTeamBase || 0;
+            const curInSz = AI_CONFIG.NN_CURRENT_INPUTS; // 417
+            console.log(`[RCS] curW[0..3]: ${_vWeights.slice(base, base+4).map(v => v.toFixed(6)).join(', ')}`);
+            console.log(`[RCS] curB[0..3]: ${_vWeights.slice(base+curInSz*48, base+curInSz*48+4).map(v => v.toFixed(6)).join(', ')}`);
+            // Check all bias values sign
+            let negCnt = 0, posCnt = 0, zeroCnt = 0;
+            for (let o = 0; o < 48; o++) {
+                const b = _vWeights[base + curInSz*48 + o];
+                if (b < 0) negCnt++; else if (b > 0) posCnt++; else zeroCnt++;
+            }
+            console.log(`[RCS] h1 bias signs: neg=${negCnt} pos=${posCnt} zero=${zeroCnt}`);
+        }
     }
 
     return state;
@@ -611,6 +633,18 @@ function _dumpWasmState(label) {
             if (!hasBad) console.log(`  state[0..23]: ${_vStateVec.map(v => v.toFixed(4)).join(', ')}`);
         }
 
+        // Check CURRENT net weights (offset 0)
+        const curInSz = AI_CONFIG.NN_CURRENT_INPUTS;
+        if (_vWeights && base + curInSz * 48 + 48 < totalWeights) {
+            console.log(`  curW[0..2]: ${_vWeights.slice(base, base+3).map(v => v.toFixed(6)).join(', ')}`);
+            let negB = 0, posB = 0;
+            for (let o = 0; o < 48; o++) {
+                const b = _vWeights[base + curInSz * 48 + o];
+                if (b < 0) negB++; else if (b > 0) posB++;
+            }
+            console.log(`  curB signs: neg=${negB} pos=${posB}`);
+        }
+
         // Check weights at discard net region
         const discBase = base + discWoff;
         if (_vWeights && discBase + 200 < totalWeights) {
@@ -802,7 +836,7 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
                         const meld = G.table?.[myTeamIdx]?.[0]?.[c.targetSuit]?.[c.targetSlot];
                         extra = ` appendTo=[${_fmtMeldArr(meld, c.targetSuit)}]`;
                     }
-                    console.log(`  seq cand ${i}:${extra} cards=${_fmtCounts(c.cardCounts)} score=${seqScores[i].toFixed(4)}`);
+                    console.log(`  seq cand ${i}:${extra} cards=${_fmtCounts(c.cardCounts)} score=${(seqScores[i] ?? -999).toFixed(4)}`);
                 }
                 for (let i = 0; i < runCands.length; i++) {
                     const c = runCands[i];
@@ -811,7 +845,7 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
                         const meld = G.table?.[myTeamIdx]?.[1]?.[c.targetSlot];
                         extra = ` appendTo=[${_fmtMeldArr(meld, 0)}]`;
                     }
-                    console.log(`  run cand ${i}:${extra} cards=${_fmtCounts(c.cardCounts)} score=${runScores[i].toFixed(4)}`);
+                    console.log(`  run cand ${i}:${extra} cards=${_fmtCounts(c.cardCounts)} score=${(runScores[i] ?? -999).toFixed(4)}`);
                 }
                 if (bestCand) {
                     const tgtStr = pickupTarget.type === 'new' ? 'new meld' : `append->[s=${pickupTarget.meldTarget?.suit ?? ''},i=${pickupTarget.meldTarget?.index ?? '?'}]`;
