@@ -497,10 +497,23 @@ export function scoreSeqCandidates(candidates) {
         for (let i = 0; i < 33; i++) _vSeqCandBatch[base + i] = enc[i];
     }
 
-    _ex.score_seq_candidates(ncands);
+    _dumpWasmState('pre_seq');
+
+    try {
+        _ex.score_seq_candidates(ncands);
+    } catch (e) {
+        console.log(`[WASM_CRASH] score_seq_candidates crashed: ${e.message}`);
+        console.log(`[WASM_CRASH] ncands=${ncands}`);
+        _dumpWasmState('crash_seq');
+        return [];
+    }
 
     const scores = [];
     for (let i = 0; i < ncands; i++) scores.push(_vOut[i]);
+
+    if (_diagnosticLog) {
+        console.log(`[WASM_DBG] seq scores: ${scores.map(v => v.toFixed(4)).join(', ')}`);
+    }
     return scores;
 }
 
@@ -531,11 +544,94 @@ export function scoreRunCandidates(candidates) {
         for (let i = 0; i < 11; i++) _vRunCandBatch[base + i] = enc[i];
     }
 
-    _ex.score_run_candidates(ncands);
+    _dumpWasmState('pre_run');
+
+    try {
+        _ex.score_run_candidates(ncands);
+    } catch (e) {
+        console.log(`[WASM_CRASH] score_run_candidates crashed: ${e.message}`);
+        console.log(`[WASM_CRASH] ncands=${ncands}`);
+        _dumpWasmState('crash_run');
+        return [];
+    }
 
     const scores = [];
     for (let i = 0; i < ncands; i++) scores.push(_vOut[i]);
+
+    if (_diagnosticLog) {
+        console.log(`[WASM_DBG] run scores: ${scores.map(v => v.toFixed(4)).join(', ')}`);
+    }
     return scores;
+}
+
+function _dumpWasmState(label) {
+    try {
+        const totalWeights = (_vWeights?.length || 0);
+        const out0 = _vOut ? _vOut[0] : NaN;
+        const out1 = _vOut ? _vOut[1] : NaN;
+
+        // Read weight values at relevant offsets if available
+        const seqWoff = AI_CONFIG.DNA_CURRENT;
+        const runWoff = seqWoff + AI_CONFIG.DNA_SEQ;
+        const discWoff = runWoff + AI_CONFIG.DNA_RUN;
+        const base = _activeTeamBase || 0;
+
+        const wSeq = _vWeights?.[base + seqWoff] ?? NaN;
+        const wRun = _vWeights?.[base + runWoff] ?? NaN;
+        const wDisc = _vWeights?.[base + discWoff] ?? NaN;
+        const wDiscEnd = _vWeights?.[base + discWoff + 10900] ?? NaN; // ~end of discard weights
+
+        // Check WASM memory pages
+        let pages = -1;
+        try { pages = _mem?.buffer?.byteLength ? _mem.buffer.byteLength >> 16 : -1; } catch (ee) {}
+
+        // Check g_out / _vStateVecWasm range
+        const stateWasm0 = _vStateVecWasm?.[0] ?? NaN;
+        const stateWasm23 = _vStateVecWasm?.[23] ?? NaN;
+
+        let stateStr = '';
+        if (_vStateVec) {
+            stateStr = _vStateVec.map((v,i) => {
+                const s = v.toFixed(2);
+                return isNaN(v) || Math.abs(v) > 1e6 ? `[${i}=${s}!]` : null;
+            }).filter(Boolean).join(', ');
+        }
+
+        console.log(`[WASM_DBG:${label}] teamBase=${base} pages=${pages} totalWeights=${totalWeights} w[seq]=${wSeq} w[run]=${wRun} w[disc]=${wDisc} w[disc+10900]=${wDiscEnd} out[0]=${out0} out[1]=${out1} stateWasm[0]=${stateWasm0} stateWasm[23]=${stateWasm23}${stateStr ? ' bad_state: ' + stateStr : ''}`);
+
+        // Check for NaN/inf in state vector
+        if (_vStateVec) {
+            let hasBad = false;
+            for (let i = 0; i < 24; i++) {
+                if (isNaN(_vStateVec[i]) || !isFinite(_vStateVec[i])) {
+                    console.log(`  STATE[${i}] = ${_vStateVec[i]} (BAD!)`);
+                    hasBad = true;
+                }
+            }
+            if (!hasBad) console.log(`  state[0..23]: ${_vStateVec.map(v => v.toFixed(4)).join(', ')}`);
+        }
+
+        // Check weights at discard net region
+        const discBase = base + discWoff;
+        if (_vWeights && discBase + 200 < totalWeights) {
+            let wNan = false;
+            for (let i = 0; i < 200; i++) {
+                if (isNaN(_vWeights[discBase + i]) || !isFinite(_vWeights[discBase + i])) {
+                    console.log(`  WEIGHT[disc+${i}] = ${_vWeights[discBase + i]} (BAD!)`);
+                    wNan = true;
+                }
+            }
+            if (!wNan) console.log(`  weights[disc+0..4]: ${_vWeights.slice(discBase, discBase + 5).map(v => v.toFixed(6)).join(', ')}`);
+
+            // Check WEIGHT END: last weight at discBase + DNA_DISCARD - 1
+            const discSz = AI_CONFIG.DNA_DISCARD;
+            const wLast = _vWeights[discBase + discSz - 1];
+            const wPast = _vWeights[discBase + discSz]; // first byte after discard weights
+            console.log(`  weights[disc+${discSz-1}]=${wLast} weights[disc+${discSz}]=${wPast} (boundary check)`);
+        }
+    } catch (e) {
+        console.log(`[WASM_DBG:${label}] dump error: ${e.message}`);
+    }
 }
 
 export function scoreDiscards() {
@@ -546,12 +642,25 @@ export function scoreDiscards() {
         for (let i = 0; i < 24; i++) _vStateVecWasm[i] = _vStateVec[i];
     }
 
+    _dumpWasmState('pre_discard');
+
     const C = AI_CONFIG;
     const discardWoff = C.DNA_CURRENT + C.DNA_SEQ + C.DNA_RUN;
-    _ex.score_discard(discardWoff);
+    try {
+        _ex.score_discard(discardWoff);
+    } catch (e) {
+        console.log(`[WASM_CRASH] score_discard crashed: ${e.message}`);
+        console.log(`[WASM_CRASH] stack: ${e.stack}`);
+        _dumpWasmState('crash_discard');
+        return null;
+    }
 
     const logits = new Float32Array(54);
     for (let i = 0; i < 54; i++) logits[i] = _vOut[i];
+
+    if (_diagnosticLog) {
+        console.log(`[WASM_DBG] discard logits: ${logits.map((v,i) => v.toFixed(4)).join(', ')}`);
+    }
     return logits;
 }
 
