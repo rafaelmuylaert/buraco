@@ -1099,6 +1099,7 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
                     cardCounts: cand.cardCounts,
                     parsedMeld: parsed,
                     targetSlot: slot,
+                    existingRunner: existing,
                 });
             }
         }
@@ -1136,6 +1137,7 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
                         parsedMeld: parsed,
                         targetSuit: suit,
                         targetSlot: slot,
+                        existingMeld: melds[slot],
                     });
                 }
             }

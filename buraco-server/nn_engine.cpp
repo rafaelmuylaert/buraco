@@ -347,12 +347,8 @@ static void build_h1_seq(float* h1, int h1sz, const float* W, int inSz) {
     for (int o = 0; o < h1sz; o++) h1[o] = 0.0f;
     int off = 0;
 
-    // offset 0-23:   state vector (24 float32, stored as 255-byte-rounded uint8)
     for (int i = 0; i < 24; i++) {
-        uint8_t v = (uint8_t)((g_score_seq_state[i] * 255.0f) + 0.5f);
-        if (!v) continue;
-        float fv = (float)v * g_inp_scale;
-        for (int o = 0; o < h1sz; o++) h1[o] += fv * W[o * inSz + off + i];
+        for (int o = 0; o < h1sz; o++) h1[o] += g_score_seq_state[i] * W[o * inSz + off + i];
     }
     off += 24;
 
@@ -377,12 +373,8 @@ static void build_h1_run(float* h1, int h1sz, const float* W, int inSz) {
     for (int o = 0; o < h1sz; o++) h1[o] = 0.0f;
     int off = 0;
 
-    // offset 0-23:   state vector (24 float32, stored as 255-byte-rounded uint8)
     for (int i = 0; i < 24; i++) {
-        uint8_t v = (uint8_t)((g_score_run_state[i] * 255.0f) + 0.5f);
-        if (!v) continue;
-        float fv = (float)v * g_inp_scale;
-        for (int o = 0; o < h1sz; o++) h1[o] += fv * W[o * inSz + off + i];
+        for (int o = 0; o < h1sz; o++) h1[o] += g_score_run_state[i] * W[o * inSz + off + i];
     }
     off += 24;
 
@@ -406,12 +398,8 @@ static void build_h1_run(float* h1, int h1sz, const float* W, int inSz) {
 static void build_h1_discard(float* h1, int h1sz, const float* W, int inSz) {
     for (int o = 0; o < h1sz; o++) h1[o] = 0.0f;
     int off = 0;
-    // offset 0-23:   state vector (24 float32, stored as 255-byte-rounded uint8)
     for (int i = 0; i < 24; i++) {
-        uint8_t v = (uint8_t)((g_current_state[i] * 255.0f) + 0.5f);
-        if (!v) continue;
-        float fv = (float)v * g_inp_scale;
-        for (int o = 0; o < h1sz; o++) h1[o] += fv * W[o * inSz + off + i];
+        for (int o = 0; o < h1sz; o++) h1[o] += g_current_state[i] * W[o * inSz + off + i];
     }
     // Total: 24
 }
@@ -634,11 +622,13 @@ WASM_EXPORT void set_num_seq_cands(int n) { g_num_seq_cands = n; }
 WASM_EXPORT void set_num_run_cands(int n) { g_num_run_cands = n; }
 
 // Weight buffer
-WASM_EXPORT float* get_weights()         { return g_weights; }
-WASM_EXPORT float* get_out()             { return g_out; }
-WASM_EXPORT int*   get_layer_sizes_buf() { return g_layer_sizes_buf; }
-WASM_EXPORT int    get_max_weights()     { return MAX_WEIGHTS; }
-WASM_EXPORT void   set_inp_scale(float s){ g_inp_scale = s; }
+WASM_EXPORT float*   get_weights()            { return g_weights; }
+WASM_EXPORT float*   get_out()                { return g_out; }
+WASM_EXPORT int*     get_layer_sizes_buf()    { return g_layer_sizes_buf; }
+WASM_EXPORT int      get_max_weights()        { return MAX_WEIGHTS; }
+WASM_EXPORT void     set_inp_scale(float s)   { g_inp_scale = s; }
+WASM_EXPORT uint8_t* get_seq_score_batch()    { return g_score_seq_batch; }
+WASM_EXPORT uint8_t* get_run_score_batch()    { return g_score_run_batch; }
 
 // Set evaluation context before evaluate()
 WASM_EXPORT void set_eval_context(int player, int my_team, int opp_team, int suit, int layerkey) {
@@ -818,6 +808,7 @@ WASM_EXPORT void score_seq_candidates(int num_cands) {
     use_net(g_seq_layers, g_seq_nlayers, g_seq_woff);
     g_layerkey = 1;  // SEQ mode
 
+    float scores[MAX_OUTPUT_SIZE] = {0};
     for (int c = 0; c < num_cands; c++) {
         for (int o = 0; o < MAX_OUTPUT_SIZE; o++) g_out[o] = 0.0f;
 
@@ -831,9 +822,11 @@ WASM_EXPORT void score_seq_candidates(int num_cands) {
         memcpy(g_seq_existing_meld, g_score_seq_batch + base + 17, 16);
 
         forward_pass_seq(g_out);
-        // NN_SEQ outputs 1 score, store at g_out[c] for JS to read
-        g_out[c] = g_out[0];
+        // NN_SEQ outputs 1 score, store in temp array
+        scores[c] = g_out[0];
     }
+    // Write all scores back to g_out so JS can read them at _vOut[0..num_cands-1]
+    for (int c = 0; c < num_cands; c++) g_out[c] = scores[c];
 }
 
 // Score runner candidates from shared memory batch
@@ -845,6 +838,7 @@ WASM_EXPORT void score_run_candidates(int num_cands) {
     g_layerkey = 2;  // RUN mode
 
     int outSz = g_layer_sizes[g_run_nlayers - 1];
+    float scores[MAX_OUTPUT_SIZE] = {0};
 
     for (int c = 0; c < num_cands; c++) {
         for (int o = 0; o < outSz; o++) g_out[o] = 0.0f;
@@ -859,7 +853,11 @@ WASM_EXPORT void score_run_candidates(int num_cands) {
         memcpy(g_run_existing_meld, g_score_run_batch + base + 6, 5);
 
         forward_pass_run(g_out);
+        // NN_RUN outputs 1 score, store in temp array
+        scores[c] = g_out[0];
     }
+    // Write all scores back to g_out so JS can read them at _vOut[0..num_cands-1]
+    for (int c = 0; c < num_cands; c++) g_out[c] = scores[c];
 }
 
 // Score discards using state vector

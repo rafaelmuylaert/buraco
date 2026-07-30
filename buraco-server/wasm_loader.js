@@ -143,15 +143,15 @@ function _refreshViews() {
 
     // Shared memory batches for candidate scoring
     // Seq batch: state(96 bytes) + 20 candidates * 33 bytes = 756 bytes
-    const seqBatchPtr = _ex.get_max_weights() + 512; // offset past weights
+    const seqBatchPtr = _ex.get_seq_score_batch();
     _vSeqCandBatch = new Uint8Array(buf, seqBatchPtr, 96 + 20 * 33);
 
     // Run batch: state(96 bytes) + 20 candidates * 11 bytes = 316 bytes
-    const runBatchPtr = seqBatchPtr + 96 + 20 * 33;
+    const runBatchPtr = _ex.get_run_score_batch();
     _vRunCandBatch = new Uint8Array(buf, runBatchPtr, 96 + 20 * 11);
 
     // Card bitmap views for NN_CURRENT input
-    const cardBufPtr = runBatchPtr + 96 + 20 * 11;
+    const cardBufPtr = seqBatchPtr + 96 + 20 * 33 + 96 + 20 * 11;
     _wasmOwnTable = new Uint8Array(buf, cardBufPtr, 54);
     _wasmOppTable = new Uint8Array(buf, cardBufPtr + 54, 54);
     _wasmDiscardFlat = new Uint8Array(buf, cardBufPtr + 108, 54);
@@ -182,6 +182,7 @@ export async function initWasm() {
                           'set_inp_scale', 'clear_seq_cands_buf', 'clear_run_cands_buf',
                           'evaluate', 'configure', 'set_eval_context', 'set_num_inputs',
                           'get_hand_total', 'cpp_plan_turn',
+                          'get_seq_score_batch', 'get_run_score_batch',
                           // timing compat
                           'get_t_fsc', 'get_t_build_h1', 'get_t_fwd', 'get_t_phase0',
                           'get_t_phase1', 'get_t_phase2', 'get_n_fsc', 'get_n_fwd',
@@ -439,9 +440,9 @@ function _encodeSeqCandidate(cand) {
 
     const newMeld = cand.parsedMeld;
     if (newMeld && newMeld.length === 16) {
-        for (let i = 0; i < 14; i++) encoded[1 + i] = newMeld[i] ? 255 : 0;
-        encoded[1 + 14] = newMeld[14] ? 255 : 0;
-        encoded[1 + 15] = newMeld[15] ? 255 : 0;
+        const em = cand.existingMeld;
+        for (let i = 0; i < 16; i++)
+            encoded[1 + i] = (newMeld[i] > (em?.[i] || 0)) ? 255 : 0;
     }
     if (cand.existingMeld && cand.existingMeld.length === 16) {
         const off = 1 + 16;
@@ -457,10 +458,12 @@ function _encodeRunCandidate(cand) {
     const runnerMeld = cand.parsedMeld;
     if (runnerMeld && runnerMeld.length === 6) {
         encoded[0] = Math.round(runnerMeld[0] / 13 * 255);
-        for (let i = 0; i < 4; i++) encoded[1 + i] = Math.round((runnerMeld[i + 1] || 0) / 2 * 255);
-        if (cand.existingMeld && cand.existingMeld.length === 6) {
+        const er = cand.existingRunner;
+        for (let i = 0; i < 4; i++)
+            encoded[1 + i] = (runnerMeld[i + 1] > (er?.[i + 1] || 0)) ? 255 : 0;
+        if (er && er.length === 6) {
             const off = 1 + 5;
-            for (let i = 0; i < 4; i++) encoded[off + i] = Math.round((cand.existingMeld[i + 1] || 0) / 2 * 255);
+            for (let i = 0; i < 4; i++) encoded[off + i] = Math.round((er[i + 1] || 0) / 2 * 255);
         }
     }
     return encoded;
