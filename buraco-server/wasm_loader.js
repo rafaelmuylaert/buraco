@@ -254,8 +254,7 @@ export function runCurrentState(G, player, myTeam, oppTeam) {
         for (let i = 0; i < 24; i++) _vStateVecWasm[i] = state[i];
     }
 
-    // Always log state vector and first CURRENT weights
-    {
+    if (_diagnosticLog) {
         const hand = G.cards?.[player] || G.cards?.[player.toString()] || [];
         let handStr = '';
         if (hand && hand.length > 0) {
@@ -270,10 +269,9 @@ export function runCurrentState(G, player, myTeam, oppTeam) {
         console.log(`[RCS] state: ${state.map(v => v.toFixed(4)).join(', ')}`);
         if (_vWeights) {
             const base = _activeTeamBase || 0;
-            const curInSz = AI_CONFIG.NN_CURRENT_INPUTS; // 417
+            const curInSz = AI_CONFIG.NN_CURRENT_INPUTS;
             console.log(`[RCS] curW[0..3]: ${_vWeights.slice(base, base+4).map(v => v.toFixed(6)).join(', ')}`);
             console.log(`[RCS] curB[0..3]: ${_vWeights.slice(base+curInSz*48, base+curInSz*48+4).map(v => v.toFixed(6)).join(', ')}`);
-            // Check all bias values sign
             let negCnt = 0, posCnt = 0, zeroCnt = 0;
             for (let o = 0; o < 48; o++) {
                 const b = _vWeights[base + curInSz*48 + o];
@@ -587,6 +585,7 @@ export function scoreRunCandidates(candidates) {
 }
 
 function _dumpWasmState(label) {
+    if (!_diagnosticLog && !label.startsWith('crash_')) return;
     try {
         const totalWeights = (_vWeights?.length || 0);
         const out0 = _vOut ? _vOut[0] : NaN;
