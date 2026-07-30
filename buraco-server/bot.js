@@ -27,7 +27,7 @@ import { getLastDbgLog, initWasm, loadMatchDNA, isWasmReady, runTurn,
          setDiagnosticLog } from './wasm_loader.js';
 setDbgLogFn(getLastDbgLog);
 await initWasm();
-setDiagnosticLog(true);
+setDiagnosticLog(1);
 
 const SERVER_URL = 'http://buraco-server:8000';
 const activeBots = {};

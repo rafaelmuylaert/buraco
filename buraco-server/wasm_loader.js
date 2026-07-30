@@ -62,8 +62,8 @@ let _activePlayer   = 0;
 let _activeMyTeam   = 0;
 let _activeOppTeam  = 1;
 
-let _diagnosticLog = false;
-export function setDiagnosticLog(flag) { _diagnosticLog = !!flag; }
+let _diagnosticLog = 0;  // 0=silent, 1=basic (candidates,scores,state), 2=verbose (weights,memory)
+export function setDiagnosticLog(level) { _diagnosticLog = level; }
 export function isDiagnosticLog() { return _diagnosticLog; }
 const _suitChars = ['','♠','♥','♣','♦','★'];
 const _rankChars = ['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
@@ -254,7 +254,7 @@ export function runCurrentState(G, player, myTeam, oppTeam) {
         for (let i = 0; i < 24; i++) _vStateVecWasm[i] = state[i];
     }
 
-    if (_diagnosticLog) {
+    if (_diagnosticLog >= 1) {
         const hand = G.cards?.[player] || G.cards?.[player.toString()] || [];
         let handStr = '';
         if (hand && hand.length > 0) {
@@ -267,18 +267,18 @@ export function runCurrentState(G, player, myTeam, oppTeam) {
         const dl = G.deck?.length || 0;
         console.log(`[RCS] p${player} team=${myTeam} opp=${oppTeam} hand=[${handStr}] td=${td} deck=${dl} discPile=${pd}`);
         console.log(`[RCS] state: ${state.map(v => v.toFixed(4)).join(', ')}`);
-        if (_vWeights) {
-            const base = _activeTeamBase || 0;
-            const curInSz = AI_CONFIG.NN_CURRENT_INPUTS;
-            console.log(`[RCS] curW[0..3]: ${_vWeights.slice(base, base+4).map(v => v.toFixed(6)).join(', ')}`);
-            console.log(`[RCS] curB[0..3]: ${_vWeights.slice(base+curInSz*48, base+curInSz*48+4).map(v => v.toFixed(6)).join(', ')}`);
-            let negCnt = 0, posCnt = 0, zeroCnt = 0;
-            for (let o = 0; o < 48; o++) {
-                const b = _vWeights[base + curInSz*48 + o];
-                if (b < 0) negCnt++; else if (b > 0) posCnt++; else zeroCnt++;
-            }
-            console.log(`[RCS] h1 bias signs: neg=${negCnt} pos=${posCnt} zero=${zeroCnt}`);
+    }
+    if (_diagnosticLog >= 2) {
+        const base = _activeTeamBase || 0;
+        const curInSz = AI_CONFIG.NN_CURRENT_INPUTS;
+        console.log(`[RCS] curW[0..3]: ${_vWeights.slice(base, base+4).map(v => v.toFixed(6)).join(', ')}`);
+        console.log(`[RCS] curB[0..3]: ${_vWeights.slice(base+curInSz*48, base+curInSz*48+4).map(v => v.toFixed(6)).join(', ')}`);
+        let negCnt = 0, posCnt = 0, zeroCnt = 0;
+        for (let o = 0; o < 48; o++) {
+            const b = _vWeights[base + curInSz*48 + o];
+            if (b < 0) negCnt++; else if (b > 0) posCnt++; else zeroCnt++;
         }
+        console.log(`[RCS] h1 bias signs: neg=${negCnt} pos=${posCnt} zero=${zeroCnt}`);
     }
 
     return state;
@@ -531,7 +531,7 @@ export function scoreSeqCandidates(candidates) {
     const scores = [];
     for (let i = 0; i < ncands; i++) scores.push(_vOut[i]);
 
-    if (_diagnosticLog) {
+    if (_diagnosticLog >= 1) {
         console.log(`[WASM_DBG] seq scores: ${scores.map(v => v.toFixed(4)).join(', ')}`);
     }
     return scores;
@@ -578,14 +578,14 @@ export function scoreRunCandidates(candidates) {
     const scores = [];
     for (let i = 0; i < ncands; i++) scores.push(_vOut[i]);
 
-    if (_diagnosticLog) {
+    if (_diagnosticLog >= 1) {
         console.log(`[WASM_DBG] run scores: ${scores.map(v => v.toFixed(4)).join(', ')}`);
     }
     return scores;
 }
 
 function _dumpWasmState(label) {
-    if (!_diagnosticLog && !label.startsWith('crash_')) return;
+    if (_diagnosticLog < 2 && !label.startsWith('crash_')) return;
     try {
         const totalWeights = (_vWeights?.length || 0);
         const out0 = _vOut ? _vOut[0] : NaN;
@@ -691,7 +691,7 @@ export function scoreDiscards() {
     const logits = new Float32Array(54);
     for (let i = 0; i < 54; i++) logits[i] = _vOut[i];
 
-    if (_diagnosticLog) {
+    if (_diagnosticLog >= 1) {
         console.log(`[WASM_DBG] discard logits: ${logits.map((v,i) => v.toFixed(4)).join(', ')}`);
     }
     return logits;
@@ -826,7 +826,7 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
                 });
             }
 
-            if (_diagnosticLog) {
+            if (_diagnosticLog >= 1) {
                 console.log('--- PICKUP CANDIDATES (Phase A) ---');
                 for (let i = 0; i < seqCands.length; i++) {
                     const c = seqCands[i];
@@ -908,7 +908,7 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
 
     meldMoves.sort((a, b) => b.score - a.score);
 
-    if (_diagnosticLog) {
+    if (_diagnosticLog >= 1) {
         console.log('--- MELD CANDIDATES (Phase B, sorted) ---');
         for (const m of meldMoves) {
             const typeStr = m.moveType === 2 ? (m.targetType === 0 ? 'NEW MELD' : 'APPEND') : m.moveType === 3 ? 'APPEND' : 'NEW RUNNER';
@@ -952,7 +952,7 @@ export function buildDiscardMoveList(G, player) {
 
     moves.sort((a, b) => b.score - a.score);
 
-    if (_diagnosticLog) {
+    if (_diagnosticLog >= 1) {
         console.log('--- DISCARD CANDIDATES (sorted) ---');
         for (const m of moves)
             console.log(`  ${_fmtCard(m.discardCard)} score=${m.score.toFixed(4)}`);

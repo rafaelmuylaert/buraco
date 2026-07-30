@@ -87,10 +87,10 @@ function runMatch(genomes, rules, fixedDeck) {
 
     if (!_diagnosticDone) {
         _diagnosticDone = true;
-        setDiagnosticLog(true);
+        setDiagnosticLog(1);
         console.log('\n========== DIAGNOSTIC MATCH ==========');
     } else {
-        setDiagnosticLog(false);
+        setDiagnosticLog(0);
     }
 
     const S = BuracoGame.setup({ random: fakeRandom, ctx: { numPlayers } }, { ...rules, numPlayers });
