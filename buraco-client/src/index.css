@@ -70,3 +70,13 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+.app-view-root {
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .app-view-root {
+    padding: 24px 12px !important;
+  }
+}

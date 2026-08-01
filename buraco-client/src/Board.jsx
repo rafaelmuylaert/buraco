@@ -99,6 +99,7 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
   const [gameOverMinimized, setGameOverMinimized] = useState(false);
   const [popupPos, setPopupPos] = useState({ x: null, y: null });
   const [dragging, setDragging] = useState(false);
+  const [removePopup, setRemovePopup] = useState(null);
   const dragOffset = React.useRef({ x: 0, y: 0 });
 
   const isMyTurn = ctx.currentPlayer === playerID;
@@ -449,7 +450,6 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
 
 
   const handleRemovePlayer = async (seatID, seatName) => {
-    if (!window.confirm(`Remover ${seatName} do assento ${seatID}?`)) return;
     if (!apiAddress) return;
     try {
       const res = await fetch(`${apiAddress}/api/admin/kick`, {
@@ -653,12 +653,13 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                 overflow: 'hidden', minWidth: 0
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 0 }}>
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>{isTurn ? '» ' : ''}{name}</span>
+                  <span
+                    onClick={showRemove ? () => setRemovePopup({ seatID: p, seatName: name }) : undefined}
+                    title={showRemove ? `Clique para remover ${name} deste assento` : undefined}
+                    style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0, cursor: showRemove ? 'pointer' : 'default', color: showRemove ? '#ff9900' : undefined, textDecoration: showRemove ? 'underline' : 'none' }}
+                  >{isTurn ? '» ' : ''}{name}</span>
                   <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.handSizes[p] ?? 0}</span>
                 </div>
-                {showRemove && (
-                  <button onClick={() => handleRemovePlayer(p, name)} title={`Remover ${name} deste assento para liberar`} style={{ marginTop: '3px', background: '#ff9900', color: '#000', border: 'none', borderRadius: '3px', padding: '1px 6px', fontSize: '0.85em', fontWeight: 'bold', cursor: 'pointer', alignSelf: 'flex-start' }}>Remover</button>
-                )}
               </div>
             );
           })}
@@ -714,6 +715,21 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       </div>
 
       {gameOverPopup}
+
+      {removePopup && (
+        <div onClick={() => setRemovePopup(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#1b4332', border: '2px solid #ff9900', borderRadius: '12px', padding: '24px', maxWidth: '340px', width: '100%', textAlign: 'center', boxShadow: '0 8px 30px rgba(0,0,0,0.5)' }}>
+            <h3 style={{ margin: '0 0 8px 0', color: '#ffd700' }}>{removePopup.seatName}</h3>
+            <p style={{ color: '#ccc', margin: '0 0 20px 0', fontSize: '0.95em', lineHeight: '1.4' }}>
+              Remover {removePopup.seatName} do assento {removePopup.seatID}? Isso libera a vaga para que possa reentrar de outro computador/browser.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button onClick={() => setRemovePopup(null)} style={{ padding: '8px 18px', background: '#555', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
+              <button onClick={() => { handleRemovePlayer(removePopup.seatID, removePopup.seatName); setRemovePopup(null); }} style={{ padding: '8px 18px', background: '#ff9900', color: '#000', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Remover</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
