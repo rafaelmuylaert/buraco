@@ -678,7 +678,13 @@ const App = () => {
     
     let stats = {};
     t.players.forEach(p => stats[p] = { points: 0, v: 0, e: 0, d: 0 });
-    t.rounds.forEach(r => {
+    const since = t.lastShuffleRound || 0;
+    const showSince = (t.shuffleMode === 'rounds' || t.shuffleMode === 'points') && since > 0;
+    let sinceStats = {};
+    t.players.forEach(p => sinceStats[p] = 0);
+
+    t.rounds.forEach((r, idx) => {
+      const roundNum = idx + 1;
       r.assignments.forEach(a => {
         const matchRecord = history.find(h => h.matchID === a.matchID);
         if (matchRecord) {
@@ -690,12 +696,14 @@ const App = () => {
               stats[p].points += s0;
               if(s0 > s1) stats[p].v += 1; else if(s0 === s1) stats[p].e += 1; else stats[p].d += 1;
             }
+            if (showSince && roundNum >= since && sinceStats[p] !== undefined) sinceStats[p] += s0;
           });
           a.team1.forEach(p => {
             if(stats[p]) {
               stats[p].points += s1;
               if(s1 > s0) stats[p].v += 1; else if(s1 === s0) stats[p].e += 1; else stats[p].d += 1;
             }
+            if (showSince && roundNum >= since && sinceStats[p] !== undefined) sinceStats[p] += s1;
           });
         }
       });
@@ -708,7 +716,13 @@ const App = () => {
     if (t.format === 'rounds' && t.rounds.length >= t.maxRounds) isFinished = true;
     if (t.format === 'playoff' && t.status === 'completed') isFinished = true;
 
-    return { standings: sorted, isFinished };
+    return { standings: sorted, sinceStats, showSince, isFinished };
+  };
+
+  const handleEndTournament = async (tID) => {
+    if (!confirm("Encerrar o torneio agora? A classificação atual será mantida como resultado final e nenhuma nova rodada será gerada.")) return;
+    const updated = tournaments.map(t => t.id === tID ? { ...t, status: 'completed', isGeneratingNext: false } : t);
+    saveTournamentsToAPI(updated);
   };
 
   const handleAdminDeleteTournament = async (tID) => {
@@ -1211,28 +1225,32 @@ const App = () => {
         {activeTournaments.length === 0 ? <div style={{ textAlign: 'center', color: '#aaa', fontSize: '1.5em', marginTop: '20px' }}>Nenhum torneio em andamento. Crie um acima!</div> : null}
         
         {activeTournaments.map(t => {
-          const { standings } = getLeaderboard(t);
+          const { standings, sinceStats, showSince } = getLeaderboard(t);
           const currentRoundMatches = t.rounds.length > 0 ? t.rounds[t.rounds.length - 1].assignments.map(a => a.matchID) : [];
           
           return (
             <div key={t.id} style={{ background: '#1b4332', borderRadius: '15px', border: `2px solid #40916c`, padding: '30px' }}>
-              <div style={{ marginBottom: '20px' }}>
-                <h2 style={{ margin: 0, color: '#ffd700', fontSize: '2em' }}>{t.name}</h2>
-                <div style={{ color: '#aaa', marginTop: '5px' }}>
-                  Formato: {tourneyFormatLabel(t)} | {t.rules.numPlayers}P | Rodada Atual: {t.rounds.length}
-                  {t.type === 'individual' && t.shuffleMode && t.shuffleMode !== 'every-round' ? ` | Duplas: ${tourneyShuffleLabel(t)}` : ''}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+                <div>
+                  <h2 style={{ margin: 0, color: '#ffd700', fontSize: '2em' }}>{t.name}</h2>
+                  <div style={{ color: '#aaa', marginTop: '5px' }}>
+                    Formato: {tourneyFormatLabel(t)} | {t.rules.numPlayers}P | Rodada Atual: {t.rounds.length}
+                    {t.type === 'individual' && t.shuffleMode && t.shuffleMode !== 'every-round' ? ` | Duplas: ${tourneyShuffleLabel(t)}` : ''}
+                  </div>
                 </div>
+                <button onClick={() => handleEndTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>Encerrar</button>
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px' }}>
                 <div style={{ flex: '1 1 300px', background: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '10px' }}>
                   <h3 style={{ color: '#4da6ff', margin: '0 0 15px 0' }}>Classificação</h3>
                   <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                    <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Jogador</th><th>Pts</th><th>V</th><th>E</th><th>D</th></tr></thead>
+                    <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Jogador</th><th>Pts</th>{showSince && <th title="Pontos desde o último sorteio">Pts pós-sorteio</th>}<th>V</th><th>E</th><th>D</th></tr></thead>
                     <tbody>
                       {standings.map(([pName, st]) => (
                         <tr key={pName} style={{ borderBottom: '1px solid #222' }}>
                           <td style={{ padding: '8px 0' }}>{pName}</td><td style={{ fontWeight: 'bold', color: '#ffd700' }}>{st.points}</td>
+                          {showSince && <td style={{ color: '#4da6ff' }}>{sinceStats[pName] ?? 0}</td>}
                           <td>{st.v}</td><td>{st.e}</td><td>{st.d}</td>
                         </tr>
                       ))}
@@ -1300,7 +1318,7 @@ const App = () => {
                       })()}
                     </div>
                     <div style={{ fontSize: '0.9em', color: '#aaa' }}>
-                      Formato: {t.format} <br/> Rodadas Totais: {t.rounds.length}
+                      Formato: {tourneyFormatLabel(t)} <br/> Rodadas Totais: {t.rounds.length}
                     </div>
                   </div>
                 );
