@@ -57,6 +57,20 @@ const SOCKET_PATH = (IS_DIRECT || IS_SUBDOMAIN) ? '/socket.io' : '/buraco/socket
 
 const lobbyClient = new LobbyClient({ server: API_ADDRESS });
 
+const tourneyFormatLabel = (t) => {
+  if (t.format === 'running') return 'CORRIDA (SEM FIM)';
+  if (t.format === 'points') return `PONTOS (Meta: ${t.targetPoints} pts)`;
+  if (t.format === 'rounds') return `RODADAS (Máx: ${t.maxRounds})`;
+  if (t.format === 'playoff') return 'ELIMINATÓRIA (MATA-MATA)';
+  return (t.format || '').toUpperCase();
+};
+
+const tourneyShuffleLabel = (t) => {
+  if (t.shuffleMode === 'rounds') return `A cada ${t.shuffleEvery || 1} partidas`;
+  if (t.shuffleMode === 'points') return `Corrida a ${t.shufflePoints || 0} pts`;
+  return 'Toda partida';
+};
+
 const BuracoClient = Client({ 
   game: BuracoGame, 
   board: BuracoBoard, 
@@ -210,7 +224,8 @@ const App = () => {
   });
 
   const [newTourney, setNewTourney] = useState({ 
-    name: '', type: 'team', format: 'points', targetPoints: 3000, maxRounds: 3, 
+    name: '', type: 'team', format: 'points', targetPoints: 3000, maxRounds: 3,
+    shuffleMode: 'every-round', shuffleEvery: 2, shufflePoints: 1000,
     players: 'Diana, Marcia, Rafa, Monica',
     botName: '',
     rules: { numPlayers: 4, discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true, cardPointValues: { joker: 10, two: 10, ace: 15, high: 10, low: 5 }, meldSizeBonus: false, allowUndo: true }
@@ -491,6 +506,9 @@ const App = () => {
       format: newTourney.format,
       targetPoints: newTourney.targetPoints,
       maxRounds: newTourney.maxRounds,
+      shuffleMode: newTourney.shuffleMode || 'every-round',
+      shuffleEvery: newTourney.shuffleEvery || 1,
+      shufflePoints: newTourney.shufflePoints || 0,
       players: playerList,
       fixedTeams: fTeams.length > 0 ? fTeams : null,
       rules: { ...newTourney.rules, targetBotName }, 
@@ -584,17 +602,53 @@ const App = () => {
         assignmentsInfo.push({ team0: t0, team1: t1, map: { '0': t0[0], '1': t1[0], '2': t0[1], '3': t1[1] } });
       }
     } else {
-      let shuffled = eligiblePlayers.sort(() => Math.random() - 0.5);
-      if (t.rules.numPlayers === 4) {
-        for (let i = 0; i < shuffled.length; i += 4) {
-          const t0 = [shuffled[i], shuffled[i+2]]; const t1 = [shuffled[i+1], shuffled[i+3]];
-          assignmentsInfo.push({ team0: t0, team1: t1, map: { '0': t0[0], '1': t1[0], '2': t0[1], '3': t1[1] } });
+      const shuffleMode = t.shuffleMode || 'every-round';
+      let shouldShuffle = true;
+      if (t.rounds.length > 0) {
+        if (shuffleMode === 'rounds') {
+          shouldShuffle = (t.rounds.length % Math.max(1, t.shuffleEvery || 1)) === 0;
+        } else if (shuffleMode === 'points') {
+          const since = t.lastShuffleRound || 0;
+          let pts = {};
+          t.players.forEach(p => pts[p] = 0);
+          t.rounds.forEach((r, idx) => {
+            const roundNum = idx + 1;
+            if (roundNum < since) return;
+            r.assignments.forEach(a => {
+              const rec = history.find(h => h.matchID === a.matchID);
+              if (!rec) return;
+              const s0 = getScoreTotal(rec.scores[0]);
+              const s1 = getScoreTotal(rec.scores[1]);
+              a.team0.forEach(p => { if (pts[p] !== undefined) pts[p] += s0; });
+              a.team1.forEach(p => { if (pts[p] !== undefined) pts[p] += s1; });
+            });
+          });
+          shouldShuffle = Math.max(0, ...Object.values(pts)) >= Math.max(0, t.shufflePoints || 0);
         }
+      }
+
+      if (shouldShuffle) {
+        let shuffled = eligiblePlayers.sort(() => Math.random() - 0.5);
+        if (t.rules.numPlayers === 4) {
+          for (let i = 0; i < shuffled.length; i += 4) {
+            const t0 = [shuffled[i], shuffled[i+2]]; const t1 = [shuffled[i+1], shuffled[i+3]];
+            assignmentsInfo.push({ team0: t0, team1: t1, map: { '0': t0[0], '1': t1[0], '2': t0[1], '3': t1[1] } });
+          }
+        } else {
+          for (let i = 0; i < shuffled.length; i += 2) {
+            const t0 = [shuffled[i]]; const t1 = [shuffled[i+1]];
+            assignmentsInfo.push({ team0: t0, team1: t1, map: { '0': t0[0], '1': t1[0] } });
+          }
+        }
+        t.lastShuffleRound = t.rounds.length + 1;
       } else {
-        for (let i = 0; i < shuffled.length; i += 2) {
-          const t0 = [shuffled[i]]; const t1 = [shuffled[i+1]];
-          assignmentsInfo.push({ team0: t0, team1: t1, map: { '0': t0[0], '1': t1[0] } });
-        }
+        const prevRound = t.rounds[t.rounds.length - 1];
+        assignmentsInfo = prevRound.assignments.map(a => {
+          const map = a.team0.length === 2
+            ? { '0': a.team0[0], '1': a.team1[0], '2': a.team0[1], '3': a.team1[1] }
+            : { '0': a.team0[0], '1': a.team1[0] };
+          return { team0: a.team0, team1: a.team1, map };
+        });
       }
     }
 
@@ -649,6 +703,7 @@ const App = () => {
 
     let isFinished = false;
     const sorted = Object.entries(stats).sort((a, b) => b[1].points - a[1].points);
+    if (t.format === 'running') isFinished = false;
     if (t.format === 'points' && sorted.length > 0 && sorted[0][1].points >= t.targetPoints) isFinished = true;
     if (t.format === 'rounds' && t.rounds.length >= t.maxRounds) isFinished = true;
     if (t.format === 'playoff' && t.status === 'completed') isFinished = true;
@@ -1009,7 +1064,9 @@ const App = () => {
                 <option value="points">Pontos (Ex: Quem chegar a 3000)</option>
                 <option value="rounds">Rodadas (Pontos Corridos)</option>
                 <option value="playoff">Eliminatória (Mata-Mata)</option>
+                <option value="running">Corrida (Sem Fim)</option>
               </select>
+              {newTourney.format === 'running' && <div style={{ color: '#aaa', fontSize: '0.9em' }}>O torneio nunca termina — gera novas rodadas indefinidamente.</div>}
               {newTourney.format === 'points' && <label>Meta de Pontos: <input type="number" value={newTourney.targetPoints} onChange={e => setNewTourney({...newTourney, targetPoints: parseInt(e.target.value)})} style={{ width: '80px', padding: '5px' }} /></label>}
               {newTourney.format === 'rounds' && <label>Máximo de Rodadas: <input type="number" value={newTourney.maxRounds} onChange={e => setNewTourney({...newTourney, maxRounds: parseInt(e.target.value)})} style={{ width: '80px', padding: '5px' }} /></label>}
               <label>Modalidade:</label>
@@ -1017,6 +1074,18 @@ const App = () => {
                 <option value="team">Equipes Fixas</option>
                 <option value="individual">Individual (Sorteio Aleatório)</option>
               </select>
+              {(newTourney.type === 'individual' || newTourney.rules.numPlayers === 2) && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label>Embaralhar duplas:</label>
+                  <select value={newTourney.shuffleMode} onChange={e => setNewTourney({...newTourney, shuffleMode: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
+                    <option value="every-round">Toda partida</option>
+                    <option value="rounds">A cada N partidas</option>
+                    <option value="points">Corrida a N pontos</option>
+                  </select>
+                  {newTourney.shuffleMode === 'rounds' && <label>Partidas com as mesmas duplas: <input type="number" min="1" value={newTourney.shuffleEvery} onChange={e => setNewTourney({...newTourney, shuffleEvery: parseInt(e.target.value) || 1})} style={{ width: '60px', padding: '5px' }} /></label>}
+                  {newTourney.shuffleMode === 'points' && <label>Pontos para embaralhar: <input type="number" min="1" value={newTourney.shufflePoints} onChange={e => setNewTourney({...newTourney, shufflePoints: parseInt(e.target.value) || 0})} style={{ width: '80px', padding: '5px' }} /></label>}
+                </div>
+              )}
               <label>Jogadores (separados por vírgula):</label>
               <textarea rows="3" value={newTourney.players} onChange={e => setNewTourney({...newTourney, players: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none', resize: 'vertical' }} />
             </div>
@@ -1150,7 +1219,8 @@ const App = () => {
               <div style={{ marginBottom: '20px' }}>
                 <h2 style={{ margin: 0, color: '#ffd700', fontSize: '2em' }}>{t.name}</h2>
                 <div style={{ color: '#aaa', marginTop: '5px' }}>
-                  Formato: {t.format.toUpperCase()} {t.format === 'points' ? `(Meta: ${t.targetPoints} pts)` : ''} | {t.rules.numPlayers}P | Rodada Atual: {t.rounds.length}
+                  Formato: {tourneyFormatLabel(t)} | {t.rules.numPlayers}P | Rodada Atual: {t.rounds.length}
+                  {t.type === 'individual' && t.shuffleMode && t.shuffleMode !== 'every-round' ? ` | Duplas: ${tourneyShuffleLabel(t)}` : ''}
                 </div>
               </div>
 

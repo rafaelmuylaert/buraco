@@ -885,6 +885,7 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
     // Pick up remaining discard pile into hand
     const pickedUp = [...G.discardPile];
     cardsAddCards(G, p, pickedUp)
+    if (G.knownCards?.[p] && !G.rules?.telepathy) for (const c of pickedUp) cardsAdd(G.knownCards[p], c);
     G.discardPile = [];
     G.hasDrawn = true;
     G.lastDrawnCard = pickedUp;
