@@ -461,12 +461,14 @@ export function findRunnerCandidates(handFlat, rank, topdiscard) {
         wilds.push(jokeridx);
     }
     
-    // Generate candidates: all valid subsets of 3+ cards using naturals + wilds
-    // For each possible meld, we need at least 3 naturals (one per suit), with optional wilds
-    // A runner with k naturals can have up to 5-k wilds (max 6 cards in runner)
-    
+    // A pickup from the discard pile can supply one extra natural (same rank)
+    // or one wild, so a runner can be completed from just 2 naturals in hand.
+    const tdNatural = (topdiscard !== null && topdiscard !== 255) ? getRank(topdiscard) : -1;
+    const tdWild = (topdiscard !== null && topdiscard !== 255) && getRank(topdiscard) === 2;
+    const minNaturals = (tdNatural === rank || tdWild) ? 2 : 3;
+
     // Simple approach: emit the max natural set, then subsets with wilds
-    if (cards.length >= 3) {
+    if (cards.length >= minNaturals) {
         // Emit all cards of this rank from hand
         const cc = {};
         for (const c of cards) {
@@ -1048,19 +1050,23 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
     const rules = G.rules;
     const handSim = G.cards[player]
     const runnerRanks = getRunnerRanks(rules);
+    const hasDiscard = topdiscard !== null && topdiscard !== 255;
     
     // Determine which suits and ranks to check based on top discard
     let minsuit = 1, maxsuit = 4;
-    if (topdiscard !== null && topdiscard !== 255) {
+    if (hasDiscard) {
         const tdRank = getRank(topdiscard);
         const tdSuit = getSuit(topdiscard);
         if (tdRank !== 2 && tdSuit >= 0 && tdRank >= 0) {
             minsuit = tdSuit;
             maxsuit = tdSuit;
-            // Only check runner ranks that include the discard rank
+            // Only check runner ranks that include the discard rank.
+            // If the discard isn't a valid runner rank, no runner can use it.
             if (runnerRanks.has(tdRank - 1)) {
                 runnerRanks.clear();
                 runnerRanks.add(tdRank - 1);
+            } else {
+                runnerRanks.clear();
             }
         }
     }
@@ -1070,7 +1076,8 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
         const runCandidates = findSeqRuns(handSim, suit, topdiscard);
         for (const cands of runCandidates) {
             const cardIds = Object.keys(cands.cardCounts).map(Number);
-            const parsed = parseMeld(cardIds, rules);
+            const fullIds = hasDiscard ? [...cardIds, topdiscard] : cardIds;
+            const parsed = parseMeld(fullIds, rules);
             if (parsed !== null) {
                 results.push({
                     moveType: 'playMeld',
@@ -1090,7 +1097,8 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
         const cands = findRunnerAppends(handSim, existing, topdiscard);
         for (const cand of cands) {
             const cardIds = [...Object.keys(cand.cardCounts).map(Number)];
-            const parsed = parseMeld(cardIds, rules, existing);
+            const fullIds = hasDiscard ? [...cardIds, topdiscard] : cardIds;
+            const parsed = parseMeld(fullIds, rules, existing);
             if (parsed !== null) {
                 const rank = existing[0];
                 trackRunnerRanks.delete(rank - 1);
@@ -1110,7 +1118,8 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
         const runnerCands = findRunnerCandidates(handSim, rank + 1, topdiscard); // convert to 1-indexed
         for (const cands of runnerCands) {
             const cardIds = Object.keys(cands.cardCounts).map(Number);
-            const parsed = parseMeld(cardIds, rules);
+            const fullIds = hasDiscard ? [...cardIds, topdiscard] : cardIds;
+            const parsed = parseMeld(fullIds, rules);
             if (parsed !== null) {
                 results.push({
                     moveType: 'playRunner',
@@ -1129,7 +1138,8 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
             const cands = findSeqRuns(handSim, suit, topdiscard, melds[slot]);
             for (const cand of cands) {
                 const cardIds = [...Object.keys(cand.cardCounts).map(Number)];
-                const parsed = parseMeld(cardIds, rules, melds[slot], suit);
+                const fullIds = hasDiscard ? [...cardIds, topdiscard] : cardIds;
+                const parsed = parseMeld(fullIds, rules, melds[slot], suit);
                 if (parsed !== null) {
                     results.push({
                         moveType: 'appendToMeld',
