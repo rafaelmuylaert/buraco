@@ -67,14 +67,14 @@ const BuracoClient = Client({
   debug: false 
 });
 
-function ReconnectingClient({ matchID, playerID, credentials, tournament, tournamentStandings }) {
+function ReconnectingClient({ matchID, playerID, credentials, tournament, tournamentStandings, apiAddress }) {
   const [key, setKey] = React.useState(0);
   React.useEffect(() => {
     const socket = io(SOCKET_SERVER, { path: SOCKET_PATH, autoConnect: true, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000 });
     socket.on('reconnect', () => setKey(k => k + 1));
     return () => socket.close();
   }, []);
-  return <BuracoClient key={key} matchID={matchID} playerID={playerID} credentials={credentials} tournament={tournament} tournamentStandings={tournamentStandings} />;
+  return <BuracoClient key={key} matchID={matchID} playerID={playerID} credentials={credentials} tournament={tournament} tournamentStandings={tournamentStandings} apiAddress={apiAddress} />;
 }
 
 // ── Tree log parser ───────────────────────────────────────────────────────────
@@ -418,15 +418,16 @@ const App = () => {
                   }
                   if (targetSeatID) {
                       (async () => {
-                          let creds;
-                          const credRes = await fetch(`${API_ADDRESS}/api/admin/credentials/${targetMatch.matchID}/${targetSeatID}`);
-                          if (credRes.ok) { const d = await credRes.json(); creds = d.credentials; }
-                          if (!creds) { ({ playerCredentials: creds } = await lobbyClient.joinMatch('buraco', targetMatch.matchID, { playerID: targetSeatID, playerName })); }
-                          const sessions = getSavedSessions();
-                          sessions[`${targetMatch.matchID}_${targetSeatID}`] = { matchID: targetMatch.matchID, playerID: targetSeatID, credentials: creds };
-                          localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
-                          setMatchID(targetMatch.matchID); setPlayerID(targetSeatID); setCredentials(creds);
-                          setView('game');
+                          try {
+                            const { playerCredentials } = await lobbyClient.joinMatch('buraco', targetMatch.matchID, { playerID: targetSeatID, playerName });
+                            const sessions = getSavedSessions();
+                            sessions[`${targetMatch.matchID}_${targetSeatID}`] = { matchID: targetMatch.matchID, playerID: targetSeatID, credentials: playerCredentials };
+                            localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
+                            setMatchID(targetMatch.matchID); setPlayerID(targetSeatID); setCredentials(playerCredentials);
+                            setView('game');
+                          } catch (e) {
+                            console.error("Auto-join falhou:", e);
+                          }
                       })();
                   }
               }
@@ -440,24 +441,19 @@ const App = () => {
     const pName = assignedName || prompt("Digite seu nome para entrar na mesa:");
     if (!pName) return;
     try {
-      let playerCredentials;
-      if (assignedName) {
-        // Tournament seat: fetch stored credentials so any device can rejoin
-        const res = await fetch(`${API_ADDRESS}/api/admin/credentials/${match.matchID}/${seatID}`);
-        if (res.ok) {
-          const data = await res.json();
-          playerCredentials = data.credentials;
-        }
-      }
-      if (!playerCredentials) {
-        ({ playerCredentials } = await lobbyClient.joinMatch('buraco', match.matchID, { playerID: seatID, playerName: pName }));
-      }
+      const { playerCredentials } = await lobbyClient.joinMatch('buraco', match.matchID, { playerID: seatID, playerName: pName });
       const sessions = getSavedSessions();
       sessions[`${match.matchID}_${seatID}`] = { matchID: match.matchID, playerID: seatID, credentials: playerCredentials };
       localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
       setMatchID(match.matchID); setPlayerID(seatID); setCredentials(playerCredentials);
       setView('game');
-    } catch (e) { alert("Erro ao entrar no assento."); }
+    } catch (e) {
+      if (String(e?.message).startsWith('HTTP status 409')) {
+        alert("Assento ocupado! Peça a alguém na mesa para usar o botão 'Remover' e liberá-lo.");
+      } else {
+        alert("Erro ao entrar no assento.");
+      }
+    }
   };
 
   const handleReconnect = (mID, pID) => {
@@ -754,6 +750,7 @@ const App = () => {
       credentials={credentials} 
       tournament={activeTournament}
       tournamentStandings={tStats}
+      apiAddress={API_ADDRESS}
     />;
   }
 
@@ -1184,6 +1181,7 @@ const App = () => {
                             const seatName = m.setupData?.assignments?.[p.id] || `Assento ${p.id}`;
                             const sessionKey = `${m.matchID}_${p.id}`;
                             const hasLocalCredentials = !!savedSessions[sessionKey];
+                            const isOccupiedByOther = !!p.name && !hasLocalCredentials;
 
                             return (
                               <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', background: '#111', padding: '6px', borderRadius: '5px', alignItems: 'center' }}>
@@ -1193,6 +1191,8 @@ const App = () => {
                                   <button onClick={() => handleReconnect(m.matchID, p.id.toString())} style={{ background: '#4da6ff', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>Reconectar</button>
                                 ) : isDone ? (
                                   <span style={{ color: '#aaa', fontSize: '0.8em' }}>Concluído</span>
+                                ) : isOccupiedByOther ? (
+                                  <span title="Assento ocupado por outro jogador. Peça a ele que use o botão 'Remover' na mesa para liberá-lo." style={{ color: '#ff9900', fontSize: '0.8em', fontWeight: 'bold' }}>Ocupado</span>
                                 ) : (
                                   <button onClick={() => handleJoinMatch(m, p.id.toString())} style={{ background: m.setupData?.assignments?.[p.id] ? '#ffd700' : '#50fa7b', color: 'black', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>Sentar</button>
                                 )}

@@ -288,17 +288,6 @@ server.router.post('/api/admin/kick', async (ctx) => {
     ctx.body = { error: 'Failed to kick player' };
   }
 });
-server.router.get('/api/admin/credentials/:matchID/:playerID', async (ctx) => {
-  setCors(ctx);
-  try {
-    const { matchID, playerID } = ctx.params;
-    const data = await server.db.fetch(matchID, { metadata: true });
-    const player = data?.metadata?.players?.[Number(playerID)];
-    if (!player?.credentials) { ctx.status = 404; ctx.body = { error: 'Not found' }; return; }
-    ctx.body = { credentials: player.credentials };
-  } catch (e) { ctx.status = 500; ctx.body = { error: 'Failed' }; }
-});
-
 server.router.post('/api/admin/delete-match', async (ctx) => {
   setCors(ctx);
   try {

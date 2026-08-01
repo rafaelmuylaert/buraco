@@ -93,7 +93,7 @@ export function BuracoBoard(props) {
   return <ErrorBoundary><BuracoBoardInner {...props} /></ErrorBoundary>;
 }
 
-function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament = null, tournamentStandings = null }) {
+function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament = null, tournamentStandings = null, apiAddress = null, matchData = null }) {
   // State: Set of uids instead of {cardType: count}
   const [selectedCards, setSelectedCards] = useState(new Set());
   const [gameOverMinimized, setGameOverMinimized] = useState(false);
@@ -448,6 +448,22 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
 };
 
 
+  const handleRemovePlayer = async (seatID, seatName) => {
+    if (!window.confirm(`Remover ${seatName} do assento ${seatID}?`)) return;
+    if (!apiAddress) return;
+    try {
+      const res = await fetch(`${apiAddress}/api/admin/kick`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matchID, playerID: seatID.toString() })
+      });
+      if (!res.ok) throw new Error('kick failed');
+      alert(`Assento ${seatID} liberado! ${seatName} agora pode reentrar de outro computador/browser.`);
+    } catch (e) {
+      alert("Falha ao remover jogador do assento.");
+    }
+  };
+
   const renderTeamTable = (teamId, title, isMyTeam) => {
     const teamTable = G.table[teamId];
     const runners = (teamTable[1] || []).filter(m => m && getMeldLength(m) > 0).map((meldGroup, index) => ({ key: `runner-${index}`, index, meldGroup, isRunner: true }));
@@ -623,9 +639,11 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
             const isTurn = ctx.currentPlayer === p;
             const isMe = p === playerID;
             const name = G.rules?.assignments?.[p] || `P${p}`;
+            const occupied = !!matchData?.find(m => m.id?.toString() === p)?.name;
+            const showRemove = occupied && !isMe && !!apiAddress;
             return (
               <div key={p} style={{ 
-                fontSize: '0.70em', display: 'flex', justifyContent: 'space-between', 
+                fontSize: '0.70em', display: 'flex', flexDirection: 'column',
                 color: isTurn ? '#ffd700' : (isMe ? '#4da6ff' : '#888'), 
                 fontWeight: (isTurn || isMe) ? 'bold' : 'normal', 
                 marginBottom: '4px',
@@ -634,8 +652,13 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                 padding: '4px', borderRadius: '4px',
                 overflow: 'hidden', minWidth: 0
               }}>
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>{isTurn ? '» ' : ''}{name}</span>
-                <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.handSizes[p] ?? 0}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 0 }}>
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>{isTurn ? '» ' : ''}{name}</span>
+                  <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.handSizes[p] ?? 0}</span>
+                </div>
+                {showRemove && (
+                  <button onClick={() => handleRemovePlayer(p, name)} title={`Remover ${name} deste assento para liberar`} style={{ marginTop: '3px', background: '#ff9900', color: '#000', border: 'none', borderRadius: '3px', padding: '1px 6px', fontSize: '0.85em', fontWeight: 'bold', cursor: 'pointer', alignSelf: 'flex-start' }}>Remover</button>
+                )}
               </div>
             );
           })}
