@@ -206,14 +206,14 @@ const App = () => {
     targetPoints: 3000,
     maxRounds: 3,
     botName: '',
-    rules: { discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true, cardPointValues: { joker: 50, two: 20, ace: 15, high: 10, low: 5 }, meldSizeBonus: false, allowUndo: false }
+    rules: { discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true, cardPointValues: { joker: 10, two: 10, ace: 15, high: 10, low: 5 }, meldSizeBonus: false, allowUndo: true }
   });
 
   const [newTourney, setNewTourney] = useState({ 
     name: '', type: 'team', format: 'points', targetPoints: 3000, maxRounds: 3, 
-    players: 'João, Maria, Pedro, Ana',
+    players: 'Diana, Marcia, Rafa, Monica',
     botName: '',
-    rules: { numPlayers: 4, discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true, cardPointValues: { joker: 50, two: 20, ace: 15, high: 10, low: 5 }, meldSizeBonus: false, allowUndo: false }
+    rules: { numPlayers: 4, discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true, cardPointValues: { joker: 10, two: 10, ace: 15, high: 10, low: 5 }, meldSizeBonus: false, allowUndo: true }
   });
 
   const [availableBots, setAvailableBots] = useState([]);
@@ -223,16 +223,16 @@ const App = () => {
   const [trainBotIsNew, setTrainBotIsNew] = useState(false);
   const [trainingStatus, setTrainingStatus] = useState(null);
 
-  const DEFAULT_CARD_POINT_VALUES = { joker: 50, two: 20, ace: 15, high: 10, low: 5 };
+  const DEFAULT_CARD_POINT_VALUES = { joker: 10, two: 10, ace: 15, high: 10, low: 5 };
 
   const [trainBotConfig, setTrainBotConfig] = useState({
-    name: 'BotPrometheus',
+    name: 'BotRafa',
     populationSize: 24,
-    generations: 500,
-    saveInterval: 10,
+    generations: 50000,
+    saveInterval: 100,
     telepathy: true,
     fixedDeck: false,
-    greedyMode: true,
+    greedyMode: false,
     scoreCardPoints: true,
     scoreHandPenalty: true,
     dirtyCanastraBonus: 100,
@@ -788,7 +788,7 @@ const App = () => {
             <div style={{ marginTop: '15px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px' }}>
               {(session.progress.islands || []).map((island, k) => island && (
                 <div key={k} style={{ background: '#1a0a33', border: '1px solid #5a2a9a', borderRadius: '8px', padding: '10px', fontSize: '0.85em' }}>
-                  <div style={{ color: '#b088f9', fontWeight: 'bold', marginBottom: '6px' }}> Ilha {k + 1} " Gen {island.gen}</div>
+                  <div style={{ color: '#b088f9', fontWeight: 'bold', marginBottom: '6px' }}> Ilha {k + 1} 🏝️ Gen {island.gen}</div>
                   <div> MaxDiff: <strong style={{color:'#ffd700'}}>{island.bestDiff?.toFixed(0)}</strong></div>
                   <div>"S AvgDiff: <strong style={{color:'#4da6ff'}}>{island.avgDiff?.toFixed(0)}</strong></div>
                 </div>
@@ -797,7 +797,7 @@ const App = () => {
 
             {session.progress.benchmarkDiff != null && (
               <div style={{ marginTop: '15px', textAlign: 'center', fontSize: '1.1em', fontWeight: 'bold', color: session.progress.benchmarkDiff >= 0 ? '#50fa7b' : '#ff5555' }}>
-                "️ Evolução vs Bot Original (Bench): {session.progress.benchmarkDiff > 0 ? '+' : ''}{session.progress.benchmarkDiff?.toFixed(0)} pts
+                🧠 Evolução vs Bot Original (Bench): {session.progress.benchmarkDiff > 0 ? '+' : ''}{session.progress.benchmarkDiff?.toFixed(0)} pts
               </div>
             )}
           </div>
