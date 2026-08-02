@@ -100,16 +100,19 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
   const [popupPos, setPopupPos] = useState({ x: null, y: null });
   const [dragging, setDragging] = useState(false);
   const [removePopup, setRemovePopup] = useState(null);
-  const [compact, setCompact] = useState(typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches);
+  const [compact, setCompact] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 900;
+  });
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const mq = window.matchMedia('(max-width: 640px)');
-    const onChange = (e) => setCompact(e.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
+    const onResize = () => setCompact(window.innerWidth < 900);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
-  const MELD_W = compact ? Math.round(CARD_W * 0.75) : CARD_W;
-  const MELD_H = compact ? Math.round(CARD_H * 0.75) : CARD_H;
+  const compactScale = compact ? (window.innerWidth < 480 ? 0.7 : 0.82) : 1;
+  const MELD_W = Math.round(CARD_W * compactScale);
+  const MELD_H = Math.round(CARD_H * compactScale);
   const dragOffset = React.useRef({ x: 0, y: 0 });
 
   const isMyTurn = ctx.currentPlayer === playerID;
@@ -535,8 +538,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
     };
 
     return (
-      <div style={{ background: isMyTeam ? 'rgba(77, 166, 255, 0.1)' : 'rgba(255, 77, 77, 0.1)', padding: '15px', borderRadius: '10px', minHeight: compact ? '90px' : '120px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+      <div style={{ background: isMyTeam ? 'rgba(77, 166, 255, 0.1)' : 'rgba(255, 77, 77, 0.1)', padding: '15px', borderRadius: '10px', minHeight: compact ? '90px' : '120px' }}>        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <h3 style={{ margin: 0, color: isMyTeam ? '#4da6ff' : '#ff4d4d' }}>{title}</h3>
           <span style={{ background: 'rgba(0,0,0,0.5)', padding: '5px 10px', borderRadius: '20px', fontWeight: 'bold', color: '#ffd700', flexShrink: 0, whiteSpace: 'nowrap', fontSize: '0.85em' }}>{calcTeamTablePoints(teamId)} pts</span>
         </div>
