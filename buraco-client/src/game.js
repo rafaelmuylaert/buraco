@@ -430,7 +430,7 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
                         cc[wildInHand] = (cc[wildInHand] || 0) + 1;
                     }
                 }
-                if (lo <= eLo && hi >= ehi) results.push({ cardCounts: cc });
+                if (lo <= eLo && hi >= eHi) results.push({ cardCounts: cc });
             }
             
             cnogap = cgap;
