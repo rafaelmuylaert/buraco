@@ -143,10 +143,10 @@ server.router.post('/api/bots/train', async (ctx) => {
     setCors(ctx);
     try {
         const body = await parseBody(ctx);
-        const { botName, rules, trainParams } = body;
+        const { botName, rules, trainParams, netParams } = body;
         
         // BUG FIX: Attached .catch() to prevent background crashes from taking down the server!
-        TrainerService.startTraining(botName, rules, trainParams).catch(err => {
+        TrainerService.startTraining(botName, rules, trainParams, netParams).catch(err => {
             console.error(`[TRAINER ERROR] Background crash for ${botName}:`, err);
         }); 
         
@@ -324,12 +324,14 @@ server.router.post('/api/bots/debug-match', async (ctx) => {
         const botName = body?.botName;
         const rules = body?.rules || {};
         const weights = botName ? TrainerService.getBotWeights(botName) : null;
-        const { AI_CONFIG } = await import('./game.js');
-        const dna = new SharedArrayBuffer(AI_CONFIG.TOTAL_DNA_SIZE * 4);
+        const { computeNetConfig, DEFAULT_NET_PARAMS } = await import('./game.js');
+        const netParams = botName ? TrainerService.getBotNetParams(botName) : null;
+        const netConfig = computeNetConfig(netParams || DEFAULT_NET_PARAMS);
+        const dna = new SharedArrayBuffer(netConfig.TOTAL_DNA_SIZE * 4);
         if (weights) new Float32Array(dna).set(weights);
-        console.log(`[DEBUG] Running debug match${botName ? ` with bot '${botName}'` : ' (random DNA)'}...`);
+        console.log(`[DEBUG] Running debug match${botName ? ` with bot '${botName}'` : ' (random DNA)'} (DNA=${netConfig.TOTAL_DNA_SIZE})...`);
         const { runDebugMatch } = await import('./train.js');
-        const result = await runDebugMatch(dna, rules);
+        const result = await runDebugMatch(dna, rules, netConfig);
         console.log(`[DEBUG] Match done: A=${result.rawA} B=${result.rawB}`);
         ctx.body = { success: true, ...result };
     } catch (e) {

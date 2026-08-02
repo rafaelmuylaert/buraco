@@ -28,7 +28,7 @@ import {
     checkGameOver, setScoreFunctions, getAndResetTimings
 } from './game.js';
 import { initWasm, loadMatchDNA, isWasmReady, getWasmCardBuffers,
-         getCppTimings, setUsingWasmBackedBuffers,
+         getCppTimings, setUsingWasmBackedBuffers, setActiveNetConfig,
          updateSeqMeld, updateRunMeld, getTeam1DnaOffset, runTurn,
          setDiagnosticLog } from './wasm_loader.js';
 
@@ -54,11 +54,12 @@ function shuffle(arr) {
     return arr;
 }
 
-function prepareGenome(raw) {
+function prepareGenome(raw, netConfig) {
+    const totalSize = (netConfig || AI_CONFIG).TOTAL_DNA_SIZE;
     let dna = raw instanceof Float32Array ? raw : new Float32Array(raw);
-    if (dna.length !== AI_CONFIG.TOTAL_DNA_SIZE) {
-        const d = new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE);
-        for (let i = 0; i < AI_CONFIG.TOTAL_DNA_SIZE; i++) d[i] = dna[i % dna.length] || 0;
+    if (dna.length !== totalSize) {
+        const d = new Float32Array(totalSize);
+        for (let i = 0; i < totalSize; i++) d[i] = dna[i % dna.length] || 0;
         dna = d;
     }
     return dna;
@@ -81,7 +82,7 @@ function makeIface(S, p) {
 
 // worker.js
 
-function runMatch(genomes, rules, fixedDeck) {
+function runMatch(genomes, rules, fixedDeck, netConfig) {
     const numPlayers = rules.numPlayers || 4;
     const fakeRandom = { Shuffle: arr => fixedDeck ? [...fixedDeck] : shuffle(arr) };
 
@@ -119,7 +120,7 @@ function runMatch(genomes, rules, fixedDeck) {
 
     S.botGenomes = Object.fromEntries(Object.entries(genomes).map(([k, v]) => {
         const arr = v instanceof SharedArrayBuffer ? new Float32Array(v) : new Float32Array(v);
-        return [k, prepareGenome(arr)];
+        return [k, prepareGenome(arr, netConfig)];
     }));
 
     const ifaces = [];
@@ -171,22 +172,23 @@ for (let i = 0; i < 52; i++) _baseDeck.push(i);
 for (let i = 0; i < 52; i++) _baseDeck.push(i);
 let _fixedDeck = null;
 
-async function processJob(matches, rules) {
+async function processJob(matches, rules, netConfig) {
     const results = [];
+    if (netConfig) setActiveNetConfig(netConfig);
     for (const { dnaA, dnaB } of matches) {
         const pairDeck = rules.fixedDeck ? _fixedDeck : shuffle([..._baseDeck]);
 
-        const gA = prepareGenome(dnaA instanceof SharedArrayBuffer ? new Float32Array(dnaA) : new Float32Array(dnaA));
-        const gB = prepareGenome(dnaB instanceof SharedArrayBuffer ? new Float32Array(dnaB) : new Float32Array(dnaB));
+        const gA = prepareGenome(dnaA instanceof SharedArrayBuffer ? new Float32Array(dnaA) : new Float32Array(dnaA), netConfig);
+        const gB = prepareGenome(dnaB instanceof SharedArrayBuffer ? new Float32Array(dnaB) : new Float32Array(dnaB), netConfig);
 
         const genomes1 = { '0': dnaA, '1': dnaB, '2': dnaA, '3': dnaB };
         const genomes2 = { '0': dnaB, '1': dnaA, '2': dnaB, '3': dnaA };
 
         if (isWasmReady()) loadMatchDNA(gA, gB);
-        const g1 = runMatch(genomes1, rules, pairDeck);
+        const g1 = runMatch(genomes1, rules, pairDeck, netConfig);
 
         if (isWasmReady()) loadMatchDNA(gB, gA);
-        const g2 = runMatch(genomes2, rules, pairDeck);
+        const g2 = runMatch(genomes2, rules, pairDeck, netConfig);
 
         results.push([g1 - g2, g2 - g1, Math.abs(g1), Math.abs(g2)]);
     }
@@ -199,10 +201,10 @@ async function processJob(matches, rules) {
 
 
 if (workerData.matches.length === 0) {
-    parentPort.on('message', async ({ type, matches, rules, deck }) => {
+    parentPort.on('message', async ({ type, matches, rules, deck, netConfig }) => {
         if (type === 'shuffleDeck') { _fixedDeck = deck; return; }
-        parentPort.postMessage(await processJob(matches, rules));
+        parentPort.postMessage(await processJob(matches, rules, netConfig));
     });
 } else {
-    parentPort.postMessage(await processJob(workerData.matches, workerData.rules));
+    parentPort.postMessage(await processJob(workerData.matches, workerData.rules, workerData.netConfig));
 }

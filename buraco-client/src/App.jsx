@@ -34,7 +34,7 @@ import { Client } from 'boardgame.io/react';
 import { SocketIO } from 'boardgame.io/multiplayer';
 import { LobbyClient } from 'boardgame.io/client';
 import { io } from 'socket.io-client';
-import { BuracoGame } from './game.js';
+import { BuracoGame, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS } from './game.js';
 import { BuracoBoard } from './Board.jsx';
 
 const { port, hostname, protocol, origin } = window.location;
@@ -272,8 +272,12 @@ const App = () => {
     endGameBonus: 100,
     cardPointValues: { ...DEFAULT_CARD_POINT_VALUES },
     meldSizeBonus: false,
+    netParams: { ...DEFAULT_NET_PARAMS },
     rules: { ...DEFAULT_TRAIN_RULES, runners: [...DEFAULT_TRAIN_RULES.runners] }
   });
+
+  const liveNetConfig = computeNetConfig(trainBotConfig.netParams);
+  const netOverBudget = liveNetConfig.TOTAL_DNA_SIZE * 2 > MAX_WEIGHTS;
 
   const loadServerData = async () => {
     try {
@@ -325,6 +329,7 @@ const App = () => {
 
   const handleStartTraining = async () => {
     if (!trainBotConfig.name.trim()) return alert("Digite um nome para o bot!");
+    if (netOverBudget) return alert("Rede neural grande demais para o buffer de pesos!");
     try {
       const res = await fetch(`${API_ADDRESS}/api/bots/train`, {
         method: 'POST',
@@ -347,7 +352,8 @@ const App = () => {
               endGameBonus: trainBotConfig.endGameBonus,
               cardPointValues: trainBotConfig.cardPointValues,
               meldSizeBonus: trainBotConfig.meldSizeBonus
-           }
+           },
+           netParams: trainBotConfig.netParams
         })
       });
       const data = await res.json();
@@ -997,7 +1003,10 @@ const App = () => {
                   {!trainBotIsNew ? (
                     <select value={trainBotConfig.name} onChange={e => {
                       if (e.target.value === '__new__') { setTrainBotIsNew(true); setTrainBotConfig({...trainBotConfig, name: ''}); }
-                      else setTrainBotConfig({...trainBotConfig, name: e.target.value});
+                      else {
+                        const meta = botInfoList.find(b => b.name === e.target.value)?.meta;
+                        setTrainBotConfig({...trainBotConfig, name: e.target.value, netParams: { ...DEFAULT_NET_PARAMS, ...(meta?.netParams || {}) }});
+                      }
                     }} style={{ padding: '5px', marginLeft: '10px' }}>
                       {availableBots.map(b => <option key={b} value={b}>{b}</option>)}
                       <option value="__new__">+ Novo Bot...</option>
@@ -1058,11 +1067,28 @@ const App = () => {
                       </div>
                     </div>
                 </div>
+
+                <h4 style={{ margin: '10px 0 0 0', color: '#50fa7b' }}>Rede Neural</h4>
+                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '5px'}}>
+                    <label>Camadas Ocultas: <input type="number" min="1" max="8" value={trainBotConfig.netParams.hiddenLayers} onChange={e => setTrainBotConfig({...trainBotConfig, netParams: {...trainBotConfig.netParams, hiddenLayers: Math.max(1, Math.min(8, parseInt(e.target.value)||1))}})} style={{ width: '50px', padding: '5px', marginLeft: '6px' }} /></label>
+                    <label>Largura Oculta: <input type="number" min="16" max="1024" step="16" value={trainBotConfig.netParams.hiddenWidth} onChange={e => setTrainBotConfig({...trainBotConfig, netParams: {...trainBotConfig.netParams, hiddenWidth: Math.max(16, Math.min(1024, parseInt(e.target.value)||16))}})} style={{ width: '70px', padding: '5px', marginLeft: '6px' }} /></label>
+                    <div style={{gridColumn:'1/-1', fontSize:'0.75em', color:'#aaa', lineHeight:'1.7'}}>
+                      <div><strong style={{color:'#8be9fd'}}>DNA:</strong> Current <span style={{color:'#50fa7b'}}>{liveNetConfig.DNA_CURRENT.toLocaleString()}</span> · Seq <span style={{color:'#50fa7b'}}>{liveNetConfig.DNA_SEQ.toLocaleString()}</span> · Run <span style={{color:'#50fa7b'}}>{liveNetConfig.DNA_RUN.toLocaleString()}</span> · Discard <span style={{color:'#50fa7b'}}>{liveNetConfig.DNA_DISCARD.toLocaleString()}</span></div>
+                      <div><strong style={{color:'#8be9fd'}}>TOTAL:</strong> <span style={{color:'#50fa7b'}}>{liveNetConfig.TOTAL_DNA_SIZE.toLocaleString()}</span> floats × 2 times = <span style={{color: netOverBudget ? '#ff5555' : '#50fa7b'}}>{(liveNetConfig.TOTAL_DNA_SIZE*2).toLocaleString()}</span> / {MAX_WEIGHTS.toLocaleString()}</div>
+                      <div style={{fontSize:'0.85em'}}>Inputs: Seq={liveNetConfig.NN_SEQ_INPUTS} · Run={liveNetConfig.NN_RUN_INPUTS} · Current={liveNetConfig.NN_CURRENT_INPUTS} · Discard={liveNetConfig.NN_DISCARD_INPUTS}</div>
+                    </div>
+                    <div style={{gridColumn:'1/-1', fontSize:'0.72em', color:'#666'}}>
+                      Parâmetros fixos do motor (WASM): Seq slots={trainBotConfig.netParams.NN_CURRENT_SEQ_INPUTS} · Run slots={trainBotConfig.netParams.NN_CURRENT_RUNNER_INPUTS} · Card maps={trainBotConfig.netParams.NN_CURRENT_CARDS_INPUTS} · Saídas={trainBotConfig.netParams.NN_CURRENT_OUTPUTS} · Seq feats={trainBotConfig.netParams.SEQ_FEATURES} · Run feats={trainBotConfig.netParams.RUNNER_FEATURES} · Scalars={trainBotConfig.netParams.SCALARS_FEATURES}
+                    </div>
+                    {netOverBudget && (
+                      <div style={{gridColumn:'1/-1', color:'#ff5555', fontWeight:'bold', fontSize:'0.85em'}}>⚠ Rede grande demais para o buffer de pesos (MAX_WEIGHTS). Reduza largura/camadas.</div>
+                    )}
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
                 <button onClick={() => setShowTrainBotPopup(false)} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Cancelar</button>
-                <button onClick={handleStartTraining} style={{ padding: '10px 20px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Iniciar Mutação</button>
+                <button onClick={handleStartTraining} disabled={netOverBudget} style={{ padding: '10px 20px', background: netOverBudget ? '#666' : '#8a2be2', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: netOverBudget ? 'not-allowed' : 'pointer' }}>Iniciar Mutação</button>
                 <button onClick={() => setShowDebugPanel(true)} style={{ padding: '10px 20px', background: '#333', color: '#50fa7b', border: '1px solid #50fa7b', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer', marginLeft: '8px' }}>🐛 Debug</button>
                 {showDebugPanel && <BotDebugPanel apiBase={API_ADDRESS} botName={trainBotConfig.name} rules={trainBotConfig.rules} onClose={() => setShowDebugPanel(false)} />}
               </div>

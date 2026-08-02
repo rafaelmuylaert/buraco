@@ -22,19 +22,36 @@
 
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
-import { setDbgLogFn, BuracoGame, AI_CONFIG, getAndResetTimings } from './game.js';
+import fs from 'fs';
+import path from 'path';
+import { setDbgLogFn, BuracoGame, AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, getAndResetTimings } from './game.js';
 import { getLastDbgLog, initWasm, loadMatchDNA, isWasmReady, runTurn,
-         setDiagnosticLog } from './wasm_loader.js';
+         setDiagnosticLog, setActiveNetConfig } from './wasm_loader.js';
 setDbgLogFn(getLastDbgLog);
 await initWasm();
 setDiagnosticLog(1);
 
 const SERVER_URL = 'http://buraco-server:8000';
+const BOTS_DIR = path.join(process.cwd(), 'bots');
 const activeBots = {};
 const dnaCache = {};
+const netConfigCache = {};
 let _pollingLobby = false;
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Resolve the full net config for a bot from its meta.json netParams (defaults otherwise).
+async function resolveBotNetConfig(botName) {
+    if (netConfigCache[botName]) return netConfigCache[botName];
+    let netParams = null;
+    try {
+        const metaPath = path.join(BOTS_DIR, `${botName}.meta.json`);
+        if (fs.existsSync(metaPath)) netParams = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))?.netParams || null;
+    } catch (e) {}
+    const cfg = computeNetConfig(netParams || DEFAULT_NET_PARAMS);
+    netConfigCache[botName] = cfg;
+    return cfg;
+}
 
 const getSuitChar = s => ['♠','♥','♦','♣','★'][s-1];
 const getRankChar = r => r===1?'A':r===11?'J':r===12?'Q':r===13?'K':r===14?'A':r.toString();
@@ -154,7 +171,9 @@ async function pollLobby() {
               const dnaRes = await fetch(`${SERVER_URL}/api/bots/weights/${targetBotName}`);
               if (dnaRes.ok) {
                 let loadedDNA = await dnaRes.json();
-                if (loadedDNA.length !== AI_CONFIG.TOTAL_DNA_SIZE) { console.warn(`[BOT] DNA size mismatch for '${targetBotName}'`); loadedDNA = null; }
+                const botConfig = await resolveBotNetConfig(targetBotName);
+                const totalSize = botConfig?.TOTAL_DNA_SIZE || AI_CONFIG.TOTAL_DNA_SIZE;
+                if (loadedDNA.length !== totalSize) { console.warn(`[BOT] DNA size mismatch for '${targetBotName}': got ${loadedDNA.length}, expected ${totalSize}`); loadedDNA = null; }
                 dnaCache[targetBotName] = loadedDNA ? new Float32Array(loadedDNA) : null;
               }
             } catch(e) { console.error(`[BOT] Could not fetch DNA for ${targetBotName}`); }
@@ -186,6 +205,8 @@ async function startBotClient(matchID, playerID, credentials, botName, targetBot
 
   let stopped = false;
   if (isWasmReady() && dnaCache[targetBotName]) {
+      const botCfg = await resolveBotNetConfig(targetBotName);
+      setActiveNetConfig(botCfg);
       loadMatchDNA(dnaCache[targetBotName], dnaCache[targetBotName]);
   }
   const shutdown = () => {

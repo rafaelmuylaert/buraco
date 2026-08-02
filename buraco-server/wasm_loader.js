@@ -32,7 +32,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { AI_CONFIG, isMeldClean, seqSuit, addPlanTurnTime, setScoreFunctions, generateAllValidMelds } from './game.js';
+import { AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS, isMeldClean, seqSuit, addPlanTurnTime, setScoreFunctions, generateAllValidMelds } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -60,6 +60,27 @@ let _activeTeamBase = 0;
 let _activePlayer   = 0;
 let _activeMyTeam   = 0;
 let _activeOppTeam  = 1;
+
+// Active network config (sizes can vary per training session / bot).
+let _activeNetConfig = AI_CONFIG;
+
+export function getActiveNetConfig() { return _activeNetConfig; }
+
+// Switch the WASM engine to a different net architecture (sizes + weights view).
+// Returns true on success. DNA offset/views are rebuilt from the new config.
+export function setActiveNetConfig(netConfig) {
+    if (!netConfig) return false;
+    if (netConfig.TOTAL_DNA_SIZE * 2 > MAX_WEIGHTS) {
+        console.warn(`[WASM] net config too large: DNA ${netConfig.TOTAL_DNA_SIZE} * 2 > MAX_WEIGHTS ${MAX_WEIGHTS}`);
+        return false;
+    }
+    _activeNetConfig = netConfig;
+    _team1DnaOffset = netConfig.TOTAL_DNA_SIZE * 2 <= MAX_WEIGHTS ? netConfig.TOTAL_DNA_SIZE : 0;
+    _refreshViews();
+    return true;
+}
+
+export function getActiveDnaSize() { return _activeNetConfig?.TOTAL_DNA_SIZE || 0; }
 
 let _diagnosticLog = 0;  // 0=silent, 1=basic (candidates,scores,state), 2=verbose (weights,memory)
 export function setDiagnosticLog(level) { _diagnosticLog = level; }
@@ -114,9 +135,9 @@ let _wasmHandFlat = null;
 
 function _refreshViews() {
     const buf = _mem.buffer;
-    _vWeights       = new Float32Array(buf, _ex.get_weights(), AI_CONFIG.TOTAL_DNA_SIZE * 2);
+    _vWeights       = new Float32Array(buf, _ex.get_weights(), _activeNetConfig.TOTAL_DNA_SIZE * 2);
     _vOut           = new Float32Array(buf, _ex.get_out(),    64);
-    _vLayerSizesBuf = new Int32Array  (buf, _ex.get_layer_sizes_buf(), 8);
+    _vLayerSizesBuf = new Int32Array  (buf, _ex.get_layer_sizes_buf(), 12);
     for (let p = 0; p < 4; p++) {
         _wasmCards2[p]      = new Uint8Array(buf, _ex.get_cards2(p),      CARDS_FLAT_SIZE);
         _wasmKnownCards2[p] = new Uint8Array(buf, _ex.get_knowncards2(p), CARDS_FLAT_SIZE);
@@ -190,8 +211,8 @@ export async function initWasm() {
         for (const fn of required) {
             if (!_ex[fn]) { console.warn(`[WASM] Missing: ${fn}`); _ex = null; return false; }
         }
-        _team1DnaOffset = _ex.get_max_weights() >= AI_CONFIG.TOTAL_DNA_SIZE * 2
-            ? AI_CONFIG.TOTAL_DNA_SIZE : 0;
+        _team1DnaOffset = _ex.get_max_weights() >= _activeNetConfig.TOTAL_DNA_SIZE * 2
+            ? _activeNetConfig.TOTAL_DNA_SIZE : 0;
 
         _refreshViews();
         _ex.set_inp_scale(1.0 / 255.0);
@@ -212,16 +233,19 @@ export function loadMatchDNA(dnaTeam0, dnaTeam1) {
     _vWeights.set(dnaTeam0, _team0DnaOffset);
     if (_team1DnaOffset > 0) _vWeights.set(dnaTeam1, _team1DnaOffset);
 
-    const C = AI_CONFIG;
+    const C = _activeNetConfig;
     const _setNet = (fn, layerSizes, woff) => {
         for (let i = 0; i < layerSizes.length; i++) _vLayerSizesBuf[i] = layerSizes[i];
         _ex[fn](layerSizes.length, woff);
     };
 
-    _setNet('configure_net_current',   [C.NN_CURRENT_INPUTS,48,48,48,48,24], 0);
-    _setNet('configure_net_seq',       [C.NN_SEQ_INPUTS,48,48,48,48,1],      C.DNA_CURRENT);
-    _setNet('configure_net_run',       [C.NN_RUN_INPUTS,48,48,48,48,1],      C.DNA_CURRENT + C.DNA_SEQ);
-    _setNet('configure_net_discard',   [C.NN_DISCARD_INPUTS,48,48,48,48,54], C.DNA_CURRENT + C.DNA_SEQ + C.DNA_RUN);
+    // Layer sizes: [input, ...hidden × hiddenLayers, output]
+    const _layers = (inp, out) => [inp, ...Array.from({ length: C.hiddenLayers }, () => C.hiddenWidth), out];
+
+    _setNet('configure_net_current',   _layers(C.NN_CURRENT_INPUTS, C.NN_CURRENT_OUTPUTS), 0);
+    _setNet('configure_net_seq',       _layers(C.NN_SEQ_INPUTS, C.NN_SEQ_OUTPUTS),          C.DNA_CURRENT);
+    _setNet('configure_net_run',       _layers(C.NN_RUN_INPUTS, C.NN_RUN_OUTPUTS),          C.DNA_CURRENT + C.DNA_SEQ);
+    _setNet('configure_net_discard',   _layers(C.NN_DISCARD_INPUTS, C.NN_DISCARD_OUTPUTS),  C.DNA_CURRENT + C.DNA_SEQ + C.DNA_RUN);
 }
 
 export function reconfigureNets() {
@@ -269,12 +293,13 @@ export function runCurrentState(G, player, myTeam, oppTeam) {
     }
     if (_diagnosticLog >= 2) {
         const base = _activeTeamBase || 0;
-        const curInSz = AI_CONFIG.NN_CURRENT_INPUTS;
+        const curInSz = _activeNetConfig.NN_CURRENT_INPUTS;
+        const hw = _activeNetConfig.hiddenWidth;
         console.log(`[RCS] curW[0..3]: ${_vWeights.slice(base, base+4).map(v => v.toFixed(6)).join(', ')}`);
-        console.log(`[RCS] curB[0..3]: ${_vWeights.slice(base+curInSz*48, base+curInSz*48+4).map(v => v.toFixed(6)).join(', ')}`);
+        console.log(`[RCS] curB[0..3]: ${_vWeights.slice(base+curInSz*hw, base+curInSz*hw+4).map(v => v.toFixed(6)).join(', ')}`);
         let negCnt = 0, posCnt = 0, zeroCnt = 0;
-        for (let o = 0; o < 48; o++) {
-            const b = _vWeights[base + curInSz*48 + o];
+        for (let o = 0; o < hw; o++) {
+            const b = _vWeights[base + curInSz*hw + o];
             if (b < 0) negCnt++; else if (b > 0) posCnt++; else zeroCnt++;
         }
         console.log(`[RCS] h1 bias signs: neg=${negCnt} pos=${posCnt} zero=${zeroCnt}`);
@@ -296,7 +321,7 @@ export async function runTurn(S, playerID, iface) {
     }
 
     syncCardsToWasm(S, S.rules?.numPlayers || 4);
-    setActiveTeam(myTeam === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
+    setActiveTeam(myTeam === 0 ? 0 : _activeNetConfig.TOTAL_DNA_SIZE);
     reconfigureNets();
     runCurrentState(S, playerID, myTeam, oppTeam);
 
@@ -591,15 +616,17 @@ function _dumpWasmState(label) {
         const out1 = _vOut ? _vOut[1] : NaN;
 
         // Read weight values at relevant offsets if available
-        const seqWoff = AI_CONFIG.DNA_CURRENT;
-        const runWoff = seqWoff + AI_CONFIG.DNA_SEQ;
-        const discWoff = runWoff + AI_CONFIG.DNA_RUN;
+        const C = _activeNetConfig;
+        const seqWoff = C.DNA_CURRENT;
+        const runWoff = seqWoff + C.DNA_SEQ;
+        const discWoff = runWoff + C.DNA_RUN;
         const base = _activeTeamBase || 0;
+        const hw = C.hiddenWidth;
 
         const wSeq = _vWeights?.[base + seqWoff] ?? NaN;
         const wRun = _vWeights?.[base + runWoff] ?? NaN;
         const wDisc = _vWeights?.[base + discWoff] ?? NaN;
-        const wDiscEnd = _vWeights?.[base + discWoff + 10900] ?? NaN; // ~end of discard weights
+        const wDiscEnd = _vWeights?.[base + discWoff + Math.min(10900, C.DNA_DISCARD - 1)] ?? NaN; // ~end of discard weights
 
         // Check WASM memory pages
         let pages = -1;
@@ -632,12 +659,12 @@ function _dumpWasmState(label) {
         }
 
         // Check CURRENT net weights (offset 0)
-        const curInSz = AI_CONFIG.NN_CURRENT_INPUTS;
-        if (_vWeights && base + curInSz * 48 + 48 < totalWeights) {
+        const curInSz = C.NN_CURRENT_INPUTS;
+        if (_vWeights && base + curInSz * hw + hw < totalWeights) {
             console.log(`  curW[0..2]: ${_vWeights.slice(base, base+3).map(v => v.toFixed(6)).join(', ')}`);
             let negB = 0, posB = 0;
-            for (let o = 0; o < 48; o++) {
-                const b = _vWeights[base + curInSz * 48 + o];
+            for (let o = 0; o < hw; o++) {
+                const b = _vWeights[base + curInSz * hw + o];
                 if (b < 0) negB++; else if (b > 0) posB++;
             }
             console.log(`  curB signs: neg=${negB} pos=${posB}`);
@@ -656,7 +683,7 @@ function _dumpWasmState(label) {
             if (!wNan) console.log(`  weights[disc+0..4]: ${_vWeights.slice(discBase, discBase + 5).map(v => v.toFixed(6)).join(', ')}`);
 
             // Check WEIGHT END: last weight at discBase + DNA_DISCARD - 1
-            const discSz = AI_CONFIG.DNA_DISCARD;
+            const discSz = C.DNA_DISCARD;
             const wLast = _vWeights[discBase + discSz - 1];
             const wPast = _vWeights[discBase + discSz]; // first byte after discard weights
             console.log(`  weights[disc+${discSz-1}]=${wLast} weights[disc+${discSz}]=${wPast} (boundary check)`);
@@ -676,7 +703,7 @@ export function scoreDiscards() {
 
     _dumpWasmState('pre_discard');
 
-    const C = AI_CONFIG;
+    const C = _activeNetConfig;
     const discardWoff = C.DNA_CURRENT + C.DNA_SEQ + C.DNA_RUN;
     try {
         _ex.score_discard(discardWoff);

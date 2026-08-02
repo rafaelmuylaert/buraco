@@ -48,44 +48,29 @@ export function getAndResetTimings() {
 export function addPlanTurnTime(ms) { _timings.planTurn += ms; _timings.planTurnCalls++; }
 
 // 🚀 CENTRALIZED AI ARCHITECTURE CONFIGURATION — Two-phase evaluation:
-//   1. NN_CURRENT: reads full game state → 24-dim state vector
+//   1. NN_CURRENT: reads full game state → NN_CURRENT_OUTPUTS-dim state vector
 //   2. NN_SEQ/NN_RUN/NN_DISCARD: candidate-specific scoring with state vector as context
-export const AI_CONFIG = {
-    // Feature sizes
-    SEQ_FEATURES:          16,  // 14 rank bits + wildForeign + wildNatural
-    RUNNER_FEATURES:       5,  // ♠/2,♥/2,♦/2,♣/2, wildSuit/5  (was 6)
-    SCALARS_FEATURES:      11,
-    SUITS_FEATURES:         1,  // suit of candidate play
-    RANK_FEATURES:          1,  // rank of candidate play
-    CARDS_FEATURES_ALL:    54,  // all-suit: 52 card types + 0 + joker
-    HIDDEN_LAYERS:          4,
-    HIDDEN_WIDTH:          48,  // seq net hidden width
-    HIDDEN_WIDTH_RUNNER:   48,  // run net hidden width
-    HIDDEN_WIDTH_DISCARD:  48,  // discard net hidden width
+//
+// The network size parameters can vary per training session. `DEFAULT_NET_PARAMS`
+// holds the current defaults; `computeNetConfig(netParams)` derives every dependent
+// size (input counts, DNA sizes) from them. `AI_CONFIG` is the default resolved
+// config, kept for backwards compatibility with every existing call site.
 
-    // NN_CURRENT (762 inputs → 24 outputs)
-    // 11 scalars + 10 seq slots (5 own + 5 opp) + 6 run slots (3 own + 3 opp) + 4 card bitmaps
-    NN_CURRENT_INPUTS:  11 + 10*16 + 6*5 + 4*54,   // = 11 + 160 + 30 + 216 = 417
-    NN_CURRENT_OUTPUTS: 24,
+export const MAX_WEIGHTS = 4_000_000;  // float slots in the WASM weight buffer (shared by both teams)
 
-    // NN_SEQ (58 inputs → 1 output)
-    // 24 current_state + 1 suit + 2 seq_slots (new meld + existing meld)
-    NN_SEQ_INPUTS:   24 + 1 + 2*16,  // = 58
-    NN_SEQ_OUTPUTS:   1,
+export const DEFAULT_NET_PARAMS = {
+    // Runtime-configurable
+    hiddenLayers: 4,
+    hiddenWidth:  48,
 
-    // NN_RUN (35 inputs → 1 output)
-    // 24 current_state + 1 rank + 2 run_slots (new meld + existing meld)
-    NN_RUN_INPUTS:   24 + 1 + 2*5,  // = 35
-    NN_RUN_OUTPUTS:   1,
-
-    // NN_DISCARD (24 inputs → 54 outputs)
-    // 24 current_state only
-    NN_DISCARD_INPUTS:   24,
-    NN_DISCARD_OUTPUTS:  54,
-
-    // Raw candidate feature counts for JS→WASM encoding (kept for compatibility)
-    SEQ_CANDIDATE_FEATURES: 17,
-    RUN_CANDIDATE_FEATURES: 8,
+    // Engine-fixed feature sizes (editing requires recompiling nn_engine.cpp)
+    NN_CURRENT_SEQ_INPUTS:    10,  // 5 own + 5 opp seq slots
+    NN_CURRENT_RUNNER_INPUTS:  6,  // 3 own + 3 opp runner slots
+    NN_CURRENT_CARDS_INPUTS:   4,  // hand/discard/own-table/opp-table bitmaps
+    NN_CURRENT_OUTPUTS:       24,  // state vector dim
+    SEQ_FEATURES:             16,  // 14 rank bits + wildForeign + wildNatural
+    RUNNER_FEATURES:           5,  // ♠/2,♥/2,♦/2,♣/2, wildSuit/5
+    SCALARS_FEATURES:         11,
 };
 
 // Compute total DNA size: all weights + biases across all 4 nets.
@@ -98,11 +83,56 @@ function calc_dna(inputSize, hiddenWidth, hiddenLayers, outputWidth) {
     }
     return size;
 }
-AI_CONFIG.DNA_CURRENT   = calc_dna(AI_CONFIG.NN_CURRENT_INPUTS, 48, 4, 24);
-AI_CONFIG.DNA_SEQ       = calc_dna(AI_CONFIG.NN_SEQ_INPUTS,    48, 4, 1);
-AI_CONFIG.DNA_RUN       = calc_dna(AI_CONFIG.NN_RUN_INPUTS,    48, 4, 1);
-AI_CONFIG.DNA_DISCARD   = calc_dna(AI_CONFIG.NN_DISCARD_INPUTS,48, 4, 54);
-AI_CONFIG.TOTAL_DNA_SIZE = AI_CONFIG.DNA_CURRENT + AI_CONFIG.DNA_SEQ + AI_CONFIG.DNA_RUN + AI_CONFIG.DNA_DISCARD;
+
+// Derive the full resolved network config from a (partial) netParams object.
+// Formula-derived sizes:
+//   NN_SEQ_INPUTS   = NN_CURRENT_OUTPUTS + 1 + 2*SEQ_FEATURES
+//   NN_RUN_INPUTS   = NN_CURRENT_OUTPUTS + 1 + 2*RUNNER_FEATURES
+//   NN_CURRENT_INPUTS = SCALARS_FEATURES + NN_CURRENT_SEQ_INPUTS*SEQ_FEATURES
+//                      + NN_CURRENT_RUNNER_INPUTS*RUNNER_FEATURES + 54*NN_CURRENT_CARDS_INPUTS
+export function computeNetConfig(netParams = {}) {
+    const p = { ...DEFAULT_NET_PARAMS, ...(netParams || {}) };
+    const {
+        hiddenLayers, hiddenWidth,
+        NN_CURRENT_SEQ_INPUTS, NN_CURRENT_RUNNER_INPUTS, NN_CURRENT_CARDS_INPUTS,
+        NN_CURRENT_OUTPUTS, SEQ_FEATURES, RUNNER_FEATURES, SCALARS_FEATURES,
+    } = p;
+
+    const NN_SEQ_INPUTS   = NN_CURRENT_OUTPUTS + 1 + 2 * SEQ_FEATURES;                 // = 57
+    const NN_RUN_INPUTS   = NN_CURRENT_OUTPUTS + 1 + 2 * RUNNER_FEATURES;              // = 35
+    const NN_CURRENT_INPUTS = SCALARS_FEATURES
+        + NN_CURRENT_SEQ_INPUTS * SEQ_FEATURES
+        + NN_CURRENT_RUNNER_INPUTS * RUNNER_FEATURES
+        + 54 * NN_CURRENT_CARDS_INPUTS;                                                 // = 417
+    const NN_DISCARD_INPUTS  = NN_CURRENT_OUTPUTS;                                      // = 24
+    const NN_DISCARD_OUTPUTS = 54;
+    const NN_SEQ_OUTPUTS     = 1;
+    const NN_RUN_OUTPUTS     = 1;
+
+    const DNA_CURRENT = calc_dna(NN_CURRENT_INPUTS, hiddenWidth, hiddenLayers, NN_CURRENT_OUTPUTS);
+    const DNA_SEQ     = calc_dna(NN_SEQ_INPUTS,     hiddenWidth, hiddenLayers, NN_SEQ_OUTPUTS);
+    const DNA_RUN     = calc_dna(NN_RUN_INPUTS,     hiddenWidth, hiddenLayers, NN_RUN_OUTPUTS);
+    const DNA_DISCARD = calc_dna(NN_DISCARD_INPUTS, hiddenWidth, hiddenLayers, NN_DISCARD_OUTPUTS);
+    const TOTAL_DNA_SIZE = DNA_CURRENT + DNA_SEQ + DNA_RUN + DNA_DISCARD;
+
+    return {
+        ...p,
+        NN_SEQ_INPUTS, NN_RUN_INPUTS, NN_CURRENT_INPUTS,
+        NN_DISCARD_INPUTS, NN_DISCARD_OUTPUTS, NN_SEQ_OUTPUTS, NN_RUN_OUTPUTS,
+        DNA_CURRENT, DNA_SEQ, DNA_RUN, DNA_DISCARD, TOTAL_DNA_SIZE,
+        MAX_WEIGHTS,
+        // Raw candidate feature counts for JS→WASM encoding (kept for compatibility)
+        SEQ_CANDIDATE_FEATURES: 17,
+        RUN_CANDIDATE_FEATURES: 8,
+        SUITS_FEATURES: 1,  // suit of candidate play
+        RANK_FEATURES:  1,  // rank of candidate play
+        CARDS_FEATURES_ALL: 54,
+        HIDDEN_WIDTH_RUNNER:  hiddenWidth,
+        HIDDEN_WIDTH_DISCARD: hiddenWidth,
+    };
+}
+
+export const AI_CONFIG = computeNetConfig(DEFAULT_NET_PARAMS);
 
 
 //=========================================================================================================================================================================================================

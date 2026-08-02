@@ -20,7 +20,7 @@
 
 #define WASM_EXPORT __attribute__((visibility("default")))
 
-#define MAX_LAYERS       8
+#define MAX_LAYERS       12
 #define MAX_LAYER_SIZE   1024
 #define MAX_OUTPUT_SIZE  64
 #define MAX_WEIGHTS      4000000

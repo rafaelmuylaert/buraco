@@ -34,7 +34,7 @@ import fs from 'fs';
 import path from 'path';
 import { Worker } from 'worker_threads';
 import { cpus } from 'os';
-import { AI_CONFIG } from './game.js';
+import { AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS } from './game.js';
 
 const NUM_WORKERS = Math.max(1, cpus().length - 1); 
 const WORKER_PATH = new URL('./worker.js', import.meta.url).pathname; 
@@ -62,12 +62,13 @@ function mutate(genome, mutationRate = 0.05, mutationStrength = 0.1) {
     return mutated;
 }
 
-function breedNodeLevel(parentA, parentB, scoreA, scoreB) {
+function breedNodeLevel(parentA, parentB, scoreA, scoreB, netConfig) {
     const child = new Float32Array(parentA.length);
     const pA = Math.max(scoreA - scoreB + 1, 0.1);
     const pB = Math.max(scoreB - scoreA + 1, 0.1);
     const total = pA + pB;
     const probA = pA / total;
+    const C = netConfig || AI_CONFIG;
 
     const nets = [
         { dna: 'DNA_CURRENT', inp: 'NN_CURRENT_INPUTS', out: 'NN_CURRENT_OUTPUTS' },
@@ -78,7 +79,7 @@ function breedNodeLevel(parentA, parentB, scoreA, scoreB) {
 
     let off = 0;
     for (const net of nets) {
-        const layers = [AI_CONFIG[net.inp], 48, 48, 48, 48, AI_CONFIG[net.out]];
+        const layers = [C[net.inp], ...Array.from({ length: C.hiddenLayers }, () => C.hiddenWidth), C[net.out]];
         for (let l = 0; l < layers.length - 1; l++) {
             const inSz = layers[l];
             const outSz = layers[l + 1];
@@ -95,7 +96,8 @@ function breedNodeLevel(parentA, parentB, scoreA, scoreB) {
     return mutate(child, 0.05, 0.05);
 }
 
-const generateRandomGenome = () => {
+const generateRandomGenome = (netConfig) => {
+    const C = netConfig || AI_CONFIG;
     const nets = [
         { dna: 'DNA_CURRENT', inp: 'NN_CURRENT_INPUTS', out: 'NN_CURRENT_OUTPUTS' },
         { dna: 'DNA_SEQ',     inp: 'NN_SEQ_INPUTS',     out: 'NN_SEQ_OUTPUTS' },
@@ -103,10 +105,10 @@ const generateRandomGenome = () => {
         { dna: 'DNA_DISCARD', inp: 'NN_DISCARD_INPUTS', out: 'NN_DISCARD_OUTPUTS' },
     ];
 
-    const g = new Float32Array(AI_CONFIG.TOTAL_DNA_SIZE);
+    const g = new Float32Array(C.TOTAL_DNA_SIZE);
     let off = 0;
     for (const net of nets) {
-        const layers = [AI_CONFIG[net.inp], 48, 48, 48, 48, AI_CONFIG[net.out]];
+        const layers = [C[net.inp], ...Array.from({ length: C.hiddenLayers }, () => C.hiddenWidth), C[net.out]];
         for (let l = 0; l < layers.length - 1; l++) {
             const inSz = layers[l];
             const outSz = layers[l + 1];
@@ -131,8 +133,9 @@ function shuffle(arr) {
     return arr;
 }
 
-function toBuffer(genome) {
-    const buf = new SharedArrayBuffer(AI_CONFIG.TOTAL_DNA_SIZE * 4);
+function toBuffer(genome, netConfig) {
+    const totalSize = (netConfig || AI_CONFIG).TOTAL_DNA_SIZE;
+    const buf = new SharedArrayBuffer(totalSize * 4);
     new Float32Array(buf).set(genome);
     return buf;
 }
@@ -177,7 +180,7 @@ class WorkerPool {
         return snap;
     }
 
-    run(matchPairs, rules) {
+    run(matchPairs, rules, netConfig) {
         if (matchPairs.length === 0) return Promise.resolve([]);
         return new Promise((resolve) => {
             const allResults = new Array(matchPairs.length);
@@ -188,7 +191,7 @@ class WorkerPool {
             const remaining = { count: chunks.length };
             const onDone = resolve;
             for (const { chunk, offset } of chunks)
-                this.queue.push({ matches: chunk, rules, offset, allResults, remaining, onDone });
+                this.queue.push({ matches: chunk, rules, netConfig, offset, allResults, remaining, onDone });
             this._dispatch();
         });
     }
@@ -199,7 +202,7 @@ class WorkerPool {
             const job = this.queue.shift();
             w.idle = false;
             w.currentJob = { ...job, size: job.matches.length };
-            w.postMessage({ matches: job.matches, rules: job.rules });
+            w.postMessage({ matches: job.matches, rules: job.rules, netConfig: job.netConfig });
         }
     }
 
@@ -216,11 +219,11 @@ function getPool() {
     return _pool;
 }
 
-function runMatchBatch(matchPairs, rules) {
-    return getPool().run(matchPairs, rules);
+function runMatchBatch(matchPairs, rules, netConfig) {
+    return getPool().run(matchPairs, rules, netConfig);
 }
 
-async function runPlayoffTournament(population, rules) {
+async function runPlayoffTournament(population, rules, netConfig) {
     let remaining = population.map((genome, i) => ({ genome, id: i }));
     shuffle(remaining);
     while (remaining.length & (remaining.length - 1)) remaining.push(null);
@@ -231,11 +234,11 @@ async function runPlayoffTournament(population, rules) {
         for (let i = 0; i < remaining.length; i += 2) {
             const a = remaining[i], b = remaining[i + 1];
             if (!a || !b) { pairIndices.push({ a, b, bye: true }); continue; }
-            pairs.push({ dnaA: toBuffer(a.genome), dnaB: toBuffer(b.genome) });
+            pairs.push({ dnaA: toBuffer(a.genome, netConfig), dnaB: toBuffer(b.genome, netConfig) });
             pairIndices.push({ a, b, bye: false });
         }
 
-        const scores = pairs.length > 0 ? await runMatchBatch(pairs, rules) : [];
+        const scores = pairs.length > 0 ? await runMatchBatch(pairs, rules, netConfig) : [];
         let scoreIdx = 0;
         remaining = pairIndices.map(({ a, b, bye }) => {
             if (bye) return a || b;
@@ -247,11 +250,27 @@ async function runPlayoffTournament(population, rules) {
     return remaining.filter(Boolean).map(r => r.genome);
 }
 
-export async function runDebugMatch(dna, rules = {}) {
+export async function runDebugMatch(dna, rules = {}, netConfig) {
     const [[scoreA, scoreB, rawA, rawB]] = await runMatchBatch(
-        [{ dnaA: dna, dnaB: dna }], { ...rules, debugLog: true }
+        [{ dnaA: dna, dnaB: dna }], { ...rules, debugLog: true }, netConfig
     );
     return { scoreA, scoreB, rawA, rawB };
+}
+
+// Resolve the full net config for a bot (from its meta.json netParams, or defaults).
+function getBotNetConfig(botName) {
+    const metaPath = path.join(BOTS_DIR, `${botName}.meta.json`);
+    try {
+        if (fs.existsSync(metaPath)) {
+            const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+            if (meta?.netParams) return computeNetConfig(meta.netParams);
+        }
+    } catch (e) {}
+    return computeNetConfig(DEFAULT_NET_PARAMS);
+}
+
+export function getBotNetParamsSync(botName) {
+    return TrainerService.getBotNetParams(botName);
 }
 
 export const TrainerService = {
@@ -267,7 +286,19 @@ export const TrainerService = {
         if (!fs.existsSync(filePath)) return null;
         const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
         const arr = Array.isArray(raw) ? raw : Object.values(raw);
-        return arr.length > AI_CONFIG.TOTAL_DNA_SIZE ? arr.slice(0, AI_CONFIG.TOTAL_DNA_SIZE) : arr;
+        const totalSize = getBotNetConfig(botName).TOTAL_DNA_SIZE;
+        return arr.length > totalSize ? arr.slice(0, totalSize) : arr;
+    },
+
+    getBotNetParams: (botName) => {
+        const metaPath = path.join(BOTS_DIR, `${botName}.meta.json`);
+        if (!fs.existsSync(metaPath)) return null;
+        try {
+            const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+            return meta?.netParams || null;
+        } catch (e) {
+            return null;
+        }
     },
 
     getTrainingStatus: (botName) => {
@@ -282,8 +313,14 @@ export const TrainerService = {
         return result;
     },
 
-    startTraining: async (botName, rules = {}, params = {}) => {
+    startTraining: async (botName, rules = {}, params = {}, netParams) => {
         if (activeTrainings.has(botName)) throw new Error(`Training already in progress for: ${botName}`);
+
+        const netConfig = computeNetConfig(netParams || params.netParams || DEFAULT_NET_PARAMS);
+        if (netConfig.TOTAL_DNA_SIZE * 2 > MAX_WEIGHTS) {
+            throw new Error(`Network too large: DNA=${netConfig.TOTAL_DNA_SIZE}, needs ${netConfig.TOTAL_DNA_SIZE * 2} floats but buffer max is ${MAX_WEIGHTS}`);
+        }
+        console.log(`🧠 Net config: layers=${netConfig.hiddenLayers} width=${netConfig.hiddenWidth} SEQ=${netConfig.NN_SEQ_INPUTS} RUN=${netConfig.NN_RUN_INPUTS} CUR=${netConfig.NN_CURRENT_INPUTS} totalDNA=${netConfig.TOTAL_DNA_SIZE}`);
 
         const POPULATION_SIZE = Math.max(8, params.populationSize || 24);
         const GENERATIONS = params.generations || 500;
@@ -299,7 +336,7 @@ export const TrainerService = {
         if (params.meldSizeBonus   != null) rules = { ...rules, meldSizeBonus:       params.meldSizeBonus };
 
         const seedDNA = TrainerService.getBotWeights(botName);
-        const originalDNA = generateRandomGenome();
+        const originalDNA = generateRandomGenome(netConfig);
 
         const metaPath = path.join(BOTS_DIR, `${botName}.meta.json`);
         const existingMeta = fs.existsSync(metaPath) ? JSON.parse(fs.readFileSync(metaPath, 'utf-8')) : null;
@@ -316,13 +353,13 @@ export const TrainerService = {
             if (fs.existsSync(fp)) {
                 const raw = JSON.parse(fs.readFileSync(fp, 'utf-8'));
                 const arr = Array.isArray(raw) ? raw : Object.values(raw);
-                return new Float32Array(arr.length === AI_CONFIG.TOTAL_DNA_SIZE ? arr : arr.slice(0, AI_CONFIG.TOTAL_DNA_SIZE));
+                return new Float32Array(arr.length === netConfig.TOTAL_DNA_SIZE ? arr : arr.slice(0, netConfig.TOTAL_DNA_SIZE));
             }
             if (seedDNA) {
                 const arr = Array.isArray(seedDNA) ? seedDNA : Array.from(seedDNA);
-                return new Float32Array(arr.length === AI_CONFIG.TOTAL_DNA_SIZE ? arr : arr.slice(0, AI_CONFIG.TOTAL_DNA_SIZE));
+                return new Float32Array(arr.length === netConfig.TOTAL_DNA_SIZE ? arr : arr.slice(0, netConfig.TOTAL_DNA_SIZE));
             }
-            return generateRandomGenome();
+            return generateRandomGenome(netConfig);
         };
 
         activeTrainings.set(botName, {
@@ -358,17 +395,17 @@ export const TrainerService = {
         const fmt = ms => ms < 60000 ? `${(ms/1000).toFixed(1)}s` : `${Math.floor(ms/60000)}m${((ms%60000)/1000).toFixed(0)}s`;
 
         const runIslandGeneration = async (pop) => {
-        const finalists = await runPlayoffTournament(pop, rules);
+        const finalists = await runPlayoffTournament(pop, rules, netConfig);
         const statPairs = [], statMeta = [];
         for (let i = 0; i < finalists.length; i++)
             for (let j = i + 1; j < finalists.length; j++) {
-                statPairs.push({ dnaA: toBuffer(finalists[i]), dnaB: toBuffer(finalists[j]) });
+                statPairs.push({ dnaA: toBuffer(finalists[i], netConfig), dnaB: toBuffer(finalists[j], netConfig) });
                 statMeta.push([i, j]);
             }
         const allDiffs = [];
         const finalistScores = new Array(finalists.length).fill(0);
         if (statPairs.length > 0) {
-            const results = await runMatchBatch(statPairs, rules);
+            const results = await runMatchBatch(statPairs, rules, netConfig);
             results.forEach(([sA, , rawA, rawB], idx) => {
                 const [i, j] = statMeta[idx];
                 allDiffs.push(rawA, rawB);
@@ -393,14 +430,14 @@ export const TrainerService = {
         const crosses = [];
         for (let i = 0; i < rankedFinalists.length; i++)
             for (let j = i + 1; j < rankedFinalists.length; j++)
-                crosses.push(breedNodeLevel(rankedFinalists[i], rankedFinalists[j], rankedScores[i], rankedScores[j]));
+                crosses.push(breedNodeLevel(rankedFinalists[i], rankedFinalists[j], rankedScores[i], rankedScores[j], netConfig));
         for (const c of crosses) nextPop.push(c);
 
         // hybrids of (best, each cross) until full
         let ci = 0;
         while (nextPop.length < pop.length) {
             const cross = crosses[ci % crosses.length];
-            nextPop.push(breedNodeLevel(rankedFinalists[0], cross, rankedScores[0], rankedScores[0] * 0.5));
+            nextPop.push(breedNodeLevel(rankedFinalists[0], cross, rankedScores[0], rankedScores[0] * 0.5, netConfig));
             ci++;
         }
 
@@ -428,9 +465,9 @@ export const TrainerService = {
                 const pairs = [];
                 for (let i = 0; i < candidates.length; i++)
                     for (let j = i + 1; j < candidates.length; j++)
-                        pairs.push({ i, j, dnaA: toBuffer(candidates[i].genome), dnaB: toBuffer(candidates[j].genome) });
+                        pairs.push({ i, j, dnaA: toBuffer(candidates[i].genome, netConfig), dnaB: toBuffer(candidates[j].genome, netConfig) });
 
-                const results = await runMatchBatch(pairs.map(p => ({ dnaA: p.dnaA, dnaB: p.dnaB })), rules);
+                const results = await runMatchBatch(pairs.map(p => ({ dnaA: p.dnaA, dnaB: p.dnaB })), rules, netConfig);
                 results.forEach(([sA], idx) => {
                     wins[pairs[idx].i] += sA;
                     wins[pairs[idx].j] -= sA;
@@ -441,7 +478,7 @@ export const TrainerService = {
 
                 fs.writeFileSync(path.join(BOTS_DIR, `${botName}.json`), JSON.stringify(Array.from(latestChampion)));
                 const currentLifetimeGen = lifetimeGenOffset + (activeTrainings.get(botName)?.currentGeneration || 0);
-                fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({ rules, lifetimeGenerations: currentLifetimeGen, trainParams: { populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, greedyMode: params.greedyMode, telepathy: params.telepathy, fixedDeck: params.fixedDeck, scoreCardPoints: params.scoreCardPoints, scoreHandPenalty: params.scoreHandPenalty, dirtyCanastraBonus: params.dirtyCanastraBonus, cleanCanastraBonus: params.cleanCanastraBonus, mortoPenalty: params.mortoPenalty, endGameBonus: params.endGameBonus, cardPointValues: params.cardPointValues, meldSizeBonus: params.meldSizeBonus } }));
+                fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({ rules, netParams, lifetimeGenerations: currentLifetimeGen, trainParams: { populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, greedyMode: params.greedyMode, telepathy: params.telepathy, fixedDeck: params.fixedDeck, scoreCardPoints: params.scoreCardPoints, scoreHandPenalty: params.scoreHandPenalty, dirtyCanastraBonus: params.dirtyCanastraBonus, cleanCanastraBonus: params.cleanCanastraBonus, mortoPenalty: params.mortoPenalty, endGameBonus: params.endGameBonus, cardPointValues: params.cardPointValues, meldSizeBonus: params.meldSizeBonus } }));
 
                 let benchmarkDiff = null;
                 if (originalDNA) {
@@ -450,8 +487,8 @@ export const TrainerService = {
                         shuffle(benchDeck);
                         getPool().broadcastDeck(benchDeck);
                         const [[benchScore]] = await runMatchBatch(
-                            [{ dnaA: toBuffer(latestChampion), dnaB: toBuffer(originalDNA) }],
-                            { ...rules, fixedDeck: true }
+                            [{ dnaA: toBuffer(latestChampion, netConfig), dnaB: toBuffer(originalDNA, netConfig) }],
+                            { ...rules, fixedDeck: true }, netConfig
                         );
                         benchmarkDiff = benchScore;
                     } catch (e) {}
