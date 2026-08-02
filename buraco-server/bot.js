@@ -132,7 +132,7 @@ function makeIface(client, botName, playerID) {
     },
     discard:  (id) => {
         const cid = id === 54 ? 54 : id;
-        console.log(`[BOT] ${botName} => discardCard id=${id} (${discardStr(cid)})`);
+        //console.log(`[BOT] ${botName} => discardCard id=${id} (${discardStr(cid)})`);
         client.moves.discardCard(id);
     },
     exhaust:  () => {

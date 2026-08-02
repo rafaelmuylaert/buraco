@@ -85,7 +85,7 @@ export function getActiveDnaSize() { return _activeNetConfig?.TOTAL_DNA_SIZE || 
 let _diagnosticLog = 0;  // 0=silent, 1=basic (candidates,scores,state), 2=verbose (weights,memory)
 export function setDiagnosticLog(level) { _diagnosticLog = level; }
 export function isDiagnosticLog() { return _diagnosticLog; }
-const _suitChars = ['','♠','♥','♣','♦','★'];
+const _suitChars = ['','♠','♥','♦','♣','★'];
 const _rankChars = ['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
 function _fmtCard(cid) {
     if (cid === 54 || cid === 53) return 'Joker';
@@ -717,7 +717,7 @@ export function scoreDiscards() {
     const logits = new Float32Array(54);
     for (let i = 0; i < 54; i++) logits[i] = _vOut[i];
 
-    if (_diagnosticLog >= 1) {
+    if (_diagnosticLog >= 2) {
         console.log(`[WASM_DBG] discard logits: ${logits.map((v,i) => v.toFixed(4)).join(', ')}`);
     }
     return logits;

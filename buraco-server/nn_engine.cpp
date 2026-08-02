@@ -564,6 +564,12 @@ static void use_net(int* layers, int nlayers, int woff) {
     g_weight_offset = g_team_base + woff;
 }
 
+static int seq_active(const uint8_t* meld) {
+    if (!meld) return 0;
+    for (int i = 0; i < 16; i++) if (meld[i]) return 1;
+    return 0;
+}
+
 // ── collect_back_neighbors helper ────────────────────────────────────────────
 static int collect_back_neighbors(int player, int suit, uint8_t* outCard, uint8_t* outPartner, int max) {
     int count = 0;
@@ -572,14 +578,18 @@ static int collect_back_neighbors(int player, int suit, uint8_t* outCard, uint8_
         if (t == team) continue;
         for (int i = 0; i < MAX_SEQ_SLOTS; i++) {
             uint8_t* meld = g_seq_melds[t][suit - 1 < 0 ? 3 : suit - 1][i < MAX_SEQ_SLOTS ? i : 0];
-            if (meld && meld[0] > 10) {
-                for (int c = 0; c < 13; c++) {
-                    if (meld[c] == 1) {
-                        if (count < max) {
-                            outCard[count] = (suit - 1) * 13 + c;
-                            outPartner[count] = 255;
-                            count++;
-                        }
+            if (seq_active(meld)) {
+                int base = (suit - 1) * 13;
+                if ((meld[0] || meld[1]) && count < max) {
+                    outCard[count] = base;
+                    outPartner[count] = 255;
+                    count++;
+                }
+                for (int r = 2; r <= 13; r++) {
+                    if (meld[r] && count < max) {
+                        outCard[count] = base + (r - 1);
+                        outPartner[count] = 255;
+                        count++;
                     }
                 }
             }
@@ -719,12 +729,11 @@ WASM_EXPORT void run_current_state(int player, int my_team, int opp_team) {
         for (int s = 0; s < 4; s++) {
             for (int slot = 0; slot < MAX_SEQ_SLOTS; slot++) {
                 uint8_t* meld = g_seq_melds[t][s][slot];
-                if (meld && meld[0] > 10) {  // Active meld
-                    for (int c = 0; c < 13; c++) {
-                        if (meld[c] == 1) {
-                            int card_idx = s * 13 + c;
-                            if (card_idx < 52) target[card_idx] = 1;
-                        }
+                if (seq_active(meld)) {
+                    if ((meld[0] || meld[1]) && s * 13 < 52) target[s * 13] = 1;
+                    for (int r = 2; r <= 13; r++) {
+                        int card_idx = s * 13 + (r - 1);
+                        if (meld[r] && card_idx < 52) target[card_idx] = 1;
                     }
                 }
             }
@@ -734,16 +743,18 @@ WASM_EXPORT void run_current_state(int player, int my_team, int opp_team) {
             uint8_t* meld = g_run_melds[t][slot];
             if (meld && meld[0] > 0) {  // Active runner meld
                 // Runner format: [rank/13, ♠/2, ♥/2, ♦/2, ♣/2, wildSuit/5]
-                // Convert to card bitmaps
-                int rank = meld[0];
+                // Convert to card bitmaps (bytes scaled: rank/13*255, count/2*255, wild/5*255)
+                int rank = (meld[0] * 13 + 127) / 255;
+                if (rank < 1) rank = 1;
+                if (rank > 13) rank = 13;
                 for (int s = 0; s < 4; s++) {
-                    if (meld[s + 1] == 2) {  // Natural card
-                        int card_idx = s * 13 + (rank + 1);
+                    int cnt = (meld[s + 1] * 2 + 127) / 255;
+                    if (cnt >= 1) {
+                        int card_idx = s * 13 + (rank - 1);
                         if (card_idx >= 0 && card_idx < 52) target[card_idx] = 1;
-                    } else if (meld[s + 1] == 1) {  // Wild card (joker)
-                        target[52] = 1;  // Joker
                     }
                 }
+                if ((meld[5] * 5 + 127) / 255 > 0) target[52] = 1;  // Joker
             }
         }
     }
@@ -759,7 +770,7 @@ WASM_EXPORT void run_current_state(int player, int my_team, int opp_team) {
         for (int s = 0; s < 4; s++) {
             for (int slot = 0; slot < MAX_SEQ_SLOTS && (t == my_team ? own_idx < MAX_SEQ_SLOTS : opp_idx < MAX_SEQ_SLOTS); slot++) {
                 uint8_t* meld = g_seq_melds[t][s][slot];
-                if (meld && meld[0] > 10) {  // Active meld
+                if (seq_active(meld)) {
                     if (t == my_team && own_idx < MAX_SEQ_SLOTS) {
                         memcpy(g_own_seq[own_idx], meld, 16);
                         own_idx++;
