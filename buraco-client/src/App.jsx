@@ -856,7 +856,7 @@ const App = () => {
                 <div key={k} style={{ background: '#1a0a33', border: '1px solid #5a2a9a', borderRadius: '8px', padding: '10px', fontSize: '0.85em' }}>
                   <div style={{ color: '#b088f9', fontWeight: 'bold', marginBottom: '6px' }}> Ilha {k + 1} 🏝️ Gen {island.gen}</div>
                   <div> MaxDiff: <strong style={{color:'#ffd700'}}>{island.bestDiff?.toFixed(0)}</strong></div>
-                  <div>"S AvgDiff: <strong style={{color:'#4da6ff'}}>{island.avgDiff?.toFixed(0)}</strong></div>
+                  <div> AvgDiff: <strong style={{color:'#4da6ff'}}>{island.avgDiff?.toFixed(0)}</strong></div>
                 </div>
               ))}
             </div>
@@ -941,7 +941,7 @@ const App = () => {
           <div style={{ flex: '2 1 300px', background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <h2 style={{ color: '#4da6ff', margin: 0 }}>Mesas Ativas (Liberar Assentos)</h2>
-              <button onClick={handleCleanOrphans} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold' }}> Limpar Mesas "rfãs</button>
+              <button onClick={handleCleanOrphans} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold' }}> Limpar Mesas órfãs</button>
             </div>
             {matches.length === 0 ? <p style={{ color: '#888' }}>Nenhuma mesa ativa.</p> : null}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
@@ -952,7 +952,7 @@ const App = () => {
                 return (
                   <div key={m.matchID} style={{ background: '#111', border: `1px solid ${isOrphan ? '#ff4d4d' : '#333'}`, borderRadius: '8px', padding: '15px', width: '300px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                      <h4 style={{ margin: 0, color: isOrphan ? '#ff4d4d' : '#ccc' }}>{tableLabel} {isOrphan && '("rfã)'}</h4>
+                      <h4 style={{ margin: 0, color: isOrphan ? '#ff4d4d' : '#ccc' }}>{tableLabel} {isOrphan && '(órfã)'}</h4>
                       <button onClick={async () => {
                         await fetch(`${API_ADDRESS}/api/admin/delete-match`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matchID: m.matchID }) });
                         window.location.reload();

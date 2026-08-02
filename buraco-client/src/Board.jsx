@@ -65,10 +65,10 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor 
       ...customStyle
     }}>
       <div style={{ position: 'absolute', top: '2px', left: '3px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1' }}>
-        <span style={{ fontSize: '9px', fontWeight: 'bold' }}>{card.rank}</span>
-        <span style={{ fontSize: '10px' }}>{card.suit}</span>
+        <span style={{ fontSize: '11px', fontWeight: 'bold' }}>{card.rank}</span>
+        <span style={{ fontSize: '12px' }}>{card.suit}</span>
       </div>
-      <div style={{ fontSize: '22px', opacity: 0.25 }}>{card.suit}</div>
+      <div style={{ fontSize: '26px', opacity: 0.3 }}>{card.suit}</div>
       {deckColor && <div style={{ position: 'absolute', bottom: 0, left: 0, width: 0, height: 0,
         borderStyle: 'solid', borderWidth: '0 12px 12px 0',
         borderColor: `transparent transparent ${deckColor} transparent`,
@@ -100,6 +100,16 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
   const [popupPos, setPopupPos] = useState({ x: null, y: null });
   const [dragging, setDragging] = useState(false);
   const [removePopup, setRemovePopup] = useState(null);
+  const [compact, setCompact] = useState(typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 640px)');
+    const onChange = (e) => setCompact(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  const MELD_W = compact ? Math.round(CARD_W * 0.75) : CARD_W;
+  const MELD_H = compact ? Math.round(CARD_H * 0.75) : CARD_H;
   const dragOffset = React.useRef({ x: 0, y: 0 });
 
   const isMyTurn = ctx.currentPlayer === playerID;
@@ -397,9 +407,9 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
   const oppTeam = myTeam === 0 ? 1 : 0;
 
   const LEFT_COL_W = 100;
-  // In open discard view cards overlap: first card takes CARD_W, each additional takes (CARD_W - 37)px
-  // Solve: CARD_W + (n-1)*(CARD_W-37) <= LEFT_COL_W - 12 (padding)
-  const CARD_OVERLAP_STEP = CARD_W - 32; // 14px per additional card
+  // In open discard view cards overlap: first card takes CARD_W, each additional takes (CARD_W - 34)px
+  // Solve: CARD_W + (n-1)*(CARD_W-34) <= LEFT_COL_W - 12 (padding)
+  const CARD_OVERLAP_STEP = CARD_W - 34; // 12px per additional card
   const cardsPerDiscardRow = Math.max(1, Math.floor((LEFT_COL_W - 12 - CARD_W) / CARD_OVERLAP_STEP) + 1);
   const chunkedDiscard = [];
   if (G.discardPile && G.discardPile.length > 0) {
@@ -511,8 +521,9 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
               const isNewCard = hasNewCards && !prevRendered.has(card.id);
               return (
                 <Card key={card.id} card={card} deckColor={dc(card.id)} isNewlyDrawn={isNewCard} customStyle={{
-                  marginLeft: (!isRunner && i > 0) ? `-${CARD_W - 14}px` : '0',
-                  marginTop: (isRunner && i > 0) ? `-${CARD_H - 18}px` : '0',
+                  width: `${MELD_W}px`, height: `${MELD_H}px`, minWidth: `${MELD_W}px`,
+                  marginLeft: (!isRunner && i > 0) ? `-${MELD_W - 12}px` : '0',
+                  marginTop: (isRunner && i > 0) ? `-${MELD_H - 18}px` : '0',
                   zIndex: i
                 }} />
               );
@@ -524,7 +535,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
     };
 
     return (
-      <div style={{ background: isMyTeam ? 'rgba(77, 166, 255, 0.1)' : 'rgba(255, 77, 77, 0.1)', padding: '15px', borderRadius: '10px', minHeight: '120px' }}>
+      <div style={{ background: isMyTeam ? 'rgba(77, 166, 255, 0.1)' : 'rgba(255, 77, 77, 0.1)', padding: '15px', borderRadius: '10px', minHeight: compact ? '90px' : '120px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <h3 style={{ margin: 0, color: isMyTeam ? '#4da6ff' : '#ff4d4d' }}>{title}</h3>
           <span style={{ background: 'rgba(0,0,0,0.5)', padding: '5px 10px', borderRadius: '20px', fontWeight: 'bold', color: '#ffd700', flexShrink: 0, whiteSpace: 'nowrap', fontSize: '0.85em' }}>{calcTeamTablePoints(teamId)} pts</span>
@@ -594,8 +605,8 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
             {G.discardPile.length > 0 ? (
               G.rules?.openDiscardView ? (
                 chunkedDiscard.map((row, rIdx) => (
-                  <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-22px' : '0' }}>
-                    {row.map((c, i) => <Card key={c.id} card={c} deckColor={dc(c.id)} customStyle={{ marginLeft: i > 0 ? '-37px' : '0' }} />)}
+                  <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-28px' : '0' }}>
+                    {row.map((c, i) => <Card key={c.id} card={c} deckColor={dc(c.id)} customStyle={{ marginLeft: i > 0 ? '-34px' : '0' }} />)}
                   </div>
                 ))
               ) : (
