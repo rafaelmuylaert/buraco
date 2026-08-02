@@ -363,38 +363,17 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
     // A discard Ace makes the existing span degenerate (lo=0..hi=12), so skip
     // the check and let parseMeld decide.
     let eLo = Infinity, eHi = -Infinity;
-    if (em[0]) { eLo = Math.min(eLo, 0); eHi = Math.max(eHi, 0); }
-    if (em[1]) { eLo = Math.min(eLo, 12); eHi = Math.max(eHi, 12); }
-    for (let r = 3; r <= 13; r++) {
-        if (em[r]) {
-            const p = r - 2;
-            eLo = Math.min(eLo, p);
-            eHi = Math.max(eHi, p);
+    if (!discardIsAce) {
+        if (em[0]) { eLo = 0;}
+        if (em[1]) { eHi = 12; }
+        for (let r = 1; r <= 11; r++) {
+            if (em[r+1]) {
+                eLo = Math.min(eLo, r);
+                eHi = Math.max(eHi, r);
+            }
         }
     }
-    const skipFilter = discardIsAce || !isFinite(eLo);
-    const candSpan = (cc) => {
-        let cLo = Infinity, cHi = -Infinity;
-        for (const k of Object.keys(cc)) {
-            const id = +k;
-            if (getSuit(id) === 5 || getRank(id) === 2) continue;
-            if (getSuit(id) !== suit) continue;
-            const r = getRank(id);
-            if (r === 1) { cLo = Math.min(cLo, 0); cHi = Math.max(cHi, 12); }
-            else { const p = r - 2; cLo = Math.min(cLo, p); cHi = Math.max(cHi, p); }
-        }
-        return isFinite(cLo) ? [cLo, cHi] : null;
-    };
-    const passesSpan = (cc) => {
-        if (skipFilter) return true;
-        const cs = candSpan(cc);
-        if (!cs) return true;
-        return cs[0] <= eHi + 2 && cs[1] >= eLo - 2;
-    };
-    const maybePush = (cc) => {
-        if (Object.keys(cc).length > 0 && passesSpan(cc)) results.push({ cardCounts: cc });
-    };
-    
+  
     // Linear scan for runs
     let cgap = 0, cnogap = 0;
     //move lo and high here, and make them the lo and hi of the existing meld??
@@ -421,7 +400,7 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
                         cc[wildInHand] = (cc[wildInHand] || 0) + 1;
                     }
                 }
-                maybePush(cc);
+                if (lo <= eLo && hi >= ehi) results.push({ cardCounts: cc });
             }
             
             if (cgap >= 3) {
@@ -433,7 +412,7 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
                     const cardIdx = suit0 * 13 + (p === 0 || p === 12 ? 0 : p === 13 ? 1 : p + 1);
                     cc[cardIdx] = (cc[cardIdx] || 0) + 1;
                 }
-                maybePush(cc);
+                if (lo <= eLo && hi >= ehi) results.push({ cardCounts: cc });
             }
 
             if (canAddWild && cgap >= 2) {
@@ -451,7 +430,7 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
                         cc[wildInHand] = (cc[wildInHand] || 0) + 1;
                     }
                 }
-                maybePush(cc);
+                if (lo <= eLo && hi >= ehi) results.push({ cardCounts: cc });
             }
             
             cnogap = cgap;
