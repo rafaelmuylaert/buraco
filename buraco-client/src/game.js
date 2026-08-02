@@ -1145,7 +1145,7 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
     }
     
     // ── Sequence appends (extend existing seq melds) ─────────────────────
-    for (let suit = 1; suit <= 4; suit++) {
+    for (let suit = minsuit; suit <= maxsuit; suit++) {
         const melds = G.table[myTeam]?.[0]?.[suit] || [];
         for (let slot = 0; slot < melds.length; slot++) {
             const cands = findSeqRuns(handSim, suit, topdiscard, melds[slot]);
