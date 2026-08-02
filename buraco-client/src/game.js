@@ -140,9 +140,9 @@ export const AI_CONFIG = computeNetConfig(DEFAULT_NET_PARAMS);
 //=========================================================================================================================================================================================================
 
 // Cards: 0-51 = normal (two copies each), 53 = Joker (two copies). Card 52 unused.
-export const getSuit = c => Math.floor((c % 54) / 13) + 1; // 1:♠, 2:♥, 3:♦, 4:♣, 5:★
+export const getSuit = c => Math.floor((c % 54) / 13) + 1; // 1:♠, 2:♥, 3:♣, 4:♦, 5:★
 export const getRank = c => ((c % 54) % 13) + 1; // 1:A, 2:2... 11:J, 12:Q, 13:K
-const getSuitChar = s => ['♠', '♥', '♣', '♦', '★'][s-1];
+export const getSuitChar = s => ['♠', '♥', '♣', '♦', '★'][s-1];
 const getRankChar = r => r === 1 ? 'A' : r === 11 ? 'J' : r === 12 ? 'Q' : r === 13 ? 'K' : r === 14 ? 'A' : r.toString();
 const getColor = s => (s%2) === 0 ? 'red' : 'black';
 
@@ -308,9 +308,10 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
     const natWild = 15;
     const foreignWild = 14;
     const wildInHand = hasForeignWild(handFlat, suit);
-    if (!wildInHand && !hasCardInSuit(handFlat, suit)) return results;
     const em = promoteNatWild(existingMeld ? [...existingMeld] : null);
     const hasDiscard = topdiscard !== null && topdiscard !== 255;
+    if (existingMeld && hasDiscard) results.push({ cardCounts: {} });
+    if (!wildInHand && !hasCardInSuit(handFlat, suit)) return results;
     if(hasDiscard){
         const discardSuit = getSuit(topdiscard);
         if(discardSuit === suit){
@@ -400,7 +401,7 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
                         cc[wildInHand] = (cc[wildInHand] || 0) + 1;
                     }
                 }
-                if (lo <= eLo && hi >= eHi) results.push({ cardCounts: cc });
+                if (Object.keys(cc).length > 0 && lo <= eLo && hi >= eHi) results.push({ cardCounts: cc });
             }
             
             if (cgap >= 3) {
@@ -412,7 +413,7 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
                     const cardIdx = suit0 * 13 + (p === 0 || p === 12 ? 0 : p === 13 ? 1 : p + 1);
                     cc[cardIdx] = (cc[cardIdx] || 0) + 1;
                 }
-                if (lo <= eLo && hi >= eHi) results.push({ cardCounts: cc });
+                if (Object.keys(cc).length > 0 && lo <= eLo && hi >= eHi) results.push({ cardCounts: cc });
             }
 
             if (canAddWild && cgap >= 2) {
@@ -430,7 +431,7 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
                         cc[wildInHand] = (cc[wildInHand] || 0) + 1;
                     }
                 }
-                if (lo <= eLo && hi >= eHi) results.push({ cardCounts: cc });
+                if (Object.keys(cc).length > 0 && lo <= eLo && hi >= eHi) results.push({ cardCounts: cc });
             }
             
             cnogap = cgap;

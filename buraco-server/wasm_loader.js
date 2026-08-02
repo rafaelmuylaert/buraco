@@ -32,7 +32,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS, isMeldClean, seqSuit, addPlanTurnTime, setScoreFunctions, generateAllValidMelds } from './game.js';
+import { AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS, isMeldClean, seqSuit, addPlanTurnTime, setScoreFunctions, generateAllValidMelds, getSuitChar } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -85,13 +85,12 @@ export function getActiveDnaSize() { return _activeNetConfig?.TOTAL_DNA_SIZE || 
 let _diagnosticLog = 0;  // 0=silent, 1=basic (candidates,scores,state), 2=verbose (weights,memory)
 export function setDiagnosticLog(level) { _diagnosticLog = level; }
 export function isDiagnosticLog() { return _diagnosticLog; }
-const _suitChars = ['','♠','♥','♦','♣','★'];
 const _rankChars = ['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
 function _fmtCard(cid) {
     if (cid === 54 || cid === 53) return 'Joker';
     const s = Math.floor(cid / 13) + 1;
     const r = (cid % 13) + 1;
-    return _rankChars[r] + _suitChars[s];
+    return _rankChars[r] + getSuitChar(s);
 }
 function _fmtCounts(cc) {
     if (!cc || Object.keys(cc).length === 0) return '{}';

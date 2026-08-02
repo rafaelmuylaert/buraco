@@ -24,7 +24,7 @@ import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import fs from 'fs';
 import path from 'path';
-import { setDbgLogFn, BuracoGame, AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, getAndResetTimings } from './game.js';
+import { setDbgLogFn, BuracoGame, AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, getAndResetTimings, getSuitChar } from './game.js';
 import { getLastDbgLog, initWasm, loadMatchDNA, isWasmReady, runTurn,
          setDiagnosticLog, setActiveNetConfig } from './wasm_loader.js';
 setDbgLogFn(getLastDbgLog);
@@ -53,7 +53,6 @@ async function resolveBotNetConfig(botName) {
     return cfg;
 }
 
-const getSuitChar = s => ['♠','♥','♦','♣','★'][s-1];
 const getRankChar = r => r===1?'A':r===11?'J':r===12?'Q':r===13?'K':r===14?'A':r.toString();
 const ccStr = (cc) => {
   if (!cc || Object.keys(cc).length === 0) return '{}';
