@@ -845,7 +845,8 @@ export function teamHasClean(G, teamId) {
 }
 
 export function mortoSafe(G, team, addCleancount) {
-    return G.rules.cleanCanastaToWin || (G.pots.length > 0 && !G.teamMortos[team]) || ((G.cleanMelds[team] + addCleancount) > 0);
+    if (!G.rules.cleanCanastaToWin) return true;
+    return (G.pots.length > 0 && !G.teamMortos[team]) || ((G.cleanMelds[team] + addCleancount) > 0);
 }
 
 export function tryPickupMorto(G, p) {
@@ -967,7 +968,7 @@ export function checkGameOver(G) {
     for (let i = 0; i < G.rules.numPlayers; i++) {
         const p = i.toString(), team = G.teams[p];
         if (G.handSizes[p] === 0 && (G.teamMortos[team] || G.pots.length === 0)) {
-            if (teamHasClean(G, team)) {
+            if (!G.rules.cleanCanastaToWin || teamHasClean(G, team)) {
                 const finalScores = calculateFinalScores(G);
                 const bonus = G.rules?.endGameBonus ?? 100;
                 finalScores[team].baterBonus = bonus;
