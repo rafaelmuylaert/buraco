@@ -429,68 +429,110 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
 }
 
 /**
- * Find all valid runner meld candidates of a specific rank from a hand bitmap.
- * 
+ * Collect every card index of a given rank present in a hand bitmap.
+ * Rank 2 also pulls in the joker (index 53), since 2s and jokers are the wilds.
+ *
+ * @param {number} rank1 - 1-indexed rank (1=Ace, 2=2, ..., 13=King)
  * @param {Uint8Array} handFlat - 54-element card bitmap
- * @param {number} rank - 1-indexed rank (1=Ace, 2=2, ..., 13=King) - note: rank 2 is typically NOT a valid runner
- * @returns {Array<{cardCounts: Object}>} Array of candidate objects
+ * @returns {number[]} card indices, one entry per copy held (0..2 each)
  */
-export function findRunnerCandidates(handFlat, rank, topdiscard) {
-    const results = [];
-    const MAX_CANDS = 4;
-    const jokeridx = 53;
-    //const wilds = [1, 14, 27, 40, 53];
-    
-    // Check how many cards of this rank exist in hand (one per suit max, plus wilds)
+function getRankInHand(rank1, handFlat) {
     const cards = [];
-    const suits = [1, 2, 3, 4]; // ♠, ♥, ♦, ♣
-    
-    for (const s of suits) {
-        const cardIdx = (s - 1) * 13 + (rank - 1);
-        if (handFlat[cardIdx] > 0) {
+    for (let s = 1; s <= 4; s++) {
+        const cardIdx = (s - 1) * 13 + (rank1 - 1);
+        for (let i = 0; i < (handFlat[cardIdx] || 0); i++) {
             cards.push(cardIdx);
         }
     }
-    
-    // Also check for wilds (2s and jokers)
-    const wilds = [];
-    for (let s = 1; s <= 4; s++) {
-        const twoIdx = (s - 1) * 13 + 1; // rank 2 = wild
-        if (handFlat[twoIdx] > 0) {
-            wilds.push(twoIdx);
-        }
+    if (rank1 === 2 && (handFlat[53] || 0) > 0) {
+        cards.push(53); // joker
     }
-    if (handFlat[jokeridx] > 0) { // joker
-        wilds.push(jokeridx);
-    }
-    
-    // A pickup from the discard pile can supply one extra natural (same rank)
-    // or one wild, so a runner can be completed from just 2 naturals in hand.
-    const tdNatural = (topdiscard !== null && topdiscard !== 255) ? getRank(topdiscard) : -1;
-    const tdWild = (topdiscard !== null && topdiscard !== 255) && getRank(topdiscard) === 2;
-    const minNaturals = (tdNatural === rank || tdWild) ? 2 : 3;
+    return cards;
+}
 
-    // Simple approach: emit the max natural set, then subsets with wilds
-    if (cards.length >= minNaturals) {
-        // Emit all cards of this rank from hand
-        const cc = {};
-        for (const c of cards) {
-            cc[c] = (cc[c] || 0) + 1;
-        }
-        results.push({ cardCounts: cc });
-        
-        // If we have wilds, also emit candidates with wilds added
-        if (wilds.length > 0 && results.length < MAX_CANDS) {
-            const ccWithWild = { ...cc };
-            for (const w of wilds) {
-                ccWithWild[w] = (ccWithWild[w] || 0) + 1;
-                if (Object.keys(ccWithWild).length > 0) {
-                    results.push({ cardCounts: { ...ccWithWild } });
-                }
-            }
-        }
+/**
+ * Find all valid runner meld candidates of a specific rank from a hand bitmap.
+ * Handles both brand-new runners (runRank given) and appends to an existing
+ * runner (existingMeld given). Enumerates every valid subset of naturals plus
+ * at most one wild, subject to the minimum hand-card requirement.
+ *
+ * A pickup from the discard pile can supply one extra card (same-rank natural
+ * or a wild), so the minimum drops by one when a compatible top discard exists.
+ *
+ * @param {Uint8Array} handFlat - 54-element card bitmap
+ * @param {number} runRank - 1-indexed rank for a new runner (0/null when appending)
+ * @param {Uint8Array|null} existingMeld - 6-element existing runner meld [rank, spadeCount, heartCount, diamondCount, clubCount, wildSuit]
+ * @param {number|null} topdiscard - top discard card ID (255 or null = no discard)
+ * @returns {Array<{cardCounts: Object}>} Array of candidate objects
+ */
+export function findRunnerCandidates(handFlat, runRank, existingMeld = null, topdiscard = null) {
+    const results = [];
+    const hasDiscard = topdiscard !== null && topdiscard !== 255;
+    const rank = runRank || (existingMeld ? existingMeld[0] : 0);
+    if (!rank) return results;
+
+    const exwildsuit = existingMeld ? existingMeld[5] : 0;
+    const tdrank = hasDiscard ? getRank(topdiscard) : -1;
+    if (hasDiscard && (exwildsuit > 0 || tdrank !== 2) && tdrank !== rank) return results;
+
+    const cards = getRankInHand(rank, handFlat);
+    const wilds = exwildsuit ? [] : getRankInHand(2, handFlat);
+    const minsize = (existingMeld ? 1 : 3);
+    const minhand = minsize - (hasDiscard ? 1 : 0);
+
+    // Enumerate every subset of the naturals (distinct card types, 0..count each),
+    // each optionally extended with at most one wild, keeping combos >= minhand.
+    const naturalTypes = [];
+    for (const c of cards) {
+        const last = naturalTypes[naturalTypes.length - 1];
+        if (last && last.idx === c) last.count++;
+        else naturalTypes.push({ idx: c, count: 1 });
     }
-    
+
+    const emit = (cc) => {
+        let total = 0;
+        for (const n of Object.values(cc)) total += n;
+        if (total >= minhand) results.push({ cardCounts: cc });
+    };
+
+    const walk = (i, cc) => {
+        if (i === naturalTypes.length) {
+            emit(cc);
+            return;
+        }
+        const t = naturalTypes[i];
+        for (let take = 0; take <= t.count; take++) {
+            const next = { ...cc };
+            if (take > 0) next[t.idx] = (next[t.idx] || 0) + take;
+            walk(i + 1, next);
+        }
+    };
+    walk(0, {});
+
+    // Add a single wild to every natural subset and re-emit valid combos.
+    if (wilds.length > 0) {
+        const w = wilds[0];
+        const emitWithWild = (cc) => {
+            const cw = { ...cc, [w]: (cc[w] || 0) + 1 };
+            let total = 0;
+            for (const n of Object.values(cw)) total += n;
+            if (total >= minhand) results.push({ cardCounts: cw });
+        };
+        const walkWild = (i, cc) => {
+            if (i === naturalTypes.length) {
+                emitWithWild(cc);
+                return;
+            }
+            const t = naturalTypes[i];
+            for (let take = 0; take <= t.count; take++) {
+                const next = { ...cc };
+                if (take > 0) next[t.idx] = (next[t.idx] || 0) + take;
+                walkWild(i + 1, next);
+            }
+        };
+        walkWild(0, {});
+    }
+
     // Deduplicate
     const seen = new Set();
     const unique = [];
@@ -499,51 +541,6 @@ export function findRunnerCandidates(handFlat, rank, topdiscard) {
         if (!seen.has(key)) { seen.add(key); unique.push(cand); }
     }
     return unique;
-}
-
-
-/**
- * Find all valid append candidates for an existing runner meld.
- * 
- * @param {Uint8Array} handFlat - 54-element card bitmap
- * @param {Uint8Array} existingMeld - 6-element existing runner meld array [rank, spadeCount, heartCount, diamondCount, clubCount, wildSuit]
- * @returns {Array<{cardCounts: Object}>} Array of candidate objects
- */
-export function findRunnerAppends(handFlat, existingMeld, topdiscard) {
-    const results = [];
-    
-    if (!existingMeld || existingMeld[0] === 0) return results;
-    
-    const rank = existingMeld[0]; // 1-indexed rank
-    const suitCounts = [existingMeld[1], existingMeld[2], existingMeld[3], existingMeld[4]];
-    
-    // Check how many natural cards of this rank we have in hand for each suit
-    const suit0 = (s) => s - 1; // 0-indexed
-    const naturalCards = [];
-    
-    for (let s = 1; s <= 4; s++) {
-        const cardIdx = suit0(s) * 13 + (rank - 1);
-        const currentInMeld = suitCounts[s - 1] || 0;
-        const maxAllowed = 2; // max 2 of same rank per suit
-        const canAdd = Math.max(0, maxAllowed - currentInMeld);
-        
-        for (let i = 0; i < canAdd; i++) {
-            const handCount = handFlat[cardIdx];
-            if (handCount > currentInMeld + i) {
-                naturalCards.push(cardIdx);
-            }
-        }
-    }
-    
-    if (naturalCards.length > 0) {
-        const cc = {};
-        for (const c of naturalCards) {
-            cc[c] = (cc[c] || 0) + 1;
-        }
-        if (Object.keys(cc).length > 0) results.push({ cardCounts: cc });
-    }
-    
-    return results;
 }
 
 function newsuitorrank(cardIds){
@@ -1092,7 +1089,7 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
     for (let slot = 0; slot < (G.table[myTeam]?.[1]?.length || 0); slot++) {
         const existing = G.table[myTeam]?.[1]?.[slot];
         if (!existing) continue;
-        const cands = findRunnerAppends(handSim, existing, topdiscard);
+        const cands = findRunnerCandidates(handSim, 0, existing, topdiscard);
         for (const cand of cands) {
             const cardIds = [...Object.keys(cand.cardCounts).map(Number)];
             const fullIds = hasDiscard ? [...cardIds, topdiscard] : cardIds;
@@ -1113,7 +1110,7 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
     
     // ── New runners ──────────────────────────────────────────────────────
     for (const rank of trackRunnerRanks) {
-        const runnerCands = findRunnerCandidates(handSim, rank + 1, topdiscard); // convert to 1-indexed
+        const runnerCands = findRunnerCandidates(handSim, rank + 1, null, topdiscard); // convert to 1-indexed
         for (const cands of runnerCands) {
             const cardIds = Object.keys(cands.cardCounts).map(Number);
             const fullIds = hasDiscard ? [...cardIds, topdiscard] : cardIds;
