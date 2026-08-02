@@ -252,21 +252,6 @@ server.router.post('/api/tournaments', async (ctx) => {
   } catch (e) { ctx.status = 500; ctx.body = { error: 'Failed' }; }
 });
 
-server.router.post('/api/history/add', async (ctx) => {
-  setCors(ctx);
-  try {
-    const body = await parseBody(ctx);
-    if (body && body.matchID) {
-      const history = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
-      if (!history.some(h => h.matchID === body.matchID)) {
-        history.unshift(body);
-        fs.writeFileSync(historyFile, JSON.stringify(history));
-      }
-    }
-    ctx.body = { success: true };
-  } catch (e) { ctx.status = 500; ctx.body = { error: 'Failed' }; }
-});
-
 server.router.post('/api/admin/kick', async (ctx) => {
   setCors(ctx);
   try {

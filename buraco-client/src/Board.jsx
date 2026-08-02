@@ -221,18 +221,6 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
       wasMyTurnRef.current = isMyTurn;
   }, [ctx?.currentPlayer]);
 
-  const onDragStart = (e) => {
-    if (e.target.tagName === 'BUTTON') return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    dragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    setDragging(true);
-  };
-  const onDragMove = (e) => {
-    if (!dragging) return;
-    setPopupPos({ x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y });
-  };
-  const onDragEnd = () => setDragging(false);
-
   const gameOverPopup = gameover ? (() => {
     const s0 = gameover.scores?.[0] ?? { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 };
     const s1 = gameover.scores?.[1] ?? { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 };
@@ -426,7 +414,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
     return total;
   };
 
-  const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
+  const isClosedDiscard = G.rules.discard;
   const toggleCardSelection = (cardUid) => {
     setSelectedCards(prev => {
         const next = new Set(prev);

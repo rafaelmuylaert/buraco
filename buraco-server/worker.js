@@ -74,7 +74,7 @@ function makeIface(S, p) {
         pickup:   (cc, tgt) => { movePickUpDiscard(S, p, cc, tgt); _workerStateId++; },
         meld:     (cc) => { moveMeld(S, p, cc); _workerStateId++; },
         append:   (tgt, cc) => { moveMeld(S, p, cc, tgt); _workerStateId++; },
-        discard:  (id) => { moveDiscardCard(S, p, id, true); _workerStateId++; },
+        discard:  (id) => { moveDiscardCard(S, p, id); _workerStateId++; },
         exhaust:  () => { S.isExhausted = true; _workerStateId++; },
     };
 }

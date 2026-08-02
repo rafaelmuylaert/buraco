@@ -57,6 +57,27 @@ const SOCKET_PATH = (IS_DIRECT || IS_SUBDOMAIN) ? '/socket.io' : '/buraco/socket
 
 const lobbyClient = new LobbyClient({ server: API_ADDRESS });
 
+const DEFAULT_CARD_POINT_VALUES = { joker: 10, two: 10, ace: 15, high: 10, low: 5 };
+const DEFAULT_RULES = {
+  discard: true,
+  runners: [1, 13],
+  largeCanasta: true,
+  cleanCanastaToWin: true,
+  noJokers: true,
+  openDiscardView: true,
+  showKnownCards: true,
+  cardPointValues: { ...DEFAULT_CARD_POINT_VALUES },
+  meldSizeBonus: false,
+  allowUndo: true,
+};
+const DEFAULT_GAME_CONFIG = {
+  format: 'points',
+  targetPoints: 3000,
+  maxRounds: 3,
+  botName: '',
+};
+const { cardPointValues: _dpv, meldSizeBonus: _msb, allowUndo: _au, ...DEFAULT_TRAIN_RULES } = DEFAULT_RULES;
+
 const tourneyFormatLabel = (t) => {
   if (t.format === 'running') return 'CORRIDA (SEM FIM)';
   if (t.format === 'points') return `PONTOS (Meta: ${t.targetPoints} pts)`;
@@ -216,19 +237,16 @@ const App = () => {
   const [showQuickGamePopup, setShowQuickGamePopup] = useState(false);
   const [quickGameConfig, setQuickGameConfig] = useState({
     numPlayers: 4,
-    format: 'points',
-    targetPoints: 3000,
-    maxRounds: 3,
-    botName: '',
-    rules: { discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true, cardPointValues: { joker: 10, two: 10, ace: 15, high: 10, low: 5 }, meldSizeBonus: false, allowUndo: true }
+    ...DEFAULT_GAME_CONFIG,
+    rules: { ...DEFAULT_RULES, runners: [...DEFAULT_RULES.runners], cardPointValues: { ...DEFAULT_RULES.cardPointValues } }
   });
 
   const [newTourney, setNewTourney] = useState({ 
-    name: '', type: 'team', format: 'points', targetPoints: 3000, maxRounds: 3,
+    name: '', type: 'team',
+    ...DEFAULT_GAME_CONFIG,
     shuffleMode: 'every-round', shuffleEvery: 2, shufflePoints: 1000,
     players: 'Diana, Marcia, Rafa, Monica',
-    botName: '',
-    rules: { numPlayers: 4, discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true, cardPointValues: { joker: 10, two: 10, ace: 15, high: 10, low: 5 }, meldSizeBonus: false, allowUndo: true }
+    rules: { ...DEFAULT_RULES, numPlayers: 4, runners: [...DEFAULT_RULES.runners], cardPointValues: { ...DEFAULT_RULES.cardPointValues } }
   });
 
   const [availableBots, setAvailableBots] = useState([]);
@@ -237,8 +255,6 @@ const App = () => {
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [trainBotIsNew, setTrainBotIsNew] = useState(false);
   const [trainingStatus, setTrainingStatus] = useState(null);
-
-  const DEFAULT_CARD_POINT_VALUES = { joker: 10, two: 10, ace: 15, high: 10, low: 5 };
 
   const [trainBotConfig, setTrainBotConfig] = useState({
     name: 'BotRafa',
@@ -256,7 +272,7 @@ const App = () => {
     endGameBonus: 100,
     cardPointValues: { ...DEFAULT_CARD_POINT_VALUES },
     meldSizeBonus: false,
-    rules: { discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: true, openDiscardView: true, showKnownCards: true }
+    rules: { ...DEFAULT_TRAIN_RULES, runners: [...DEFAULT_TRAIN_RULES.runners] }
   });
 
   const loadServerData = async () => {
@@ -540,8 +556,6 @@ const App = () => {
              ...quickGameConfig.rules, 
              numPlayers: quickGameConfig.numPlayers, 
              isTournament: false, 
-             quickGameTargetPoints: quickGameConfig.format === 'points' ? quickGameConfig.targetPoints : null,
-             quickGameMaxRounds: quickGameConfig.format === 'rounds' ? quickGameConfig.maxRounds : null,
              assignments: assignmentsMap,
              debugLog: true,
              targetBotName: targetBotName
@@ -1168,16 +1182,6 @@ const App = () => {
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
               <label>Jogadores: <select value={quickGameConfig.numPlayers} onChange={e => setQuickGameConfig({...quickGameConfig, numPlayers: parseInt(e.target.value)})} style={{ padding: '5px', marginLeft: '10px' }}><option value={2}>2 (Mano a Mano)</option><option value={4}>4 (Duplas)</option></select></label>
-              
-              <label>Formato: 
-                <select value={quickGameConfig.format} onChange={e => setQuickGameConfig({...quickGameConfig, format: e.target.value})} style={{ padding: '5px', marginLeft: '10px' }}>
-                  <option value="points">Meta de Pontos</option>
-                  <option value="rounds">Limite de Rodadas</option>
-                </select>
-              </label>
-              
-              {quickGameConfig.format === 'points' && <label>Pontos para Vencer: <input type="number" value={quickGameConfig.targetPoints} onChange={e => setQuickGameConfig({...quickGameConfig, targetPoints: parseInt(e.target.value)})} style={{ width: '80px', padding: '5px' }} /></label>}
-              {quickGameConfig.format === 'rounds' && <label>Máximo de Rodadas: <input type="number" value={quickGameConfig.maxRounds} onChange={e => setQuickGameConfig({...quickGameConfig, maxRounds: parseInt(e.target.value)})} style={{ width: '80px', padding: '5px' }} /></label>}
 
               <h4 style={{ margin: '10px 0 0 0', color: '#4da6ff' }}>Regras</h4>
               <div>
@@ -1303,7 +1307,6 @@ const App = () => {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
               {completedTournaments.map(t => {
                 const { standings } = getLeaderboard(t);
-                const winner = standings[0];
                 return (
                   <div key={t.id} style={{ background: '#222', border: '1px solid #444', borderRadius: '10px', padding: '20px', width: '300px' }}>
                     <h3 style={{ margin: '0 0 10px 0', color: '#888' }}>{t.name}</h3>

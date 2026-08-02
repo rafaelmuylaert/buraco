@@ -19,7 +19,6 @@
 //   scoreSeqCandidates(cands) — Batch scores sequence candidates
 //   scoreRunCandidates(cands) — Batch scores runner candidates
 //   scoreDiscards()          — Scores all 54 discard options
-//   planTurnWasm(G, p)      — Legacy: Calls C++ plan_turn() for backward compat
 //   buildTurnMoveList(G, p) — Full turn executor: builds ordered move list from WASM output
 //   setMatchState(G, ...)   — Writes full game state into WASM match state buffers
 //   writeSeqCands/RunCands  — Legacy: Encodes meld candidate data into WASM buffers
@@ -33,7 +32,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { AI_CONFIG, isMeldClean, seqSuit, addForwardPassTime, addPlanTurnTime, addWasmDiag, setScoreFunctions, generateAllValidMelds } from './game.js';
+import { AI_CONFIG, isMeldClean, seqSuit, addPlanTurnTime, setScoreFunctions, generateAllValidMelds } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1080,12 +1079,8 @@ export function setMatchState(G, player, myTeam, oppTeam) {
     const topDeck    = G.deck.length > 0 ? G.deck[G.deck.length-1] : 255;
     const runnersAllowed = (() => {
         const r = G.rules.runners;
-        if (!r || r === 'none') return 0;
-        if (r === 'any') return 0xFF;
-        if (r === 'aces_kings')  return (1<<1)|(1<<13);
-        if (r === 'aces_threes') return (1<<1)|(1<<3);
-        if (Array.isArray(r)) return r.reduce((a,v) => a|(1<<v), 0);
-        return 0;
+        if (!r || !Array.isArray(r)) return 0;
+        return r.reduce((a,v) => a|(1<<v), 0);
     })();
 
     _ex.set_match_state(
@@ -1101,7 +1096,7 @@ export function setMatchState(G, player, myTeam, oppTeam) {
         G.cleanMelds[0] || 0,
         G.cleanMelds[1] || 0,
         numP,
-        (G.rules.discard === 'closed' || G.rules.discard === true) ? 1 : 0,
+        G.rules.discard ? 1 : 0,
         runnersAllowed
     );
 
@@ -1119,35 +1114,4 @@ export function setMatchState(G, player, myTeam, oppTeam) {
         _wasmScalars[9] = (G.cleanMelds[myTeam]  || 0) > 0 ? 255 : 0;
         _wasmScalars[10]= (G.cleanMelds[oppTeam] || 0) > 0 ? 255 : 0;
     }
-}
-
-// ─── Legacy WASM wrapper — not used in new two-phase flow ────────────────────
-// Kept for backward compatibility with existing bot.js callers
-export function planTurnWasm(G, player, myTeam, oppTeam) {
-    if (!_ex?.cpp_plan_turn) return null;
-    const pInt = parseInt(player);
-    const myTeamIdx  = myTeam;
-    setActiveTeam(myTeamIdx === 0 ? 0 : AI_CONFIG.TOTAL_DNA_SIZE);
-    _ex.set_eval_context(pInt, myTeamIdx, myTeamIdx===0?1:0, 0, 0);
-    setMatchState(G, pInt, myTeam, oppTeam);
-    const t0 = performance.now(); const count = _ex.cpp_plan_turn(); addPlanTurnTime(performance.now() - t0);
-    if (count === 0) return [];
-    const listPtr = _ex.get_move_list();
-    const buf = new Uint8Array(_mem.buffer, listPtr, count * 58);
-    const moves = [];
-    for (let i = 0; i < count; i++) {
-        const off = i * 58;
-        const cc = {};
-        for (let j = 0; j < 53; j++) if (buf[off+5+j] > 0) cc[j===52?54:j] = buf[off+5+j];
-        moves.push({
-            phase:      buf[off],
-            moveType:   buf[off+1],
-            targetType: buf[off+2],
-            targetSuit: buf[off+3],
-            targetSlot: buf[off+4],
-            discardCard: buf[off+1]===4 ? (buf[off+5]===54?54:buf[off+5]) : -1,
-            cardCounts: cc
-        });
-    }
-    return moves;
 }

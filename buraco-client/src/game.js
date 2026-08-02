@@ -38,34 +38,14 @@ const SEQ_POINTS_NEW = [15, 15, 20, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10];
 
 
 // ── Timing accumulators ───────────────────────────────────────────────────────
-const _timings = { buildSegments: 0, forwardPass: 0, getAllValidMelds: 0, getAllValidAppends: 0, planTurn: 0, planTurnCalls: 0 };
-function makeIface(client) {
-  const check = (result, label) => {
-    if (result === 'INVALID_MOVE') {
-      console.log(`[BOT] *** INVALID MOVE on ${label} ***`);
-      console.log(getLastDbgLog());
-    }
-  };
-  return {
-    hasDrawn: () => client.getState()?.G?.hasDrawn ?? false,
-    draw:     () => check(client.moves.drawCard(), 'draw'),
-    pickup:   (cc, tgt) => check(client.moves.pickUpDiscard(cc, tgt), 'pickup'),
-    meld:     (cc) => check(client.moves.playMeld(cc), 'meld'),
-    append:   (tgt, cc) => check(client.moves.appendToMeld(tgt, cc), `append ${JSON.stringify(tgt)}`),
-    discard:  (id) => check(client.moves.discardCard(id), 'discard'),
-    exhaust:  () => client.moves.declareExhausted(),
-  };
-}
+const _timings = { planTurn: 0, planTurnCalls: 0 };
 export function getAndResetTimings() {
     const snap = { ..._timings };
-    _timings.buildSegments = 0;
-    _timings.forwardPass = 0; _timings.getAllValidMelds = 0; _timings.getAllValidAppends = 0;
+    _timings.planTurn = 0; _timings.planTurnCalls = 0;
 
     return snap;
 }
-export function addForwardPassTime(ms) { _timings.forwardPass += ms; }
 export function addPlanTurnTime(ms) { _timings.planTurn += ms; _timings.planTurnCalls++; }
-export function addWasmDiag(evalCount, copyMs) { _timings._evalCount = (_timings._evalCount||0) + evalCount; _timings._copyMs = (_timings._copyMs||0) + copyMs; }
 
 // 🚀 CENTRALIZED AI ARCHITECTURE CONFIGURATION — Two-phase evaluation:
 //   1. NN_CURRENT: reads full game state → 24-dim state vector
@@ -269,12 +249,6 @@ export function seqSuit(cardIds) {
  * @param {Uint8Array|null} existingMeld - 16-element existing meld array (null for new melds)
  * @returns {Array<{cardCounts: Object}>} Array of candidate objects
  */
-function haswilds(handflat){
-    const wilds = [1, 14, 27, 40, 53];
-    let count = 0;
-    for (const w of wilds) count += handFlat[w];
-    return count;
-}
 function hasForeignWild(handflat, suit){
     const natwild = (suit - 1)*13 + 1;
     const wilds = [1, 14, 27, 40, 53];
@@ -301,7 +275,6 @@ function promoteNatWild(meld){
 export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
     const results = [];
     const suit0 = suit - 1;
-    const jokeridx = 53;
     const natWild = 15;
     const foreignWild = 14;
     const wildInHand = hasForeignWild(handFlat, suit);
@@ -513,7 +486,6 @@ export function findRunnerAppends(handFlat, existingMeld, topdiscard) {
     
     const rank = existingMeld[0]; // 1-indexed rank
     const suitCounts = [existingMeld[1], existingMeld[2], existingMeld[3], existingMeld[4]];
-    const wildSuit = existingMeld[5];
     
     // Check how many natural cards of this rank we have in hand for each suit
     const suit0 = (s) => s - 1; // 0-indexed
@@ -704,10 +676,7 @@ function cardsToRunnerSlots(cardIds, existingMeld = null, rules) {
  */
 export function getRunnerRanks(rules) {
     const r = rules?.runners;
-    if (!r || r === 'none' || (Array.isArray(r) && r.length === 0)) return new Set();
-    if (r === 'any') return new Set([0,1,2,3,4,5,6,7,8,9,10,11,12]); // all 13 ranks (0-indexed)
-    if (r === 'aces_kings') return new Set([0, 12]); // Ace=0, King=12 (0-indexed)
-    if (r === 'aces_threes') return new Set([0, 2]);  // Ace=0, Three=2 (0-indexed)
+    if (!r || (Array.isArray(r) && r.length === 0)) return new Set();
     if (Array.isArray(r)) return new Set(r.map(x => x - 1)); // convert 1-indexed to 0-indexed
     return new Set();
 }
@@ -736,8 +705,6 @@ export function parseMeld(cardIds, rules, existingMeld = null, meldSuit = 0) {
     }
     else if (!isSeq(existingMeld)) return cardsToRunnerSlots(cardIds, existingMeld, rules);
     else return cardsToSeqSlots(cardIds, existingMeld, meldSuit);
-    //console.log("[GAME.JS] INVALID MOVE: existing meld failed"); 
-    return null;
 }
 
 
@@ -875,7 +842,7 @@ export function moveDrawCard(G, p) {
 export function movePickUpDiscard(G, p, selectedHandIds, target) {
     if (G.hasDrawn || G.discardPile.length === 0) return false;
     const topCard = G.discardPile[G.discardPile.length - 1];
-    const isClosedDiscard = G.rules.discard === 'closed' || G.rules.discard === true;
+    const isClosedDiscard = G.rules.discard;
     if (isClosedDiscard) {
         const meldTarget = target.type === 'append' ? target.meldTarget : null;
         const restCount = G.discardPile.length - 1;
@@ -950,7 +917,7 @@ export function moveMeld(G, p, Hand, target = null, addCards = 0, topDiscard = n
     return true;
 }
 
-export function moveDiscardCard(G, p, cardId, force = false) {
+export function moveDiscardCard(G, p, cardId) {
     if (!G.hasDrawn) return false;
     const have = hasCard(G, p, cardId);
     if (have < 1) return false;
@@ -985,7 +952,6 @@ export function calculateFinalScores(G) {
   const dirtyCanastraBonus = G.rules?.dirtyCanastraBonus ?? 100;
   const cleanCanastraBonus = G.rules?.cleanCanastraBonus ?? 200;
   const mortoPenaltyAmt    = G.rules?.mortoPenalty       ?? 100;
-  const endGameBonusAmt    = G.rules?.endGameBonus       ?? 100;
   const scoreCardPoints    = G.rules?.scoreCardPoints    !== false;
   const scoreHandPenalty   = G.rules?.scoreHandPenalty   !== false;
 
@@ -1174,8 +1140,14 @@ export const BuracoGame = {
   name: 'buraco',
   setup: ({ random, ctx }, setupData) => {
     const numPlayers = ctx.numPlayers || 4; 
-    const rules = setupData || { numPlayers, discard: 'closed', runners: 'aces_kings', largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false, debugLog: true, };
-    const botGenomes = setupData?.botGenomes || {};
+    const rules = setupData || { numPlayers, discard: true, runners: [1, 13], largeCanasta: true, cleanCanastaToWin: true, noJokers: false, openDiscardView: false, debugLog: true, };
+    rules.discard = rules.discard === true || rules.discard === 'closed';
+    if (typeof rules.runners === 'string') {
+        rules.runners = rules.runners === 'any' ? [1,2,3,4,5,6,7,8,9,10,11,12,13]
+            : rules.runners === 'aces_kings' ? [1, 13]
+            : rules.runners === 'aces_threes' ? [1, 3]
+            : rules.runners === 'none' ? [] : [];
+    }
     let initialDeck = random.Shuffle(buildDeck(rules));
     const pots = [initialDeck.splice(0, 11), initialDeck.splice(0, 11)];
     let cards = {}; let knownCards = {}; let handSizes = {};
