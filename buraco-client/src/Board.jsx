@@ -70,8 +70,8 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor 
         <span style={{ fontSize: '11px', fontWeight: 'bold' }}>{card.rank}</span>
         <span style={{ fontSize: '12px' }}>{card.suit}</span>
       </div>
-      <div style={{ fontSize: '24px', opacity: 0.75, transform: 'rotate(180deg);'}}>{card.suit}</div>
-      <div style={{ position: 'absolute', right: '3px', bottom: '1px', fontSize: '20px', fontWeight: 'bold', lineHeight: '1', opacity: 0.75, transform: 'rotate(180deg);'}}>{card.rank}</div>
+      <div style={{ fontSize: '24px', opacity: 0.75, transform: 'rotate(180deg)'}}>{card.suit}</div>
+      <div style={{ position: 'absolute', right: '3px', bottom: '1px', fontSize: '20px', fontWeight: 'bold', lineHeight: '1', opacity: 0.75, transform: 'rotate(180deg)'}}>{card.rank}</div>
       {deckColor && <div style={{ position: 'absolute', bottom: 0, left: 0, width: 0, height: 0,
         borderStyle: 'solid', borderWidth: '0 12px 12px 0',
         borderColor: `transparent transparent ${deckColor} transparent`,
