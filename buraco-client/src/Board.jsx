@@ -48,12 +48,9 @@ class ErrorBoundary extends React.Component {
 // Card dimensions used for overlap calculations
 const CARD_W = 46, CARD_H = 60;
 
-const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor, exposed = false }) => {
+const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor }) => {
   const cssW = parseFloat(customStyle?.width);
-  const textScale = exposed && !isNaN(cssW) ? cssW / CARD_W : 1;
-  const fRank = exposed ? 15 * textScale : 11;
-  const fSuit = exposed ? 16 * textScale : 12;
-  const fCenter = exposed ? 40 * textScale : 26;
+  const isSmall = !isNaN(cssW) && cssW < CARD_W;
   return (
     <div onClick={onClick} style={{
       position: 'relative',
@@ -70,10 +67,11 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor,
       ...customStyle
     }}>
       <div style={{ position: 'absolute', top: '2px', left: '3px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1' }}>
-        <span style={{ fontSize: `${fRank}px`, fontWeight: 'bold' }}>{card.rank}</span>
-        <span style={{ fontSize: `${fSuit}px` }}>{card.suit}</span>
+        <span style={{ fontSize: '11px', fontWeight: 'bold' }}>{card.rank}</span>
+        <span style={{ fontSize: '12px' }}>{card.suit}</span>
       </div>
-      <div style={{ fontSize: `${fCenter}px`, opacity: 0.3 }}>{card.suit}</div>
+      <div style={{ fontSize: '26px', opacity: 0.3, ...(isSmall ? { transform: 'translate(5px, -4px)' } : {}) }}>{card.suit}</div>
+      <div style={{ position: 'absolute', right: '3px', bottom: '1px', fontSize: '20px', fontWeight: 'bold', lineHeight: '1' }}>{card.rank}</div>
       {deckColor && <div style={{ position: 'absolute', bottom: 0, left: 0, width: 0, height: 0,
         borderStyle: 'solid', borderWidth: '0 12px 12px 0',
         borderColor: `transparent transparent ${deckColor} transparent`,
@@ -559,7 +557,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
             {renderedCards.map((card, i) => {
               const isNewCard = hasNewCards && !prevRendered.has(card.id);
               return (
-                <Card key={card.id} card={card} deckColor={dc(card.id)} isNewlyDrawn={isNewCard} exposed={i === renderedCards.length - 1} customStyle={{
+                <Card key={card.id} card={card} deckColor={dc(card.id)} isNewlyDrawn={isNewCard} customStyle={{
                   width: `${MELD_W}px`, height: `${MELD_H}px`, minWidth: `${MELD_W}px`,
                   marginLeft: (!isRunner && i > 0) ? `-${MELD_W - 12}px` : '0',
                   marginTop: (isRunner && i > 0) ? `-${MELD_H - 18}px` : '0',
@@ -644,11 +642,11 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
               G.rules?.openDiscardView ? (
                 chunkedDiscard.map((row, rIdx) => (
                   <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-28px' : '0' }}>
-                    {row.map((c, i) => <Card key={c.id} card={c} deckColor={dc(c.id)} exposed={rIdx === chunkedDiscard.length - 1 && i === row.length - 1} customStyle={{ marginLeft: i > 0 ? '-34px' : '0' }} />)}
+                    {row.map((c, i) => <Card key={c.id} card={c} deckColor={dc(c.id)} customStyle={{ marginLeft: i > 0 ? '-34px' : '0' }} />)}
                   </div>
                 ))
               ) : (
-                <Card card={topDiscard} deckColor={topDiscard ? dc(topDiscard.id) : undefined} exposed />
+                <Card card={topDiscard} deckColor={topDiscard ? dc(topDiscard.id) : undefined} />
               )
             ) : (
               <div style={{ border: '2px dashed #40916c', width: '60px', height: '90px', borderRadius: '8px', textAlign: 'center', lineHeight: '90px', color: '#888', margin: '0 auto' }}>Vazio</div>
@@ -771,7 +769,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
             {handCardObjs.map(card => {
-              return <Card key={card.id} card={card} deckColor={dc(card.id)} isSelected={isCardSelected(card)} isNewlyDrawn={isNewlyDrawn(card)} exposed onClick={() => toggleCardSelection(card.id)} />;
+              return <Card key={card.id} card={card} deckColor={dc(card.id)} isSelected={isCardSelected(card)} isNewlyDrawn={isNewlyDrawn(card)} onClick={() => toggleCardSelection(card.id)} />;
             })}
           </div>
         </div>
