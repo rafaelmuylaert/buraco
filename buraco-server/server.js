@@ -718,6 +718,81 @@ server.router.delete('/api/admin/users/:name', async (ctx) => {
   }
 });
 
+// ── STATS / GLOBAL LEADERBOARD ────────────────────────────────────────────
+// Aggregates per-player statistics (points, wins/draws/losses, games) for the
+// current month, current year, and all time. Only tournament matches count;
+// players are attributed via the tournament seat assignments (consistent with
+// the per-tournament standings the client already renders), and bot seats are
+// excluded.
+server.router.get('/api/stats', (ctx) => {
+  setCors(ctx);
+  const token = bearerToken(ctx);
+  const sessions = readJSON(sessionsFile);
+  const username = token ? sessions[token] : null;
+  if (!username) {
+    ctx.status = 401;
+    ctx.body = { error: 'Sessão inválida ou expirada.' };
+    return;
+  }
+
+  let history = [];
+  try { history = JSON.parse(fs.readFileSync(historyFile, 'utf8')); } catch { history = []; }
+  let tournaments = [];
+  try { tournaments = JSON.parse(fs.readFileSync(tourneyFile, 'utf8')); } catch { tournaments = []; }
+
+  const matchTeams = {};
+  for (const t of tournaments) {
+    for (const r of (t.rounds || [])) {
+      for (const a of (r.assignments || [])) {
+        if (a.matchID) matchTeams[a.matchID] = { team0: a.team0 || [], team1: a.team1 || [] };
+      }
+    }
+  }
+
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth();
+  const zero = () => ({ points: 0, v: 0, e: 0, d: 0, games: 0 });
+  const stats = {};
+
+  const credit = (name, teamScore, oppScore, ts) => {
+    const clean = String(name || '').trim();
+    if (!clean || /^bot\b/i.test(clean)) return;
+    const key = clean.toLowerCase();
+    if (!stats[key]) stats[key] = { name: clean, month: zero(), year: zero(), all: zero() };
+    const st = stats[key];
+    const wins = teamScore > oppScore;
+    const draws = teamScore === oppScore;
+    const apply = (w) => {
+      w.points += teamScore;
+      w.games += 1;
+      if (wins) w.v += 1; else if (draws) w.e += 1; else w.d += 1;
+    };
+    apply(st.all);
+    if (ts > 0) {
+      const d = new Date(ts);
+      if (d.getFullYear() === curYear) {
+        apply(st.year);
+        if (d.getMonth() === curMonth) apply(st.month);
+      }
+    }
+  };
+
+  const toTotal = (s) => (typeof s === 'number' ? s : (s?.total || 0));
+
+  for (const entry of history) {
+    const teams = matchTeams[entry.matchID];
+    if (!teams) continue;
+    const ts = entry.ts || new Date(String(entry.date || '')).getTime() || 0;
+    const s0 = toTotal(entry.scores?.[0]);
+    const s1 = toTotal(entry.scores?.[1]);
+    for (const name of teams.team0) credit(name, s0, s1, ts);
+    for (const name of teams.team1) credit(name, s1, s0, ts);
+  }
+
+  ctx.body = { users: Object.values(stats) };
+});
+
 server.router.post('/api/auth/logout', async (ctx) => {
   setCors(ctx);
   try {
@@ -793,6 +868,45 @@ server.router.post('/api/bots/debug-match', async (ctx) => {
     }
 });
 
+// One-time migration: enrich legacy history entries with the fields the stats
+// aggregation needs (real timestamp + tournament flag). Timestamps are parsed
+// from the old locale-string `date`; tournament membership is inferred from the
+// persisted tournament assignments. Idempotent and only writes back on change.
+const backfillHistoryStats = () => {
+  try {
+    let history = [];
+    try { history = JSON.parse(fs.readFileSync(historyFile, 'utf8')); } catch { history = []; }
+    let tournaments = [];
+    try { tournaments = JSON.parse(fs.readFileSync(tourneyFile, 'utf8')); } catch { tournaments = []; }
+    const tourneyMatchIDs = new Set();
+    for (const t of tournaments) {
+      for (const r of (t.rounds || [])) {
+        for (const a of (r.assignments || [])) if (a.matchID) tourneyMatchIDs.add(a.matchID);
+      }
+    }
+    let changed = false;
+    for (const entry of history) {
+      if (!entry.ts) {
+        const ts = new Date(String(entry.date || '')).getTime();
+        entry.ts = Number.isFinite(ts) ? ts : 0;
+        changed = true;
+      }
+      if (entry.isTournament === undefined) {
+        entry.isTournament = tourneyMatchIDs.has(entry.matchID);
+        changed = true;
+      }
+    }
+    if (changed) {
+      fs.writeFileSync(historyFile, JSON.stringify(history));
+      console.log(`[STATS] Backfilled ${history.length} history entries with ts/isTournament.`);
+    }
+  } catch (e) {
+    console.error('[STATS] Backfill error:', e.message);
+  }
+};
+
+backfillHistoryStats();
+
 server.run({ port: 8000, host: '0.0.0.0' }, () => {
   console.log(`Server running on port 8000...`);
 });
@@ -824,6 +938,8 @@ setInterval(async () => {
                 history.unshift({
                     matchID,
                     date: new Date().toLocaleString(),
+                    ts: Date.now(),
+                    isTournament: data.state?.G?.rules?.isTournament === true,
                     scores: gameover.scores
                 });
                 savedIDs.add(matchID);
