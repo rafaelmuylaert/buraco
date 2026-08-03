@@ -61,6 +61,7 @@ const AUTH_KEY = 'buraco_auth';
 const getSavedAuth = () => { try { return JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch { return null; } };
 
 const PRIMARY_ACTION = { padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '1em', border: 'none' };
+const CARD_VALUE_INPUT = { width: '30px', padding: '1px', fontSize: '0.9em' };
 
 const DEFAULT_CARD_POINT_VALUES = { joker: 10, two: 10, ace: 15, high: 10, low: 5 };
 const DEFAULT_RULES = {
@@ -1013,6 +1014,11 @@ const App = () => {
     saveTournamentsToAPI(updated);
   };
 
+  const handleToggleTournamentVisibility = async (tID) => {
+    const updated = tournaments.map(t => t.id === tID ? { ...t, private: !t.private } : t);
+    saveTournamentsToAPI(updated);
+  };
+
   const handleAdminDeleteTournament = async (tID) => {
     if (!confirm("Tem certeza? Isso apagará o torneio E DESTRUIRÁ todas as mesas associadas permanentemente.")) return;
     const tToDelete = tournaments.find(t => t.id === tID);
@@ -1270,8 +1276,9 @@ const App = () => {
           ))}
 
           {botInfoList.length === 0 ? <p style={{ color: '#888' }}>Nenhum bot treinado.</p> : null}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
           {botInfoList.map(bot => (
-            <div key={bot.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px', gap: '10px' }}>
+            <div key={bot.name} style={{ background: '#111', border: '1px solid #333', borderRadius: '8px', padding: '15px', width: '300px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div>
                 <div style={{ fontWeight: 'bold', color: bot.isTraining ? '#ffb86c' : 'white' }}>{bot.name} {bot.isTraining ? '' : ''}</div>
                 <div style={{ fontSize: '0.75em', color: '#888' }}>
@@ -1280,7 +1287,7 @@ const App = () => {
                     : `${bot.meta?.lifetimeGenerations ? `${bot.meta.lifetimeGenerations} ger. treinadas · ` : ''}Salvo: ${new Date(bot.lastModified).toLocaleDateString()}`}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '6px' }}>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 <button onClick={() => {
                   const meta = bot.meta?.trainParams || {};
                   setTrainBotIsNew(false);
@@ -1309,6 +1316,7 @@ const App = () => {
               </div>
             </div>
           ))}
+          </div>
         </AdminCard>
 
         <AdminCard title="Gerenciar Usuários" color="#2a9d8f" open={adminCardOpen('users')} onToggle={() => toggleAdminCard('users')}>
@@ -1321,17 +1329,18 @@ const App = () => {
                 <button type="submit" style={{ padding: '8px 14px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Adicionar</button>
               </form>
               {adminUsers.length === 0 ? <p style={{ color: '#888' }}>Nenhum usuário.</p> : null}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
               {adminUsers.map(u => {
                 const isSelf = currentUser?.username?.toLowerCase() === u.username.toLowerCase();
                 return (
-                  <div key={u.username} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px', gap: '10px' }}>
-                    <div style={{ minWidth: 0 }}>
+                  <div key={u.username} style={{ background: '#111', border: '1px solid #333', borderRadius: '8px', padding: '15px', width: '300px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div>
                       <span style={{ fontWeight: 'bold', color: u.isAdmin ? '#ffd700' : 'white' }}>{u.username}</span>
                       {u.isAdmin && <span style={{ color: '#ffd700', fontSize: '0.75em', marginLeft: '6px' }}>🛡 admin</span>}
                       {u.envAdmin && <span style={{ color: '#b088f9', fontSize: '0.75em', marginLeft: '6px' }}>(env)</span>}
                       {isSelf && <span style={{ color: '#4da6ff', fontSize: '0.75em', marginLeft: '6px' }}>(você)</span>}
                     </div>
-                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                       {u.envAdmin ? null : (
                         <button onClick={() => handleAdminToggleAdmin(u.username, !u.isAdmin)} style={{ background: u.isAdmin ? '#333' : '#2a9d8f', color: u.isAdmin ? '#ccc' : 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>
                           {u.isAdmin ? 'Remover Admin' : 'Tornar Admin'}
@@ -1345,19 +1354,23 @@ const App = () => {
                   </div>
                 );
               })}
+              </div>
         </AdminCard>
 
         <AdminCard title="Gerenciar Torneios" color="#ffd700" open={adminCardOpen('tournaments')} onToggle={() => toggleAdminCard('tournaments')}>
           {tournaments.filter(t => t.status !== 'completed').length === 0 ? <p style={{ color: '#888' }}>Nenhum torneio ativo.</p> : null}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
           {tournaments.filter(t => t.status !== 'completed').map(t => (
-            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px', gap: '10px' }}>
+            <div key={t.id} style={{ background: '#111', border: '1px solid #333', borderRadius: '8px', padding: '15px', width: '300px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <strong style={{ minWidth: 0 }}>{t.name}</strong>
-              <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                <button onClick={() => handleToggleTournamentVisibility(t.id)} title={t.private ? 'Privado — clique para tornar público' : 'Público — clique para tornar privado'} style={{ background: t.private ? '#8a2be2' : '#2a9d8f', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>{t.private ? '🔒 Privado' : '🔓 Público'}</button>
                 <button onClick={() => handleEndTournament(t.id)} style={{ background: '#ff9900', color: 'black', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Encerrar</button>
                 <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar</button>
               </div>
             </div>
           ))}
+          </div>
         </AdminCard>
 
         <AdminCard title="Mesas Ativas (Liberar Assentos)" color="#4da6ff" open={adminCardOpen('active')} onToggle={() => toggleAdminCard('active')} right={
@@ -1394,18 +1407,23 @@ const App = () => {
 
         <AdminCard title="Torneios Finalizados" color="#888" open={adminCardOpen('finished')} onToggle={() => toggleAdminCard('finished')}>
           {tournaments.filter(t => t.status === 'completed').length === 0 ? <p style={{ color: '#888' }}>Nenhum.</p> : null}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
           {tournaments.filter(t => t.status === 'completed').map(t => (
-            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px' }}>
+            <div key={t.id} style={{ background: '#111', border: '1px solid #333', borderRadius: '8px', padding: '15px', width: '300px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <strong style={{ color: '#888' }}>{t.name}</strong>
-              <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar</button>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                <button onClick={() => handleToggleTournamentVisibility(t.id)} title={t.private ? 'Privado — clique para tornar público' : 'Público — clique para tornar privado'} style={{ background: t.private ? '#8a2be2' : '#2a9d8f', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>{t.private ? '🔒 Privado' : '🔓 Público'}</button>
+                <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar</button>
+              </div>
             </div>
           ))}
+          </div>
         </AdminCard>
       </div>
 
         {showTrainBotPopup && (
-          <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-            <div style={{ background: '#2b1055', padding: '30px', borderRadius: '15px', border: '2px solid #8a2be2', width: '500px', maxWidth: '90%', color: 'white' }}>
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', overflowY: 'auto', padding: '20px', boxSizing: 'border-box', zIndex: 1000 }}>
+            <div style={{ margin: 'auto', background: '#2b1055', padding: '30px', borderRadius: '15px', border: '2px solid #8a2be2', width: '500px', maxWidth: '100%', boxSizing: 'border-box', color: 'white' }}>
               <h2 style={{ color: '#b088f9', marginTop: 0 }}> Treinar Nova IA</h2>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
@@ -1470,9 +1488,9 @@ const App = () => {
                     <label style={{gridColumn:'1/-1'}}><input type="checkbox" checked={trainBotConfig.meldSizeBonus} onChange={e => setTrainBotConfig({...trainBotConfig, meldSizeBonus: e.target.checked})} /> Bônus por tamanho de meld (4=+1, 5=+2, 6=+3, 7+=+4)</label>
                     <div style={{gridColumn:'1/-1', marginTop:'6px'}}>
                       <div style={{fontSize:'0.8em', color:'#aaa', marginBottom:'4px'}}>Valor das cartas:</div>
-                      <div style={{display:'flex', flexWrap:'wrap', gap:'6px'}}>
+                      <div style={{display:'flex', gap:'6px', overflowX:'auto'}}>
                         {[['joker','Curinga'],['two','2'],['ace','A'],['high','8-K'],['low','3-7']].map(([k,lbl]) => (
-                          <label key={k} style={{fontSize:'0.8em'}}>{lbl}: <input type="number" value={trainBotConfig.cardPointValues[k]} onChange={e => setTrainBotConfig({...trainBotConfig, cardPointValues: {...trainBotConfig.cardPointValues, [k]: parseInt(e.target.value)||0}})} style={{width:'40px', padding:'2px'}} /></label>
+                          <label key={k} style={{fontSize:'0.8em'}}>{lbl}: <input type="number" value={trainBotConfig.cardPointValues[k]} onChange={e => setTrainBotConfig({...trainBotConfig, cardPointValues: {...trainBotConfig.cardPointValues, [k]: parseInt(e.target.value)||0}})} style={CARD_VALUE_INPUT} /></label>
                         ))}
                       </div>
                     </div>
@@ -1600,9 +1618,9 @@ const App = () => {
               <label><input type="checkbox" checked={!!newTourney.rules.allowUndo} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, allowUndo: e.target.checked}})} /> Permitir Desfazer Jogada</label>
               <div>
                 <div style={{fontSize:'0.85em', color:'#aaa', marginBottom:'4px'}}>Valor das cartas:</div>
-                <div style={{display:'flex', flexWrap:'wrap', gap:'4px'}}>
+                <div style={{display:'flex', gap:'4px', overflowX:'auto'}}>
                   {[['joker','Curinga'],['two','2'],['ace','A'],['high','8-K'],['low','3-7']].map(([k,lbl]) => (
-                    <label key={k} style={{fontSize:'0.85em'}}>{lbl}: <input type="number" value={newTourney.rules.cardPointValues[k]} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, cardPointValues: {...newTourney.rules.cardPointValues, [k]: parseInt(e.target.value)||0}}})} style={{width:'40px', padding:'2px'}} /></label>
+                    <label key={k} style={{fontSize:'0.85em'}}>{lbl}: <input type="number" value={newTourney.rules.cardPointValues[k]} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, cardPointValues: {...newTourney.rules.cardPointValues, [k]: parseInt(e.target.value)||0}}})} style={CARD_VALUE_INPUT} /></label>
                   ))}
                 </div>
               </div>
@@ -1639,9 +1657,12 @@ const App = () => {
     return parts.join(' · ');
   };
 
-  const rankBy = (win, metric) => (stats?.users || [])
-    .filter(u => (u[win]?.games || 0) > 0)
-    .sort((a, b) => (b[win]?.[metric] || 0) - (a[win]?.[metric] || 0));
+  const rankBy = (win, metric) => {
+    const key = metric === 'wins' ? 'v' : metric;
+    return (stats?.users || [])
+      .filter(u => (u[win]?.games || 0) > 0)
+      .sort((a, b) => ((b[win]?.[key] || 0) - (a[win]?.[key] || 0)) || ((b[win]?.points || 0) - (a[win]?.points || 0)));
+  };
 
   const myStatsRow = currentUser && stats
     ? stats.users.find(u => u.name.toLowerCase() === currentUser.username.toLowerCase()) || null
@@ -1649,26 +1670,30 @@ const App = () => {
 
   return (
     <div className="app-view-root" style={{ padding: '50px', overflowX: 'hidden', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
-        <h1 style={{ color: '#ffd700', margin: 0, flex: '1 1 100%' }}>
-          <span onClick={() => { if (currentUser?.isAdmin) setView('admin'); }} style={{ cursor: currentUser?.isAdmin ? 'pointer' : 'not-allowed', opacity: currentUser?.isAdmin ? 0.2 : 0.06, marginRight: '15px' }} title={currentUser?.isAdmin ? 'Modo Admin' : 'Acesso restrito a administradores'} >⚙️</span>
-           Salão Principal 
-        </h1>
-        <button onClick={() => setShowQuickGamePopup(true)} style={{ ...PRIMARY_ACTION, background: '#e63946', color: 'white' }}> Jogo Rápido</button>
-        <button onClick={() => setView('tournaments')} style={{ ...PRIMARY_ACTION, background: '#8a2be2', color: 'white' }}>+ Novo Torneio</button>
-        {currentUser ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
-            <span style={{ color: '#4da6ff', fontWeight: 'bold' }}>👤 {currentUser.username}</span>
-            <button onClick={handleLogout} style={{ padding: '8px 14px', background: '#333', color: '#ccc', border: '1px solid #555', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Sair</button>
-          </div>
-        ) : (
-          <button onClick={() => { setAuthMode('login'); setAuthError(''); setShowAuthPopup(true); }} style={{ padding: '12px 16px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', marginLeft: 'auto' }}>Entrar / Registrar</button>
-        )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
+          <h1 style={{ color: '#ffd700', margin: 0 }}>
+            <span onClick={() => { if (currentUser?.isAdmin) setView('admin'); }} style={{ cursor: currentUser?.isAdmin ? 'pointer' : 'not-allowed', opacity: currentUser?.isAdmin ? 0.2 : 0.06, marginRight: '15px' }} title={currentUser?.isAdmin ? 'Modo Admin' : 'Acesso restrito a administradores'} >⚙️</span>
+             Salão Principal 
+          </h1>
+          {currentUser ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', marginLeft: 'auto' }}>
+              <span style={{ color: '#4da6ff', fontWeight: 'bold', fontSize: '0.95em' }}>👤 {currentUser.username}</span>
+              <button onClick={handleLogout} style={{ padding: '6px 12px', background: '#333', color: '#ccc', border: '1px solid #555', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85em' }}>Sair</button>
+            </div>
+          ) : (
+            <button onClick={() => { setAuthMode('login'); setAuthError(''); setShowAuthPopup(true); }} style={{ padding: '12px 16px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', marginLeft: 'auto' }}>Entrar / Registrar</button>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+          <button onClick={() => setShowQuickGamePopup(true)} style={{ ...PRIMARY_ACTION, background: '#e63946', color: 'white' }}> Jogo Rápido</button>
+          <button onClick={() => setView('tournaments')} style={{ ...PRIMARY_ACTION, background: '#8a2be2', color: 'white' }}>+ Torneio</button>
+        </div>
       </div>
       
       {showQuickGamePopup && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#1b4332', padding: '30px', borderRadius: '15px', border: '2px solid #e63946', width: '500px', maxWidth: '90%' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', overflowY: 'auto', padding: '20px', boxSizing: 'border-box', zIndex: 1000 }}>
+          <div style={{ margin: 'auto', background: '#1b4332', padding: '30px', borderRadius: '15px', border: '2px solid #e63946', width: '500px', maxWidth: '100%', boxSizing: 'border-box' }}>
             <h2 style={{ color: '#e63946', marginTop: 0 }}>Configurar Jogo Rápido</h2>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
@@ -1703,9 +1728,9 @@ const App = () => {
               <label><input type="checkbox" checked={!!quickGameConfig.rules.allowUndo} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, allowUndo: e.target.checked}})} /> Permitir Desfazer Jogada</label>
               <div>
                 <div style={{fontSize:'0.85em', color:'#aaa', marginBottom:'4px'}}>Valor das cartas:</div>
-                <div style={{display:'flex', flexWrap:'wrap', gap:'6px'}}>
+                <div style={{display:'flex', gap:'6px', overflowX:'auto'}}>
                   {[['joker','Curinga'],['two','2'],['ace','A'],['high','8-K'],['low','3-7']].map(([k,lbl]) => (
-                    <label key={k} style={{fontSize:'0.85em'}}>{lbl}: <input type="number" value={quickGameConfig.rules.cardPointValues[k]} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, cardPointValues: {...quickGameConfig.rules.cardPointValues, [k]: parseInt(e.target.value)||0}}})} style={{width:'40px', padding:'2px'}} /></label>
+                    <label key={k} style={{fontSize:'0.85em'}}>{lbl}: <input type="number" value={quickGameConfig.rules.cardPointValues[k]} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, cardPointValues: {...quickGameConfig.rules.cardPointValues, [k]: parseInt(e.target.value)||0}}})} style={CARD_VALUE_INPUT} /></label>
                   ))}
                 </div>
               </div>
@@ -1726,8 +1751,8 @@ const App = () => {
       )}
 
       {showAuthPopup && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#1b4332', padding: '30px', borderRadius: '15px', border: '2px solid #2a9d8f', width: '400px', maxWidth: '90%' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', overflowY: 'auto', padding: '20px', boxSizing: 'border-box', zIndex: 1000 }}>
+          <div style={{ margin: 'auto', background: '#1b4332', padding: '30px', borderRadius: '15px', border: '2px solid #2a9d8f', width: '400px', maxWidth: '100%', boxSizing: 'border-box' }}>
             <h2 style={{ color: '#2a9d8f', marginTop: 0 }}>{authMode === 'login' ? 'Entrar' : 'Criar Conta'}</h2>
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
               <button onClick={() => { setAuthMode('login'); setAuthError(''); }} style={{ flex: 1, padding: '8px', background: authMode === 'login' ? '#2a9d8f' : '#333', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Entrar</button>
@@ -1754,16 +1779,16 @@ const App = () => {
               <h2 style={{ margin: '0 0 20px 0', color: '#ffd700', fontSize: '1.6em' }}>Minhas Estatísticas</h2>
               {myStatsRow ? (
                 <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                  <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Período</th><th>Pts</th><th>V</th><th>E</th><th>D</th><th>Jogos</th><th>Pos.</th></tr></thead>
+                  <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Período</th><th>Pts</th><th>V</th><th>D</th><th>Pos.</th></tr></thead>
                   <tbody>
-                    {[['month', 'Este Mês'], ['year', 'Este Ano'], ['all', 'Todo o período']].map(([win, label]) => {
+                    {[['month', 'Este Mês'], ['year', 'Este Ano'], ['all', 'Total']].map(([win, label]) => {
                       const w = myStatsRow[win];
                       const pos = rankBy(win, 'points').findIndex(u => u.name.toLowerCase() === currentUser.username.toLowerCase()) + 1;
                       return (
                         <tr key={win} style={{ borderBottom: '1px solid #222' }}>
                           <td style={{ padding: '8px 0', color: '#4da6ff' }}>{label}</td>
                           <td style={{ fontWeight: 'bold', color: '#ffd700' }}>{w.points}</td>
-                          <td>{w.v}</td><td>{w.e}</td><td>{w.d}</td><td>{w.games}</td>
+                          <td>{w.v}</td><td>{w.d}</td>
                           <td>{w.games > 0 ? `#${pos}` : '—'}</td>
                         </tr>
                       );
@@ -1789,7 +1814,7 @@ const App = () => {
                 <button onClick={() => setStatsMetric('wins')} style={{ padding: '6px 12px', background: statsMetric === 'wins' ? '#ffd700' : '#333', color: statsMetric === 'wins' ? 'black' : 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Por Vitórias</button>
               </div>
               <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>#</th><th>Jogador</th><th>Pts</th><th>V</th><th>E</th><th>D</th><th>Jogos</th></tr></thead>
+                <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>#</th><th>Jogador</th><th>Pts</th><th>V</th><th>D</th></tr></thead>
                 <tbody>
                   {rankBy(statsWindow, statsMetric).slice(0, 10).map((u, i) => {
                     const w = u[statsWindow];
@@ -1799,11 +1824,11 @@ const App = () => {
                         <td style={{ padding: '8px 0', color: '#aaa' }}>{i + 1}</td>
                         <td>{u.name}</td>
                         <td style={{ fontWeight: 'bold', color: '#ffd700' }}>{w.points}</td>
-                        <td>{w.v}</td><td>{w.e}</td><td>{w.d}</td><td>{w.games}</td>
+                        <td>{w.v}</td><td>{w.d}</td>
                       </tr>
                     );
                   })}
-                  {rankBy(statsWindow, statsMetric).length === 0 && <tr><td colSpan={7} style={{ color: '#aaa', padding: '8px 0' }}>Sem dados neste período.</td></tr>}
+                  {rankBy(statsWindow, statsMetric).length === 0 && <tr><td colSpan={5} style={{ color: '#aaa', padding: '8px 0' }}>Sem dados neste período.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -1835,12 +1860,13 @@ const App = () => {
 
         {activeTournaments.length === 0 ? <div style={{ textAlign: 'center', color: '#aaa', fontSize: '1.5em', marginTop: '20px' }}>Nenhum torneio em andamento. Crie um acima!</div> : null}
         
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'flex-start' }}>
         {activeTournaments.map(t => {
           const { standings, sinceStats, showSince } = getLeaderboard(t);
           const currentRoundMatches = t.rounds.length > 0 ? t.rounds[t.rounds.length - 1].assignments.map(a => a.matchID) : [];
           
           return (
-            <div key={t.id} style={{ background: '#1b4332', borderRadius: '15px', border: `2px solid #40916c`, padding: '30px', minWidth: 0, overflow: 'hidden' }}>
+            <div key={t.id} style={{ background: '#1b4332', borderRadius: '15px', border: `2px solid #40916c`, padding: '30px', minWidth: '320px', flex: '1 1 540px', maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
                 <div>
                   <h2 style={{ margin: 0, color: '#ffd700', fontSize: '2em' }}>{t.name}</h2>
@@ -1867,16 +1893,16 @@ const App = () => {
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px' }}>
-                <div style={{ flex: '1 1 300px', background: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '10px', minWidth: 0 }}>
+                <div style={{ flex: '1 1 300px', maxWidth: '300px', background: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '10px', minWidth: 0, boxSizing: 'border-box' }}>
                   <h3 style={{ color: '#4da6ff', margin: '0 0 15px 0' }}>Classificação</h3>
                   <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                    <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Jogador</th><th>Pts</th>{showSince && <th title="Pontos desde o último sorteio">Pts pós-sorteio</th>}<th>V</th><th>E</th><th>D</th></tr></thead>
+                    <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Jogador</th><th>Pts</th>{showSince && <th title="Pontos desde o último sorteio">Pts pós-sorteio</th>}<th>V</th><th>D</th></tr></thead>
                     <tbody>
                       {standings.map(([pName, st]) => (
                         <tr key={pName} style={{ borderBottom: '1px solid #222' }}>
                           <td style={{ padding: '8px 0' }}>{pName}</td><td style={{ fontWeight: 'bold', color: '#ffd700' }}>{st.points}</td>
                           {showSince && <td style={{ color: '#4da6ff' }}>{sinceStats[pName] ?? 0}</td>}
-                          <td>{st.v}</td><td>{st.e}</td><td>{st.d}</td>
+                          <td>{st.v}</td><td>{st.d}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1928,6 +1954,7 @@ const App = () => {
             </div>
           );
         })}
+        </div>
 
         {completedTournaments.length > 0 && (
           <div style={{ marginTop: '20px', borderTop: '2px solid #333', paddingTop: '30px' }}>
