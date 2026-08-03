@@ -39,6 +39,10 @@ import { AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS } from './
 const NUM_WORKERS = Math.max(1, cpus().length - 1); 
 const WORKER_PATH = new URL('./worker.js', import.meta.url).pathname; 
 
+// Hard cap on any single weight/bias magnitude. GA mutation can otherwise
+// inflate weights without bound (observed |w| up to ~22), saturating the nets.
+const WEIGHT_CLIP = 5.0;
+
 const BOTS_DIR = path.join(process.cwd(), 'bots');
 if (!fs.existsSync(BOTS_DIR)) fs.mkdirSync(BOTS_DIR, { recursive: true });
 
@@ -58,6 +62,8 @@ function mutate(genome, mutationRate = 0.05, mutationStrength = 0.1) {
         if (Math.random() < mutationRate) {
             mutated[i] += gaussianRandom() * mutationStrength;
         }
+        if (mutated[i] > WEIGHT_CLIP) mutated[i] = WEIGHT_CLIP;
+        else if (mutated[i] < -WEIGHT_CLIP) mutated[i] = -WEIGHT_CLIP;
     }
     return mutated;
 }
