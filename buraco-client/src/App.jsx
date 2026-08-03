@@ -433,6 +433,9 @@ const App = () => {
       const fetchMatches = async () => {
         try { const { matches } = await lobbyClient.listMatches('buraco'); setMatches(matches); } 
         catch (e) { console.error("Sem conexão com o servidor."); }
+        if (view === 'admin') {
+          setHistory(await fetch(`${API_ADDRESS}/api/history`).then(r => r.json()).catch(() => []));
+        }
       };
       fetchMatches();
       const interval = setInterval(fetchMatches, 3000);
@@ -911,6 +914,7 @@ const App = () => {
         </div>
       );
     }
+    const activeMatches = matches.filter(m => !history.some(h => h.matchID === m.matchID));
     return (
       <div className="app-view-root" style={{ padding: '50px', overflowX: 'hidden', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #ff4d4d', paddingBottom: '20px' }}>
@@ -1030,9 +1034,9 @@ const App = () => {
               <h2 style={{ color: '#4da6ff', margin: 0 }}>Mesas Ativas (Liberar Assentos)</h2>
               <button onClick={handleCleanOrphans} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold' }}> Limpar Mesas órfãs</button>
             </div>
-            {matches.length === 0 ? <p style={{ color: '#888' }}>Nenhuma mesa ativa.</p> : null}
+            {activeMatches.length === 0 ? <p style={{ color: '#888' }}>Nenhuma mesa ativa.</p> : null}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
-              {matches.map(m => {
+              {activeMatches.map(m => {
                 const isOrphan = !allValidMatchIDs.includes(m.matchID);
                 const owningTournament = tournaments.find(t => t.rounds.some(r => r.assignments.some(a => a.matchID === m.matchID)));
                 const tableLabel = owningTournament ? owningTournament.name : `Mesa: ${m.matchID.substring(0,6)}...`;

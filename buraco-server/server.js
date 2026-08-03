@@ -295,14 +295,18 @@ server.router.post('/api/admin/kick', async (ctx) => {
     ctx.body = { error: 'Failed to kick player' };
   }
 });
+const deleteMatchFiles = async (matchID) => {
+  await server.db.wipe(matchID);
+  const matchFilePath = path.join(gamesPath, matchID);
+  if (fs.existsSync(matchFilePath)) fs.unlinkSync(matchFilePath);
+};
+
 server.router.post('/api/admin/delete-match', async (ctx) => {
   setCors(ctx);
   try {
     const body = await parseBody(ctx);
     if (body && body.matchID) {
-      await server.db.wipe(body.matchID);
-      const matchFilePath = path.join(gamesPath, body.matchID);
-      if (fs.existsSync(matchFilePath)) fs.unlinkSync(matchFilePath);
+      await deleteMatchFiles(body.matchID);
     }
     ctx.body = { success: true };
   } catch (e) {
@@ -465,6 +469,11 @@ server.run({ port: 8000, host: '0.0.0.0' }, () => {
 });
 
 // In server.js, after server.run():
+// Tracks finished quick games seen across consecutive polls. A match must be
+// observed as finished twice (~5-10s) before it is auto-deleted, so a player
+// viewing the game-over screen never hits a "match not found" sync error.
+const finishedQuickSeen = new Set();
+
 setInterval(async () => {
     try {
         const result = await gameDB.listMatches('buraco');
@@ -477,19 +486,38 @@ setInterval(async () => {
 
         for (const match of matchList) {
             const matchID = typeof match === 'string' ? match : (match.id || match.matchID);
-            if (!matchID || savedIDs.has(matchID)) continue;
+            if (!matchID) continue;
             const data = await gameDB.fetch(matchID, { state: true });
             if (!data?.state?.ctx?.gameover) continue;
             const gameover = data.state.ctx.gameover;
-            if (!gameover?.scores) continue;
-            history.unshift({
-                matchID,
-                date: new Date().toLocaleString(),
-                scores: gameover.scores
-            });
-            savedIDs.add(matchID);
-            changed = true;
-            console.log(`[HISTORY] Auto-saved result for match ${matchID}`);
+
+            if (!savedIDs.has(matchID) && gameover?.scores) {
+                history.unshift({
+                    matchID,
+                    date: new Date().toLocaleString(),
+                    scores: gameover.scores
+                });
+                savedIDs.add(matchID);
+                changed = true;
+                console.log(`[HISTORY] Auto-saved result for match ${matchID}`);
+            }
+
+            // Auto-cleanup: finished QUICK games (isTournament !== true) are
+            // orphaned tables once over, so wipe them. Tournament matches are
+            // kept (reconnects, standings, admin seat management).
+            if (data.state.G?.rules?.isTournament !== true) {
+                if (finishedQuickSeen.has(matchID)) {
+                    finishedQuickSeen.delete(matchID);
+                    try {
+                        await deleteMatchFiles(matchID);
+                        console.log(`[CLEANUP] Removed finished quick match ${matchID}`);
+                    } catch (e) {
+                        console.error('[CLEANUP] Failed to remove match:', e.message);
+                    }
+                } else {
+                    finishedQuickSeen.add(matchID);
+                }
+            }
         }
         if (changed) fs.writeFileSync(historyFile, JSON.stringify(history));
     } catch(e) {
