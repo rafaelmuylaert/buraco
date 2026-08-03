@@ -834,10 +834,10 @@ export function cardsAddCards(G, p, cards) {
     if (G.rules?.telepathy && G.knownCards?.[p]) for (const c of cards) cardsAdd(G.knownCards[p], c);//change this to read rules.telepathy
 }
 
-export function cardsRemoveCards(G, p, cards) {
+export function cardsRemoveCards(G, p, cards, suppressMorto = false) {
     if (G.cards?.[p])  for (const c of cards) {cardsRemove(G.cards[p], c); G.handSizes[p]--;}
     if (G.knownCards?.[p]) for (const c of cards) cardsRemove(G.knownCards[p], c);
-    if(G.handSizes[p]===0) tryPickupMorto(G, p);
+    if(!suppressMorto && G.handSizes[p]===0) tryPickupMorto(G, p);
 }
 
 export function hasCard(G, p, card) {
@@ -893,7 +893,7 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
         const meldTarget = target.type === 'append' ? target.meldTarget : null;
         const restCount = G.discardPile.length - 1;
         // selectedHandIds is a cardCounts map from the client
-        if (!moveMeld(G, p, selectedHandIds, meldTarget, restCount, topCard)) return false;
+        if (!moveMeld(G, p, selectedHandIds, meldTarget, restCount, topCard, true)) return false;
         G.discardPile.pop();
     }
     // Pick up remaining discard pile into hand
@@ -910,7 +910,7 @@ export function movePickUpDiscard(G, p, selectedHandIds, target) {
 
 // target: null (new meld) | { type: 'seq', suit, index } | { type: 'runner', index }
 // Hand: { cardType: count } — card types to use from hand (+ topDiscard if provided), or list of ids
-export function moveMeld(G, p, Hand, target = null, addCards = 0, topDiscard = null) {
+export function moveMeld(G, p, Hand, target = null, addCards = 0, topDiscard = null, suppressMorto = false) {
     if (!G.hasDrawn && topDiscard === null) { if (G.rules?.debugLog) console.log('[GAME.JS] INVALID MOVE: moveMeld fail: not drawn'); return false; }
     const teamId = G.teams[p];
     const selectedHandIds = Array.isArray(Hand) ? Hand : countsToIds(Hand);
@@ -938,7 +938,7 @@ export function moveMeld(G, p, Hand, target = null, addCards = 0, topDiscard = n
     if (newHandSize < 2 && !mortoSafe(G, teamId, addCleancount)) {if (G.rules?.debugLog) console.log('[GAME.JS] INVALID MOVE: moveMeld fail: Mortosafe check'); return false;}
 
     // Remove cards from hand bitmap
-    cardsRemoveCards(G, p, selectedHandIds);
+    cardsRemoveCards(G, p, selectedHandIds, suppressMorto);
     
     if (target === null) {
         if (isRunner) G.table[teamId][1].push(parsed);
