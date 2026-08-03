@@ -60,6 +60,8 @@ const lobbyClient = new LobbyClient({ server: API_ADDRESS });
 const AUTH_KEY = 'buraco_auth';
 const getSavedAuth = () => { try { return JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch { return null; } };
 
+const PRIMARY_ACTION = { padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '1em', border: 'none' };
+
 const DEFAULT_CARD_POINT_VALUES = { joker: 10, two: 10, ace: 15, high: 10, low: 5 };
 const DEFAULT_RULES = {
   discard: true,
@@ -227,6 +229,48 @@ function BotDebugPanel({ apiBase, botName, rules, onClose }) {
   );
 }
 
+function LogPanel({ apiBase }) {
+  const [lines, setLines] = React.useState([]);
+  const [paused, setPaused] = React.useState(false);
+  const endRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const es = new EventSource(`${apiBase}/api/logs`);
+    es.onmessage = (e) => {
+      try {
+        const line = JSON.parse(e.data);
+        setLines(prev => (paused ? prev : [...prev.slice(-399), line]));
+      } catch { /* ignora mensagens malformadas */ }
+    };
+    return () => es.close();
+  }, [apiBase, paused]);
+
+  React.useEffect(() => {
+    if (!paused) endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [lines, paused]);
+
+  return (
+    <div style={{ background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444', width: '100%', boxSizing: 'border-box' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <h2 style={{ color: '#50fa7b', margin: 0 }}>Log do Servidor</h2>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={() => setPaused(p => !p)} style={{ padding: '6px 12px', background: paused ? '#ffb86c' : '#444', color: paused ? '#000' : '#ccc', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.85em' }}>
+            {paused ? '▶ Retomar' : '⏸ Pausar'}
+          </button>
+          <button onClick={() => setLines([])} style={{ padding: '6px 12px', background: '#444', color: '#ccc', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.85em' }}>Limpar</button>
+        </div>
+      </div>
+      <div style={{ height: '260px', overflowY: 'auto', background: '#0d0d0d', border: '1px solid #333', borderRadius: '5px', padding: '10px', fontSize: '0.75em', lineHeight: '1.5', fontFamily: 'monospace', color: '#ddd', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+        {lines.length === 0 && <span style={{ color: '#555' }}>Aguardando logs do servidor...</span>}
+        {lines.map((l, i) => (
+          <div key={i} style={{ color: /error|failed|crash/i.test(l) ? '#ff5555' : (/\[CLEANUP\]|\[HISTORY\]/i.test(l) ? '#b088f9' : '#ddd') }}>{l}</div>
+        ))}
+        <div ref={endRef} />
+      </div>
+    </div>
+  );
+}
+
 const App = () => {
   const [view, setView] = useState('lounge'); 
   const [matches, setMatches] = useState([]);
@@ -235,6 +279,9 @@ const App = () => {
   const [credentials, setCredentials] = useState(null); 
   
   const [currentUser, setCurrentUser] = useState(() => getSavedAuth());
+  const [needsAdmin, setNeedsAdmin] = useState(null);
+  const [adminBootstrapForm, setAdminBootstrapForm] = useState({ username: '', password: '' });
+  const [adminBootstrapError, setAdminBootstrapError] = useState('');
   const [showAuthPopup, setShowAuthPopup] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [authForm, setAuthForm] = useState({ username: '', password: '' });
@@ -270,6 +317,8 @@ const App = () => {
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [trainBotIsNew, setTrainBotIsNew] = useState(false);
   const [trainingStatus, setTrainingStatus] = useState(null);
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [newAdminUser, setNewAdminUser] = useState({ username: '', password: '', isAdmin: false });
 
   const [trainBotConfig, setTrainBotConfig] = useState({
     name: 'BotRafa',
@@ -340,6 +389,13 @@ const App = () => {
   };
 
   useEffect(() => {
+    fetch(`${API_ADDRESS}/api/auth/bootstrap-status`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => setNeedsAdmin(data?.needsAdmin === true))
+      .catch(() => setNeedsAdmin(false));
+  }, []);
+
+  useEffect(() => {
     const saved = getSavedAuth();
     if (!saved?.token) return;
     fetch(`${API_ADDRESS}/api/auth/me`, { headers: { 'Authorization': `Bearer ${saved.token}` } })
@@ -378,6 +434,26 @@ const App = () => {
       window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash);
     }
   }, []);
+
+  const submitAdminBootstrap = async (e) => {
+    e.preventDefault();
+    setAdminBootstrapError('');
+    try {
+      const res = await fetch(`${API_ADDRESS}/api/auth/register-admin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(adminBootstrapForm)
+      });
+      const data = await res.json();
+      if (!res.ok) { setAdminBootstrapError(data.error || 'Falha ao criar o administrador.'); return; }
+      const auth = { token: data.token, username: data.username, isAdmin: data.isAdmin };
+      localStorage.setItem(AUTH_KEY, JSON.stringify(auth));
+      setCurrentUser(auth);
+      setNeedsAdmin(false);
+    } catch {
+      setAdminBootstrapError('Sem conexão com o servidor.');
+    }
+  };
 
   const submitAuth = async (e) => {
     e.preventDefault();
@@ -420,11 +496,18 @@ const App = () => {
           setBotInfoList(await infoRes.json());
         } catch (err) {}
       };
+      const fetchAdminUsers = async () => {
+        try {
+          const res = await fetch(`${API_ADDRESS}/api/admin/users`, { headers: { 'Authorization': `Bearer ${currentUser?.token}` } });
+          if (res.ok) setAdminUsers((await res.json()).users || []);
+        } catch { /* não crítico */ }
+      };
       fetchStatus();
-      const interval = setInterval(fetchStatus, 2000);
+      fetchAdminUsers();
+      const interval = setInterval(() => { fetchStatus(); fetchAdminUsers(); }, 3000);
       return () => clearInterval(interval);
     }
-  }, [view]);
+  }, [view, currentUser]);
 
   useEffect(() => {
     fetch(`${API_ADDRESS}/api/bots/list`)
@@ -891,7 +974,7 @@ const App = () => {
         try {
           await fetch(`${API_ADDRESS}/api/admin/delete-match`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentUser?.token}` },
             body: JSON.stringify({ matchID: mID })
           });
         } catch (e) {}
@@ -911,7 +994,7 @@ const App = () => {
       try {
         await fetch(`${API_ADDRESS}/api/admin/delete-match`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentUser?.token}` },
           body: JSON.stringify({ matchID: m.matchID })
         });
       } catch(e) {}
@@ -925,11 +1008,81 @@ const App = () => {
     try {
       await fetch(`${API_ADDRESS}/api/admin/kick`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentUser?.token}` },
         body: JSON.stringify({ matchID, playerID: seatID })
       });
       alert('Assento liberado! O jogador foi removido da mesa.');
     } catch (e) { alert("Erro ao liberar assento."); }
+  };
+
+  const refreshAdminUsers = async () => {
+    try {
+      const res = await fetch(`${API_ADDRESS}/api/admin/users`, { headers: { 'Authorization': `Bearer ${currentUser?.token}` } });
+      if (res.ok) {
+        const users = (await res.json()).users || [];
+        setAdminUsers(users);
+        setRegisteredUsers(users.map(u => u.username));
+      }
+    } catch { /* lista será atualizada no próximo poll */ }
+  };
+
+  const handleAdminAddUser = async (e) => {
+    e.preventDefault();
+    if (!newAdminUser.username.trim()) return alert("Digite um nome de usuário.");
+    if (newAdminUser.password.length < 6) return alert("A senha deve ter pelo menos 6 caracteres.");
+    try {
+      const res = await fetch(`${API_ADDRESS}/api/admin/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentUser?.token}` },
+        body: JSON.stringify(newAdminUser)
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || 'Falha ao adicionar usuário.');
+      setNewAdminUser({ username: '', password: '', isAdmin: false });
+      refreshAdminUsers();
+    } catch { alert("Erro ao adicionar usuário."); }
+  };
+
+  const handleAdminToggleAdmin = async (username, makeAdmin) => {
+    try {
+      const res = await fetch(`${API_ADDRESS}/api/admin/users/${encodeURIComponent(username)}/admin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentUser?.token}` },
+        body: JSON.stringify({ isAdmin: makeAdmin })
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || 'Falha ao alterar administrador.');
+      refreshAdminUsers();
+    } catch { alert("Erro ao alterar administrador."); }
+  };
+
+  const handleAdminResetPassword = async (username) => {
+    const password = prompt(`Nova senha para "${username}":`);
+    if (!password) return;
+    if (password.length < 6) return alert("A senha deve ter pelo menos 6 caracteres.");
+    try {
+      const res = await fetch(`${API_ADDRESS}/api/admin/users/${encodeURIComponent(username)}/password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentUser?.token}` },
+        body: JSON.stringify({ password })
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || 'Falha ao redefinir senha.');
+      alert('Senha redefinida!');
+    } catch { alert("Erro ao redefinir senha."); }
+  };
+
+  const handleAdminRemoveUser = async (username) => {
+    if (!confirm(`Remover o usuário "${username}"? Todas as sessões dele serão encerradas.`)) return;
+    try {
+      const res = await fetch(`${API_ADDRESS}/api/admin/users/${encodeURIComponent(username)}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${currentUser?.token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || 'Falha ao remover usuário.');
+      refreshAdminUsers();
+    } catch { alert("Erro ao remover usuário."); }
   };
 
   const RUNNER_RANKS = [
@@ -966,6 +1119,34 @@ const App = () => {
 
   const allValidMatchIDs = tournaments.flatMap(t => t.rounds.flatMap(r => r.assignments.map(a => a.matchID)));
 
+  if (needsAdmin === null) {
+    return (
+      <div className="app-view-root" style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px' }}>
+        <h1 style={{ color: '#ffd700', margin: 0 }}>Buraco</h1>
+        <p style={{ color: '#aaa' }}>Carregando...</p>
+      </div>
+    );
+  }
+
+  if (needsAdmin) {
+    return (
+      <div className="app-view-root" style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ background: '#1b4332', padding: '40px', borderRadius: '15px', border: '2px solid #ffd700', maxWidth: '440px', width: '100%' }}>
+          <h1 style={{ color: '#ffd700', margin: '0 0 6px 0', fontSize: '1.4em' }}>Primeiro Acesso</h1>
+          <p style={{ color: '#ccc', margin: '0 0 20px 0', fontSize: '0.95em', lineHeight: '1.5' }}>
+            Nenhum administrador existe ainda. Crie a conta de administrador inicial para liberar o uso do app.
+          </p>
+          <form onSubmit={submitAdminBootstrap} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <input type="text" placeholder="Nome de administrador" value={adminBootstrapForm.username} onChange={e => setAdminBootstrapForm({ ...adminBootstrapForm, username: e.target.value })} autoComplete="username" style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
+            <input type="password" placeholder="Senha (mín. 6)" value={adminBootstrapForm.password} onChange={e => setAdminBootstrapForm({ ...adminBootstrapForm, password: e.target.value })} autoComplete="new-password" style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
+            {adminBootstrapError && <div style={{ color: '#ff5555', fontSize: '0.9em' }}>{adminBootstrapError}</div>}
+            <button type="submit" style={{ padding: '12px 20px', background: '#ffd700', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '1em' }}>Criar Conta de Administrador</button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   if (view === 'game') {
     const activeTournament = tournaments.find(t => t.rounds.some(r => r.assignments.some(a => a.matchID === matchID)));
     const tStats = activeTournament ? getLeaderboard(activeTournament).standings : null;
@@ -995,10 +1176,10 @@ const App = () => {
       <div className="app-view-root" style={{ padding: '50px', overflowX: 'hidden', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #ff4d4d', paddingBottom: '20px' }}>
           <h1 style={{ color: '#ff4d4d', margin: 0, flex: '1 1 100%' }}>Painel de Administração</h1>
-          <button onClick={() => { setTrainBotIsNew(availableBots.length === 0); setTrainBotConfig(prev => ({ ...prev, name: availableBots[0] || 'BotPrometheus' })); setShowTrainBotPopup(true); }} style={{ padding: '15px 30px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer', marginTop: '20px', boxShadow: '0 0 15px rgba(138, 43, 226, 0.5)' }}>
+          <button onClick={() => { setTrainBotIsNew(availableBots.length === 0); setTrainBotConfig(prev => ({ ...prev, name: availableBots[0] || 'BotPrometheus' })); setShowTrainBotPopup(true); }} style={{ ...PRIMARY_ACTION, background: '#8a2be2', color: 'white' }}>
              Laboratório de IA (Treinar Bot)
           </button>
-          <button onClick={() => setView('lounge')} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Sair do Modo Admin</button>
+          <button onClick={() => setView('lounge')} style={{ ...PRIMARY_ACTION, background: '#555', color: 'white' }}>Sair do Modo Admin</button>
         </div>
 
         {trainingStatus && trainingStatus.isTraining && trainingStatus.sessions.map(session => (
@@ -1042,9 +1223,12 @@ const App = () => {
               <h2 style={{ color: '#ffd700', marginTop: 0 }}>Gerenciar Torneios</h2>
               {tournaments.filter(t => t.status !== 'completed').length === 0 ? <p style={{ color: '#888' }}>Nenhum torneio ativo.</p> : null}
               {tournaments.filter(t => t.status !== 'completed').map(t => (
-                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px' }}>
-                  <strong>{t.name}</strong>
-                  <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar</button>
+                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px', gap: '10px' }}>
+                  <strong style={{ minWidth: 0 }}>{t.name}</strong>
+                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                    <button onClick={() => handleEndTournament(t.id)} style={{ background: '#ff9900', color: 'black', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Encerrar</button>
+                    <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar</button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1058,6 +1242,43 @@ const App = () => {
                   <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar</button>
                 </div>
               ))}
+            </div>
+
+            <div style={{ background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #2a9d8f' }}>
+              <h2 style={{ color: '#2a9d8f', marginTop: 0 }}>Gerenciar Usuários</h2>
+              <form onSubmit={handleAdminAddUser} style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '15px', alignItems: 'center' }}>
+                <input type="text" placeholder="Novo usuário" value={newAdminUser.username} onChange={e => setNewAdminUser({ ...newAdminUser, username: e.target.value })} style={{ padding: '7px', borderRadius: '5px', border: 'none', flex: '1 1 120px', minWidth: 0 }} />
+                <input type="password" placeholder="Senha (mín. 6)" value={newAdminUser.password} onChange={e => setNewAdminUser({ ...newAdminUser, password: e.target.value })} style={{ padding: '7px', borderRadius: '5px', border: 'none', flex: '1 1 120px', minWidth: 0 }} />
+                <label style={{ color: '#ddd', fontSize: '0.85em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <input type="checkbox" checked={newAdminUser.isAdmin} onChange={e => setNewAdminUser({ ...newAdminUser, isAdmin: e.target.checked })} /> admin
+                </label>
+                <button type="submit" style={{ padding: '8px 14px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Adicionar</button>
+              </form>
+              {adminUsers.length === 0 ? <p style={{ color: '#888' }}>Nenhum usuário.</p> : null}
+              {adminUsers.map(u => {
+                const isSelf = currentUser?.username?.toLowerCase() === u.username.toLowerCase();
+                return (
+                  <div key={u.username} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px', gap: '10px' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <span style={{ fontWeight: 'bold', color: u.isAdmin ? '#ffd700' : 'white' }}>{u.username}</span>
+                      {u.isAdmin && <span style={{ color: '#ffd700', fontSize: '0.75em', marginLeft: '6px' }}>🛡 admin</span>}
+                      {u.envAdmin && <span style={{ color: '#b088f9', fontSize: '0.75em', marginLeft: '6px' }}>(env)</span>}
+                      {isSelf && <span style={{ color: '#4da6ff', fontSize: '0.75em', marginLeft: '6px' }}>(você)</span>}
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap' }}>
+                      {u.envAdmin ? null : (
+                        <button onClick={() => handleAdminToggleAdmin(u.username, !u.isAdmin)} style={{ background: u.isAdmin ? '#333' : '#2a9d8f', color: u.isAdmin ? '#ccc' : 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>
+                          {u.isAdmin ? 'Remover Admin' : 'Tornar Admin'}
+                        </button>
+                      )}
+                      <button onClick={() => handleAdminResetPassword(u.username)} style={{ background: '#4da6ff', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Redefinir Senha</button>
+                      {!isSelf && !u.envAdmin && (
+                        <button onClick={() => handleAdminRemoveUser(u.username)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Remover</button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <div style={{ background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #8a2be2' }}>
@@ -1121,7 +1342,7 @@ const App = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                       <h4 style={{ margin: 0, color: isOrphan ? '#ff4d4d' : '#ccc' }}>{tableLabel} {isOrphan && '(órfã)'}</h4>
                       <button onClick={async () => {
-                        await fetch(`${API_ADDRESS}/api/admin/delete-match`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matchID: m.matchID }) });
+                        await fetch(`${API_ADDRESS}/api/admin/delete-match`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentUser?.token}` }, body: JSON.stringify({ matchID: m.matchID }) });
                         window.location.reload();
                       }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '3px 8px', fontSize: '0.8em', fontWeight: 'bold', cursor: 'pointer' }}>Apagar</button>
                     </div>
@@ -1243,6 +1464,10 @@ const App = () => {
           </div>
         )}
 
+        <div style={{ marginTop: '30px' }}>
+          <LogPanel apiBase={API_ADDRESS} />
+        </div>
+
       </div>
     );
   }
@@ -1363,8 +1588,8 @@ const App = () => {
           <span onClick={() => { if (currentUser?.isAdmin) setView('admin'); }} style={{ cursor: currentUser?.isAdmin ? 'pointer' : 'not-allowed', opacity: currentUser?.isAdmin ? 0.2 : 0.06, marginRight: '15px' }} title={currentUser?.isAdmin ? 'Modo Admin' : 'Acesso restrito a administradores'} >⚙️</span>
            Salão Principal 
         </h1>
-        <button onClick={() => setShowQuickGamePopup(true)} style={{ padding: '12px 16px', background: '#e63946', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}> Jogo Rápido</button>
-        <button onClick={() => setView('tournaments')} style={{ padding: '12px 20px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer' }}>+ Novo Torneio</button>
+        <button onClick={() => setShowQuickGamePopup(true)} style={{ ...PRIMARY_ACTION, background: '#e63946', color: 'white' }}> Jogo Rápido</button>
+        <button onClick={() => setView('tournaments')} style={{ ...PRIMARY_ACTION, background: '#8a2be2', color: 'white' }}>+ Novo Torneio</button>
         {currentUser ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
             <span style={{ color: '#4da6ff', fontWeight: 'bold' }}>👤 {currentUser.username}</span>

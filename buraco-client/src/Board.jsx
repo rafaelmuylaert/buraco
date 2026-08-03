@@ -459,9 +459,10 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
   const handleRemovePlayer = async (seatID, seatName) => {
     if (!apiAddress) return;
     try {
+      const savedAuth = (() => { try { return JSON.parse(localStorage.getItem('buraco_auth') || 'null'); } catch { return null; } })();
       const res = await fetch(`${apiAddress}/api/admin/kick`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(savedAuth?.token ? { 'Authorization': `Bearer ${savedAuth.token}` } : {}) },
         body: JSON.stringify({ matchID, playerID: seatID.toString() })
       });
       if (!res.ok) throw new Error('kick failed');

@@ -129,7 +129,31 @@ const readJSON = (file) => {
 const writeJSON = (file, data) => fs.writeFileSync(file, JSON.stringify(data));
 const hashPassword = (password, salt) => crypto.scryptSync(String(password), salt, 64).toString('hex');
 const generateToken = () => crypto.randomBytes(32).toString('hex');
-const isAdminUser = (username) => ADMIN_USERS.includes(String(username).toLowerCase());
+const isAdminUser = (username) => {
+  const name = String(username || '').toLowerCase();
+  if (ADMIN_USERS.includes(name)) return true;
+  const users = readJSON(usersFile);
+  const key = Object.keys(users).find(k => k.toLowerCase() === name);
+  return !!(key && users[key].isAdmin === true);
+};
+
+// Returns the username if the request carries a valid admin session, else null.
+const adminUsername = (ctx) => {
+  const token = bearerToken(ctx);
+  if (!token) return null;
+  const username = readJSON(sessionsFile)[token];
+  return username && isAdminUser(username) ? username : null;
+};
+
+const requireAdmin = (ctx) => {
+  const username = adminUsername(ctx);
+  if (!username) {
+    ctx.status = 401;
+    ctx.body = { error: 'Acesso restrito a administradores.' };
+    return null;
+  }
+  return username;
+};
 
 const bearerToken = (ctx) => {
   const header = ctx.request.headers['authorization'] || '';
@@ -349,6 +373,7 @@ server.router.post('/api/tournaments/claim-seat', async (ctx) => {
 
 server.router.post('/api/admin/kick', async (ctx) => {
   setCors(ctx);
+  if (!requireAdmin(ctx)) return;
   try {
     const body = await parseBody(ctx);
     if (body && body.matchID && body.playerID) {
@@ -376,6 +401,7 @@ const deleteMatchFiles = async (matchID) => {
 
 server.router.post('/api/admin/delete-match', async (ctx) => {
   setCors(ctx);
+  if (!requireAdmin(ctx)) return;
   try {
     const body = await parseBody(ctx);
     if (body && body.matchID) {
@@ -482,6 +508,216 @@ server.router.get('/api/auth/users', (ctx) => {
   ctx.body = { usernames: Object.keys(readJSON(usersFile)) };
 });
 
+const hasDbAdmin = () => {
+  const users = readJSON(usersFile);
+  return Object.values(users).some(u => u && u.isAdmin === true);
+};
+const needsAdmin = () => ADMIN_USERS.length === 0 && !hasDbAdmin();
+
+// First-load bootstrap: tells the client whether an admin account must be
+// created before the app can be used.
+server.router.get('/api/auth/bootstrap-status', (ctx) => {
+  setCors(ctx);
+  ctx.body = { needsAdmin: needsAdmin() };
+});
+
+// Creates the very first admin account. Only allowed while no admin exists
+// (no DB admin and no ADMIN_USERS env). After that it returns 403.
+server.router.post('/api/auth/register-admin', async (ctx) => {
+  setCors(ctx);
+  try {
+    if (!needsAdmin()) {
+      ctx.status = 403;
+      ctx.body = { error: 'Já existe um administrador.' };
+      return;
+    }
+    const body = await parseBody(ctx);
+    const username = String(body?.username || '').trim();
+    const password = String(body?.password || '');
+    if (!/^[a-zA-Z0-9_.-]{2,20}$/.test(username)) {
+      ctx.status = 400;
+      ctx.body = { error: 'Nome de usuário deve ter 2 a 20 caracteres (letras, números, _ . -).' };
+      return;
+    }
+    if (password.length < 6) {
+      ctx.status = 400;
+      ctx.body = { error: 'A senha deve ter pelo menos 6 caracteres.' };
+      return;
+    }
+    const users = readJSON(usersFile);
+    if (users[username]) {
+      ctx.status = 409;
+      ctx.body = { error: 'Este nome de usuário já está em uso.' };
+      return;
+    }
+    const salt = crypto.randomBytes(16).toString('hex');
+    users[username] = { salt, hash: hashPassword(password, salt), createdAt: Date.now(), isAdmin: true };
+    writeJSON(usersFile, users);
+    const token = generateToken();
+    const sessions = readJSON(sessionsFile);
+    sessions[token] = username;
+    writeJSON(sessionsFile, sessions);
+    ctx.body = { token, username, isAdmin: true };
+  } catch (e) {
+    ctx.status = 400;
+    ctx.body = { error: e.message };
+  }
+});
+
+// ── ADMIN USER MANAGEMENT ────────────────────────────────────────────────
+server.router.get('/api/admin/users', (ctx) => {
+  setCors(ctx);
+  if (!requireAdmin(ctx)) return;
+  const users = readJSON(usersFile);
+  ctx.body = {
+    users: Object.entries(users).map(([username, u]) => ({
+      username,
+      isAdmin: isAdminUser(username),
+      envAdmin: ADMIN_USERS.includes(username.toLowerCase()),
+      createdAt: u?.createdAt || null
+    }))
+  };
+});
+
+server.router.post('/api/admin/users', async (ctx) => {
+  setCors(ctx);
+  if (!requireAdmin(ctx)) return;
+  try {
+    const body = await parseBody(ctx);
+    const username = String(body?.username || '').trim();
+    const password = String(body?.password || '');
+    if (!/^[a-zA-Z0-9_.-]{2,20}$/.test(username)) {
+      ctx.status = 400;
+      ctx.body = { error: 'Nome de usuário deve ter 2 a 20 caracteres (letras, números, _ . -).' };
+      return;
+    }
+    if (password.length < 6) {
+      ctx.status = 400;
+      ctx.body = { error: 'A senha deve ter pelo menos 6 caracteres.' };
+      return;
+    }
+    const users = readJSON(usersFile);
+    if (users[username]) {
+      ctx.status = 409;
+      ctx.body = { error: 'Este nome de usuário já está em uso.' };
+      return;
+    }
+    const salt = crypto.randomBytes(16).toString('hex');
+    users[username] = { salt, hash: hashPassword(password, salt), createdAt: Date.now(), isAdmin: !!body?.isAdmin };
+    writeJSON(usersFile, users);
+    ctx.body = { success: true, username, isAdmin: !!body?.isAdmin };
+  } catch (e) {
+    ctx.status = 400;
+    ctx.body = { error: e.message };
+  }
+});
+
+server.router.post('/api/admin/users/:name/admin', async (ctx) => {
+  setCors(ctx);
+  const acting = requireAdmin(ctx);
+  if (!acting) return;
+  try {
+    const name = String(ctx.params.name || '').trim();
+    const body = await parseBody(ctx);
+    const makeAdmin = !!body?.isAdmin;
+    const users = readJSON(usersFile);
+    if (!users[name]) {
+      ctx.status = 404;
+      ctx.body = { error: 'Usuário não encontrado.' };
+      return;
+    }
+    if (ADMIN_USERS.includes(name.toLowerCase())) {
+      ctx.status = 403;
+      ctx.body = { error: 'Administradores definidos por variável de ambiente são imutáveis.' };
+      return;
+    }
+    if (!makeAdmin) {
+      const adminCount = Object.keys(users).filter(u => isAdminUser(u)).length;
+      if (adminCount <= 1) {
+        ctx.status = 403;
+        ctx.body = { error: 'Não é possível remover o último administrador.' };
+        return;
+      }
+    }
+    users[name].isAdmin = makeAdmin;
+    writeJSON(usersFile, users);
+    ctx.body = { success: true, username: name, isAdmin: makeAdmin };
+  } catch (e) {
+    ctx.status = 400;
+    ctx.body = { error: e.message };
+  }
+});
+
+server.router.post('/api/admin/users/:name/password', async (ctx) => {
+  setCors(ctx);
+  if (!requireAdmin(ctx)) return;
+  try {
+    const name = String(ctx.params.name || '').trim();
+    const body = await parseBody(ctx);
+    const password = String(body?.password || '');
+    if (password.length < 6) {
+      ctx.status = 400;
+      ctx.body = { error: 'A senha deve ter pelo menos 6 caracteres.' };
+      return;
+    }
+    const users = readJSON(usersFile);
+    if (!users[name]) {
+      ctx.status = 404;
+      ctx.body = { error: 'Usuário não encontrado.' };
+      return;
+    }
+    users[name].salt = crypto.randomBytes(16).toString('hex');
+    users[name].hash = hashPassword(password, users[name].salt);
+    writeJSON(usersFile, users);
+    ctx.body = { success: true };
+  } catch (e) {
+    ctx.status = 400;
+    ctx.body = { error: e.message };
+  }
+});
+
+server.router.delete('/api/admin/users/:name', async (ctx) => {
+  setCors(ctx);
+  const acting = requireAdmin(ctx);
+  if (!acting) return;
+  try {
+    const name = String(ctx.params.name || '').trim();
+    const users = readJSON(usersFile);
+    if (!users[name]) {
+      ctx.status = 404;
+      ctx.body = { error: 'Usuário não encontrado.' };
+      return;
+    }
+    if (acting.toLowerCase() === name.toLowerCase()) {
+      ctx.status = 403;
+      ctx.body = { error: 'Você não pode remover a si mesmo.' };
+      return;
+    }
+    if (ADMIN_USERS.includes(name.toLowerCase())) {
+      ctx.status = 403;
+      ctx.body = { error: 'Administradores definidos por variável de ambiente são imutáveis.' };
+      return;
+    }
+    const adminCount = Object.keys(users).filter(u => isAdminUser(u)).length;
+    if (isAdminUser(name) && adminCount <= 1) {
+      ctx.status = 403;
+      ctx.body = { error: 'Não é possível remover o último administrador.' };
+      return;
+    }
+    delete users[name];
+    writeJSON(usersFile, users);
+    const sessions = readJSON(sessionsFile);
+    for (const [token, sessUser] of Object.entries(sessions)) {
+      if (String(sessUser).toLowerCase() === name.toLowerCase()) delete sessions[token];
+    }
+    writeJSON(sessionsFile, sessions);
+    ctx.body = { success: true };
+  } catch (e) {
+    ctx.status = 400;
+    ctx.body = { error: e.message };
+  }
+});
+
 server.router.post('/api/auth/logout', async (ctx) => {
   setCors(ctx);
   try {
@@ -500,13 +736,19 @@ server.router.post('/api/auth/logout', async (ctx) => {
 
 // ── Log capture for SSE streaming ──────────────────────────────────────────
 const logSubscribers = new Set();
+const LOG_TAIL = 500;
+const logHistory = [];
 const _origStdoutWrite = process.stdout.write.bind(process.stdout);
 const _origStderrWrite = process.stderr.write.bind(process.stderr);
 const _intercept = (orig) => function(chunk, ...args) {
     const result = orig(chunk, ...args);
     const str = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
     for (const line of str.split('\n')) {
-        if (line.trim()) for (const send of logSubscribers) send(line);
+        if (line.trim()) {
+            for (const send of logSubscribers) send(line);
+            logHistory.push(line);
+            if (logHistory.length > LOG_TAIL) logHistory.splice(0, logHistory.length - LOG_TAIL);
+        }
     }
     return result;
 };
@@ -520,6 +762,7 @@ server.router.get('/api/logs', (ctx) => {
     ctx.set('Connection', 'keep-alive');
     ctx.status = 200;
     const send = (line) => { try { ctx.res.write(`data: ${JSON.stringify(line)}\n\n`); } catch(_) {} };
+    for (const line of logHistory) send(line);
     logSubscribers.add(send);
     ctx.req.on('close', () => logSubscribers.delete(send));
     ctx.respond = false;
