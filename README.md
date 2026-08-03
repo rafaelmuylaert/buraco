@@ -19,19 +19,26 @@ A full-stack, real-time multiplayer digital Buraco card game built specifically 
 
 ## 🚀 Quick Start (Docker)
 
-The easiest way to run the game is using Docker. It will automatically build the frontend and backend in secure sandboxes.
+The easiest way to run the game is using Docker. The containers pull the app
+code directly from the public GitHub mirror (`github.com/rafaelmuylaert/buraco`),
+so **pushing to git auto-deploys** — no tokens, no copying files from the host.
 
-### 1. Clone the repository
-```bash
-git clone [https://github.com/rafaelmuylaert/buraco](https://github.com/rafaelmuylaert/buraco)
-cd buraco-web
-```
-### 2. Start the Containers
+### 1. Build and start
 ```bash
 docker compose up -d --build
 ```
+This builds the small runner images (node + git). The first start clones the
+repo and installs dependencies inside the container, so it can take a few
+minutes. Optional `.env` overrides: `GIT_URL`, `GIT_REF`, `GIT_POLL_SECS`
+(see `.env.example`).
+
+### 2. Deploy updates
+Just push to git — each container polls every `GIT_POLL_SECS` seconds and
+restarts itself with the new code. No host action needed. Rebuild images only
+when a Dockerfile or `deploy/entrypoint.sh` changes.
+
 The game is now running!
-The React Frontend is exposed on port 4173
+The React Frontend is exposed on port 5173
 The Node.js Game Server & API is exposed on port 8000
 ## 🌐 Reverse Proxy Setup (Nginx Proxy Manager)
 This app is pre-configured to be hosted behind an Nginx proxy under a sub-path (e.g., yourdomain.com/buraco). This naturally bypasses all CORS restrictions.

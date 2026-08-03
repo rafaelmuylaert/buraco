@@ -1,72 +1,51 @@
 version: '3.8'
 
+# App code comes from git (cloned/polled by deploy/entrypoint.sh inside the
+# container), so pushing to the remote auto-deploys. The host only needs this
+# compose file + the Dockerfiles; no source checkout required.
+# The default GIT_URL is the public GitHub mirror, so no credentials are needed.
+# Override GIT_URL/GIT_REF/GIT_TOKEN/GIT_POLL_SECS in a .env file (.env.example).
+x-git-env: &git-env
+  GIT_URL: ${GIT_URL:-https://github.com/rafaelmuylaert/buraco.git}
+  GIT_REF: ${GIT_REF:-main}
+  GIT_TOKEN: ${GIT_TOKEN:-}
+  GIT_POLL_SECS: ${GIT_POLL_SECS:-60}
+
 services:
   buraco-server:
     build:
       context: .
       dockerfile: buraco-server/Dockerfile
     container_name: buraco-server
+    command: ["server"]
+    environment: *git-env
     ports:
       - "8000:8000"
     volumes:
-      - ./buraco-server/db:/app/db
-      - ./buraco-server/bots:/app/bots
+      - ./buraco-server/db:/data/db
+      - ./buraco-server/bots:/data/bots
     restart: unless-stopped
-    develop:
-      watch:
-        - action: rebuild
-          path: ./buraco-server/package.json
-        - action: sync+restart
-          path: ./buraco-server
-          target: /app
-          ignore:
-            - node_modules/
-            - db/
-            - bots/
-            - nn_engine.wasm
-        - action: sync+restart
-          path: ./buraco-client/src/game.js
-          target: /app/game.js
 
   buraco-client:
-    build: ./buraco-client
+    build:
+      context: .
+      dockerfile: buraco-client/Dockerfile
     container_name: buraco-client
+    command: ["client"]
+    environment: *git-env
     ports:
       - "5173:5173"
     depends_on:
       - buraco-server
     restart: unless-stopped
-    develop:
-      watch:
-        - action: rebuild
-          path: ./buraco-client/package.json
-        - action: sync
-          path: ./buraco-client/src
-          target: /app/src
-          ignore:
-            - node_modules/
 
   buraco-bot:
     build:
       context: .
       dockerfile: buraco-server/Dockerfile
     container_name: buraco-bot
-    command: ["node", "bot.js"]
+    command: ["bot"]
+    environment: *git-env
     depends_on:
       - buraco-server
     restart: unless-stopped
-    develop:
-      watch:
-        - action: rebuild
-          path: ./buraco-server/package.json
-        - action: sync+restart
-          path: ./buraco-server
-          target: /app
-          ignore:
-            - node_modules/
-            - db/
-            - bots/
-            - nn_engine.wasm
-        - action: sync+restart
-          path: ./buraco-client/src/game.js
-          target: /app/game.js

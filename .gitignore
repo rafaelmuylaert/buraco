@@ -3,3 +3,4 @@ dist/
 buraco-server/db/
 .DS_Store
 npm-debug.log
+.env

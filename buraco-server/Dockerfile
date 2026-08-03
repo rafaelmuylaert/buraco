@@ -1,21 +1,13 @@
 FROM node:20-alpine
 
+# The app is pulled from git at runtime by the entrypoint; the image itself
+# carries no app code. Rebuild this image only when the Dockerfile or
+# deploy/entrypoint.sh changes, not for app updates.
+RUN apk add --no-cache git
+
 WORKDIR /app
-COPY buraco-server/package*.json ./
+COPY deploy/entrypoint.sh /usr/local/bin/git-entrypoint.sh
+RUN chmod +x /usr/local/bin/git-entrypoint.sh
 
-RUN npm install
-
-COPY buraco-server/ .
-COPY buraco-client/src/game.js ./game.js
-# RUN apk add --no-cache libc-dev build-base
-# Install clang/lld and recompile the WASM binary from source
-RUN apk add --no-cache clang lld && \
-    clang --target=wasm32 -O2 -flto -nostdlib \
-      -Wl,--no-entry -Wl,--export-all -Wl,--allow-undefined \
-      -msimd128 \
-      -o nn_engine.wasm nn_engine.cpp && \
-    apk del clang lld
-
-# Expose the API and WebSockets port
 EXPOSE 8000
-CMD ["node", "server.js"]
+ENTRYPOINT ["/usr/local/bin/git-entrypoint.sh"]
