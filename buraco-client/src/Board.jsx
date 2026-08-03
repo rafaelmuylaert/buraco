@@ -641,7 +641,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
             {G.discardPile.length > 0 ? (
               G.rules?.openDiscardView ? (
                 chunkedDiscard.map((row, rIdx) => (
-                  <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-28px' : '0' }}>
+                  <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-40px' : '0' }}>
                     {row.map((c, i) => <Card key={c.id} card={c} deckColor={dc(c.id)} customStyle={{ marginLeft: i > 0 ? '-34px' : '0' }} />)}
                   </div>
                 ))
