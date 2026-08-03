@@ -37,6 +37,10 @@ Just push to git — each container polls every `GIT_POLL_SECS` seconds and
 restarts itself with the new code. No host action needed. Rebuild images only
 when a Dockerfile or `deploy/entrypoint.sh` changes.
 
+> **Troubleshooting: `Cannot find module '/app/client'`** (or `/app/server`)
+> The images were built from the *old* Dockerfiles. Run `docker compose up -d --build`
+> to rebuild them so the new `ENTRYPOINT` takes effect.
+
 The game is now running!
 The React Frontend is exposed on port 5173
 The Node.js Game Server & API is exposed on port 8000
