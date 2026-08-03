@@ -290,6 +290,10 @@ const App = () => {
   const [history, setHistory] = useState([]);
   const [tournaments, setTournaments] = useState([]);
 
+  const [stats, setStats] = useState(null);
+  const [statsWindow, setStatsWindow] = useState('all');
+  const [statsMetric, setStatsMetric] = useState('points');
+
   const [registeredUsers, setRegisteredUsers] = useState([]);
   const [playersFocused, setPlayersFocused] = useState(false);
   const [grantedTournaments, setGrantedTournaments] = useState(() => {
@@ -417,6 +421,19 @@ const App = () => {
       .then(res => res.ok ? res.json() : null)
       .then(data => setRegisteredUsers(data?.usernames || []))
       .catch(() => setRegisteredUsers([]));
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser?.token) { setStats(null); return; }
+    const fetchStats = async () => {
+      try {
+        const res = await fetch(`${API_ADDRESS}/api/stats`, { headers: { 'Authorization': `Bearer ${currentUser.token}` } });
+        if (res.ok) setStats(await res.json());
+      } catch { /* estatísticas indisponíveis */ }
+    };
+    fetchStats();
+    const interval = setInterval(fetchStats, 3000);
+    return () => clearInterval(interval);
   }, [currentUser]);
 
   useEffect(() => {
@@ -1581,6 +1598,14 @@ const App = () => {
   const completedTournaments = visibleTournaments.filter(t => t.status === 'completed');
   const savedSessions = getSavedSessions();
 
+  const rankBy = (win, metric) => (stats?.users || [])
+    .filter(u => (u[win]?.games || 0) > 0)
+    .sort((a, b) => (b[win]?.[metric] || 0) - (a[win]?.[metric] || 0));
+
+  const myStatsRow = currentUser && stats
+    ? stats.users.find(u => u.name.toLowerCase() === currentUser.username.toLowerCase()) || null
+    : null;
+
   return (
     <div className="app-view-root" style={{ padding: '50px', overflowX: 'hidden', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
@@ -1673,6 +1698,68 @@ const App = () => {
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '50px' }}>
+        {currentUser && stats && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px' }}>
+            <div style={{ flex: '1 1 380px', background: '#1b4332', borderRadius: '15px', border: '2px solid #40916c', padding: '30px', minWidth: 0 }}>
+              <h2 style={{ margin: '0 0 20px 0', color: '#ffd700', fontSize: '1.6em' }}>Minhas Estatísticas</h2>
+              {myStatsRow ? (
+                <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+                  <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Período</th><th>Pts</th><th>V</th><th>E</th><th>D</th><th>Jogos</th><th>Pos.</th></tr></thead>
+                  <tbody>
+                    {[['month', 'Este Mês'], ['year', 'Este Ano'], ['all', 'Todo o período']].map(([win, label]) => {
+                      const w = myStatsRow[win];
+                      const pos = rankBy(win, 'points').findIndex(u => u.name.toLowerCase() === currentUser.username.toLowerCase()) + 1;
+                      return (
+                        <tr key={win} style={{ borderBottom: '1px solid #222' }}>
+                          <td style={{ padding: '8px 0', color: '#4da6ff' }}>{label}</td>
+                          <td style={{ fontWeight: 'bold', color: '#ffd700' }}>{w.points}</td>
+                          <td>{w.v}</td><td>{w.e}</td><td>{w.d}</td><td>{w.games}</td>
+                          <td>{w.games > 0 ? `#${pos}` : '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{ color: '#aaa' }}>Sem jogos ainda. Participe de torneios para gerar suas estatísticas.</div>
+              )}
+            </div>
+
+            <div style={{ flex: '2 1 520px', background: '#1b4332', borderRadius: '15px', border: '2px solid #40916c', padding: '30px', minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
+                <h2 style={{ margin: 0, color: '#ffd700', fontSize: '1.6em' }}>Classificação Geral</h2>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {[['month', 'Mês'], ['year', 'Ano'], ['all', 'Todos']].map(([w, l]) => (
+                    <button key={w} onClick={() => setStatsWindow(w)} style={{ padding: '6px 12px', background: statsWindow === w ? '#4da6ff' : '#333', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ marginBottom: '15px' }}>
+                <button onClick={() => setStatsMetric('points')} style={{ padding: '6px 12px', background: statsMetric === 'points' ? '#ffd700' : '#333', color: statsMetric === 'points' ? 'black' : 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold', marginRight: '8px' }}>Por Pontos</button>
+                <button onClick={() => setStatsMetric('wins')} style={{ padding: '6px 12px', background: statsMetric === 'wins' ? '#ffd700' : '#333', color: statsMetric === 'wins' ? 'black' : 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Por Vitórias</button>
+              </div>
+              <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+                <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>#</th><th>Jogador</th><th>Pts</th><th>V</th><th>E</th><th>D</th><th>Jogos</th></tr></thead>
+                <tbody>
+                  {rankBy(statsWindow, statsMetric).slice(0, 10).map((u, i) => {
+                    const w = u[statsWindow];
+                    const isMe = currentUser && u.name.toLowerCase() === currentUser.username.toLowerCase();
+                    return (
+                      <tr key={u.name} style={{ borderBottom: '1px solid #222', background: isMe ? 'rgba(255,215,0,0.12)' : 'transparent', fontWeight: isMe ? 'bold' : 'normal' }}>
+                        <td style={{ padding: '8px 0', color: '#aaa' }}>{i + 1}</td>
+                        <td>{u.name}</td>
+                        <td style={{ fontWeight: 'bold', color: '#ffd700' }}>{w.points}</td>
+                        <td>{w.v}</td><td>{w.e}</td><td>{w.d}</td><td>{w.games}</td>
+                      </tr>
+                    );
+                  })}
+                  {rankBy(statsWindow, statsMetric).length === 0 && <tr><td colSpan={7} style={{ color: '#aaa', padding: '8px 0' }}>Sem dados neste período.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {activeTournaments.length === 0 ? <div style={{ textAlign: 'center', color: '#aaa', fontSize: '1.5em', marginTop: '20px' }}>Nenhum torneio em andamento. Crie um acima!</div> : null}
         
         {activeTournaments.map(t => {
