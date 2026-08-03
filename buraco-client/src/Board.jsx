@@ -228,7 +228,8 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
     const team1NamesArr = (G.teamPlayers[1] || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`);
     const team0Names = team0NamesArr.join(' & ');
     const team1Names = team1NamesArr.join(' & ');
-    const myName = G.rules?.assignments?.[playerID] || "Eu";
+    const savedAuth = (() => { try { return JSON.parse(localStorage.getItem('buraco_auth') || 'null'); } catch { return null; } })();
+    const myName = G.rules?.assignments?.[playerID] || savedAuth?.username || "Eu";
     const isTournament = !!tournament;
     const isTournamentComplete = tournament && tournament.status === 'completed';
     const showNextButton = !isTournament || (isTournament && !isTournamentComplete);

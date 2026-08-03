@@ -10,6 +10,9 @@ x-git-env: &git-env
   GIT_REF: ${GIT_REF:-main}
   GIT_TOKEN: ${GIT_TOKEN:-}
   GIT_POLL_SECS: ${GIT_POLL_SECS:-60}
+  # Comma-separated usernames allowed to open the Admin panel (⚙️). Only the
+  # server reads this; client/bot containers ignore it.
+  ADMIN_USERS: ${ADMIN_USERS:-}
 
 services:
   buraco-server:

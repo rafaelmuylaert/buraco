@@ -25,6 +25,7 @@ import { BuracoGame } from './game.js';
 import { TrainerService } from './train.js';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 const dbPath = path.join(process.cwd(), 'db');
 if (!fs.existsSync(dbPath)) fs.mkdirSync(dbPath);
@@ -114,9 +115,30 @@ const historyFile = path.join(dbPath, 'history.json');
 if (!fs.existsSync(tourneyFile)) fs.writeFileSync(tourneyFile, '[]');
 if (!fs.existsSync(historyFile)) fs.writeFileSync(historyFile, '[]');
 
+// --- AUTH STORAGE (persisted in the mounted db volume, survives restarts) ---
+const usersFile = path.join(dbPath, 'users.json');
+const sessionsFile = path.join(dbPath, 'sessions.json');
+if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, '{}');
+if (!fs.existsSync(sessionsFile)) fs.writeFileSync(sessionsFile, '{}');
+
+const ADMIN_USERS = (process.env.ADMIN_USERS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+const readJSON = (file) => {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return {}; }
+};
+const writeJSON = (file, data) => fs.writeFileSync(file, JSON.stringify(data));
+const hashPassword = (password, salt) => crypto.scryptSync(String(password), salt, 64).toString('hex');
+const generateToken = () => crypto.randomBytes(32).toString('hex');
+const isAdminUser = (username) => ADMIN_USERS.includes(String(username).toLowerCase());
+
+const bearerToken = (ctx) => {
+  const header = ctx.request.headers['authorization'] || '';
+  return header.startsWith('Bearer ') ? header.slice(7).trim() : null;
+};
+
 const setCors = (ctx) => {
   ctx.set('Access-Control-Allow-Origin', ctx.request.headers.origin || '*');
-  ctx.set('Access-Control-Allow-Headers', 'Content-Type');
+  ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   ctx.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 };
 
@@ -286,6 +308,103 @@ server.router.post('/api/admin/delete-match', async (ctx) => {
   } catch (e) {
     ctx.status = 500;
     ctx.body = { error: 'Failed to delete match' };
+  }
+});
+
+// ── AUTH API ROUTES ──────────────────────────────────────────────────────
+server.router.post('/api/auth/register', async (ctx) => {
+  setCors(ctx);
+  try {
+    const body = await parseBody(ctx);
+    const username = String(body?.username || '').trim();
+    const password = String(body?.password || '');
+    if (!/^[a-zA-Z0-9_.-]{2,20}$/.test(username)) {
+      ctx.status = 400;
+      ctx.body = { error: 'Nome de usuário deve ter 2 a 20 caracteres (letras, números, _ . -).' };
+      return;
+    }
+    if (password.length < 6) {
+      ctx.status = 400;
+      ctx.body = { error: 'A senha deve ter pelo menos 6 caracteres.' };
+      return;
+    }
+    const users = readJSON(usersFile);
+    if (users[username]) {
+      ctx.status = 409;
+      ctx.body = { error: 'Este nome de usuário já está em uso.' };
+      return;
+    }
+    const salt = crypto.randomBytes(16).toString('hex');
+    users[username] = { salt, hash: hashPassword(password, salt), createdAt: Date.now() };
+    writeJSON(usersFile, users);
+    const token = generateToken();
+    const sessions = readJSON(sessionsFile);
+    sessions[token] = username;
+    writeJSON(sessionsFile, sessions);
+    ctx.body = { token, username, isAdmin: isAdminUser(username) };
+  } catch (e) {
+    ctx.status = 400;
+    ctx.body = { error: e.message };
+  }
+});
+
+server.router.post('/api/auth/login', async (ctx) => {
+  setCors(ctx);
+  try {
+    const body = await parseBody(ctx);
+    const username = String(body?.username || '').trim();
+    const password = String(body?.password || '');
+    const users = readJSON(usersFile);
+    const user = users[username];
+    if (!user) {
+      ctx.status = 401;
+      ctx.body = { error: 'Usuário ou senha incorretos.' };
+      return;
+    }
+    const attempt = Buffer.from(hashPassword(password, user.salt), 'hex');
+    const stored = Buffer.from(user.hash, 'hex');
+    if (attempt.length !== stored.length || !crypto.timingSafeEqual(attempt, stored)) {
+      ctx.status = 401;
+      ctx.body = { error: 'Usuário ou senha incorretos.' };
+      return;
+    }
+    const token = generateToken();
+    const sessions = readJSON(sessionsFile);
+    sessions[token] = username;
+    writeJSON(sessionsFile, sessions);
+    ctx.body = { token, username, isAdmin: isAdminUser(username) };
+  } catch (e) {
+    ctx.status = 400;
+    ctx.body = { error: e.message };
+  }
+});
+
+server.router.get('/api/auth/me', (ctx) => {
+  setCors(ctx);
+  const token = bearerToken(ctx);
+  const sessions = readJSON(sessionsFile);
+  const username = token ? sessions[token] : null;
+  if (!username) {
+    ctx.status = 401;
+    ctx.body = { error: 'Sessão inválida ou expirada.' };
+    return;
+  }
+  ctx.body = { username, isAdmin: isAdminUser(username) };
+});
+
+server.router.post('/api/auth/logout', async (ctx) => {
+  setCors(ctx);
+  try {
+    const token = bearerToken(ctx);
+    if (token) {
+      const sessions = readJSON(sessionsFile);
+      delete sessions[token];
+      writeJSON(sessionsFile, sessions);
+    }
+    ctx.body = { success: true };
+  } catch (e) {
+    ctx.status = 400;
+    ctx.body = { error: e.message };
   }
 });
 

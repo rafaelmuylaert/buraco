@@ -57,6 +57,9 @@ const SOCKET_PATH = (IS_DIRECT || IS_SUBDOMAIN) ? '/socket.io' : '/buraco/socket
 
 const lobbyClient = new LobbyClient({ server: API_ADDRESS });
 
+const AUTH_KEY = 'buraco_auth';
+const getSavedAuth = () => { try { return JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch { return null; } };
+
 const DEFAULT_CARD_POINT_VALUES = { joker: 10, two: 10, ace: 15, high: 10, low: 5 };
 const DEFAULT_RULES = {
   discard: true,
@@ -231,6 +234,12 @@ const App = () => {
   const [playerID, setPlayerID] = useState(null);
   const [credentials, setCredentials] = useState(null); 
   
+  const [currentUser, setCurrentUser] = useState(() => getSavedAuth());
+  const [showAuthPopup, setShowAuthPopup] = useState(false);
+  const [authMode, setAuthMode] = useState('login');
+  const [authForm, setAuthForm] = useState({ username: '', password: '' });
+  const [authError, setAuthError] = useState('');
+  
   const [history, setHistory] = useState([]);
   const [tournaments, setTournaments] = useState([]);
 
@@ -298,6 +307,54 @@ const App = () => {
   };
 
   const getSavedSessions = () => JSON.parse(localStorage.getItem('buraco_sessions') || '{}');
+
+  const myDisplayName = currentUser?.username || 'Eu';
+
+  useEffect(() => {
+    const saved = getSavedAuth();
+    if (!saved?.token) return;
+    fetch(`${API_ADDRESS}/api/auth/me`, { headers: { 'Authorization': `Bearer ${saved.token}` } })
+      .then(async (res) => {
+        if (res.ok) {
+          const me = await res.json();
+          setCurrentUser({ token: saved.token, ...me });
+        } else {
+          localStorage.removeItem(AUTH_KEY);
+          setCurrentUser(null);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const submitAuth = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      const res = await fetch(`${API_ADDRESS}/api/auth/${authMode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(authForm)
+      });
+      const data = await res.json();
+      if (!res.ok) { setAuthError(data.error || 'Falha na autenticação.'); return; }
+      const auth = { token: data.token, username: data.username, isAdmin: data.isAdmin };
+      localStorage.setItem(AUTH_KEY, JSON.stringify(auth));
+      setCurrentUser(auth);
+      setShowAuthPopup(false);
+      setAuthForm({ username: '', password: '' });
+    } catch {
+      setAuthError('Sem conexão com o servidor.');
+    }
+  };
+
+  const handleLogout = () => {
+    const saved = getSavedAuth();
+    if (saved?.token) {
+      fetch(`${API_ADDRESS}/api/auth/logout`, { method: 'POST', headers: { 'Authorization': `Bearer ${saved.token}` } }).catch(() => {});
+    }
+    localStorage.removeItem(AUTH_KEY);
+    setCurrentUser(null);
+  };
 
   useEffect(() => {
     if (view === 'admin') {
@@ -475,7 +532,8 @@ const App = () => {
 
   const handleJoinMatch = async (match, seatID) => {
     const assignedName = match.setupData?.assignments?.[seatID];
-    const pName = assignedName || prompt("Digite seu nome para entrar na mesa:");
+    let pName = assignedName || currentUser?.username || null;
+    if (!pName) pName = prompt("Digite seu nome para entrar na mesa:");
     if (!pName) return;
     try {
       const { playerCredentials } = await lobbyClient.joinMatch('buraco', match.matchID, { playerID: seatID, playerName: pName });
@@ -547,7 +605,7 @@ const App = () => {
   };
 
   const handleQuickGameSubmit = async () => {
-    const myName = "Eu";
+    const myName = myDisplayName;
     let assignmentsMap = { '0': myName };
     const targetBotName = quickGameConfig.botName || "UntrainedBot";
     
@@ -844,6 +902,15 @@ const App = () => {
   }
 
   if (view === 'admin') {
+    if (!currentUser?.isAdmin) {
+      return (
+        <div className="app-view-root" style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px' }}>
+          <h1 style={{ color: '#ff4d4d', margin: 0 }}>Acesso Restrito</h1>
+          <p style={{ color: '#aaa' }}>Você precisa entrar com uma conta de administrador para acessar este painel.</p>
+          <button onClick={() => setView('lounge')} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Voltar ao Salão</button>
+        </div>
+      );
+    }
     return (
       <div className="app-view-root" style={{ padding: '50px', overflowX: 'hidden', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #ff4d4d', paddingBottom: '20px' }}>
@@ -1194,11 +1261,19 @@ const App = () => {
     <div className="app-view-root" style={{ padding: '50px', overflowX: 'hidden', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
         <h1 style={{ color: '#ffd700', margin: 0, flex: '1 1 100%' }}>
-          <span onClick={() => setView('admin')} style={{ cursor: 'pointer', opacity: 0.2, marginRight: '15px' }} title="Modo Admin">⚙️</span>
+          <span onClick={() => { if (currentUser?.isAdmin) setView('admin'); }} style={{ cursor: currentUser?.isAdmin ? 'pointer' : 'not-allowed', opacity: currentUser?.isAdmin ? 0.2 : 0.06, marginRight: '15px' }} title={currentUser?.isAdmin ? 'Modo Admin' : 'Acesso restrito a administradores'} >⚙️</span>
            Salão Principal 
         </h1>
         <button onClick={() => setShowQuickGamePopup(true)} style={{ padding: '12px 16px', background: '#e63946', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}> Jogo Rápido</button>
         <button onClick={() => setView('tournaments')} style={{ padding: '12px 20px', background: '#8a2be2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer' }}>+ Novo Torneio</button>
+        {currentUser ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+            <span style={{ color: '#4da6ff', fontWeight: 'bold' }}>👤 {currentUser.username}</span>
+            <button onClick={handleLogout} style={{ padding: '8px 14px', background: '#333', color: '#ccc', border: '1px solid #555', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Sair</button>
+          </div>
+        ) : (
+          <button onClick={() => { setAuthMode('login'); setAuthError(''); setShowAuthPopup(true); }} style={{ padding: '12px 16px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', marginLeft: 'auto' }}>Entrar / Registrar</button>
+        )}
       </div>
       
       {showQuickGamePopup && (
@@ -1247,6 +1322,28 @@ const App = () => {
               <button onClick={() => setShowQuickGamePopup(false)} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Cancelar</button>
               <button onClick={handleQuickGameSubmit} style={{ padding: '10px 20px', background: '#e63946', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Iniciar Partida</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showAuthPopup && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#1b4332', padding: '30px', borderRadius: '15px', border: '2px solid #2a9d8f', width: '400px', maxWidth: '90%' }}>
+            <h2 style={{ color: '#2a9d8f', marginTop: 0 }}>{authMode === 'login' ? 'Entrar' : 'Criar Conta'}</h2>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+              <button onClick={() => { setAuthMode('login'); setAuthError(''); }} style={{ flex: 1, padding: '8px', background: authMode === 'login' ? '#2a9d8f' : '#333', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Entrar</button>
+              <button onClick={() => { setAuthMode('register'); setAuthError(''); }} style={{ flex: 1, padding: '8px', background: authMode === 'register' ? '#2a9d8f' : '#333', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Registrar</button>
+            </div>
+            <form onSubmit={submitAuth} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <input type="text" placeholder="Nome de usuário" value={authForm.username} onChange={e => setAuthForm({ ...authForm, username: e.target.value })} autoComplete="username" style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
+              <input type="password" placeholder="Senha" value={authForm.password} onChange={e => setAuthForm({ ...authForm, password: e.target.value })} autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
+              {authError && <div style={{ color: '#ff5555', fontSize: '0.9em' }}>{authError}</div>}
+              {authMode === 'register' && <div style={{ color: '#aaa', fontSize: '0.85em' }}>Mínimo 2 caracteres no nome e 6 na senha. Entrar após criar já conecta automaticamente.</div>}
+              <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setShowAuthPopup(false)} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Cancelar</button>
+                <button type="submit" style={{ padding: '10px 20px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>{authMode === 'login' ? 'Entrar' : 'Criar Conta'}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
