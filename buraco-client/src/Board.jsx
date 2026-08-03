@@ -66,11 +66,11 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor 
       WebkitTextSizeAdjust: '100%',
       ...customStyle
     }}>
-      <div style={{ position: 'absolute', top: '2px', left: '2px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1' }}>
+      <div style={{ position: 'absolute', top: '2px', left: '2px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '0.8' }}>
         <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{card.rank}</span>
         <span style={{ fontSize: '14px' }}>{card.suit}</span>
       </div>
-      <div style={{ fontSize: '26px', opacity: 0.4}}>{card.suit}</div>
+      <div style={{ fontSize: '40px', opacity: 0.4}}>{card.suit}</div>
       {deckColor && <div style={{ position: 'absolute', bottom: 0, left: 0, width: 0, height: 0,
         borderStyle: 'solid', borderWidth: '0 12px 12px 0',
         borderColor: `transparent transparent ${deckColor} transparent`,
