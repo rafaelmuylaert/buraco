@@ -48,7 +48,12 @@ class ErrorBoundary extends React.Component {
 // Card dimensions used for overlap calculations
 const CARD_W = 46, CARD_H = 60;
 
-const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor }) => {
+const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor, exposed = false }) => {
+  const cssW = parseFloat(customStyle?.width);
+  const textScale = exposed && !isNaN(cssW) ? cssW / CARD_W : 1;
+  const fRank = exposed ? 15 * textScale : 11;
+  const fSuit = exposed ? 16 * textScale : 12;
+  const fCenter = exposed ? 40 * textScale : 26;
   return (
     <div onClick={onClick} style={{
       position: 'relative',
@@ -65,10 +70,10 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor 
       ...customStyle
     }}>
       <div style={{ position: 'absolute', top: '2px', left: '3px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1' }}>
-        <span style={{ fontSize: '11px', fontWeight: 'bold' }}>{card.rank}</span>
-        <span style={{ fontSize: '12px' }}>{card.suit}</span>
+        <span style={{ fontSize: `${fRank}px`, fontWeight: 'bold' }}>{card.rank}</span>
+        <span style={{ fontSize: `${fSuit}px` }}>{card.suit}</span>
       </div>
-      <div style={{ fontSize: '26px', opacity: 0.3 }}>{card.suit}</div>
+      <div style={{ fontSize: `${fCenter}px`, opacity: 0.3 }}>{card.suit}</div>
       {deckColor && <div style={{ position: 'absolute', bottom: 0, left: 0, width: 0, height: 0,
         borderStyle: 'solid', borderWidth: '0 12px 12px 0',
         borderColor: `transparent transparent ${deckColor} transparent`,
@@ -512,7 +517,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
             {renderedCards.map((card, i) => {
               const isNewCard = hasNewCards && !prevRendered.has(card.id);
               return (
-                <Card key={card.id} card={card} deckColor={dc(card.id)} isNewlyDrawn={isNewCard} customStyle={{
+                <Card key={card.id} card={card} deckColor={dc(card.id)} isNewlyDrawn={isNewCard} exposed={i === renderedCards.length - 1} customStyle={{
                   width: `${MELD_W}px`, height: `${MELD_H}px`, minWidth: `${MELD_W}px`,
                   marginLeft: (!isRunner && i > 0) ? `-${MELD_W - 12}px` : '0',
                   marginTop: (isRunner && i > 0) ? `-${MELD_H - 18}px` : '0',
@@ -532,13 +537,13 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
           <span style={{ background: 'rgba(0,0,0,0.5)', padding: '5px 10px', borderRadius: '20px', fontWeight: 'bold', color: '#ffd700', flexShrink: 0, whiteSpace: 'nowrap', fontSize: '0.85em' }}>{calcTeamTablePoints(teamId)} pts</span>
         </div>
         {/* Runners float left; sequences wrap and fill space beside AND below (issue 4) */}
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', gap: compact ? '4px' : '10px', alignItems: 'flex-start' }}>
           {runners.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? '4px' : '8px', flexShrink: 0 }}>
               {runners.map(renderMeld)}
             </div>
           )}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignContent: 'flex-start', flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: compact ? '5px' : '10px', alignContent: 'flex-start', flex: 1, minWidth: 0 }}>
             {sequences.map(renderMeld)}
             {isMyTeam && (
               <div onClick={() => {
@@ -597,11 +602,11 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
               G.rules?.openDiscardView ? (
                 chunkedDiscard.map((row, rIdx) => (
                   <div key={rIdx} style={{ display: 'flex', marginTop: rIdx > 0 ? '-28px' : '0' }}>
-                    {row.map((c, i) => <Card key={c.id} card={c} deckColor={dc(c.id)} customStyle={{ marginLeft: i > 0 ? '-34px' : '0' }} />)}
+                    {row.map((c, i) => <Card key={c.id} card={c} deckColor={dc(c.id)} exposed={rIdx === chunkedDiscard.length - 1 && i === row.length - 1} customStyle={{ marginLeft: i > 0 ? '-34px' : '0' }} />)}
                   </div>
                 ))
               ) : (
-                <Card card={topDiscard} deckColor={topDiscard ? dc(topDiscard.id) : undefined} />
+                <Card card={topDiscard} deckColor={topDiscard ? dc(topDiscard.id) : undefined} exposed />
               )
             ) : (
               <div style={{ border: '2px dashed #40916c', width: '60px', height: '90px', borderRadius: '8px', textAlign: 'center', lineHeight: '90px', color: '#888', margin: '0 auto' }}>Vazio</div>
@@ -648,10 +653,10 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                 fontSize: '0.70em', display: 'flex', flexDirection: 'column',
                 color: isTurn ? '#ffd700' : (isMe ? '#4da6ff' : '#888'), 
                 fontWeight: (isTurn || isMe) ? 'bold' : 'normal', 
-                marginBottom: '4px',
+                marginBottom: '2px',
                 background: isMe ? 'rgba(77, 166, 255, 0.2)' : 'transparent',
                 border: isMe ? '1px solid #4da6ff' : '1px solid transparent',
-                padding: '4px', borderRadius: '4px',
+                padding: '3px 4px', borderRadius: '4px',
                 overflow: 'hidden', minWidth: 0
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 0 }}>
@@ -699,8 +704,10 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '25px', overflowY: 'auto', overflowX: 'hidden', paddingRight: '10px', paddingBottom: '20px' }}>
-        <div style={{ flexShrink: 0 }}>{renderTeamTable(oppTeam, "Mesa Deles", false)}</div>
-        <div style={{ flexShrink: 0 }}>{renderTeamTable(myTeam, "Nossa Mesa", true)}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flexShrink: 0 }}>
+          <div style={{ flexShrink: 0 }}>{renderTeamTable(oppTeam, "Mesa Deles", false)}</div>
+          <div style={{ flexShrink: 0 }}>{renderTeamTable(myTeam, "Nossa Mesa", true)}</div>
+        </div>
         <div style={{ flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '0 0 10px 0' }}>
             <h2 style={{ fontSize: '1.2em', margin: 0 }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
@@ -710,7 +717,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
             {handCardObjs.map(card => {
-              return <Card key={card.id} card={card} deckColor={dc(card.id)} isSelected={isCardSelected(card)} isNewlyDrawn={isNewlyDrawn(card)} onClick={() => toggleCardSelection(card.id)} />;
+              return <Card key={card.id} card={card} deckColor={dc(card.id)} isSelected={isCardSelected(card)} isNewlyDrawn={isNewlyDrawn(card)} exposed onClick={() => toggleCardSelection(card.id)} />;
             })}
           </div>
         </div>
