@@ -274,6 +274,79 @@ server.router.post('/api/tournaments', async (ctx) => {
   } catch (e) { ctx.status = 500; ctx.body = { error: 'Failed' }; }
 });
 
+// Claims a seat reserved for a registered player. Bypasses the boardgame.io
+// session lock (joinMatch 409s on any occupied seat) so a registered player
+// can take their own seat from any device, and blocks anyone else from it.
+server.router.post('/api/tournaments/claim-seat', async (ctx) => {
+  setCors(ctx);
+  try {
+    const token = bearerToken(ctx);
+    const sessions = readJSON(sessionsFile);
+    const username = token ? sessions[token] : null;
+
+    const body = await parseBody(ctx);
+    const matchID = String(body?.matchID || '');
+    const playerID = String(body?.playerID ?? '');
+    if (!matchID || playerID === '') {
+      ctx.status = 400;
+      ctx.body = { error: 'matchID e playerID são obrigatórios.' };
+      return;
+    }
+
+    const data = await server.db.fetch(matchID, { metadata: true });
+    if (!data?.metadata?.players?.[playerID]) {
+      ctx.status = 404;
+      ctx.body = { error: 'Mesa não encontrada.' };
+      return;
+    }
+
+    const sd = data.metadata?.setupData || {};
+    const assigned = sd.assignments?.[playerID];
+    if (!assigned) {
+      ctx.status = 400;
+      ctx.body = { error: 'Assento sem nome atribuído.' };
+      return;
+    }
+
+    // Only tournament seats assigned to a registered username are "reserved".
+    // Quick games and seats with non-registered names keep the old open behavior.
+    const users = readJSON(usersFile);
+    const reservedKey = sd.isTournament === true
+      ? Object.keys(users).find(k => k.toLowerCase() === String(assigned).toLowerCase())
+      : null;
+
+    let finalName;
+    if (reservedKey) {
+      if (!username) {
+        ctx.status = 401;
+        ctx.body = { error: 'Sessão inválida ou expirada. Entre com sua conta para jogar neste assento.' };
+        return;
+      }
+      if (reservedKey.toLowerCase() !== username.toLowerCase()) {
+        ctx.status = 403;
+        ctx.body = { error: `Assento reservado para ${assigned}.` };
+        return;
+      }
+      finalName = username;
+    } else {
+      finalName = String(body?.playerName || username || '').trim();
+      if (!finalName) {
+        ctx.status = 400;
+        ctx.body = { error: 'Informe seu nome para entrar neste assento.' };
+        return;
+      }
+    }
+
+    const playerCredentials = crypto.randomBytes(32).toString('hex');
+    data.metadata.players[playerID] = { id: Number(playerID), name: finalName, credentials: playerCredentials };
+    await server.db.setMetadata(matchID, data.metadata);
+    ctx.body = { success: true, playerID, playerCredentials };
+  } catch (e) {
+    ctx.status = 500;
+    ctx.body = { error: 'Falha ao reservar o assento.' };
+  }
+});
+
 server.router.post('/api/admin/kick', async (ctx) => {
   setCors(ctx);
   try {
@@ -394,6 +467,19 @@ server.router.get('/api/auth/me', (ctx) => {
     return;
   }
   ctx.body = { username, isAdmin: isAdminUser(username) };
+});
+
+server.router.get('/api/auth/users', (ctx) => {
+  setCors(ctx);
+  const token = bearerToken(ctx);
+  const sessions = readJSON(sessionsFile);
+  const username = token ? sessions[token] : null;
+  if (!username) {
+    ctx.status = 401;
+    ctx.body = { error: 'Sessão inválida ou expirada.' };
+    return;
+  }
+  ctx.body = { usernames: Object.keys(readJSON(usersFile)) };
 });
 
 server.router.post('/api/auth/logout', async (ctx) => {

@@ -243,6 +243,12 @@ const App = () => {
   const [history, setHistory] = useState([]);
   const [tournaments, setTournaments] = useState([]);
 
+  const [registeredUsers, setRegisteredUsers] = useState([]);
+  const [playersFocused, setPlayersFocused] = useState(false);
+  const [grantedTournaments, setGrantedTournaments] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('buraco_tourney_grant') || '[]'); } catch { return []; }
+  });
+
   const [showQuickGamePopup, setShowQuickGamePopup] = useState(false);
   const [quickGameConfig, setQuickGameConfig] = useState({
     numPlayers: 4,
@@ -251,7 +257,7 @@ const App = () => {
   });
 
   const [newTourney, setNewTourney] = useState({ 
-    name: '', type: 'team',
+    name: '', type: 'team', private: false,
     ...DEFAULT_GAME_CONFIG,
     shuffleMode: 'every-round', shuffleEvery: 2, shufflePoints: 1000,
     players: 'Diana, Marcia, Rafa, Monica',
@@ -310,6 +316,29 @@ const App = () => {
 
   const myDisplayName = currentUser?.username || 'Eu';
 
+  const isRegisteredName = (name) =>
+    registeredUsers.some(u => u.toLowerCase() === String(name).toLowerCase());
+
+  const isTournamentVisible = (t) => {
+    if (!t.private) return true;
+    if (grantedTournaments.includes(t.id)) return true;
+    const me = currentUser?.username?.toLowerCase();
+    if (!me) return false;
+    if (t.createdBy && String(t.createdBy).toLowerCase() === me) return true;
+    return (t.players || []).some(p => String(p).toLowerCase() === me);
+  };
+
+  const canEndTournament = (t) =>
+    !t.createdBy || (!!currentUser?.username && String(t.createdBy).toLowerCase() === currentUser.username.toLowerCase());
+
+  const pickPlayer = (name) => {
+    const text = newTourney.players;
+    const idx = text.lastIndexOf(',');
+    const before = idx === -1 ? '' : text.slice(0, idx + 1);
+    const sep = before ? (before.endsWith(' ') ? '' : ' ') : '';
+    setNewTourney({ ...newTourney, players: (before + sep + name).trim() });
+  };
+
   useEffect(() => {
     const saved = getSavedAuth();
     if (!saved?.token) return;
@@ -324,6 +353,30 @@ const App = () => {
         }
       })
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser?.token) { setRegisteredUsers([]); return; }
+    fetch(`${API_ADDRESS}/api/auth/users`, { headers: { 'Authorization': `Bearer ${currentUser.token}` } })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => setRegisteredUsers(data?.usernames || []))
+      .catch(() => setRegisteredUsers([]));
+  }, [currentUser]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tid = params.get('tournament');
+    if (tid) {
+      setGrantedTournaments(prev => {
+        if (prev.includes(tid)) return prev;
+        const next = [...prev, tid];
+        try { localStorage.setItem('buraco_tourney_grant', JSON.stringify(next)); } catch { /* armazenamento indisponível */ }
+        return next;
+      });
+      params.delete('tournament');
+      const qs = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash);
+    }
   }, []);
 
   const submitAuth = async (e) => {
@@ -516,11 +569,19 @@ const App = () => {
                   if (targetSeatID) {
                       (async () => {
                           try {
-                            const { playerCredentials } = await lobbyClient.joinMatch('buraco', targetMatch.matchID, { playerID: targetSeatID, playerName });
+                            const savedAuth = getSavedAuth();
+                            const headers = { 'Content-Type': 'application/json' };
+                            if (savedAuth?.token) headers['Authorization'] = `Bearer ${savedAuth.token}`;
+                            const res = await fetch(`${API_ADDRESS}/api/tournaments/claim-seat`, {
+                              method: 'POST', headers,
+                              body: JSON.stringify({ matchID: targetMatch.matchID, playerID: targetSeatID, playerName })
+                            });
+                            const data = await res.json();
+                            if (!res.ok || !data.playerCredentials) { console.error('Auto-join falhou:', data.error); return; }
                             const sessions = getSavedSessions();
-                            sessions[`${targetMatch.matchID}_${targetSeatID}`] = { matchID: targetMatch.matchID, playerID: targetSeatID, credentials: playerCredentials };
+                            sessions[`${targetMatch.matchID}_${targetSeatID}`] = { matchID: targetMatch.matchID, playerID: targetSeatID, credentials: data.playerCredentials };
                             localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
-                            setMatchID(targetMatch.matchID); setPlayerID(targetSeatID); setCredentials(playerCredentials);
+                            setMatchID(targetMatch.matchID); setPlayerID(targetSeatID); setCredentials(data.playerCredentials);
                             setView('game');
                           } catch (e) {
                             console.error("Auto-join falhou:", e);
@@ -535,22 +596,35 @@ const App = () => {
 
   const handleJoinMatch = async (match, seatID) => {
     const assignedName = match.setupData?.assignments?.[seatID];
+    const isTourney = match.setupData?.isTournament === true;
+    const reserved = isTourney && assignedName && isRegisteredName(assignedName);
+    if (reserved && (!currentUser || String(assignedName).toLowerCase() !== currentUser.username.toLowerCase())) {
+      alert(`Assento reservado para ${assignedName}. Entre com essa conta para jogar.`);
+      return;
+    }
     let pName = assignedName || currentUser?.username || null;
     if (!pName) pName = prompt("Digite seu nome para entrar na mesa:");
     if (!pName) return;
     try {
-      const { playerCredentials } = await lobbyClient.joinMatch('buraco', match.matchID, { playerID: seatID, playerName: pName });
+      const headers = { 'Content-Type': 'application/json' };
+      if (currentUser?.token) headers['Authorization'] = `Bearer ${currentUser.token}`;
+      const res = await fetch(`${API_ADDRESS}/api/tournaments/claim-seat`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ matchID: match.matchID, playerID: seatID, playerName: pName })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.playerCredentials) {
+        alert(data.error || "Não foi possível entrar neste assento.");
+        return;
+      }
       const sessions = getSavedSessions();
-      sessions[`${match.matchID}_${seatID}`] = { matchID: match.matchID, playerID: seatID, credentials: playerCredentials };
+      sessions[`${match.matchID}_${seatID}`] = { matchID: match.matchID, playerID: seatID, credentials: data.playerCredentials };
       localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
-      setMatchID(match.matchID); setPlayerID(seatID); setCredentials(playerCredentials);
+      setMatchID(match.matchID); setPlayerID(seatID); setCredentials(data.playerCredentials);
       setView('game');
     } catch (e) {
-      if (String(e?.message).startsWith('HTTP status 409')) {
-        alert("Assento ocupado! Peça a alguém na mesa para usar o botão 'Remover' e liberá-lo.");
-      } else {
-        alert("Erro ao entrar no assento.");
-      }
+      alert("Erro ao entrar no assento.");
     }
   };
 
@@ -586,6 +660,8 @@ const App = () => {
       id: Date.now().toString(),
       name: newTourney.name || `Torneio ${tournaments.length + 1}`,
       type: tourneyType,
+      private: !!newTourney.private,
+      createdBy: currentUser?.username || null,
       format: newTourney.format,
       targetPoints: newTourney.targetPoints,
       maxRounds: newTourney.maxRounds,
@@ -1184,6 +1260,10 @@ const App = () => {
             <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <h3 style={{ margin: 0, color: '#4da6ff' }}>Geral</h3>
               <input type="text" placeholder="Nome do Torneio" value={newTourney.name} onChange={e => setNewTourney({...newTourney, name: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd', fontSize: '0.95em' }}>
+                <input type="checkbox" checked={!!newTourney.private} onChange={e => setNewTourney({...newTourney, private: e.target.checked})} />
+                Torneio Privado (acesso por link)
+              </label>
               <label>Formato:</label>
               <select value={newTourney.format} onChange={e => setNewTourney({...newTourney, format: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
                 <option value="points">Pontos (Ex: Quem chegar a 3000)</option>
@@ -1212,7 +1292,21 @@ const App = () => {
                 </div>
               )}
               <label>Jogadores (separados por vírgula):</label>
-              <textarea rows="3" value={newTourney.players} onChange={e => setNewTourney({...newTourney, players: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none', resize: 'vertical' }} />
+              <textarea rows="3" value={newTourney.players} onChange={e => setNewTourney({...newTourney, players: e.target.value})} onFocus={() => setPlayersFocused(true)} onBlur={() => setPlayersFocused(false)} style={{ padding: '10px', borderRadius: '5px', border: 'none', resize: 'vertical' }} />
+              {(() => {
+                if (!playersFocused || !registeredUsers.length) return null;
+                const token = newTourney.players.split(',').pop().trim();
+                if (!token) return null;
+                const matches = registeredUsers.filter(u => u.toLowerCase().startsWith(token.toLowerCase())).slice(0, 8);
+                if (matches.length === 0) return null;
+                return (
+                  <div style={{ background: '#0d0d0d', border: '1px solid #4da6ff', borderRadius: '5px', maxHeight: '140px', overflowY: 'auto' }}>
+                    {matches.map(u => (
+                      <div key={u} onMouseDown={e => { e.preventDefault(); pickPlayer(u); }} style={{ padding: '6px 10px', cursor: 'pointer', color: '#8be9fd', fontSize: '0.9em' }}>{u}</div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
 
             <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '15px', borderLeft: '1px solid #444', paddingLeft: '20px' }}>
@@ -1257,8 +1351,9 @@ const App = () => {
     );
   }
 
-  const activeTournaments = tournaments.filter(t => t.status !== 'completed');
-  const completedTournaments = tournaments.filter(t => t.status === 'completed');
+  const visibleTournaments = tournaments.filter(isTournamentVisible);
+  const activeTournaments = visibleTournaments.filter(t => t.status !== 'completed');
+  const completedTournaments = visibleTournaments.filter(t => t.status === 'completed');
   const savedSessions = getSavedSessions();
 
   return (
@@ -1369,7 +1464,21 @@ const App = () => {
                     {t.type === 'individual' && t.shuffleMode && t.shuffleMode !== 'every-round' ? ` | Duplas: ${tourneyShuffleLabel(t)}` : ''}
                   </div>
                 </div>
-                <button onClick={() => handleEndTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>Encerrar</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                  {t.private && canEndTournament(t) && (
+                    <button onClick={() => {
+                      const link = `${window.location.origin}${window.location.pathname}?tournament=${t.id}`;
+                      if (navigator.clipboard?.writeText) {
+                        navigator.clipboard.writeText(link).then(() => alert('Link de acesso copiado!')).catch(() => prompt('Copie o link de acesso:', link));
+                      } else {
+                        prompt('Copie o link de acesso:', link);
+                      }
+                    }} style={{ background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>🔗 Link de Acesso</button>
+                  )}
+                  {canEndTournament(t) && (
+                    <button onClick={() => handleEndTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>Encerrar</button>
+                  )}
+                </div>
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px' }}>
@@ -1397,10 +1506,13 @@ const App = () => {
                         <h4 style={{ margin: '0 0 10px 0', color: isDone ? '#aaa' : '#4da6ff' }}>{isDone ? 'Mesa Encerrada' : 'Mesa Ativa'}</h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           {m.players.map(p => {
-                            const seatName = m.setupData?.assignments?.[p.id] || `Assento ${p.id}`;
+                            const assignedName = m.setupData?.assignments?.[p.id];
+                            const seatName = assignedName || `Assento ${p.id}`;
                             const sessionKey = `${m.matchID}_${p.id}`;
                             const hasLocalCredentials = !!savedSessions[sessionKey];
                             const isOccupiedByOther = !!p.name && !hasLocalCredentials;
+                            const seatReservedFor = m.setupData?.isTournament === true && assignedName && isRegisteredName(assignedName) ? assignedName : null;
+                            const isOwner = seatReservedFor && currentUser && String(seatReservedFor).toLowerCase() === currentUser.username.toLowerCase();
 
                             return (
                               <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', background: '#111', padding: '6px', borderRadius: '5px', alignItems: 'center', minWidth: 0, gap: '6px' }}>
@@ -1410,10 +1522,14 @@ const App = () => {
                                   <button onClick={() => handleReconnect(m.matchID, p.id.toString())} style={{ background: '#4da6ff', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>Reconectar</button>
                                 ) : isDone ? (
                                   <span style={{ color: '#aaa', fontSize: '0.8em' }}>Concluído</span>
+                                ) : seatReservedFor && !isOwner ? (
+                                  <span title={`Assento reservado para ${seatReservedFor}.`} style={{ color: '#888', fontSize: '0.8em', fontWeight: 'bold' }}>Reservado</span>
+                                ) : isOwner ? (
+                                  <button onClick={() => handleJoinMatch(m, p.id.toString())} style={{ background: '#ffd700', color: 'black', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>Entrar</button>
                                 ) : isOccupiedByOther ? (
                                   <span title="Assento ocupado por outro jogador. Peça a ele que use o botão 'Remover' na mesa para liberá-lo." style={{ color: '#ff9900', fontSize: '0.8em', fontWeight: 'bold' }}>Ocupado</span>
                                 ) : (
-                                  <button onClick={() => handleJoinMatch(m, p.id.toString())} style={{ background: m.setupData?.assignments?.[p.id] ? '#ffd700' : '#50fa7b', color: 'black', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>Sentar</button>
+                                  <button onClick={() => handleJoinMatch(m, p.id.toString())} style={{ background: assignedName ? '#ffd700' : '#50fa7b', color: 'black', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>Sentar</button>
                                 )}
                               </div>
                             );
