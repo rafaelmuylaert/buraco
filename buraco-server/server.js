@@ -371,6 +371,73 @@ server.router.post('/api/tournaments/claim-seat', async (ctx) => {
   }
 });
 
+// Converts a seat into a bot seat (quick-game "Substituir por Bot" flow).
+// Open like seat join: frees the seat's metadata and renames the assignment
+// so bot.js claims it on its next lobby poll.
+server.router.post('/api/quick/replace-bot', async (ctx) => {
+  setCors(ctx);
+  try {
+    const body = await parseBody(ctx);
+    const matchID = String(body?.matchID || '');
+    const playerID = String(body?.playerID ?? '');
+    if (!matchID || playerID === '') {
+      ctx.status = 400;
+      ctx.body = { error: 'matchID e playerID são obrigatórios.' };
+      return;
+    }
+    const data = await server.db.fetch(matchID, { metadata: true });
+    if (!data?.metadata?.players?.[playerID]) {
+      ctx.status = 404;
+      ctx.body = { error: 'Mesa não encontrada.' };
+      return;
+    }
+    const metadata = data.metadata;
+    const assignments = metadata.setupData?.assignments || {};
+    assignments[playerID] = 'Bot ' + playerID;
+    metadata.setupData = { ...metadata.setupData, assignments };
+    metadata.players[playerID] = { id: Number(playerID) };
+    await server.db.setMetadata(matchID, metadata);
+    ctx.body = { success: true, botName: assignments[playerID] };
+  } catch (e) {
+    ctx.status = 500;
+    ctx.body = { error: 'Falha ao substituir por bot.' };
+  }
+});
+
+// Frees the caller's own seat (quick-game "Sair da mesa" flow). Open like seat
+// join: clears the seat so it can be rejoined or converted to a bot. A bot's
+// assignment is kept as-is so bot.js does not lose it.
+server.router.post('/api/quick/release-seat', async (ctx) => {
+  setCors(ctx);
+  try {
+    const body = await parseBody(ctx);
+    const matchID = String(body?.matchID || '');
+    const playerID = String(body?.playerID ?? '');
+    if (!matchID || playerID === '') {
+      ctx.status = 400;
+      ctx.body = { error: 'matchID e playerID são obrigatórios.' };
+      return;
+    }
+    const data = await server.db.fetch(matchID, { metadata: true });
+    if (!data?.metadata?.players?.[playerID]) {
+      ctx.status = 404;
+      ctx.body = { error: 'Mesa não encontrada.' };
+      return;
+    }
+    const metadata = data.metadata;
+    const assignments = metadata.setupData?.assignments || {};
+    const wasBot = String(assignments[playerID] || '').toLowerCase().includes('bot');
+    if (!wasBot) assignments[playerID] = 'Jogador ' + playerID;
+    metadata.setupData = { ...metadata.setupData, assignments };
+    metadata.players[playerID] = { id: Number(playerID) };
+    await server.db.setMetadata(matchID, metadata);
+    ctx.body = { success: true };
+  } catch (e) {
+    ctx.status = 500;
+    ctx.body = { error: 'Falha ao liberar o assento.' };
+  }
+});
+
 server.router.post('/api/admin/kick', async (ctx) => {
   setCors(ctx);
   if (!requireAdmin(ctx)) return;

@@ -1229,7 +1229,13 @@ export const BuracoGame = {
       if (!moveDiscardCard(G, ctx.currentPlayer, cardId)) return 'INVALID_MOVE';
       events.endTurn();
     },
-    declareExhausted: ({ G, events }) => { G.isExhausted = true; events.endTurn(); }
+    declareExhausted: ({ G, events }) => { G.isExhausted = true; events.endTurn(); },
+    renamePlayer: ({ G }, targetID, newName) => {
+      const name = String(newName || '').trim();
+      if (name.length < 1 || name.length > 20) return 'INVALID_MOVE';
+      if (!G.rules.assignments) G.rules.assignments = {};
+      G.rules.assignments[String(targetID)] = name;
+    }
   },
 
   endIf: ({ G }) => {

@@ -472,6 +472,47 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
     }
   };
 
+  const isBotSeat = (seatID) => String(G.rules?.assignments?.[seatID] || '').toLowerCase().includes('bot');
+  const isTournament = !!tournament;
+
+  const handleRenameSelf = () => {
+    const current = G.rules?.assignments?.[playerID] || '';
+    const newName = window.prompt('Novo nome:', current);
+    if (newName !== null && newName.trim()) moves.renamePlayer(playerID, newName.trim());
+  };
+
+  const handleReplaceWithBot = async (seatID, seatName) => {
+    if (!window.confirm(`Substituir ${seatName} por um bot? O assento será liberado para o bot entrar.`)) return;
+    moves.renamePlayer(seatID, `Bot ${seatID}`);
+    try {
+      const savedAuth = (() => { try { return JSON.parse(localStorage.getItem('buraco_auth') || 'null'); } catch { return null; } })();
+      const res = await fetch(`${apiAddress}/api/quick/replace-bot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(savedAuth?.token ? { 'Authorization': `Bearer ${savedAuth.token}` } : {}) },
+        body: JSON.stringify({ matchID, playerID: seatID.toString() })
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || 'Falha ao substituir por bot.'); }
+      else alert(`${seatName} substituído por Bot ${seatID}.`);
+    } catch { alert("Falha ao substituir por bot."); }
+  };
+
+  const handleLeaveSeat = async () => {
+    if (!window.confirm('Sair desta mesa? Seu assento será liberado e outros poderão entrar ou colocar um bot.')) return;
+    try {
+      const savedAuth = (() => { try { return JSON.parse(localStorage.getItem('buraco_auth') || 'null'); } catch { return null; } })();
+      const res = await fetch(`${apiAddress}/api/quick/release-seat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(savedAuth?.token ? { 'Authorization': `Bearer ${savedAuth.token}` } : {}) },
+        body: JSON.stringify({ matchID, playerID: playerID.toString() })
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || 'Falha ao sair da mesa.'); return; }
+      const sessions = (() => { try { return JSON.parse(localStorage.getItem('buraco_sessions') || '{}'); } catch { return {}; } })();
+      delete sessions[`${matchID}_${playerID}`];
+      localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
+      window.location.reload();
+    } catch { alert("Falha ao sair da mesa."); }
+  };
+
   const renderTeamTable = (teamId, title, isMyTeam) => {
     const teamTable = G.table[teamId];
     const runners = (teamTable[1] || []).filter(m => m && getMeldLength(m) > 0).map((meldGroup, index) => ({ key: `runner-${index}`, index, meldGroup, isRunner: true }));
@@ -668,6 +709,18 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                   >{isTurn ? '» ' : ''}{name}</span>
                   <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.handSizes[p] ?? 0}</span>
                 </div>
+                {!isTournament && (
+                  <div style={{ display: 'flex', gap: '4px', marginTop: '3px', flexWrap: 'wrap' }}>
+                    {isMe ? (
+                      <>
+                        <button onClick={handleRenameSelf} title="Renomear minha mesa (visível para todos)" style={{ background: '#333', color: '#ccc', border: '1px solid #555', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.65em', fontWeight: 'bold' }}>✏️ Renomear</button>
+                        <button onClick={handleLeaveSeat} title="Liberar meu assento e voltar ao salão" style={{ background: '#333', color: '#ff6b6b', border: '1px solid #ff6b6b', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.65em', fontWeight: 'bold' }}>Sair da mesa</button>
+                      </>
+                    ) : !isBotSeat(p) ? (
+                      <button onClick={() => handleReplaceWithBot(p, name)} title="Substituir este jogador por um bot" style={{ background: '#333', color: '#ccc', border: '1px solid #555', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.65em', fontWeight: 'bold' }}>🤖 Substituir por Bot</button>
+                    ) : null}
+                  </div>
+                )}
               </div>
             );
           })}

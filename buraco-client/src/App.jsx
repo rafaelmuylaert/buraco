@@ -303,6 +303,8 @@ const App = () => {
   const [showQuickGamePopup, setShowQuickGamePopup] = useState(false);
   const [quickGameConfig, setQuickGameConfig] = useState({
     numPlayers: 4,
+    numBots: 3,
+    tableName: '',
     ...DEFAULT_GAME_CONFIG,
     rules: { ...DEFAULT_RULES, runners: [...DEFAULT_RULES.runners], cardPointValues: { ...DEFAULT_RULES.cardPointValues } }
   });
@@ -627,13 +629,16 @@ const App = () => {
     if (rematchData) {
       sessionStorage.removeItem('quick_game_rematch');
       const { rules, numPlayers, myName } = JSON.parse(rematchData);
+      const prevAssignments = rules?.assignments || {};
+      const numBots = Object.values(prevAssignments).filter(n => String(n).toLowerCase().includes('bot')).length;
       
       let assignmentsMap = { '0': myName };
-      for (let i = 1; i < numPlayers; i++) assignmentsMap[i.toString()] = `Bot ${i}`;
+      const humanSeats = numPlayers - 1 - numBots;
+      for (let i = 1; i < numPlayers; i++) assignmentsMap[i.toString()] = i <= humanSeats ? `Jogador ${i}` : `Bot ${i}`;
 
       lobbyClient.createMatch('buraco', {
          numPlayers: numPlayers,
-         setupData: { ...rules, numPlayers: numPlayers, isTournament: false, assignments: assignmentsMap }
+         setupData: { ...rules, numPlayers: numPlayers, isTournament: false, assignments: assignmentsMap, name: rules.name || `Mesa de ${myName}` }
       }).then(async ({ matchID }) => {
          const { playerCredentials } = await lobbyClient.joinMatch('buraco', matchID, { playerID: '0', playerName: myName });
          const sessions = getSavedSessions();
@@ -785,21 +790,26 @@ const App = () => {
 
   const handleQuickGameSubmit = async () => {
     const myName = myDisplayName;
-    let assignmentsMap = { '0': myName };
+    const numPlayers = 4;
+    const numBots = Math.max(1, Math.min(3, quickGameConfig.numBots || 3));
+    const tableName = (quickGameConfig.tableName || '').trim() || `Mesa de ${myName}`;
     const targetBotName = quickGameConfig.botName || "UntrainedBot";
     
-    for (let i = 1; i < quickGameConfig.numPlayers; i++) {
-        assignmentsMap[i.toString()] = `Bot ${i}`;
+    let assignmentsMap = { '0': myName };
+    const humanSeats = numPlayers - 1 - numBots;
+    for (let seat = 1; seat < numPlayers; seat++) {
+        assignmentsMap[seat.toString()] = seat <= humanSeats ? `Jogador ${seat}` : `Bot ${seat}`;
     }
 
     try {
       const { matchID } = await lobbyClient.createMatch('buraco', {
-         numPlayers: quickGameConfig.numPlayers,
+         numPlayers: numPlayers,
          setupData: { 
              ...quickGameConfig.rules, 
-             numPlayers: quickGameConfig.numPlayers, 
+             numPlayers: numPlayers, 
              isTournament: false, 
              assignments: assignmentsMap,
+             name: tableName,
              debugLog: true,
              targetBotName: targetBotName
          }
@@ -1598,6 +1608,26 @@ const App = () => {
   const completedTournaments = visibleTournaments.filter(t => t.status === 'completed');
   const savedSessions = getSavedSessions();
 
+  const isBotSeat = (m, p) => String(m.setupData?.assignments?.[p.id] || '').toLowerCase().includes('bot');
+  const openQuickMatches = matches.filter(m => {
+    if (m.setupData?.isTournament === true) return false;
+    if (history.some(h => h.matchID === m.matchID)) return false;
+    return (m.players || []).some(p => !p.name && !isBotSeat(m, p));
+  });
+  const rulesSummary = (rules) => {
+    const parts = [];
+    const runners = rules?.runners;
+    if (Array.isArray(runners)) {
+      parts.push(`Trincas: ${runners.length === 0 ? 'nenhuma' : runners.length >= 13 ? 'todas' : RUNNER_RANKS.filter(([r]) => runners.includes(r)).map(([, l]) => l).join(', ')}`);
+    }
+    parts.push(`Lixo ${rules?.discard === false ? 'aberto' : 'fechado'}`);
+    if (rules?.largeCanasta) parts.push('Canastrão');
+    if (rules?.cleanCanastaToWin) parts.push('Bater limpo');
+    if (rules?.noJokers) parts.push('Sem curingas');
+    if (rules?.openDiscardView) parts.push('Cascata');
+    return parts.join(' · ');
+  };
+
   const rankBy = (win, metric) => (stats?.users || [])
     .filter(u => (u[win]?.games || 0) > 0)
     .sort((a, b) => (b[win]?.[metric] || 0) - (a[win]?.[metric] || 0));
@@ -1631,7 +1661,16 @@ const App = () => {
             <h2 style={{ color: '#e63946', marginTop: 0 }}>Configurar Jogo Rápido</h2>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
-              <label>Jogadores: <select value={quickGameConfig.numPlayers} onChange={e => setQuickGameConfig({...quickGameConfig, numPlayers: parseInt(e.target.value)})} style={{ padding: '5px', marginLeft: '10px' }}><option value={2}>2 (Mano a Mano)</option><option value={4}>4 (Duplas)</option></select></label>
+              <label>Nome da mesa: <input type="text" value={quickGameConfig.tableName || ''} placeholder={`Mesa de ${myDisplayName}`} onChange={e => setQuickGameConfig({...quickGameConfig, tableName: e.target.value})} style={{ padding: '5px', marginLeft: '10px', width: '200px', maxWidth: '60%' }} /></label>
+
+              <label>Robôs: <select value={quickGameConfig.numBots || 3} onChange={e => setQuickGameConfig({...quickGameConfig, numBots: parseInt(e.target.value)})} style={{ padding: '5px', marginLeft: '10px' }}><option value={1}>1 Robô</option><option value={2}>2 Robôs</option><option value={3}>3 Robôs</option></select>
+                <span style={{ color: '#aaa', fontSize: '0.85em', marginLeft: '10px' }}>
+                  {(() => {
+                    const nb = quickGameConfig.numBots || 3;
+                    return nb === 3 ? 'você + 3 robôs' : nb === 2 ? 'você + 2 robôs e 1 assento livre' : 'você + 1 robô e 2 assentos livres';
+                  })()}
+                </span>
+              </label>
 
               <h4 style={{ margin: '10px 0 0 0', color: '#4da6ff' }}>Regras</h4>
               <div>
@@ -1756,6 +1795,29 @@ const App = () => {
                   {rankBy(statsWindow, statsMetric).length === 0 && <tr><td colSpan={7} style={{ color: '#aaa', padding: '8px 0' }}>Sem dados neste período.</td></tr>}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {openQuickMatches.length > 0 && (
+          <div>
+            <h2 style={{ color: '#ffd700', marginBottom: '20px' }}>Jogos Rápidos em Aberto</h2>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
+              {openQuickMatches.map(m => {
+                const numBots = (m.players || []).filter(p => isBotSeat(m, p)).length;
+                const openSeats = (m.players || []).filter(p => !p.name && !isBotSeat(m, p)).length;
+                const firstOpen = (m.players || []).find(p => !p.name && !isBotSeat(m, p));
+                return (
+                  <div key={m.matchID} style={{ background: '#222', border: '2px solid #40916c', borderRadius: '10px', padding: '20px', width: '320px', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+                    <h3 style={{ margin: '0 0 10px 0', color: '#ffd700', fontSize: '1.3em' }}>{m.setupData?.name || 'Jogo Rápido'}</h3>
+                    <div style={{ fontSize: '0.85em', color: '#aaa', marginBottom: '12px', lineHeight: '1.6' }}>
+                      4 jogadores · {numBots} bot(s) · {openSeats} assento(s) livre(s)<br/>
+                      {rulesSummary(m.setupData)}
+                    </div>
+                    <button onClick={() => { if (firstOpen) handleJoinMatch(m, firstOpen.id.toString()); }} style={{ width: '100%', padding: '10px', background: '#ffd700', color: 'black', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Entrar</button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
