@@ -229,7 +229,22 @@ function BotDebugPanel({ apiBase, botName, rules, onClose }) {
   );
 }
 
-function LogPanel({ apiBase }) {
+function AdminCard({ title, color, open, onToggle, right, children }) {
+  return (
+    <div style={{ background: '#222', padding: '16px 20px', borderRadius: '10px', border: '1px solid #444', width: '100%', boxSizing: 'border-box' }}>
+      <div onClick={onToggle} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none', gap: '10px', flexWrap: 'wrap' }}>
+        <h2 style={{ color, margin: 0, fontSize: '1.25em' }}>{title}</h2>
+        <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          {right}
+          <span style={{ color: '#888', fontSize: '0.9em' }}>{open ? '▲' : '▼'}</span>
+        </div>
+      </div>
+      {open && <div style={{ marginTop: '16px' }}>{children}</div>}
+    </div>
+  );
+}
+
+function LogPanel({ apiBase, collapsed, onToggle }) {
   const [lines, setLines] = React.useState([]);
   const [paused, setPaused] = React.useState(false);
   const endRef = React.useRef(null);
@@ -250,23 +265,26 @@ function LogPanel({ apiBase }) {
   }, [lines, paused]);
 
   return (
-    <div style={{ background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444', width: '100%', boxSizing: 'border-box' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <h2 style={{ color: '#50fa7b', margin: 0 }}>Log do Servidor</h2>
-        <div style={{ display: 'flex', gap: '8px' }}>
+    <div style={{ background: '#222', padding: '16px 20px', borderRadius: '10px', border: '1px solid #444', width: '100%', boxSizing: 'border-box' }}>
+      <div onClick={onToggle} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none', gap: '10px', flexWrap: 'wrap' }}>
+        <h2 style={{ color: '#50fa7b', margin: 0, fontSize: '1.25em' }}>Log do Servidor</h2>
+        <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button onClick={() => setPaused(p => !p)} style={{ padding: '6px 12px', background: paused ? '#ffb86c' : '#444', color: paused ? '#000' : '#ccc', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.85em' }}>
             {paused ? '▶ Retomar' : '⏸ Pausar'}
           </button>
           <button onClick={() => setLines([])} style={{ padding: '6px 12px', background: '#444', color: '#ccc', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.85em' }}>Limpar</button>
+          <span style={{ color: '#888', fontSize: '0.9em' }}>{collapsed ? '▼' : '▲'}</span>
         </div>
       </div>
-      <div style={{ height: '260px', overflowY: 'auto', background: '#0d0d0d', border: '1px solid #333', borderRadius: '5px', padding: '10px', fontSize: '0.75em', lineHeight: '1.5', fontFamily: 'monospace', color: '#ddd', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-        {lines.length === 0 && <span style={{ color: '#555' }}>Aguardando logs do servidor...</span>}
-        {lines.map((l, i) => (
-          <div key={i} style={{ color: /error|failed|crash/i.test(l) ? '#ff5555' : (/\[CLEANUP\]|\[HISTORY\]/i.test(l) ? '#b088f9' : '#ddd') }}>{l}</div>
-        ))}
-        <div ref={endRef} />
-      </div>
+      {!collapsed && (
+        <div style={{ marginTop: '12px', height: '260px', overflowY: 'auto', background: '#0d0d0d', border: '1px solid #333', borderRadius: '5px', padding: '10px', fontSize: '0.75em', lineHeight: '1.5', fontFamily: 'monospace', color: '#ddd', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {lines.length === 0 && <span style={{ color: '#555' }}>Aguardando logs do servidor...</span>}
+          {lines.map((l, i) => (
+            <div key={i} style={{ color: /error|failed|crash/i.test(l) ? '#ff5555' : (/\[CLEANUP\]|\[HISTORY\]/i.test(l) ? '#b088f9' : '#ddd') }}>{l}</div>
+          ))}
+          <div ref={endRef} />
+        </div>
+      )}
     </div>
   );
 }
@@ -325,6 +343,9 @@ const App = () => {
   const [trainingStatus, setTrainingStatus] = useState(null);
   const [adminUsers, setAdminUsers] = useState([]);
   const [newAdminUser, setNewAdminUser] = useState({ username: '', password: '', isAdmin: false });
+  const [adminOpen, setAdminOpen] = useState({});
+  const adminCardOpen = (id) => !!adminOpen[id];
+  const toggleAdminCard = (id) => setAdminOpen(prev => ({ ...prev, [id]: !prev[id] }));
 
   const [trainBotConfig, setTrainBotConfig] = useState({
     name: 'BotRafa',
@@ -1209,8 +1230,12 @@ const App = () => {
           <button onClick={() => setView('lounge')} style={{ ...PRIMARY_ACTION, background: '#555', color: 'white' }}>Sair do Modo Admin</button>
         </div>
 
-        {trainingStatus && trainingStatus.isTraining && trainingStatus.sessions.map(session => (
-          <div key={session.botName} style={{ width: '100%', background: '#2b1055', padding: '20px', borderRadius: '10px', border: '1px solid #8a2be2', marginBottom: '30px', boxSizing: 'border-box' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <LogPanel apiBase={API_ADDRESS} collapsed={!adminCardOpen('logs')} onToggle={() => toggleAdminCard('logs')} />
+
+        <AdminCard title="Gerenciar Bots" color="#b088f9" open={adminCardOpen('bots')} onToggle={() => toggleAdminCard('bots')}>
+          {trainingStatus && trainingStatus.isTraining && trainingStatus.sessions.map(session => (
+          <div key={session.botName} style={{ width: '100%', background: '#2b1055', padding: '20px', borderRadius: '10px', border: '1px solid #8a2be2', boxSizing: 'border-box', marginBottom: '15px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
               <h3 style={{ margin: 0, color: '#ffb86c' }}> Treinamento em Andamento: {session.botName}</h3>
               <button onClick={async () => {
@@ -1242,37 +1267,51 @@ const App = () => {
               </div>
             )}
           </div>
-        ))}
+          ))}
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'flex-start' }}>
-          <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div style={{ background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
-              <h2 style={{ color: '#ffd700', marginTop: 0 }}>Gerenciar Torneios</h2>
-              {tournaments.filter(t => t.status !== 'completed').length === 0 ? <p style={{ color: '#888' }}>Nenhum torneio ativo.</p> : null}
-              {tournaments.filter(t => t.status !== 'completed').map(t => (
-                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px', gap: '10px' }}>
-                  <strong style={{ minWidth: 0 }}>{t.name}</strong>
-                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                    <button onClick={() => handleEndTournament(t.id)} style={{ background: '#ff9900', color: 'black', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Encerrar</button>
-                    <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar</button>
-                  </div>
+          {botInfoList.length === 0 ? <p style={{ color: '#888' }}>Nenhum bot treinado.</p> : null}
+          {botInfoList.map(bot => (
+            <div key={bot.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px', gap: '10px' }}>
+              <div>
+                <div style={{ fontWeight: 'bold', color: bot.isTraining ? '#ffb86c' : 'white' }}>{bot.name} {bot.isTraining ? '' : ''}</div>
+                <div style={{ fontSize: '0.75em', color: '#888' }}>
+                  {bot.isTraining
+                    ? `Sessão: Gen ${bot.currentGen}/${bot.totalGen}${bot.meta?.lifetimeGenerations ? ` · Total: ${bot.meta.lifetimeGenerations} ger.` : ''}`
+                    : `${bot.meta?.lifetimeGenerations ? `${bot.meta.lifetimeGenerations} ger. treinadas · ` : ''}Salvo: ${new Date(bot.lastModified).toLocaleDateString()}`}
                 </div>
-              ))}
+              </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button onClick={() => {
+                  const meta = bot.meta?.trainParams || {};
+                  setTrainBotIsNew(false);
+                  setTrainBotConfig(prev => ({
+                    ...prev,
+                    name: bot.name,
+                    populationSize:      meta.populationSize      ?? prev.populationSize,
+                    generations:         meta.generations         ?? prev.generations,
+                    saveInterval:        meta.saveInterval        ?? prev.saveInterval,
+                    telepathy:           meta.telepathy           ?? prev.telepathy,
+                    fixedDeck:           meta.fixedDeck           ?? prev.fixedDeck,
+                    greedyMode:          meta.greedyMode          ?? prev.greedyMode,
+                    scoreCardPoints:     meta.scoreCardPoints     ?? prev.scoreCardPoints,
+                    scoreHandPenalty:    meta.scoreHandPenalty    ?? prev.scoreHandPenalty,
+                    dirtyCanastraBonus:  meta.dirtyCanastraBonus  ?? prev.dirtyCanastraBonus,
+                    cleanCanastraBonus:  meta.cleanCanastraBonus  ?? prev.cleanCanastraBonus,
+                    mortoPenalty:        meta.mortoPenalty        ?? prev.mortoPenalty,
+                    endGameBonus:        meta.endGameBonus        ?? prev.endGameBonus,
+                    cardPointValues:     meta.cardPointValues     ?? prev.cardPointValues,
+                    meldSizeBonus:       meta.meldSizeBonus       ?? prev.meldSizeBonus,
+                    rules: bot.meta?.rules || prev.rules
+                  }));
+                  setShowTrainBotPopup(true);
+                }} style={{ background: '#8a2be2', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}> Treinar</button>
+                <button onClick={async () => { if (!confirm(`Apagar bot "${bot.name}"?`)) return; await fetch(`${API_ADDRESS}/api/bots/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botName: bot.name }) }); setBotInfoList(prev => prev.filter(b => b.name !== bot.name)); setAvailableBots(prev => prev.filter(b => b !== bot.name)); }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Apagar</button>
+              </div>
             </div>
+          ))}
+        </AdminCard>
 
-            <div style={{ background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
-              <h2 style={{ color: '#888', marginTop: 0 }}>Torneios Finalizados</h2>
-              {tournaments.filter(t => t.status === 'completed').length === 0 ? <p style={{ color: '#888' }}>Nenhum.</p> : null}
-              {tournaments.filter(t => t.status === 'completed').map(t => (
-                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px' }}>
-                  <strong style={{ color: '#888' }}>{t.name}</strong>
-                  <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar</button>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #2a9d8f' }}>
-              <h2 style={{ color: '#2a9d8f', marginTop: 0 }}>Gerenciar Usuários</h2>
+        <AdminCard title="Gerenciar Usuários" color="#2a9d8f" open={adminCardOpen('users')} onToggle={() => toggleAdminCard('users')}>
               <form onSubmit={handleAdminAddUser} style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '15px', alignItems: 'center' }}>
                 <input type="text" placeholder="Novo usuário" value={newAdminUser.username} onChange={e => setNewAdminUser({ ...newAdminUser, username: e.target.value })} style={{ padding: '7px', borderRadius: '5px', border: 'none', flex: '1 1 120px', minWidth: 0 }} />
                 <input type="password" placeholder="Senha (mín. 6)" value={newAdminUser.password} onChange={e => setNewAdminUser({ ...newAdminUser, password: e.target.value })} style={{ padding: '7px', borderRadius: '5px', border: 'none', flex: '1 1 120px', minWidth: 0 }} />
@@ -1306,87 +1345,63 @@ const App = () => {
                   </div>
                 );
               })}
-            </div>
+        </AdminCard>
 
-            <div style={{ background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #8a2be2' }}>
-              <h2 style={{ color: '#b088f9', marginTop: 0 }}>Gerenciar Bots</h2>
-              {botInfoList.length === 0 ? <p style={{ color: '#888' }}>Nenhum bot treinado.</p> : null}
-              {botInfoList.map(bot => (
-                <div key={bot.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px', gap: '10px' }}>
-                  <div>
-                    <div style={{ fontWeight: 'bold', color: bot.isTraining ? '#ffb86c' : 'white' }}>{bot.name} {bot.isTraining ? '' : ''}</div>
-                    <div style={{ fontSize: '0.75em', color: '#888' }}>
-                      {bot.isTraining
-                        ? `Sessão: Gen ${bot.currentGen}/${bot.totalGen}${bot.meta?.lifetimeGenerations ? ` · Total: ${bot.meta.lifetimeGenerations} ger.` : ''}`
-                        : `${bot.meta?.lifetimeGenerations ? `${bot.meta.lifetimeGenerations} ger. treinadas · ` : ''}Salvo: ${new Date(bot.lastModified).toLocaleDateString()}`}
+        <AdminCard title="Gerenciar Torneios" color="#ffd700" open={adminCardOpen('tournaments')} onToggle={() => toggleAdminCard('tournaments')}>
+          {tournaments.filter(t => t.status !== 'completed').length === 0 ? <p style={{ color: '#888' }}>Nenhum torneio ativo.</p> : null}
+          {tournaments.filter(t => t.status !== 'completed').map(t => (
+            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px', gap: '10px' }}>
+              <strong style={{ minWidth: 0 }}>{t.name}</strong>
+              <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                <button onClick={() => handleEndTournament(t.id)} style={{ background: '#ff9900', color: 'black', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Encerrar</button>
+                <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar</button>
+              </div>
+            </div>
+          ))}
+        </AdminCard>
+
+        <AdminCard title="Mesas Ativas (Liberar Assentos)" color="#4da6ff" open={adminCardOpen('active')} onToggle={() => toggleAdminCard('active')} right={
+          <button onClick={handleCleanOrphans} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold' }}> Limpar Mesas órfãs</button>
+        }>
+          {activeMatches.length === 0 ? <p style={{ color: '#888' }}>Nenhuma mesa ativa.</p> : null}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
+            {activeMatches.map(m => {
+              const isOrphan = !allValidMatchIDs.includes(m.matchID);
+              const owningTournament = tournaments.find(t => t.rounds.some(r => r.assignments.some(a => a.matchID === m.matchID)));
+              const tableLabel = owningTournament ? owningTournament.name : `Mesa: ${m.matchID.substring(0,6)}...`;
+              return (
+                <div key={m.matchID} style={{ background: '#111', border: `1px solid ${isOrphan ? '#ff4d4d' : '#333'}`, borderRadius: '8px', padding: '15px', width: '300px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <h4 style={{ margin: 0, color: isOrphan ? '#ff4d4d' : '#ccc' }}>{tableLabel} {isOrphan && '(órfã)'}</h4>
+                    <button onClick={async () => {
+                      await fetch(`${API_ADDRESS}/api/admin/delete-match`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentUser?.token}` }, body: JSON.stringify({ matchID: m.matchID }) });
+                      window.location.reload();
+                    }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '3px 8px', fontSize: '0.8em', fontWeight: 'bold', cursor: 'pointer' }}>Apagar</button>
+                  </div>
+                  {m.players.map(p => (
+                    <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px dashed #333', paddingBottom: '4px' }}>
+                      <span style={{ fontSize: '0.9em' }}>Assento {p.id}: <strong style={{ color: p.name ? 'white' : '#555' }}>{p.name || 'Vazio'}</strong></span>
+                      {p.name && (
+                        <button onClick={() => handleAdminForceKick(m.matchID, p.id)} style={{ background: '#ff9900', color: 'black', border: 'none', borderRadius: '3px', padding: '2px 8px', fontSize: '0.8em', fontWeight: 'bold', cursor: 'pointer' }}>Forçar Saída</button>
+                      )}
                     </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button onClick={() => {
-                      const meta = bot.meta?.trainParams || {};
-                      setTrainBotIsNew(false);
-                      setTrainBotConfig(prev => ({
-                        ...prev,
-                        name: bot.name,
-                        populationSize:      meta.populationSize      ?? prev.populationSize,
-                        generations:         meta.generations         ?? prev.generations,
-                        saveInterval:        meta.saveInterval        ?? prev.saveInterval,
-                        telepathy:           meta.telepathy           ?? prev.telepathy,
-                        fixedDeck:           meta.fixedDeck           ?? prev.fixedDeck,
-                        greedyMode:          meta.greedyMode          ?? prev.greedyMode,
-                        scoreCardPoints:     meta.scoreCardPoints     ?? prev.scoreCardPoints,
-                        scoreHandPenalty:    meta.scoreHandPenalty    ?? prev.scoreHandPenalty,
-                        dirtyCanastraBonus:  meta.dirtyCanastraBonus  ?? prev.dirtyCanastraBonus,
-                        cleanCanastraBonus:  meta.cleanCanastraBonus  ?? prev.cleanCanastraBonus,
-                        mortoPenalty:        meta.mortoPenalty        ?? prev.mortoPenalty,
-                        endGameBonus:        meta.endGameBonus        ?? prev.endGameBonus,
-                        cardPointValues:     meta.cardPointValues     ?? prev.cardPointValues,
-                        meldSizeBonus:       meta.meldSizeBonus       ?? prev.meldSizeBonus,
-                        rules: bot.meta?.rules || prev.rules
-                      }));
-                      setShowTrainBotPopup(true);
-                    }} style={{ background: '#8a2be2', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}> Treinar</button>
-                    <button onClick={async () => { if (!confirm(`Apagar bot "${bot.name}"?`)) return; await fetch(`${API_ADDRESS}/api/bots/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botName: bot.name }) }); setBotInfoList(prev => prev.filter(b => b.name !== bot.name)); setAvailableBots(prev => prev.filter(b => b !== bot.name)); }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Apagar</button>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
+        </AdminCard>
 
-          <div style={{ flex: '2 1 300px', background: '#222', padding: '20px', borderRadius: '10px', border: '1px solid #444' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h2 style={{ color: '#4da6ff', margin: 0 }}>Mesas Ativas (Liberar Assentos)</h2>
-              <button onClick={handleCleanOrphans} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold' }}> Limpar Mesas órfãs</button>
+        <AdminCard title="Torneios Finalizados" color="#888" open={adminCardOpen('finished')} onToggle={() => toggleAdminCard('finished')}>
+          {tournaments.filter(t => t.status === 'completed').length === 0 ? <p style={{ color: '#888' }}>Nenhum.</p> : null}
+          {tournaments.filter(t => t.status === 'completed').map(t => (
+            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111', padding: '10px', borderRadius: '5px', marginBottom: '10px' }}>
+              <strong style={{ color: '#888' }}>{t.name}</strong>
+              <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar</button>
             </div>
-            {activeMatches.length === 0 ? <p style={{ color: '#888' }}>Nenhuma mesa ativa.</p> : null}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
-              {activeMatches.map(m => {
-                const isOrphan = !allValidMatchIDs.includes(m.matchID);
-                const owningTournament = tournaments.find(t => t.rounds.some(r => r.assignments.some(a => a.matchID === m.matchID)));
-                const tableLabel = owningTournament ? owningTournament.name : `Mesa: ${m.matchID.substring(0,6)}...`;
-                return (
-                  <div key={m.matchID} style={{ background: '#111', border: `1px solid ${isOrphan ? '#ff4d4d' : '#333'}`, borderRadius: '8px', padding: '15px', width: '300px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                      <h4 style={{ margin: 0, color: isOrphan ? '#ff4d4d' : '#ccc' }}>{tableLabel} {isOrphan && '(órfã)'}</h4>
-                      <button onClick={async () => {
-                        await fetch(`${API_ADDRESS}/api/admin/delete-match`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentUser?.token}` }, body: JSON.stringify({ matchID: m.matchID }) });
-                        window.location.reload();
-                      }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '3px 8px', fontSize: '0.8em', fontWeight: 'bold', cursor: 'pointer' }}>Apagar</button>
-                    </div>
-                    {m.players.map(p => (
-                      <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px dashed #333', paddingBottom: '4px' }}>
-                        <span style={{ fontSize: '0.9em' }}>Assento {p.id}: <strong style={{ color: p.name ? 'white' : '#555' }}>{p.name || 'Vazio'}</strong></span>
-                        {p.name && (
-                          <button onClick={() => handleAdminForceKick(m.matchID, p.id)} style={{ background: '#ff9900', color: 'black', border: 'none', borderRadius: '3px', padding: '2px 8px', fontSize: '0.8em', fontWeight: 'bold', cursor: 'pointer' }}>Forçar Saída</button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+          ))}
+        </AdminCard>
+      </div>
 
         {showTrainBotPopup && (
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
@@ -1490,10 +1505,6 @@ const App = () => {
             </div>
           </div>
         )}
-
-        <div style={{ marginTop: '30px' }}>
-          <LogPanel apiBase={API_ADDRESS} />
-        </div>
 
       </div>
     );
