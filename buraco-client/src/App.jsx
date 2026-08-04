@@ -1884,7 +1884,7 @@ const App = () => {
                       } else {
                         prompt('Copie o link de acesso:', link);
                       }
-                    }} style={{ background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>🔗 Link de Acesso</button>
+                    }} style={{ background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>🔗 Link</button>
                   )}
                   {canEndTournament(t) && (
                     <button onClick={() => handleEndTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>Encerrar</button>
@@ -1893,10 +1893,10 @@ const App = () => {
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px' }}>
-                <div style={{ flex: '1 1 300px', maxWidth: '300px', background: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '10px', minWidth: 0, boxSizing: 'border-box' }}>
-                  <h3 style={{ color: '#4da6ff', margin: '0 0 15px 0' }}>Classificação</h3>
+                <div style={{ flex: '1 1 300px', maxWidth: '450px', background: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '10px', minWidth: 0, boxSizing: 'border-box' }}>
+                  <h4 style={{ color: '#4da6ff', margin: '0 0 10px 0' }}>Classificação</h4>
                   <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                    <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Jogador</th><th>Pts</th>{showSince && <th title="Pontos desde o último sorteio">Pts pós-sorteio</th>}<th>V</th><th>D</th></tr></thead>
+                    <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Jogador</th><th>Total</th>{showSince && <th title="Pontos desde o último sorteio">Rodada</th>}<th>V</th><th>D</th></tr></thead>
                     <tbody>
                       {standings.map(([pName, st]) => (
                         <tr key={pName} style={{ borderBottom: '1px solid #222' }}>
