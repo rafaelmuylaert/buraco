@@ -48,7 +48,7 @@ class ErrorBoundary extends React.Component {
 // Card dimensions used for overlap calculations
 const CARD_W = 46, CARD_H = 60;
 
-const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor }) => {
+const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor, horizontalCorner }) => {
   const cssW = parseFloat(customStyle?.width);
   const isSmall = !isNaN(cssW) && cssW < CARD_W;
   return (
@@ -66,11 +66,11 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor 
       WebkitTextSizeAdjust: '100%',
       ...customStyle
     }}>
-      <div style={{ position: 'absolute', top: '2px', left: '2px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '0.7' }}>
+      <div style={{ position: 'absolute', top: '2px', left: '2px', display: 'flex', flexDirection: horizontalCorner ? 'row' : 'column', alignItems: 'center', lineHeight: '0.7' }}>
         <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{card.rank}</span>
         <span style={{ fontSize: '18px' }}>{card.suit}</span>
       </div>
-      <div style={{ fontSize: '34px', opacity: 0.4}}>{card.suit}</div>
+      <div style={{ fontSize: isSmall ? '25px' : '34px', opacity: 0.4}}>{card.suit}</div>
       {deckColor && <div style={{ position: 'absolute', bottom: 0, left: 0, width: 0, height: 0,
         borderStyle: 'solid', borderWidth: '0 12px 12px 0',
         borderColor: `transparent transparent ${deckColor} transparent`,
@@ -613,10 +613,10 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
             {renderedCards.map((card, i) => {
               const isNewCard = hasNewCards && !prevRendered.has(card.id);
               return (
-                <Card key={card.id} card={card} deckColor={dc(card.id)} isNewlyDrawn={isNewCard} customStyle={{
+                <Card key={card.id} card={card} deckColor={dc(card.id)} isNewlyDrawn={isNewCard} horizontalCorner={isRunner} customStyle={{
                   width: `${MELD_W}px`, height: `${MELD_H}px`, minWidth: `${MELD_W}px`,
                   marginLeft: (!isRunner && i > 0) ? `-${MELD_W - 12}px` : '0',
-                  marginTop: (isRunner && i > 0) ? `-${MELD_H - 18}px` : '0',
+                  marginTop: (isRunner && i > 0) ? `-${MELD_H - 12}px` : '0',
                   zIndex: i
                 }} />
               );
