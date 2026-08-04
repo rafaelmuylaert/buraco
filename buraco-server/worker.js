@@ -17,30 +17,24 @@
 //   each pair bidirectionally with optional fixed deck → returns score differentials.
 //
 // Key difference from bot.js: worker.js mutates game state directly (no network),
-// uses WASM-backed card buffers for zero-copy performance, and runs at full speed
-// (no per-tick delays) to maximize throughput for training.
+// and runs at full speed (no per-tick delays) to maximize throughput for training.
 // ──────────────────────────────────────────────────────────────────────────────
 
 import { workerData, parentPort } from 'worker_threads';
 import {
     BuracoGame, AI_CONFIG,
     moveDrawCard, moveDiscardCard, moveMeld, movePickUpDiscard,
-    checkGameOver, setScoreFunctions, getAndResetTimings
+    checkGameOver, getAndResetTimings
 } from './game.js';
-import { initWasm, loadMatchDNA, isWasmReady, getWasmCardBuffers,
-         getCppTimings, setUsingWasmBackedBuffers, setActiveNetConfig,
-         updateSeqMeld, updateRunMeld, getTeam1DnaOffset, runTurn,
-         setDiagnosticLog, isDiagnosticLog } from './wasm_loader.js';
+import { initWasm, loadMatchDNA, isWasmReady,
+         getCppTimings, setActiveNetConfig, runTurn,
+         setDiagnosticLog, isDiagnosticLog } from './wasm_loader_new.js';
 
 
 await initWasm();
-setScoreFunctions(null, null, null, (isSeq, teamIdx, suit0, slotIdx, meldArray) => {
-    if (isSeq) updateSeqMeld(teamIdx, suit0, slotIdx, meldArray);
-    else updateRunMeld(teamIdx, slotIdx, meldArray);
-}, null);
 
 import { setDbgLogFn } from './game.js';
-import { getLastDbgLog } from './wasm_loader.js';
+import { getLastDbgLog } from './wasm_loader_new.js';
 
 setDbgLogFn(getLastDbgLog);
 
@@ -82,8 +76,7 @@ function makeIface(S, p) {
 
 // worker.js
 
-function runMatch(genomes, rules, fixedDeck, netConfig) {
-    const numPlayers = rules.numPlayers || 4;
+async function runMatch(genomes, rules, fixedDeck, netConfig) {    const numPlayers = rules.numPlayers || 4;
     const fakeRandom = { Shuffle: arr => fixedDeck ? [...fixedDeck] : shuffle(arr) };
 
     const wasDiagnostic = isDiagnosticLog();
@@ -101,27 +94,12 @@ function runMatch(genomes, rules, fixedDeck, netConfig) {
 
     const S = BuracoGame.setup({ random: fakeRandom, ctx: { numPlayers } }, { ...rules, numPlayers });
 
-    if (isWasmReady()) {
-        const wb = getWasmCardBuffers();
-        for (const k of Object.keys(S.cards)) {
-            wb.cards[+k].set(S.cards[k]);
-            wb.knownCards[+k].set(S.knownCards[k]);
-            S.cards[k]      = wb.cards[+k];
-            S.knownCards[k] = wb.knownCards[+k];
-        }
-        setUsingWasmBackedBuffers(true);
-        for (let t = 0; t < 2; t++) {
-            for (let s = 0; s < 4; s++)
-                for (let sl = 0; sl < 5; sl++)
-                    updateSeqMeld(t, s, sl, null);
-            for (let sl = 0; sl < 4; sl++)
-                updateRunMeld(t, sl, null);
-        }
-    } else {
-        for (const k of Object.keys(S.cards))      S.cards[k]      = Uint8Array.from(S.cards[k]);
-        for (const k of Object.keys(S.knownCards)) S.knownCards[k] = Uint8Array.from(S.knownCards[k]);
-        S.discardPile = Uint8Array.from(S.discardPile);
-    }
+    // No wasm-backed card buffers anymore — keep plain JS copies for
+    // reproducible training state. Card bitmaps are Uint8Array; the discard
+    // pile is a JS array (needs push/pop in movePickUpDiscard).
+    for (const k of Object.keys(S.cards))      S.cards[k]      = Uint8Array.from(S.cards[k]);
+    for (const k of Object.keys(S.knownCards)) S.knownCards[k] = Uint8Array.from(S.knownCards[k]);
+    S.discardPile = Array.from(S.discardPile);
 
     S.botGenomes = Object.fromEntries(Object.entries(genomes).map(([k, v]) => {
         const arr = v instanceof SharedArrayBuffer ? new Float32Array(v) : new Float32Array(v);
@@ -142,7 +120,7 @@ function runMatch(genomes, rules, fixedDeck, netConfig) {
             const p = ctx.currentPlayer;
             const iface = ifaces[parseInt(p)];
 
-            runTurn(S, p, iface);
+            await runTurn(S, p, iface);
 
             ctx.currentPlayer = String((parseInt(p) + 1) % numPlayers);
             S.hasDrawn = false;
@@ -192,10 +170,10 @@ async function processJob(matches, rules, netConfig) {
         const genomes2 = { '0': dnaB, '1': dnaA, '2': dnaB, '3': dnaA };
 
         if (isWasmReady()) loadMatchDNA(gA, gB);
-        const g1 = runMatch(genomes1, rules, pairDeck, netConfig);
+        const g1 = await runMatch(genomes1, rules, pairDeck, netConfig);
 
         if (isWasmReady()) loadMatchDNA(gB, gA);
-        const g2 = runMatch(genomes2, rules, pairDeck, netConfig);
+        const g2 = await runMatch(genomes2, rules, pairDeck, netConfig);
 
         results.push([g1 - g2, g2 - g1, Math.abs(g1), Math.abs(g2)]);
     }

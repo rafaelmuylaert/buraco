@@ -9,6 +9,8 @@
 // No uint8/255 feature scaling lives in C++: every input is a float (the in[]
 // scratch and the parent out[] buffers). No state vector is copied into nets by
 // the engine — JS writes in[] once, and parents are read straight from out[].
+// The CURRENT slot's output is max-abs normalized to [-1,1] in-place here (see
+// normalize_state), so JS never has to read the state and re-feed it.
 //
 // WASM exports:
 //   get_weights/get_offsets/get_inputs/get_hiddenlayers/get_hiddenwidth/get_outputs
@@ -63,6 +65,7 @@ static int   g_parents[MAX_PARENTS];            // parent NN indices, -1-termina
 static float g_buf0[MAX_LAYER_SIZE];            // hidden activation scratch
 static float g_buf1[MAX_LAYER_SIZE];
 static int   g_team = 0;                        // active team (0 or 1)
+static float g_normalize_max = 0.0f;            // slot-0 state divisor; 0 = auto max-abs
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -107,6 +110,9 @@ static void accum_first(float* h1, int h1sz, const float* W, int inWidth,
 }
 
 // ── Core ──────────────────────────────────────────────────────────────────────
+
+// Forward decl: normalizes slot 0's output in place (defined below).
+static void normalize_state(int NNidx, float* obuf, int out);
 
 // forwardpass(NNidx, parents):
 //   parents points to a -1-terminated list of parent NN indices (0 = no parents).
@@ -184,6 +190,7 @@ static void do_forwardpass(int NNidx, const int* parents) {
             for (int k = 0; k < inp; k++, col++) sum += g_in[k] * w0[(long long)o * inWidth + col];
             obuf[o] = sum;
         }
+        normalize_state(NNidx, obuf, out);
         return;
     }
 
@@ -220,6 +227,37 @@ static void do_forwardpass(int NNidx, const int* parents) {
         woff2 += (long long)lIn * lOut + lOut;
         cur = nxt;
     }
+    normalize_state(NNidx, obuf, out);
+}
+
+// ── State normalization (slot 0 only) ─────────────────────────────────────────
+// The CURRENT net (slot 0) emits an unbounded 24-dim state vector whose logits
+// (~30k–100k) dwarf byte-scaled features. It is max-abs normalized to [-1,1] so
+// SEQ/RUN/DISCARD (which read out[0] as a parent) see a stable context. Done
+// here, in the engine, so JS never has to read the state and write it back.
+//
+// The divisor comes from g_normalize_max (settable from JS): a positive value is
+// used as a fixed range; 0 (default) falls back to the actual max-abs, preserving
+// the trained behavior exactly.
+static void normalize_state(int NNidx, float* obuf, int out) {
+    //if (NNidx != 0) return;  // only the CURRENT state vector is normalized
+    //if (out < 1) return;
+
+    if (out < 2) return; //we can normalize any multiple-out outputs as they are relative between themselves and the cutoff is zero for bot actions
+    float maxAbs = 0.0f;
+    for (int o = 0; o < out; o++) {
+        float v = obuf[o];
+        if (v < 0.0f) v = -v;
+        if (v > maxAbs) maxAbs = v;
+    }
+    float divisor = g_normalize_max > 0.0f ? g_normalize_max : maxAbs;
+    if (divisor <= 0.0f) return;
+    for (int o = 0; o < out; o++) {
+        float v = obuf[o] / divisor;
+        if (v > 1.0f) v = 1.0f;
+        else if (v < -1.0f) v = -1.0f;
+        obuf[o] = v;
+    }
 }
 
 // ── Exports ───────────────────────────────────────────────────────────────────
@@ -239,6 +277,10 @@ WASM_EXPORT int*   get_parents_buf()   { return g_parents; }
 
 // Team selection: weights base and config half
 WASM_EXPORT void set_team(int team)    { g_team = (team == 1) ? 1 : 0; }
+
+// State-normalization range for slot 0 (0 = auto max-abs)
+WASM_EXPORT float get_normalize_max()  { return g_normalize_max; }
+WASM_EXPORT void  set_normalize_max(float v) { g_normalize_max = v; }
 
 // Core compute export
 WASM_EXPORT void forwardpass(int NNidx, const int* parents) {

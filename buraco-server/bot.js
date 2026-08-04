@@ -26,7 +26,7 @@ import fs from 'fs';
 import path from 'path';
 import { setDbgLogFn, BuracoGame, AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, getAndResetTimings, getSuitChar } from './game.js';
 import { getLastDbgLog, initWasm, loadMatchDNA, isWasmReady, runTurn,
-         setDiagnosticLog, setActiveNetConfig } from './wasm_loader.js';
+         setDiagnosticLog, setActiveNetConfig } from './wasm_loader_new.js';
 setDbgLogFn(getLastDbgLog);
 await initWasm();
 setDiagnosticLog(1);
@@ -241,7 +241,7 @@ async function startBotClient(matchID, playerID, credentials, botName, targetBot
       printState(state.G, botName, playerID);
 
       const G = JSON.parse(JSON.stringify(state.G));
-      runTurn(G, playerID, iface);
+      await runTurn(G, playerID, iface);
 
       // Wait for our turn to fully end (server processes all queued moves).
       // Moves are sent async; the server may respond with intermediate states
