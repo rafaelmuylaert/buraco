@@ -30,7 +30,7 @@ import {
 import { initWasm, loadMatchDNA, isWasmReady, getWasmCardBuffers,
          getCppTimings, setUsingWasmBackedBuffers, setActiveNetConfig,
          updateSeqMeld, updateRunMeld, getTeam1DnaOffset, runTurn,
-         setDiagnosticLog } from './wasm_loader.js';
+         setDiagnosticLog, isDiagnosticLog } from './wasm_loader.js';
 
 
 await initWasm();
@@ -86,13 +86,18 @@ function runMatch(genomes, rules, fixedDeck, netConfig) {
     const numPlayers = rules.numPlayers || 4;
     const fakeRandom = { Shuffle: arr => fixedDeck ? [...fixedDeck] : shuffle(arr) };
 
-    if (!_diagnosticDone) {
+    const wasDiagnostic = isDiagnosticLog();
+    let diagLevel;
+    if (rules.debugLevel != null) {
+        diagLevel = rules.debugLevel;
+    } else if (!_diagnosticDone) {
         _diagnosticDone = true;
-        setDiagnosticLog(1);
+        diagLevel = 1;
         console.log('\n========== DIAGNOSTIC MATCH ==========');
     } else {
-        setDiagnosticLog(0);
+        diagLevel = 0;
     }
+    setDiagnosticLog(diagLevel);
 
     const S = BuracoGame.setup({ random: fakeRandom, ctx: { numPlayers } }, { ...rules, numPlayers });
 
@@ -161,6 +166,8 @@ function runMatch(genomes, rules, fixedDeck, netConfig) {
     } catch (e) {
         console.error('[runMatch] exception:', e?.message || e);
         return 0;
+    } finally {
+        setDiagnosticLog(wasDiagnostic);
     }
 }
 

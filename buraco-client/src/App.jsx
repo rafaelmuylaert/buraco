@@ -170,6 +170,7 @@ function BotDebugPanel({ apiBase, botName, rules, onClose }) {
   const [running, setRunning] = React.useState(false);
   const [result, setResult] = React.useState(null);
   const [version, setVersion] = React.useState(0);
+  const [debugLevel, setDebugLevel] = React.useState(1);
   const logsEndRef = React.useRef(null);
   const treeRef = React.useRef([]);
 
@@ -197,7 +198,7 @@ function BotDebugPanel({ apiBase, botName, rules, onClose }) {
     try {
       const res = await fetch(`${apiBase}/api/bots/debug-match`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ botName, rules })
+        body: JSON.stringify({ botName, rules, debugLevel })
       });
       setResult(await res.json());
     } catch (e) { setResult({ error: e.message }); }
@@ -209,6 +210,11 @@ function BotDebugPanel({ apiBase, botName, rules, onClose }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <h2 style={{ color: '#50fa7b', margin: 0 }}>🤖 Debug — {botName || 'sem bot'}</h2>
         <div style={{ display: 'flex', gap: '10px' }}>
+          <select value={debugLevel} onChange={e => setDebugLevel(parseInt(e.target.value))} title="Nível de log do debug (2 = mais verboso, com pesos/memória)" style={{ padding: '8px', background: '#222', color: '#50fa7b', border: '1px solid #50fa7b', borderRadius: '5px', cursor: 'pointer' }}>
+            <option value={0}>Log: 0 · Silencioso</option>
+            <option value={1}>Log: 1 · Básico</option>
+            <option value={2}>Log: 2 · Verboso</option>
+          </select>
           <button onClick={runDebugMatch} disabled={running} style={{ padding: '8px 18px', background: running ? '#555' : '#50fa7b', color: '#000', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: running ? 'not-allowed' : 'pointer' }}>
             {running ? '⏳ Rodando...' : '▶ Rodar Partida Debug'}
           </button>
@@ -353,6 +359,7 @@ const App = () => {
     populationSize: 24,
     generations: 50000,
     saveInterval: 100,
+    weightClip: 5.0,
     telepathy: true,
     fixedDeck: false,
     greedyMode: false,
@@ -575,6 +582,7 @@ const App = () => {
               populationSize: trainBotConfig.populationSize,
               generations: trainBotConfig.generations,
               saveInterval: trainBotConfig.saveInterval,
+              weightClip: trainBotConfig.weightClip,
               telepathy: trainBotConfig.telepathy,
               fixedDeck: trainBotConfig.fixedDeck,
               greedyMode: trainBotConfig.greedyMode,
@@ -1297,6 +1305,7 @@ const App = () => {
                     populationSize:      meta.populationSize      ?? prev.populationSize,
                     generations:         meta.generations         ?? prev.generations,
                     saveInterval:        meta.saveInterval        ?? prev.saveInterval,
+                    weightClip:          meta.weightClip          ?? prev.weightClip,
                     telepathy:           meta.telepathy           ?? prev.telepathy,
                     fixedDeck:           meta.fixedDeck           ?? prev.fixedDeck,
                     greedyMode:          meta.greedyMode          ?? prev.greedyMode,
@@ -1500,6 +1509,7 @@ const App = () => {
                 <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '5px'}}>
                     <label>Camadas Ocultas: <input type="number" min="1" max="8" value={trainBotConfig.netParams.hiddenLayers} onChange={e => setTrainBotConfig({...trainBotConfig, netParams: {...trainBotConfig.netParams, hiddenLayers: Math.max(1, Math.min(8, parseInt(e.target.value)||1))}})} style={{ width: '50px', padding: '5px', marginLeft: '6px' }} /></label>
                     <label>Largura Oculta: <input type="number" min="16" max="1024" step="16" value={trainBotConfig.netParams.hiddenWidth} onChange={e => setTrainBotConfig({...trainBotConfig, netParams: {...trainBotConfig.netParams, hiddenWidth: Math.max(16, Math.min(1024, parseInt(e.target.value)||16))}})} style={{ width: '70px', padding: '5px', marginLeft: '6px' }} /></label>
+                    <label title="0 = sem limite">Limite de Peso: <input type="number" min="0" step="0.5" value={trainBotConfig.weightClip} onChange={e => setTrainBotConfig({...trainBotConfig, weightClip: parseFloat(e.target.value)||0})} style={{ width: '60px', padding: '5px', marginLeft: '6px' }} /> (0=sem limite)</label>
                     <div style={{gridColumn:'1/-1', fontSize:'0.75em', color:'#aaa', lineHeight:'1.7'}}>
                       <div><strong style={{color:'#8be9fd'}}>DNA:</strong> Current <span style={{color:'#50fa7b'}}>{liveNetConfig.DNA_CURRENT.toLocaleString()}</span> · Seq <span style={{color:'#50fa7b'}}>{liveNetConfig.DNA_SEQ.toLocaleString()}</span> · Run <span style={{color:'#50fa7b'}}>{liveNetConfig.DNA_RUN.toLocaleString()}</span> · Discard <span style={{color:'#50fa7b'}}>{liveNetConfig.DNA_DISCARD.toLocaleString()}</span></div>
                       <div><strong style={{color:'#8be9fd'}}>TOTAL:</strong> <span style={{color:'#50fa7b'}}>{liveNetConfig.TOTAL_DNA_SIZE.toLocaleString()}</span> floats × 2 times = <span style={{color: netOverBudget ? '#ff5555' : '#50fa7b'}}>{(liveNetConfig.TOTAL_DNA_SIZE*2).toLocaleString()}</span> / {MAX_WEIGHTS.toLocaleString()}</div>

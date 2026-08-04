@@ -966,14 +966,15 @@ server.router.post('/api/bots/debug-match', async (ctx) => {
     try {
         const body = await parseBody(ctx);
         const botName = body?.botName;
-        const rules = body?.rules || {};
+        const rules = { ...(body?.rules || {}), debugLog: true };
+        if (body?.debugLevel != null) rules.debugLevel = body.debugLevel;
         const weights = botName ? TrainerService.getBotWeights(botName) : null;
         const { computeNetConfig, DEFAULT_NET_PARAMS } = await import('./game.js');
         const netParams = botName ? TrainerService.getBotNetParams(botName) : null;
         const netConfig = computeNetConfig(netParams || DEFAULT_NET_PARAMS);
         const dna = new SharedArrayBuffer(netConfig.TOTAL_DNA_SIZE * 4);
         if (weights) new Float32Array(dna).set(weights);
-        console.log(`[DEBUG] Running debug match${botName ? ` with bot '${botName}'` : ' (random DNA)'} (DNA=${netConfig.TOTAL_DNA_SIZE})...`);
+        console.log(`[DEBUG] Running debug match${botName ? ` with bot '${botName}'` : ' (random DNA)'} (DNA=${netConfig.TOTAL_DNA_SIZE}, debugLevel=${rules.debugLevel ?? 0})...`);
         const { runDebugMatch } = await import('./train.js');
         const result = await runDebugMatch(dna, rules, netConfig);
         console.log(`[DEBUG] Match done: A=${result.rawA} B=${result.rawB}`);

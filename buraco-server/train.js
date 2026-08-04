@@ -39,8 +39,9 @@ import { AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS } from './
 const NUM_WORKERS = Math.max(1, cpus().length - 1); 
 const WORKER_PATH = new URL('./worker.js', import.meta.url).pathname; 
 
-// Hard cap on any single weight/bias magnitude. GA mutation can otherwise
+// Default hard cap on any single weight/bias magnitude. GA mutation can otherwise
 // inflate weights without bound (observed |w| up to ~22), saturating the nets.
+// Configurable per training run via params.weightClip (0 disables the clamp).
 const WEIGHT_CLIP = 5.0;
 
 const BOTS_DIR = path.join(process.cwd(), 'bots');
@@ -56,19 +57,21 @@ function gaussianRandom() {
     return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-function mutate(genome, mutationRate = 0.05, mutationStrength = 0.1) {
+function mutate(genome, mutationRate = 0.05, mutationStrength = 0.1, weightClip = WEIGHT_CLIP) {
     const mutated = new Float32Array(genome);
     for (let i = 0; i < mutated.length; i++) {
         if (Math.random() < mutationRate) {
             mutated[i] += gaussianRandom() * mutationStrength;
         }
-        if (mutated[i] > WEIGHT_CLIP) mutated[i] = WEIGHT_CLIP;
-        else if (mutated[i] < -WEIGHT_CLIP) mutated[i] = -WEIGHT_CLIP;
+        if (weightClip > 0) {
+            if (mutated[i] > weightClip) mutated[i] = weightClip;
+            else if (mutated[i] < -weightClip) mutated[i] = -weightClip;
+        }
     }
     return mutated;
 }
 
-function breedNodeLevel(parentA, parentB, scoreA, scoreB, netConfig) {
+function breedNodeLevel(parentA, parentB, scoreA, scoreB, netConfig, weightClip = WEIGHT_CLIP) {
     const child = new Float32Array(parentA.length);
     const pA = Math.max(scoreA - scoreB + 1, 0.1);
     const pB = Math.max(scoreB - scoreA + 1, 0.1);
@@ -99,7 +102,7 @@ function breedNodeLevel(parentA, parentB, scoreA, scoreB, netConfig) {
             off += inSz * outSz + outSz;
         }
     }
-    return mutate(child, 0.05, 0.05);
+    return mutate(child, 0.05, 0.05, weightClip);
 }
 
 const generateRandomGenome = (netConfig) => {
@@ -331,6 +334,7 @@ export const TrainerService = {
         const POPULATION_SIZE = Math.max(8, params.populationSize || 24);
         const GENERATIONS = params.generations || 500;
         const SAVE_EVERY = params.saveInterval || params.matchesPerGeneration || 12;
+        const weightClip = params.weightClip != null ? params.weightClip : WEIGHT_CLIP;
         if (params.greedyMode     != null) rules = { ...rules, greedyMode:          params.greedyMode };
         if (params.scoreCardPoints != null) rules = { ...rules, scoreCardPoints:     params.scoreCardPoints };
         if (params.scoreHandPenalty!= null) rules = { ...rules, scoreHandPenalty:    params.scoreHandPenalty };
@@ -385,7 +389,7 @@ export const TrainerService = {
         const islandPops = Array.from({ length: NUM_ISLANDS }, (_, k) => {
             const seed = loadIslandSeed(k);
             return Array.from({ length: POPULATION_SIZE }, (_, i) =>
-                i === 0 ? new Float32Array(seed) : mutate(seed, 0.05, 0.1)
+                i === 0 ? new Float32Array(seed) : mutate(seed, 0.05, 0.1, weightClip)
             );
         });
 
@@ -400,7 +404,7 @@ export const TrainerService = {
 
         const fmt = ms => ms < 60000 ? `${(ms/1000).toFixed(1)}s` : `${Math.floor(ms/60000)}m${((ms%60000)/1000).toFixed(0)}s`;
 
-        const runIslandGeneration = async (pop) => {
+        const runIslandGeneration = async (pop, weightClip) => {
         const finalists = await runPlayoffTournament(pop, rules, netConfig);
         const statPairs = [], statMeta = [];
         for (let i = 0; i < finalists.length; i++)
@@ -430,20 +434,20 @@ export const TrainerService = {
         const nextPop = [new Float32Array(rankedFinalists[0])];
 
         // mutate all finalists
-        for (const f of rankedFinalists) nextPop.push(mutate(f, 0.05, 0.1));
+        for (const f of rankedFinalists) nextPop.push(mutate(f, 0.05, 0.1, weightClip));
 
         // all pairwise crosses
         const crosses = [];
         for (let i = 0; i < rankedFinalists.length; i++)
             for (let j = i + 1; j < rankedFinalists.length; j++)
-                crosses.push(breedNodeLevel(rankedFinalists[i], rankedFinalists[j], rankedScores[i], rankedScores[j], netConfig));
+                crosses.push(breedNodeLevel(rankedFinalists[i], rankedFinalists[j], rankedScores[i], rankedScores[j], netConfig, weightClip));
         for (const c of crosses) nextPop.push(c);
 
         // hybrids of (best, each cross) until full
         let ci = 0;
         while (nextPop.length < pop.length) {
             const cross = crosses[ci % crosses.length];
-            nextPop.push(breedNodeLevel(rankedFinalists[0], cross, rankedScores[0], rankedScores[0] * 0.5, netConfig));
+            nextPop.push(breedNodeLevel(rankedFinalists[0], cross, rankedScores[0], rankedScores[0] * 0.5, netConfig, weightClip));
             ci++;
         }
 
@@ -484,7 +488,7 @@ export const TrainerService = {
 
                 fs.writeFileSync(path.join(BOTS_DIR, `${botName}.json`), JSON.stringify(Array.from(latestChampion)));
                 const currentLifetimeGen = lifetimeGenOffset + (activeTrainings.get(botName)?.currentGeneration || 0);
-                fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({ rules, netParams, lifetimeGenerations: currentLifetimeGen, trainParams: { populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, greedyMode: params.greedyMode, telepathy: params.telepathy, fixedDeck: params.fixedDeck, scoreCardPoints: params.scoreCardPoints, scoreHandPenalty: params.scoreHandPenalty, dirtyCanastraBonus: params.dirtyCanastraBonus, cleanCanastraBonus: params.cleanCanastraBonus, mortoPenalty: params.mortoPenalty, endGameBonus: params.endGameBonus, cardPointValues: params.cardPointValues, meldSizeBonus: params.meldSizeBonus } }));
+                fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({ rules, netParams, lifetimeGenerations: currentLifetimeGen, trainParams: { populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, weightClip, greedyMode: params.greedyMode, telepathy: params.telepathy, fixedDeck: params.fixedDeck, scoreCardPoints: params.scoreCardPoints, scoreHandPenalty: params.scoreHandPenalty, dirtyCanastraBonus: params.dirtyCanastraBonus, cleanCanastraBonus: params.cleanCanastraBonus, mortoPenalty: params.mortoPenalty, endGameBonus: params.endGameBonus, cardPointValues: params.cardPointValues, meldSizeBonus: params.meldSizeBonus } }));
 
                 let benchmarkDiff = null;
                 if (originalDNA) {
@@ -520,7 +524,7 @@ export const TrainerService = {
             try {
                 for (let gen = 1; gen <= GENERATIONS; gen++) {
                     if (stopFlags.has(botName)) break;
-                    const result = await runIslandGeneration(islandPops[islandIdx]);
+                    const result = await runIslandGeneration(islandPops[islandIdx], weightClip);
                     islandPops[islandIdx] = result.nextPop;
 
                     if (gen % SAVE_EVERY === 0 || gen === GENERATIONS) {
