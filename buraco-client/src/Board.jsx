@@ -66,7 +66,7 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor 
       WebkitTextSizeAdjust: '100%',
       ...customStyle
     }}>
-      <div style={{ position: 'absolute', top: '2px', left: '2px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1' }}>
+      <div style={{ position: 'absolute', top: '2px', left: '2px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '0.55' }}>
         <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{card.rank}</span>
         <span style={{ fontSize: '14px' }}>{card.suit}</span>
       </div>
@@ -102,6 +102,10 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
   const [popupPos, setPopupPos] = useState({ x: null, y: null });
   const [dragging, setDragging] = useState(false);
   const [removePopup, setRemovePopup] = useState(null);
+  const [renamePopup, setRenamePopup] = useState(null);
+  const [renameForm, setRenameForm] = useState({ name: '', password: '' });
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameError, setRenameError] = useState('');
   const [compact, setCompact] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.innerWidth < 900;
@@ -453,44 +457,84 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
 };
 
 
+  const savedAuthHeaders = () => {
+    const savedAuth = (() => { try { return JSON.parse(localStorage.getItem('buraco_auth') || 'null'); } catch { return null; } })();
+    return { 'Content-Type': 'application/json', ...(savedAuth?.token ? { 'Authorization': `Bearer ${savedAuth.token}` } : {}) };
+  };
+
   const handleRemovePlayer = async (seatID, seatName) => {
     if (!apiAddress) return;
     try {
-      const savedAuth = (() => { try { return JSON.parse(localStorage.getItem('buraco_auth') || 'null'); } catch { return null; } })();
-      const res = await fetch(`${apiAddress}/api/admin/kick`, {
+      const res = await fetch(`${apiAddress}/api/quick/kick-seat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(savedAuth?.token ? { 'Authorization': `Bearer ${savedAuth.token}` } : {}) },
+        headers: savedAuthHeaders(),
         body: JSON.stringify({ matchID, playerID: seatID.toString() })
       });
-      if (!res.ok) throw new Error('kick failed');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'kick failed');
       alert(`Assento ${seatID} liberado! ${seatName} agora pode reentrar de outro computador/browser.`);
     } catch (e) {
-      alert("Falha ao remover jogador do assento.");
+      alert(e.message && e.message.includes('conectado') ? e.message : "Falha ao remover jogador do assento.");
     }
   };
 
-  const isBotSeat = (seatID) => String(G.rules?.assignments?.[seatID] || '').toLowerCase().includes('bot');
   const isTournament = !!tournament;
-
-  const handleRenameSelf = () => {
-    const current = G.rules?.assignments?.[playerID] || '';
-    const newName = window.prompt('Novo nome:', current);
-    if (newName !== null && newName.trim()) moves.renamePlayer(playerID, newName.trim());
-  };
 
   const handleReplaceWithBot = async (seatID, seatName) => {
     if (!window.confirm(`Substituir ${seatName} por um bot? O assento será liberado para o bot entrar.`)) return;
     moves.renamePlayer(seatID, `Bot ${seatID}`);
     try {
-      const savedAuth = (() => { try { return JSON.parse(localStorage.getItem('buraco_auth') || 'null'); } catch { return null; } })();
       const res = await fetch(`${apiAddress}/api/quick/replace-bot`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(savedAuth?.token ? { 'Authorization': `Bearer ${savedAuth.token}` } : {}) },
+        headers: savedAuthHeaders(),
         body: JSON.stringify({ matchID, playerID: seatID.toString() })
       });
       if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || 'Falha ao substituir por bot.'); }
       else alert(`${seatName} substituído por Bot ${seatID}.`);
     } catch { alert("Falha ao substituir por bot."); }
+  };
+
+  const handleRenameSubmit = async () => {
+    if (!apiAddress) return;
+    const newName = renameForm.name.trim();
+    if (newName.length < 2) { setRenameError('O nome deve ter pelo menos 2 caracteres.'); return; }
+    if (renameForm.password.length < 6) { setRenameError('A senha deve ter pelo menos 6 caracteres.'); return; }
+    setRenameBusy(true);
+    setRenameError('');
+    try {
+      let auth = null;
+      const tryLogin = async () => {
+        const res = await fetch(`${apiAddress}/api/auth/login`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: newName, password: renameForm.password })
+        });
+        if (res.ok) return await res.json();
+        const data = await res.json().catch(() => ({}));
+        const err = new Error(data.error || 'login failed'); err.status = res.status; throw err;
+      };
+      try {
+        auth = await tryLogin();
+      } catch (e) {
+        if (e.status === 401) {
+          const regRes = await fetch(`${apiAddress}/api/auth/register`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: newName, password: renameForm.password })
+          });
+          if (!regRes.ok) { const d = await regRes.json().catch(() => ({})); throw new Error(d.error || 'register failed'); }
+          auth = await regRes.json();
+        } else {
+          throw e;
+        }
+      }
+      if (auth?.token) localStorage.setItem('buraco_auth', JSON.stringify(auth));
+      moves.renamePlayer(playerID, newName);
+      setRenamePopup(null);
+      setRenameForm({ name: '', password: '' });
+    } catch (e) {
+      setRenameError(e.message || 'Falha ao renomear.');
+    } finally {
+      setRenameBusy(false);
+    }
   };
 
   const handleLeaveSeat = async () => {
@@ -684,36 +728,39 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
           {Object.keys(G.handSizes).map(p => {
             const isTurn = ctx.currentPlayer === p;
             const isMe = p === playerID;
-            const name = G.rules?.assignments?.[p] || `P${p}`;
-            const occupied = !!matchData?.find(m => m.id?.toString() === p)?.name;
-            const showRemove = occupied && !isMe && !!apiAddress;
+            const md = matchData?.find(m => m.id?.toString() === p);
+            const occupied = !!md?.name;
+            const name = md?.name || G.rules?.assignments?.[p] || `P${p}`;
+            const isBot = String(name || '').toLowerCase().includes('bot');
+            const disconnected = occupied && !isBot && md?.isConnected === false;
+            const showActions = occupied && !isMe && !!apiAddress;
+            const showRename = isMe && !isTournament && !!apiAddress;
             return (
               <div key={p} style={{ 
                 fontSize: '0.70em', display: 'flex', flexDirection: 'column',
                 color: isTurn ? '#ffd700' : (isMe ? '#4da6ff' : '#888'), 
                 fontWeight: (isTurn || isMe) ? 'bold' : 'normal', 
                 marginBottom: '2px',
-                background: isMe ? 'rgba(77, 166, 255, 0.2)' : 'transparent',
-                border: isMe ? '1px solid #4da6ff' : '1px solid transparent',
+                background: isMe ? 'rgba(77, 166, 255, 0.2)' : (disconnected ? 'rgba(255, 107, 107, 0.15)' : 'transparent'),
+                border: isMe ? '1px solid #4da6ff' : (disconnected ? '1px solid rgba(255, 107, 107, 0.6)' : '1px solid transparent'),
                 padding: '3px 4px', borderRadius: '4px',
                 overflow: 'hidden', minWidth: 0
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 0 }}>
                   <span
-                    onClick={showRemove ? () => setRemovePopup({ seatID: p, seatName: name }) : undefined}
-                    title={showRemove ? `Clique para remover ${name} deste assento` : undefined}
-                    style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0, cursor: showRemove ? 'pointer' : 'default', color: showRemove ? '#ff9900' : undefined, textDecoration: showRemove ? 'underline' : 'none' }}
-                  >{isTurn ? '» ' : ''}{name}</span>
+                    onClick={showActions ? () => setRemovePopup({ seatID: p, seatName: name }) : (showRename ? () => setRenamePopup({ seatID: p, seatName: name }) : undefined)}
+                    title={showActions ? `Clique para gerenciar o assento de ${name}` : (showRename ? 'Clique para renomear sua mesa' : undefined)}
+                    style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0, cursor: (showActions || showRename) ? 'pointer' : 'default', color: showActions ? '#ff9900' : undefined, textDecoration: showActions ? 'underline' : 'none' }}
+                  >{isBot ? '🤖' : '👤'} {isTurn ? '» ' : ''}{name}{disconnected ? ' 🔴' : (occupied && !isBot ? ' 🟢' : '')}</span>
                   <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.handSizes[p] ?? 0}</span>
                 </div>
                 {!isTournament && (
                   <div style={{ display: 'flex', gap: '4px', marginTop: '3px', flexWrap: 'wrap' }}>
                     {isMe ? (
                       <>
-                        <button onClick={handleRenameSelf} title="Renomear minha mesa (visível para todos)" style={{ background: '#333', color: '#ccc', border: '1px solid #555', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.65em', fontWeight: 'bold' }}>✏️ Renomear</button>
+                        <button onClick={() => setRenamePopup({ seatID: p, seatName: name })} title="Renomear minha mesa (visível para todos)" style={{ background: '#333', color: '#ccc', border: '1px solid #555', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.65em', fontWeight: 'bold' }}>✏️ Renomear</button>
+                        <button onClick={handleLeaveSeat} title="Liberar meu assento e voltar ao salão" style={{ background: '#333', color: '#ff6b6b', border: '1px solid #ff6b6b', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.65em', fontWeight: 'bold' }}>Sair da mesa</button>
                       </>
-                    ) : !isBotSeat(p) ? (
-                      <button onClick={() => handleReplaceWithBot(p, name)} title="Substituir este jogador por um bot" style={{ background: '#333', color: '#ccc', border: '1px solid #555', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.65em', fontWeight: 'bold' }}>🤖 Substituir por Bot</button>
                     ) : null}
                   </div>
                 )}
@@ -775,16 +822,76 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
 
       {gameOverPopup}
 
-      {removePopup && (
-        <div onClick={() => setRemovePopup(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#1b4332', border: '2px solid #ff9900', borderRadius: '12px', padding: '24px', maxWidth: '340px', width: '100%', textAlign: 'center', boxShadow: '0 8px 30px rgba(0,0,0,0.5)' }}>
-            <h3 style={{ margin: '0 0 8px 0', color: '#ffd700' }}>{removePopup.seatName}</h3>
-            <p style={{ color: '#ccc', margin: '0 0 20px 0', fontSize: '0.95em', lineHeight: '1.4' }}>
-              Remover {removePopup.seatName} do assento {removePopup.seatID}? Isso libera a vaga para que possa reentrar de outro computador/browser.
+      {removePopup && (() => {
+        const md = matchData?.find(m => m.id?.toString() === removePopup.seatID);
+        const occupied = !!md?.name;
+        const isBot = String(md?.name || G.rules?.assignments?.[removePopup.seatID] || '').toLowerCase().includes('bot');
+        const humanConnected = occupied && !isBot && md?.isConnected !== false;
+        const canRemove = !humanConnected;
+        const canReplace = !isBot && !humanConnected;
+        return (
+          <div onClick={() => setRemovePopup(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: '#1b4332', border: '2px solid #ff9900', borderRadius: '12px', padding: '24px', maxWidth: '340px', width: '100%', textAlign: 'center', boxShadow: '0 8px 30px rgba(0,0,0,0.5)' }}>
+              <h3 style={{ margin: '0 0 8px 0', color: '#ffd700' }}>{removePopup.seatName}</h3>
+              <p style={{ color: '#ccc', margin: '0 0 12px 0', fontSize: '0.95em', lineHeight: '1.4' }}>
+                {isBot
+                  ? `Remover ${removePopup.seatName} do assento ${removePopup.seatID}? A vaga será liberada.`
+                  : `O que fazer com o assento ${removePopup.seatID} (${removePopup.seatName})?`}
+              </p>
+              {humanConnected && (
+                <p style={{ color: '#ffcc66', margin: '0 0 12px 0', fontSize: '0.85em', lineHeight: '1.4' }}>
+                  Este jogador ainda está conectado. Só é possível remover/substituir após desconexão.
+                </p>
+              )}
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button onClick={() => setRemovePopup(null)} style={{ padding: '8px 18px', background: '#555', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
+                {!isBot && (
+                  <button
+                    onClick={canReplace ? () => { handleReplaceWithBot(removePopup.seatID, removePopup.seatName); setRemovePopup(null); } : undefined}
+                    disabled={!canReplace}
+                    title={canReplace ? 'Liberar o assento para um bot entrar' : 'Aguardando desconexão do jogador'}
+                    style={{ padding: '8px 18px', background: canReplace ? '#2a9d8f' : '#444', color: canReplace ? 'white' : '#888', border: 'none', borderRadius: '6px', cursor: canReplace ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>🤖 Substituir por Bot</button>
+                )}
+                <button
+                  onClick={canRemove ? () => { handleRemovePlayer(removePopup.seatID, removePopup.seatName); setRemovePopup(null); } : undefined}
+                  disabled={!canRemove}
+                  title={canRemove ? 'Liberar a vaga para reentrar' : 'Aguardando desconexão do jogador'}
+                  style={{ padding: '8px 18px', background: canRemove ? '#ff9900' : '#444', color: canRemove ? '#000' : '#888', border: 'none', borderRadius: '6px', cursor: canRemove ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>Remover</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {renamePopup && (
+        <div onClick={() => setRenamePopup(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#1b4332', border: '2px solid #2a9d8f', borderRadius: '12px', padding: '24px', maxWidth: '340px', width: '100%', textAlign: 'center', boxShadow: '0 8px 30px rgba(0,0,0,0.5)' }}>
+            <h3 style={{ margin: '0 0 8px 0', color: '#ffd700' }}>Renomear minha mesa</h3>
+            <p style={{ color: '#ccc', margin: '0 0 14px 0', fontSize: '0.9em', lineHeight: '1.4' }}>
+              Digite seu nome de usuário e senha. Se a conta não existir, ela será criada automaticamente.
             </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+              <input
+                type="text"
+                placeholder="Nome de usuário"
+                value={renameForm.name}
+                onChange={e => setRenameForm({ ...renameForm, name: e.target.value })}
+                autoComplete="username"
+                style={{ padding: '10px', borderRadius: '5px', border: 'none' }}
+              />
+              <input
+                type="password"
+                placeholder="Senha (mínimo 6 caracteres)"
+                value={renameForm.password}
+                onChange={e => setRenameForm({ ...renameForm, password: e.target.value })}
+                autoComplete="current-password"
+                style={{ padding: '10px', borderRadius: '5px', border: 'none' }}
+              />
+            </div>
+            {renameError && <div style={{ color: '#ff6b6b', fontSize: '0.85em', marginBottom: '10px' }}>{renameError}</div>}
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-              <button onClick={() => setRemovePopup(null)} style={{ padding: '8px 18px', background: '#555', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
-              <button onClick={() => { handleRemovePlayer(removePopup.seatID, removePopup.seatName); setRemovePopup(null); }} style={{ padding: '8px 18px', background: '#ff9900', color: '#000', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Remover</button>
+              <button onClick={() => { setRenamePopup(null); setRenameForm({ name: '', password: '' }); setRenameError(''); }} style={{ padding: '8px 18px', background: '#555', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
+              <button onClick={handleRenameSubmit} disabled={renameBusy} style={{ padding: '8px 18px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '6px', cursor: renameBusy ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>{renameBusy ? 'Salvando…' : 'Renomear'}</button>
             </div>
           </div>
         </div>

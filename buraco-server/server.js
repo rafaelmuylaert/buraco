@@ -392,7 +392,16 @@ server.router.post('/api/quick/replace-bot', async (ctx) => {
       return;
     }
     const metadata = data.metadata;
+    const seat = metadata.players[playerID];
     const assignments = metadata.setupData?.assignments || {};
+    const assigned = String(assignments[playerID] || '');
+    const isBot = assigned.toLowerCase().includes('bot');
+    // Lifecheck gate: a still-connected human can never be replaced by a bot.
+    if (!!seat?.name && !isBot && seat.isConnected === true) {
+      ctx.status = 409;
+      ctx.body = { error: 'Este jogador ainda está conectado. Só é possível substituir após desconexão.' };
+      return;
+    }
     assignments[playerID] = 'Bot ' + playerID;
     metadata.setupData = { ...metadata.setupData, assignments };
     metadata.players[playerID] = { id: Number(playerID) };
@@ -435,6 +444,47 @@ server.router.post('/api/quick/release-seat', async (ctx) => {
   } catch (e) {
     ctx.status = 500;
     ctx.body = { error: 'Falha ao liberar o assento.' };
+  }
+});
+
+// Removes a player from a seat (quick-game "Remover" flow). Any player may
+// free any seat, but a still-connected human cannot be removed: lifecheck is
+// what frees disconnected players automatically. Bot and empty seats are
+// always removable. The assignment is kept so the same player can re-enter
+// (and tournament registered names stay intact).
+server.router.post('/api/quick/kick-seat', async (ctx) => {
+  setCors(ctx);
+  try {
+    const body = await parseBody(ctx);
+    const matchID = String(body?.matchID || '');
+    const playerID = String(body?.playerID ?? '');
+    if (!matchID || playerID === '') {
+      ctx.status = 400;
+      ctx.body = { error: 'matchID e playerID são obrigatórios.' };
+      return;
+    }
+    const data = await server.db.fetch(matchID, { metadata: true });
+    if (!data?.metadata?.players?.[playerID]) {
+      ctx.status = 404;
+      ctx.body = { error: 'Mesa não encontrada.' };
+      return;
+    }
+    const metadata = data.metadata;
+    const seat = metadata.players[playerID];
+    const assignments = metadata.setupData?.assignments || {};
+    const isBot = String(assignments[playerID] || '').toLowerCase().includes('bot');
+    // Lifecheck gate: a still-connected human can never be removed.
+    if (!!seat?.name && !isBot && seat.isConnected === true) {
+      ctx.status = 409;
+      ctx.body = { error: 'Este jogador ainda está conectado. Só é possível remover após desconexão.' };
+      return;
+    }
+    metadata.players[playerID] = { id: Number(playerID) };
+    await server.db.setMetadata(matchID, metadata);
+    ctx.body = { success: true };
+  } catch (e) {
+    ctx.status = 500;
+    ctx.body = { error: 'Falha ao remover o jogador.' };
   }
 });
 
@@ -1036,5 +1086,83 @@ setInterval(async () => {
         console.error('[HISTORY] Poll error:', e.message);
     }
 }, 5000);
+
+// ── LIFECHECK ─────────────────────────────────────────────────────────────
+// Frees the seat of any human player whose connection has been down for more
+// than LIFECHECK_GRACE_SECS (default 10s). The seat is NOT auto-converted to a
+// bot: another human can re-seat from the lobby, or a player already in the
+// game can replace them with a bot via the seat popup. Applies to quick games
+// AND tournaments. Still-connected humans are never touched here.
+const LIFECHECK_GRACE_MS = (Number(process.env.LIFECHECK_GRACE_SECS) || 10) * 1000;
+const lifecheckSince = new Map();
+
+// boardgame.io persists `isConnected` into metadata, so after a server restart
+// every seat looks "connected" even though no socket exists yet. Reset them all
+// at boot; reconnecting clients mark themselves connected again immediately.
+const resetConnectionsOnBoot = async () => {
+  try {
+    const result = await gameDB.listMatches('buraco');
+    const matchList = Array.isArray(result) ? result : (result?.matches || []);
+    let changed = 0;
+    for (const match of matchList) {
+      const matchID = typeof match === 'string' ? match : (match.id || match.matchID);
+      if (!matchID) continue;
+      const data = await gameDB.fetch(matchID, { metadata: true });
+      if (!data?.metadata?.players) continue;
+      let dirty = false;
+      for (const p of Object.values(data.metadata.players)) {
+        if (p && p.name && p.isConnected === true) { p.isConnected = false; dirty = true; }
+      }
+      if (dirty) { await gameDB.setMetadata(matchID, data.metadata); changed++; }
+    }
+    if (changed > 0) console.log(`[LIFECHECK] Marked ${changed} seats as disconnected at boot (awaiting reconnect).`);
+  } catch (e) {
+    console.error('[LIFECHECK] Boot reset error:', e.message);
+  }
+};
+
+setInterval(async () => {
+  try {
+    const result = await gameDB.listMatches('buraco');
+    const matchList = Array.isArray(result) ? result : (result?.matches || []);
+    const seenKeys = new Set();
+    for (const match of matchList) {
+      const matchID = typeof match === 'string' ? match : (match.id || match.matchID);
+      if (!matchID) continue;
+      const data = await gameDB.fetch(matchID, { metadata: true });
+      if (!data?.metadata) continue;
+      const metadata = data.metadata;
+      const assignments = metadata.setupData?.assignments || {};
+      for (const p of Object.keys(assignments)) {
+        const key = `${matchID}:${p}`;
+        seenKeys.add(key);
+        const assigned = String(assignments[p] || '');
+        // Bot seats and empty seats are not subject to lifecheck.
+        if (assigned.toLowerCase().includes('bot')) { lifecheckSince.delete(key); continue; }
+        const seat = metadata.players[p];
+        if (!seat?.name) { lifecheckSince.delete(key); continue; }
+        if (seat.isConnected === true) { lifecheckSince.delete(key); continue; }
+        const since = lifecheckSince.get(key) ?? Date.now();
+        if (Date.now() - since >= LIFECHECK_GRACE_MS) {
+          metadata.players[p] = { id: Number(p) };
+          await gameDB.setMetadata(matchID, metadata);
+          lifecheckSince.delete(key);
+          console.log(`[LIFECHECK] Freed disconnected seat ${p} in match ${matchID} (${assigned}).`);
+        } else {
+          lifecheckSince.set(key, since);
+        }
+      }
+    }
+    // Prune timers for matches/seats that no longer exist (e.g. finished quick games).
+    for (const key of lifecheckSince.keys()) {
+      if (!seenKeys.has(key)) lifecheckSince.delete(key);
+    }
+  } catch (e) {
+    console.error('[LIFECHECK] Poll error:', e.message);
+  }
+}, 10000);
+
+resetConnectionsOnBoot();
+
 
 
