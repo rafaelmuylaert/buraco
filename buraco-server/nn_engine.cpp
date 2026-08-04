@@ -813,6 +813,22 @@ WASM_EXPORT void run_current_state(int player, int my_team, int opp_team) {
 
     // Store result in g_current_state and g_out
     memcpy(g_current_state, g_out, 24 * sizeof(float));
+
+    // Normalize state to [-1,1] so downstream seq/run/discard nets see inputs
+    // on the same scale as the byte features (0..1), instead of unbounded
+    // logits that dominate them and inflate weights/gradients during training.
+    float m = 0.0f;
+    for (int i = 0; i < 24; i++) {
+        float a = g_out[i];
+        if (a < 0.0f) a = -a;
+        if (a > m) m = a;
+    }
+    if (m > 0.0f) {
+        for (int i = 0; i < 24; i++) {
+            g_out[i] /= m;
+            g_current_state[i] /= m;
+        }
+    }
 }
 
 // Score sequence candidates from shared memory batch

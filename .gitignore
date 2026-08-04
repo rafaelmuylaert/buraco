@@ -1,6 +1,7 @@
 node_modules/
 dist/
 buraco-server/db/
+buraco-server/game.js
 .DS_Store
 npm-debug.log
 .env
