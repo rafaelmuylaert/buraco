@@ -611,7 +611,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: `${LEFT_COL_W}px`, minWidth: `${LEFT_COL_W}px`, flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
         
-        <button onClick={() => window.location.reload()} style={{ width: '100%', background: '#4da6ff', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.8em', boxSizing: 'border-box' }}>
+        <button onClick={handleLeaveSeat} style={{ width: '100%', background: '#4da6ff', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.8em', boxSizing: 'border-box' }}>
           Salão
         </button>
 
@@ -711,7 +711,6 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                     {isMe ? (
                       <>
                         <button onClick={handleRenameSelf} title="Renomear minha mesa (visível para todos)" style={{ background: '#333', color: '#ccc', border: '1px solid #555', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.65em', fontWeight: 'bold' }}>✏️ Renomear</button>
-                        <button onClick={handleLeaveSeat} title="Liberar meu assento e voltar ao salão" style={{ background: '#333', color: '#ff6b6b', border: '1px solid #ff6b6b', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.65em', fontWeight: 'bold' }}>Sair da mesa</button>
                       </>
                     ) : !isBotSeat(p) ? (
                       <button onClick={() => handleReplaceWithBot(p, name)} title="Substituir este jogador por um bot" style={{ background: '#333', color: '#ccc', border: '1px solid #555', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.65em', fontWeight: 'bold' }}>🤖 Substituir por Bot</button>
