@@ -66,7 +66,7 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor 
       WebkitTextSizeAdjust: '100%',
       ...customStyle
     }}>
-      <div style={{ position: 'absolute', top: '2px', left: '2px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '0.55' }}>
+      <div style={{ position: 'absolute', top: '2px', left: '2px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '0.7' }}>
         <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{card.rank}</span>
         <span style={{ fontSize: '14px' }}>{card.suit}</span>
       </div>
