@@ -754,16 +754,6 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                   >{isBot ? '🤖' : '👤'} {isTurn ? '» ' : ''}{name}{disconnected ? ' 🔴' : (occupied && !isBot ? ' 🟢' : '')}</span>
                   <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.handSizes[p] ?? 0}</span>
                 </div>
-                {!isTournament && (
-                  <div style={{ display: 'flex', gap: '4px', marginTop: '3px', flexWrap: 'wrap' }}>
-                    {isMe ? (
-                      <>
-                        <button onClick={() => setRenamePopup({ seatID: p, seatName: name })} title="Renomear minha mesa (visível para todos)" style={{ background: '#333', color: '#ccc', border: '1px solid #555', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.65em', fontWeight: 'bold' }}>✏️ Renomear</button>
-                        <button onClick={handleLeaveSeat} title="Liberar meu assento e voltar ao salão" style={{ background: '#333', color: '#ff6b6b', border: '1px solid #ff6b6b', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.65em', fontWeight: 'bold' }}>Sair da mesa</button>
-                      </>
-                    ) : null}
-                  </div>
-                )}
               </div>
             );
           })}
