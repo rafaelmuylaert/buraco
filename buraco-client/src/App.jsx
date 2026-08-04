@@ -1674,7 +1674,7 @@ const App = () => {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
           <h1 style={{ color: '#ffd700', margin: 0 }}>
             <span onClick={() => { if (currentUser?.isAdmin) setView('admin'); }} style={{ cursor: currentUser?.isAdmin ? 'pointer' : 'not-allowed', opacity: currentUser?.isAdmin ? 0.2 : 0.06, marginRight: '15px' }} title={currentUser?.isAdmin ? 'Modo Admin' : 'Acesso restrito a administradores'} >⚙️</span>
-             Salão Principal 
+             Salão 
           </h1>
           {currentUser ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', marginLeft: 'auto' }}>
@@ -1875,7 +1875,7 @@ const App = () => {
                     {t.type === 'individual' && t.shuffleMode && t.shuffleMode !== 'every-round' ? ` | Duplas: ${tourneyShuffleLabel(t)}` : ''}
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
                   {t.private && canEndTournament(t) && (
                     <button onClick={() => {
                       const link = `${window.location.origin}${window.location.pathname}?tournament=${t.id}`;
@@ -1884,16 +1884,16 @@ const App = () => {
                       } else {
                         prompt('Copie o link de acesso:', link);
                       }
-                    }} style={{ background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>🔗 Link</button>
+                    }} style={{ width: '100%', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>🔗 Link</button>
                   )}
                   {canEndTournament(t) && (
-                    <button onClick={() => handleEndTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>Encerrar</button>
+                    <button onClick={() => handleEndTournament(t.id)} style={{ width: '100%', background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>Encerrar</button>
                   )}
                 </div>
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px' }}>
-                <div style={{ flex: '1 1 300px', maxWidth: '450px', background: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '10px', minWidth: 0, boxSizing: 'border-box' }}>
+                <div style={{ flex: '1 1 300px', maxWidth: '350px', background: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '10px', minWidth: 0, boxSizing: 'border-box' }}>
                   <h4 style={{ color: '#4da6ff', margin: '0 0 10px 0' }}>Classificação</h4>
                   <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
                     <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Jogador</th><th>Total</th>{showSince && <th title="Pontos desde o último sorteio">Rodada</th>}<th>V</th><th>D</th></tr></thead>
@@ -1913,7 +1913,7 @@ const App = () => {
                   {matches.filter(m => currentRoundMatches.includes(m.matchID)).map(m => {
                     const isDone = history.some(h => h.matchID === m.matchID);
                     return (
-                      <div key={m.matchID} style={{ background: 'rgba(0,0,0,0.3)', border: `1px solid ${isDone ? '#444' : '#40916c'}`, borderRadius: '10px', padding: '15px', width: '100%', maxWidth: '300px', minWidth: 0, flex: '1 1 280px', overflow: 'hidden', opacity: isDone ? 0.6 : 1, boxSizing: 'border-box' }}>
+                      <div key={m.matchID} style={{ background: 'rgba(0,0,0,0.3)', border: `1px solid ${isDone ? '#444' : '#40916c'}`, borderRadius: '10px', padding: '15px', width: '100%', maxWidth: '350px', minWidth: 0, flex: '1 1 280px', overflow: 'hidden', opacity: isDone ? 0.6 : 1, boxSizing: 'border-box' }}>
                         <h4 style={{ margin: '0 0 10px 0', color: isDone ? '#aaa' : '#4da6ff' }}>{isDone ? 'Mesa Encerrada' : 'Mesa Ativa'}</h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           {m.players.map(p => {
