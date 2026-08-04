@@ -67,8 +67,8 @@ const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor 
       ...customStyle
     }}>
       <div style={{ position: 'absolute', top: '2px', left: '2px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '0.7' }}>
-        <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{card.rank}</span>
-        <span style={{ fontSize: '14px' }}>{card.suit}</span>
+        <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{card.rank}</span>
+        <span style={{ fontSize: '18px' }}>{card.suit}</span>
       </div>
       <div style={{ fontSize: '34px', opacity: 0.4}}>{card.suit}</div>
       {deckColor && <div style={{ position: 'absolute', bottom: 0, left: 0, width: 0, height: 0,
@@ -528,6 +528,19 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       }
       if (auth?.token) localStorage.setItem('buraco_auth', JSON.stringify(auth));
       moves.renamePlayer(playerID, newName);
+      try {
+        const sessions = (() => { try { return JSON.parse(localStorage.getItem('buraco_sessions') || '{}'); } catch { return {}; } })();
+        const credentials = sessions[`${matchID}_${playerID}`]?.credentials;
+        if (credentials) {
+          await fetch(`${apiAddress}/games/buraco/${matchID}/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ playerID, credentials, newName })
+          });
+        }
+      } catch (e) {
+        console.warn('Falha ao atualizar o nome da mesa:', e.message);
+      }
       setRenamePopup(null);
       setRenameForm({ name: '', password: '' });
     } catch (e) {

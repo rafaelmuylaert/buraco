@@ -729,7 +729,7 @@ const App = () => {
       alert(`Assento reservado para ${assignedName}. Entre com essa conta para jogar.`);
       return;
     }
-    let pName = assignedName || currentUser?.username || null;
+    let pName = currentUser?.username || assignedName || null;
     if (!pName) pName = prompt("Digite seu nome para entrar na mesa:");
     if (!pName) return;
     try {
