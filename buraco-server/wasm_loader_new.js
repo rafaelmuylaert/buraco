@@ -486,7 +486,7 @@ export function scoreSeqCandidate(cand) {
     const enc = _encodeSeqCandidateFloats(cand);
     const out = getscores(_activeTeam, 1, [0], enc);
     if (_diagnosticLog >= 2) {
-        console.log(`[WASM_DBG] Seq candidate: ${enc.toFixed(4).join(' ')} score: ${out.toFixed(4).join(' ')}`);
+        console.log(`[WASM_DBG] Seq candidate: ${enc.toFixed(0).join(' ')} score: ${out.toFixed(0).join(' ')}`);
     }
     return out && out.length ? out[0] : -999;
 }
@@ -496,7 +496,7 @@ export function scoreRunCandidate(cand) {
     const enc = _encodeRunCandidateFloats(cand);
     const out = getscores(_activeTeam, 2, [0], enc);
     if (_diagnosticLog >= 2) {
-        console.log(`[WASM_DBG] Run candidate: ${enc.toFixed(4).join(' ')} score: ${out.toFixed(4).join(' ')}`);
+        console.log(`[WASM_DBG] Run candidate: ${enc.toFixed(0).join(' ')} score: ${out.toFixed(0).join(' ')}`);
     }
     return out && out.length ? out[0] : -999;
 }
@@ -505,7 +505,7 @@ export function scoreSeqCandidates(candidates) {
     if (!candidates?.length) return [];
     const scores = candidates.map(scoreSeqCandidate);
     if (_diagnosticLog >= 1) {
-        console.log(`[WASM_DBG] seq scores: ${scores.map(v => v.toFixed(4)).join(', ')}`);
+        console.log(`[WASM_DBG] seq scores: ${scores.map(v => v.toFixed(0)).join(', ')}`);
     }
     return scores;
 }
@@ -514,7 +514,7 @@ export function scoreRunCandidates(candidates) {
     if (!candidates?.length) return [];
     const scores = candidates.map(scoreRunCandidate);
     if (_diagnosticLog >= 1) {
-        console.log(`[WASM_DBG] run scores: ${scores.map(v => v.toFixed(4)).join(', ')}`);
+        console.log(`[WASM_DBG] run scores: ${scores.map(v => v.toFixed(0)).join(', ')}`);
     }
     return scores;
 }
@@ -524,7 +524,7 @@ export function scoreDiscards() {
     const out = getscores(_activeTeam, 3, [0], []);
     if (!out) return null;
     if (_diagnosticLog >= 2) {
-        console.log(`[WASM_DBG] discard logits: ${Array.from(out).map(v => v.toFixed(4)).join(', ')}`);
+        console.log(`[WASM_DBG] discard logits: ${Array.from(out).map(v => v.toFixed(0)).join(', ')}`);
     }
     return out;
 }
