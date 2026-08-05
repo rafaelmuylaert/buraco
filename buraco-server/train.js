@@ -149,13 +149,10 @@ function toBuffer(genome, netConfig) {
     return buf;
 }
 
-const _cppTimingsZero = () => ({ fsc:0, build_h1:0, fwd:0, phase0:0, phase1:0, phase2:0, n_fsc:0, n_fwd:0, n_turns:0 });
-
 class WorkerPool {
     constructor(size, path) {
         this.queue = [];
         this._timings = { buildStateVector: 0, buildDiscardVector: 0, forwardPass: 0, getAllValidMelds: 0, getAllValidAppends: 0, planTurn: 0, planTurnCalls: 0, _evalCount: 0, _copyMs: 0 };
-        this._cppTimings = _cppTimingsZero();
         this.workers = Array.from({ length: size }, () => {
             const w = new Worker(path, { workerData: { matches: [], rules: {} } });
             w.idle = true;
@@ -165,10 +162,6 @@ class WorkerPool {
                 if (msg?.timings) {
                     for (const k of Object.keys(this._timings))
                         this._timings[k] += msg.timings[k] ?? 0;
-                }
-                if (msg?.cppTimings) {
-                    for (const k of Object.keys(this._cppTimings))
-                        this._cppTimings[k] += msg.cppTimings[k] ?? 0;
                 }
                 const { offset, allResults, remaining, onDone } = w.currentJob;
                 results.forEach((r, i) => allResults[offset + i] = r);
@@ -183,9 +176,8 @@ class WorkerPool {
     }
 
     getAndResetTimings() {
-        const snap = { ...this._timings, cpp: { ...this._cppTimings } };
+        const snap = { ...this._timings };
         for (const k of Object.keys(this._timings)) this._timings[k] = 0;
-        this._cppTimings = _cppTimingsZero();
         return snap;
     }
 
@@ -555,9 +547,8 @@ export const TrainerService = {
                         console.log(`[${botName}] Island ${islandIdx} Gen ${gen}/${GENERATIONS} | MaxDiff: ${result.bestDiff.toFixed(0)} | AvgDiff: ${result.avgDiff.toFixed(0)}`);
 
                         const t = getPool().getAndResetTimings();
-                        const cpp = t.cpp || {};
-                        const mspt = cpp.n_turns > 0 ? (t.planTurn / cpp.n_turns).toFixed(2) : '?';
-                        //console.log(`[${botName}] [TIMING/${SAVE_EVERY}gens] planTurn=${(t.planTurn||0).toFixed(0)}ms (${mspt}ms/turn) turns=${cpp.n_turns||0} fsc=${(cpp.fsc||0).toFixed(0)}ms(${cpp.n_fsc||0}) fwd=${(cpp.fwd||0).toFixed(0)}ms(${cpp.n_fwd||0}) p0=${(cpp.phase0||0).toFixed(0)}ms p1=${(cpp.phase1||0).toFixed(0)}ms p2=${(cpp.phase2||0).toFixed(0)}ms`);
+                        const mspt = t.planTurnCalls > 0 ? (t.planTurn / t.planTurnCalls).toFixed(2) : '?';
+                        //console.log(`[${botName}] [TIMING/${SAVE_EVERY}gens] planTurn=${(t.planTurn||0).toFixed(0)}ms (${mspt}ms/turn) turns=${t.planTurnCalls||0}`);
 
                         const minBroadcastGen = Math.min(...islandBroadcastGen);
                         const roundGen = Math.floor(minBroadcastGen / SAVE_EVERY) * SAVE_EVERY;

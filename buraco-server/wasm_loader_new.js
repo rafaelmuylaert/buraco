@@ -38,7 +38,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
     AI_CONFIG, seqSuit, addPlanTurnTime, setScoreFunctions,
-    computeNetConfig, generateAllValidMelds, getSuitChar
+    computeNetConfig, generateAllValidMelds, intToCardObj, meldToCards
 } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -245,12 +245,9 @@ export function setDiagnosticLog(level) { _diagnosticLog = level; }
 export function isDiagnosticLog() { return _diagnosticLog; }
 export function getLastDbgLog() { return _lastDbgLog; }
 
-const _rankChars = ['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
 function _fmtCard(cid) {
-    if (cid === 54 || cid === 53) return 'Joker';
-    const s = Math.floor(cid / 13) + 1;
-    const r = (cid % 13) + 1;
-    return _rankChars[r] + getSuitChar(s);
+    const o = intToCardObj(cid);
+    return o.rank === 'JOKER' ? 'Joker' : o.rank + o.suit;
 }
 function _fmtCounts(cc) {
     if (!cc || Object.keys(cc).length === 0) return '{}';
@@ -259,57 +256,15 @@ function _fmtCounts(cc) {
         return v > 1 ? `${c}x${v}` : c;
     }).join(' ') + '}';
 }
-function _fmtHand(flat) {
-    const out = [];
-    for (let i = 0; i < 53; i++) {
-        const n = flat[i] || 0;
-        for (let j = 0; j < n; j++) out.push(_fmtCard(i));
-    }
-    return out.join(' ') || '(empty)';
-}
 function _fmtMeldArr(meld, suit) {
     if (!meld) return '∅';
-    try { return meldToCardIDs(meld, suit || 0).map(_fmtCard).join(' '); }
+    try { return meldToCards(meld, suit || 0).map(c => c.rank + c.suit).join(' '); }
     catch (_) { return '?'; }
 }
-
-// Convert a meld slot array to card IDs (0-53 for specific cards, +54 for wilds)
-function meldToCardIDs(m, suit) {
-    let cards = [];
-    const WILD_SUIT_OFFSET = 1;
-    if (m[0] || m[1] || m[2]) {
-        const isSeq = m.length >= 16;
-        if (isSeq) {
-            const WildSuit = m[14] ? m[14] : suit;
-            if (m[0]) cards.push(getCardId(suit, 0));
-            for (let r = 2; r <= 13; r++) {
-                const cardIdx = r === 2 ? 1 : r - 1;
-                if (m[r]) cards.push(getCardId(suit, cardIdx));
-                else if (m[14] && r === getGapIndex(m)) cards.push(getCardId(WildSuit, WILD_SUIT_OFFSET));
-            }
-            if (m[1]) cards.push(getCardId(suit, 0));
-            if (getGapIndex(m) === 0 && m[14] && !m[0]) cards.push(getCardId(suit, WILD_SUIT_OFFSET));
-        }
-    } else if (m.length >= 6) {
-        const rank = m[0];
-        const wildSuit = m[5] || 0;
-        for (let s = 1; s <= 4; s++) {
-            const cnt = m[s] || 0;
-            for (let i = 0; i < cnt; i++) cards.push(getCardId(s, rank - 1));
-        }
-        if (wildSuit) cards.push(getCardId(wildSuit, WILD_SUIT_OFFSET));
-    }
-    return cards;
-}
-
-function getGapIndex(m) {
-    for (let r = 2; r <= 13; r++) if (!m[r]) return r - 1;
-    return 0;
-}
-function getCardId(suit, rank0) {
-    if (rank0 < 0 || rank0 > 12) return 0;
-    if (suit < 1 || suit > 4) return 0;
-    return (suit - 1) * 13 + rank0;
+function printcandidates(headerLine, candidates) {
+    if (_diagnosticLog < 1) return;
+    console.log(headerLine);
+    for (const line of candidates) console.log(`  ${line}`);
 }
 
 // ── NN_CURRENT feature builder (slot 0) ──────────────────────────────────────
@@ -434,8 +389,7 @@ function _buildCurrentFeatures(G, player, myTeam, oppTeam) {
 
     const disc = new Uint8Array(54);
     for (const c of (G.discardPile || [])) {
-        const idx = c === 54 ? 52 : c;
-        if (idx < 54) disc[idx]++;
+        if (c < 54) disc[c]++;
     }
     for (let j = 0; j < 54; j++) feat[off++] = disc[j] / 255;
 
@@ -470,7 +424,7 @@ export function runCurrentState(G, player, myTeam, oppTeam) {
         }
         const td = G.discardPile?.length > 0 ? _fmtCard(G.discardPile[G.discardPile.length - 1]) : 'empty';
         console.log(`[RCS] p${player} team=${myTeam} opp=${oppTeam} hand=[${handStr}] td=${td} deck=${G.deck?.length || 0} discPile=${G.discardPile?.length || 0}`);
-        console.log(`[RCS] state: ${Array.from(state).map(v => v.toFixed(4)).join(', ')}`);
+        //console.log(`[RCS] state: ${Array.from(state).map(v => v.toFixed(4)).join(', ')}`);
     }
     return state;
 }
@@ -649,7 +603,7 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
             }
 
             if (_diagnosticLog >= 1) {
-                console.log('--- PICKUP CANDIDATES (Phase A) ---');
+                const lines = [];
                 for (let i = 0; i < seqCands.length; i++) {
                     const c = seqCands[i];
                     let extra = '';
@@ -657,7 +611,7 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
                         const meld = G.table?.[myTeamIdx]?.[0]?.[c.targetSuit]?.[c.targetSlot];
                         extra = ` appendTo=[${_fmtMeldArr(meld, c.targetSuit)}]`;
                     }
-                    console.log(`  seq cand ${i}:${extra} cards=${_fmtCounts(c.cardCounts)} score=${(seqScores[i] ?? -999).toFixed(4)}`);
+                    lines.push(`seq cand ${i}:${extra} cards=${_fmtCounts(c.cardCounts)} score=${(seqScores[i] ?? -999).toFixed(4)}`);
                 }
                 for (let i = 0; i < runCands.length; i++) {
                     const c = runCands[i];
@@ -666,14 +620,15 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
                         const meld = G.table?.[myTeamIdx]?.[1]?.[c.targetSlot];
                         extra = ` appendTo=[${_fmtMeldArr(meld, 0)}]`;
                     }
-                    console.log(`  run cand ${i}:${extra} cards=${_fmtCounts(c.cardCounts)} score=${(runScores[i] ?? -999).toFixed(4)}`);
+                    lines.push(`run cand ${i}:${extra} cards=${_fmtCounts(c.cardCounts)} score=${(runScores[i] ?? -999).toFixed(4)}`);
                 }
                 if (bestCand) {
                     const tgtStr = pickupTarget.type === 'new' ? 'new meld' : `append->[s=${pickupTarget.meldTarget?.suit ?? ''},i=${pickupTarget.meldTarget?.index ?? '?'}]`;
-                    console.log(`  BEST: pickup ${_fmtCounts(bestCand.cardCounts)} ${tgtStr} score=${bestScore.toFixed(4)}`);
+                    lines.push(`BEST: pickup ${_fmtCounts(bestCand.cardCounts)} ${tgtStr} score=${bestScore.toFixed(4)}`);
                 } else {
-                    console.log('  BEST: (none) — will draw from deck');
+                    lines.push('BEST: (none) — will draw from deck');
                 }
+                printcandidates('--- PICKUP CANDIDATES (Phase A) ---', lines);
             }
         }
 
@@ -727,8 +682,7 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
     meldMoves.sort((a, b) => b.score - a.score);
 
     if (_diagnosticLog >= 1) {
-        console.log('--- MELD CANDIDATES (Phase B, sorted) ---');
-        for (const m of meldMoves) {
+        const lines = meldMoves.map(m => {
             const typeStr = m.moveType === 2 ? (m.targetType === 0 ? 'NEW MELD' : 'APPEND') : m.moveType === 3 ? 'APPEND' : 'NEW RUNNER';
             let extra = '';
             if (m.moveType === 3) {
@@ -740,8 +694,9 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
                     extra = ` existing=[${_fmtMeldArr(meld, 0)}]`;
                 }
             }
-            console.log(`  ${typeStr}${extra} cards=${_fmtCounts(m.cardCounts)} score=${m.score.toFixed(4)}`);
-        }
+            return `${typeStr}${extra} cards=${_fmtCounts(m.cardCounts)} score=${m.score.toFixed(4)}`;
+        });
+        printcandidates('--- MELD CANDIDATES (Phase B, sorted) ---', lines);
     }
 
     addPlanTurnTime(performance.now() - _pt0);
@@ -756,15 +711,13 @@ export function buildDiscardMoveList(G, player) {
     const moves = [];
     for (let i = 0; i < 54; i++) {
         if ((flat[i] || 0) > 0) {
-            moves.push({ phase: 2, moveType: 4, discardCard: i === 52 ? 54 : i, cardCounts: {}, score: logits[i] });
+            moves.push({ phase: 2, moveType: 4, discardCard: i, cardCounts: {}, score: logits[i] });
         }
     }
     moves.sort((a, b) => b.score - a.score);
 
-    if (_diagnosticLog >= 1) {
-        console.log('--- DISCARD CANDIDATES (sorted) ---');
-        for (const m of moves) console.log(`  ${_fmtCard(m.discardCard)} score=${m.score.toFixed(4)}`);
-    }
+    if (_diagnosticLog >= 1)
+        printcandidates('--- DISCARD CANDIDATES (sorted) ---', moves.map(m => `${_fmtCard(m.discardCard)} score=${m.score.toFixed(4)}`));
     return moves;
 }
 
@@ -792,15 +745,3 @@ export function _executeTurnMove(m, iface, log) {
     }
     return false;
 }
-
-// ── Compat stubs (old engine machinery no longer exists) ─────────────────────
-
-export function getCppTimings() {
-    return { fsc: 0, build_h1: 0, fwd: 0, phase0: 0, phase1: 0, phase2: 0, n_fsc: 0, n_fwd: 0, n_turns: 0 };
-}
-export function syncCardsToWasm() {}
-export function updateSeqMeld() {}
-export function updateRunMeld() {}
-export function getWasmCardBuffers() { return null; }
-export function getWasmMeldBuffers() { return null; }
-export function setUsingWasmBackedBuffers() {}

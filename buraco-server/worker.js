@@ -8,7 +8,7 @@
 // score differentials for the genetic algorithm.
 //
 // Main functions:
-//   runMatch(genomes, rules, fixedDeck)  — Simulates a complete match between two bots
+//   runMatch(rules, fixedDeck)           — Simulates a complete match between two bots
 //   processJob(matches, rules)           — Processes a batch of match pairs, returns results
 //   prepareGenome(raw)                   — Normalizes a genome vector to expected size
 //   makeIface(S, p)                      — Builds action interface for direct state mutation
@@ -27,7 +27,7 @@ import {
     checkGameOver, getAndResetTimings
 } from './game.js';
 import { initWasm, loadMatchDNA, isWasmReady,
-         getCppTimings, setActiveNetConfig, runTurn,
+         setActiveNetConfig, runTurn,
          setDiagnosticLog, isDiagnosticLog } from './wasm_loader_new.js';
 
 
@@ -76,7 +76,7 @@ function makeIface(S, p) {
 
 // worker.js
 
-async function runMatch(genomes, rules, fixedDeck, netConfig) {    const numPlayers = rules.numPlayers || 4;
+async function runMatch(rules, fixedDeck) {    const numPlayers = rules.numPlayers || 4;
     const fakeRandom = { Shuffle: arr => fixedDeck ? [...fixedDeck] : shuffle(arr) };
 
     const wasDiagnostic = isDiagnosticLog();
@@ -100,11 +100,6 @@ async function runMatch(genomes, rules, fixedDeck, netConfig) {    const numPlay
     for (const k of Object.keys(S.cards))      S.cards[k]      = Uint8Array.from(S.cards[k]);
     for (const k of Object.keys(S.knownCards)) S.knownCards[k] = Uint8Array.from(S.knownCards[k]);
     S.discardPile = Array.from(S.discardPile);
-
-    S.botGenomes = Object.fromEntries(Object.entries(genomes).map(([k, v]) => {
-        const arr = v instanceof SharedArrayBuffer ? new Float32Array(v) : new Float32Array(v);
-        return [k, prepareGenome(arr, netConfig)];
-    }));
 
     const ifaces = [];
     for (let i = 0; i < numPlayers; i++)
@@ -166,21 +161,17 @@ async function processJob(matches, rules, netConfig) {
         const gA = prepareGenome(dnaA instanceof SharedArrayBuffer ? new Float32Array(dnaA) : new Float32Array(dnaA), netConfig);
         const gB = prepareGenome(dnaB instanceof SharedArrayBuffer ? new Float32Array(dnaB) : new Float32Array(dnaB), netConfig);
 
-        const genomes1 = { '0': dnaA, '1': dnaB, '2': dnaA, '3': dnaB };
-        const genomes2 = { '0': dnaB, '1': dnaA, '2': dnaB, '3': dnaA };
-
         if (isWasmReady()) loadMatchDNA(gA, gB);
-        const g1 = await runMatch(genomes1, rules, pairDeck, netConfig);
+        const g1 = await runMatch(rules, pairDeck);
 
         if (isWasmReady()) loadMatchDNA(gB, gA);
-        const g2 = await runMatch(genomes2, rules, pairDeck, netConfig);
+        const g2 = await runMatch(rules, pairDeck);
 
         results.push([g1 - g2, g2 - g1, Math.abs(g1), Math.abs(g2)]);
     }
     return {
         results,
         timings: getAndResetTimings(),
-        cppTimings: getCppTimings(),
     };
 }
 
