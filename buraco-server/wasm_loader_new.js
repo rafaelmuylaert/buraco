@@ -486,7 +486,7 @@ export function scoreSeqCandidate(cand) {
     const enc = _encodeSeqCandidateFloats(cand);
     const out = getscores(_activeTeam, 1, [0], enc);
     if (_diagnosticLog >= 2) {
-        console.log(`[WASM_DBG] Seq candidate: ${enc.toFixed(0).join(' ')} score: ${out.toFixed(0).join(' ')}`);
+        console.log(`[WASM_DBG] Seq candidate: ${Array.from(enc).map(v => v.toFixed(0))} score: ${Array.from(out).map(v => v.toFixed(0))}`);
     }
     return out && out.length ? out[0] : -999;
 }
@@ -496,7 +496,7 @@ export function scoreRunCandidate(cand) {
     const enc = _encodeRunCandidateFloats(cand);
     const out = getscores(_activeTeam, 2, [0], enc);
     if (_diagnosticLog >= 2) {
-        console.log(`[WASM_DBG] Run candidate: ${enc.toFixed(0).join(' ')} score: ${out.toFixed(0).join(' ')}`);
+        console.log(`[WASM_DBG] Run candidate: ${Array.from(enc).map(v => v.toFixed(0))} score: ${Array.from(out).map(v => v.toFixed(0))}`);
     }
     return out && out.length ? out[0] : -999;
 }
