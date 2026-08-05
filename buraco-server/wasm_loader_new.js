@@ -28,7 +28,7 @@
 //   loadMatchDNA(a, b)      — Convenience wrapper over initweights (both teams)
 //   runCurrentState(G, p, myT, oppT) — Slot 0; state is normalized to [-1,1]
 //                               in-engine (setNormalizeMax adjusts the range)
-//   scoreSeqCandidates(cands) / scoreRunCandidates(cands) — Slot 1/2 per candidate
+//   scoreSeqCandidate(cand) / scoreRunCandidate(cand) — Slot 1/2, one candidate
 //   scoreDiscards()         — Slot 3 -> 54 logits
 //   buildTurnMoveList / buildDiscardMoveList / runTurn — full turn executor
 // ──────────────────────────────────────────────────────────────────────────────
@@ -261,10 +261,25 @@ function _fmtMeldArr(meld, suit) {
     try { return meldToCards(meld, suit || 0).map(c => c.rank + c.suit).join(' '); }
     catch (_) { return '?'; }
 }
-function printcandidates(headerLine, candidates) {
+// Single candidate printer. Takes the raw candidates from generateAllValidMelds
+// (which carry moveType, cardCounts, existingMeld/existingRunner) plus G for
+// context. Prints m.moveType verbatim — 'playMeld' is NOT renamed to 'NEW MELD'.
+// Also accepts discard moves (discardCard) and legacy pre-formatted strings.
+function printcandidates(headerLine, allCands, G) {
     if (_diagnosticLog < 1) return;
     console.log(headerLine);
-    for (const line of candidates) console.log(`  ${line}`);
+    for (const c of allCands) {
+        if (typeof c === 'string') { console.log(`  ${c}`); continue; }
+        if (c.discardCard !== undefined) {
+            console.log(`  ${_fmtCard(c.discardCard)} score=${c.score.toFixed(4)}`);
+            continue;
+        }
+        let line = `${c.moveType} cards=${_fmtCounts(c.cardCounts)}`;
+        if (c.moveType === 'appendToMeld') line += ` existing=[${_fmtMeldArr(c.existingMeld, c.targetSuit)}]`;
+        else if (c.moveType === 'appendRunner') line += ` existing=[${_fmtMeldArr(c.existingRunner, 0)}]`;
+        if (c._score !== undefined) line += ` score=${c._score.toFixed(4)}`;
+        console.log(`  ${line}`);
+    }
 }
 
 // ── NN_CURRENT feature builder (slot 0) ──────────────────────────────────────
@@ -466,14 +481,23 @@ function _encodeRunCandidateFloats(cand) {
     return f;
 }
 
+export function scoreSeqCandidate(cand) {
+    if (!_ex || !cand) return -1;
+    const enc = _encodeSeqCandidateFloats(cand);
+    const out = getscores(_activeTeam, 1, [0], enc);
+    return out && out.length ? out[0] : -999;
+}
+
+export function scoreRunCandidate(cand) {
+    if (!_ex || !cand) return -1;
+    const enc = _encodeRunCandidateFloats(cand);
+    const out = getscores(_activeTeam, 2, [0], enc);
+    return out && out.length ? out[0] : -999;
+}
+
 export function scoreSeqCandidates(candidates) {
-    if (!_ex || !candidates?.length) return [];
-    const scores = [];
-    for (const cand of candidates) {
-        const enc = _encodeSeqCandidateFloats(cand);
-        const out = getscores(_activeTeam, 1, [0], enc);
-        scores.push(out && out.length ? out[0] : -999);
-    }
+    if (!candidates?.length) return [];
+    const scores = candidates.map(scoreSeqCandidate);
     if (_diagnosticLog >= 1) {
         console.log(`[WASM_DBG] seq scores: ${scores.map(v => v.toFixed(4)).join(', ')}`);
     }
@@ -481,13 +505,8 @@ export function scoreSeqCandidates(candidates) {
 }
 
 export function scoreRunCandidates(candidates) {
-    if (!_ex || !candidates?.length) return [];
-    const scores = [];
-    for (const cand of candidates) {
-        const enc = _encodeRunCandidateFloats(cand);
-        const out = getscores(_activeTeam, 2, [0], enc);
-        scores.push(out && out.length ? out[0] : -999);
-    }
+    if (!candidates?.length) return [];
+    const scores = candidates.map(scoreRunCandidate);
     if (_diagnosticLog >= 1) {
         console.log(`[WASM_DBG] run scores: ${scores.map(v => v.toFixed(4)).join(', ')}`);
     }
@@ -563,144 +582,54 @@ export async function runTurn(S, playerID, iface) {
 export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null) {
     if (!_ex?.forwardpass) return [];
     const pInt = parseInt(player);
-    const myTeamIdx = myTeam;
     const _pt0 = performance.now();
+    const isPickup = (topdiscard !== null && topdiscard !== undefined);
 
-    if (topdiscard !== null && topdiscard !== undefined) {
-        // ── Phase A: Pickup decisions ──────────────────────────────────────
-        const pickupMoves = [];
-        pickupMoves.push({ phase: 0, moveType: 0, cardCounts: {}, score: 0 });
+    const allCands = generateAllValidMelds(G, pInt, myTeam, topdiscard) || [];
 
-        if ((G.deck?.length || 0) === 0 && (G.pots?.length || 0) === 0) {
-            pickupMoves.push({ phase: 0, moveType: 5, cardCounts: {}, score: 0 });
+    const moves = [];
+    for (const c of allCands) {
+        const isSeq = c.moveType === 'playMeld' || c.moveType === 'appendToMeld';
+        const score = isSeq ? scoreSeqCandidate(c) : scoreRunCandidate(c);
+        c._score = score;
+        if (c.phase === 0) {
+            // Pickup move — meld the top discard together with hand cards.
+            const pickupTarget = { type: 'new' };
+            if (c.moveType === 'appendToMeld') {
+                pickupTarget.type = 'append';
+                pickupTarget.meldTarget = { type: 'seq', suit: c.targetSuit, index: c.targetSlot };
+            } else if (c.moveType === 'appendRunner') {
+                pickupTarget.type = 'append';
+                pickupTarget.meldTarget = { type: 'runner', index: c.targetSlot };
+            }
+            moves.push({ phase: 0, moveType: 'pickUpDiscard', cardCounts: c.cardCounts, score, pickupTarget });
+        } else {
+            moves.push({
+                phase: 1,
+                moveType: c.moveType,
+                targetType: c.targetType,
+                targetSuit: c.targetSuit ?? 0,
+                targetSlot: c.targetSlot ?? 0,
+                cardCounts: c.cardCounts,
+                score,
+            });
         }
-
-        if (G.discardPile?.length > 0) {
-            const allCands = generateAllValidMelds(G, pInt, myTeamIdx, topdiscard) || [];
-            const seqCands = allCands.filter(c => c.moveType === 'playMeld' || c.moveType === 'appendToMeld');
-            const runCands = allCands.filter(c => c.moveType === 'playRunner' || c.moveType === 'appendRunner');
-            const seqScores = seqCands.length > 0 ? scoreSeqCandidates(seqCands) : [];
-            const runScores = runCands.length > 0 ? scoreRunCandidates(runCands) : [];
-
-            let bestScore = -Infinity;
-            let bestCand = null;
-            for (let i = 0; i < seqCands.length; i++) {
-                if (seqScores[i] > bestScore) { bestScore = seqScores[i]; bestCand = seqCands[i]; }
-            }
-            for (let i = 0; i < runCands.length; i++) {
-                if (runScores[i] > bestScore) { bestScore = runScores[i]; bestCand = runCands[i]; }
-            }
-            let pickupTarget = { type: 'new' };
-            if (bestCand) {
-                if (bestCand.moveType === 'appendToMeld') {
-                    pickupTarget = { type: 'append', meldTarget: { type: 'seq', suit: bestCand.targetSuit, index: bestCand.targetSlot } };
-                } else if (bestCand.moveType === 'appendRunner') {
-                    pickupTarget = { type: 'append', meldTarget: { type: 'runner', index: bestCand.targetSlot } };
-                } else {
-                    pickupTarget = { type: 'new' };
-                }
-                pickupMoves.push({ phase: 0, moveType: 1, cardCounts: bestCand.cardCounts, score: bestScore, pickupTarget });
-            }
-
-            if (_diagnosticLog >= 1) {
-                const lines = [];
-                for (let i = 0; i < seqCands.length; i++) {
-                    const c = seqCands[i];
-                    let extra = '';
-                    if (c.moveType === 'appendToMeld') {
-                        const meld = G.table?.[myTeamIdx]?.[0]?.[c.targetSuit]?.[c.targetSlot];
-                        extra = ` appendTo=[${_fmtMeldArr(meld, c.targetSuit)}]`;
-                    }
-                    lines.push(`seq cand ${i}:${extra} cards=${_fmtCounts(c.cardCounts)} score=${(seqScores[i] ?? -999).toFixed(4)}`);
-                }
-                for (let i = 0; i < runCands.length; i++) {
-                    const c = runCands[i];
-                    let extra = '';
-                    if (c.moveType === 'appendRunner') {
-                        const meld = G.table?.[myTeamIdx]?.[1]?.[c.targetSlot];
-                        extra = ` appendTo=[${_fmtMeldArr(meld, 0)}]`;
-                    }
-                    lines.push(`run cand ${i}:${extra} cards=${_fmtCounts(c.cardCounts)} score=${(runScores[i] ?? -999).toFixed(4)}`);
-                }
-                if (bestCand) {
-                    const tgtStr = pickupTarget.type === 'new' ? 'new meld' : `append->[s=${pickupTarget.meldTarget?.suit ?? ''},i=${pickupTarget.meldTarget?.index ?? '?'}]`;
-                    lines.push(`BEST: pickup ${_fmtCounts(bestCand.cardCounts)} ${tgtStr} score=${bestScore.toFixed(4)}`);
-                } else {
-                    lines.push('BEST: (none) — will draw from deck');
-                }
-                printcandidates('--- PICKUP CANDIDATES (Phase A) ---', lines);
-            }
-        }
-
-        pickupMoves.sort((a, b) => b.score - a.score);
-        addPlanTurnTime(performance.now() - _pt0);
-        return pickupMoves;
     }
 
-    // ── Phase B: All meld/appender moves, scored and sorted ──────────────
-    const allCands = generateAllValidMelds(G, pInt, myTeamIdx, null) || [];
-    const seqCands = allCands.filter(c => c.moveType === 'playMeld' || c.moveType === 'appendToMeld');
-    const runCands = allCands.filter(c => c.moveType === 'playRunner' || c.moveType === 'appendRunner');
-
-    let seqScores = [], runScores = [];
-    if (seqCands.length > 0) {
-        seqScores = scoreSeqCandidates(seqCands);
-        while (seqScores.length < seqCands.length) seqScores.push(-1);
-    }
-    if (runCands.length > 0) {
-        runScores = scoreRunCandidates(runCands);
-        while (runScores.length < runCands.length) runScores.push(-1);
+    // Phase A fallback: draw from deck (score 0) so a bad pickup never blocks us.
+    if (isPickup) {
+        moves.push({ phase: 0, moveType: 'drawCard', cardCounts: {}, score: 0 });
+        if ((G.deck?.length || 0) === 0 && (G.pots?.length || 0) === 0)
+            moves.push({ phase: 0, moveType: 'declareExhausted', cardCounts: {}, score: 0 });
     }
 
-    const meldMoves = [];
-    for (let i = 0; i < seqCands.length; i++) {
-        const c = seqCands[i];
-        const isAppend = c.moveType === 'appendToMeld';
-        meldMoves.push({
-            phase: 1,
-            moveType: isAppend ? 3 : 2,
-            targetType: isAppend ? 1 : 0,
-            targetSuit: c.targetSuit,
-            targetSlot: isAppend ? c.targetSlot : 0,
-            cardCounts: c.cardCounts,
-            score: seqScores[i]
-        });
-    }
-    for (let i = 0; i < runCands.length; i++) {
-        const c = runCands[i];
-        const isAppend = c.moveType === 'appendRunner';
-        meldMoves.push({
-            phase: 1,
-            moveType: isAppend ? 3 : 2,
-            targetType: isAppend ? 2 : 0,
-            targetSuit: 0,
-            targetSlot: isAppend ? c.targetSlot : 0,
-            cardCounts: c.cardCounts,
-            score: runScores[i]
-        });
-    }
-    meldMoves.sort((a, b) => b.score - a.score);
+    moves.sort((a, b) => b.score - a.score);
 
-    if (_diagnosticLog >= 1) {
-        const lines = meldMoves.map(m => {
-            const typeStr = m.moveType === 2 ? (m.targetType === 0 ? 'NEW MELD' : 'APPEND') : m.moveType === 3 ? 'APPEND' : 'NEW RUNNER';
-            let extra = '';
-            if (m.moveType === 3) {
-                if (m.targetType === 1) {
-                    const meld = G.table?.[myTeam]?.[0]?.[m.targetSuit]?.[m.targetSlot];
-                    extra = ` existing=[${_fmtMeldArr(meld, m.targetSuit)}]`;
-                } else {
-                    const meld = G.table?.[myTeam]?.[1]?.[m.targetSlot];
-                    extra = ` existing=[${_fmtMeldArr(meld, 0)}]`;
-                }
-            }
-            return `${typeStr}${extra} cards=${_fmtCounts(m.cardCounts)} score=${m.score.toFixed(4)}`;
-        });
-        printcandidates('--- MELD CANDIDATES (Phase B, sorted) ---', lines);
-    }
+    if (_diagnosticLog >= 1)
+        printcandidates(isPickup ? '--- PICKUP CANDIDATES (Phase A, sorted) ---' : '--- MELD CANDIDATES (Phase B, sorted) ---', allCands, G);
 
     addPlanTurnTime(performance.now() - _pt0);
-    return meldMoves;
+    return moves;
 }
 
 export function buildDiscardMoveList(G, player) {
@@ -711,13 +640,13 @@ export function buildDiscardMoveList(G, player) {
     const moves = [];
     for (let i = 0; i < 54; i++) {
         if ((flat[i] || 0) > 0) {
-            moves.push({ phase: 2, moveType: 4, discardCard: i, cardCounts: {}, score: logits[i] });
+            moves.push({ phase: 2, moveType: 'discardCard', discardCard: i, cardCounts: {}, score: logits[i] });
         }
     }
     moves.sort((a, b) => b.score - a.score);
 
     if (_diagnosticLog >= 1)
-        printcandidates('--- DISCARD CANDIDATES (sorted) ---', moves.map(m => `${_fmtCard(m.discardCard)} score=${m.score.toFixed(4)}`));
+        printcandidates('--- DISCARD CANDIDATES (sorted) ---', moves, G);
     return moves;
 }
 
@@ -725,15 +654,17 @@ export function buildDiscardMoveList(G, player) {
 export function _executeTurnMove(m, iface, log) {
     if (!m) return false;
     if (m.phase === 0) {
-        if (m.moveType === 5) { log?.('declareExhausted'); iface.exhaust(); return true; }
-        else if (m.moveType === 0) { log?.(`drawCard${m._fallback ? ' [fallback]' : ''}`); iface.draw(); return false; }
-        else if (m.moveType === 1) { log?.(`pickUpDiscard ${JSON.stringify(m.cardCounts)}`); iface.pickup(m.cardCounts, m.pickupTarget || { type: 'new' }); return false; }
+        if (m.moveType === 'declareExhausted') { log?.('declareExhausted'); iface.exhaust(); return true; }
+        else if (m.moveType === 'drawCard') { log?.(`drawCard${m._fallback ? ' [fallback]' : ''}`); iface.draw(); return false; }
+        else if (m.moveType === 'pickUpDiscard') { log?.(`pickUpDiscard ${JSON.stringify(m.cardCounts)}`); iface.pickup(m.cardCounts, m.pickupTarget || { type: 'new' }); return false; }
     }
     if (m.phase === 1) {
-        if (m.moveType === 2) { log?.(`playMeld ${JSON.stringify(m.cardCounts)}`); iface.meld(m.cardCounts); }
-        else if (m.moveType === 3) {
-            const tgt = { type: m.targetType === 1 ? 'seq' : 'runner', suit: m.targetSuit, index: m.targetSlot };
-            log?.(`appendToMeld ${tgt.type}[${tgt.suit || ''}${tgt.index}] ${JSON.stringify(m.cardCounts)}`);
+        if (m.moveType === 'playMeld' || m.moveType === 'playRunner') { log?.(`${m.moveType} ${JSON.stringify(m.cardCounts)}`); iface.meld(m.cardCounts); }
+        else if (m.moveType === 'appendToMeld' || m.moveType === 'appendRunner') {
+            const tgt = m.moveType === 'appendToMeld'
+                ? { type: 'seq', suit: m.targetSuit, index: m.targetSlot }
+                : { type: 'runner', index: m.targetSlot };
+            log?.(`${m.moveType} ${tgt.type}[${tgt.suit || ''}${tgt.index}] ${JSON.stringify(m.cardCounts)}`);
             iface.append(tgt, m.cardCounts);
         }
         return false;

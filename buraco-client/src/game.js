@@ -1065,6 +1065,8 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
     const handSim = G.cards[player]
     const runnerRanks = getRunnerRanks(rules);
     const hasDiscard = topdiscard !== null && topdiscard !== 255;
+    // Never `topdiscard ? 0 : 1` — card id 0 (A♠) is falsy.
+    const phase = (topdiscard !== null && topdiscard !== undefined) ? 0 : 1;
     
     // Determine which suits and ranks to check based on top discard
     let minsuit = 1, maxsuit = 4;
@@ -1098,6 +1100,8 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
                     cardCounts: cands.cardCounts,
                     parsedMeld: parsed,
                     targetSuit: suit,
+                    targetType: 0,
+                    phase,
                 });
             }
         }
@@ -1122,6 +1126,8 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
                     parsedMeld: parsed,
                     targetSlot: slot,
                     existingRunner: existing,
+                    targetType: 2,
+                    phase,
                 });
             }
         }
@@ -1140,6 +1146,8 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
                     cardCounts: cands.cardCounts,
                     parsedMeld: parsed,
                     targetSuit: 0,
+                    targetType: 0,
+                    phase,
                 });
             }
         }
@@ -1162,6 +1170,8 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
                         targetSuit: suit,
                         targetSlot: slot,
                         existingMeld: melds[slot],
+                        targetType: 1,
+                        phase,
                     });
                 }
             }
