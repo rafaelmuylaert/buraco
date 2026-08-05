@@ -451,16 +451,18 @@ export function runCurrentState(G, player, myTeam, oppTeam) {
 function _encodeSeqCandidateFloats(cand) {
     const f = new Float32Array(33);
     const s = cand.targetSuit || seqSuit(Object.keys(cand.cardCounts).map(Number));
-    f[0] = (s || 1) / 255;
+    //f[0] = (s || 1) / 255;
+    f[0] = (s || 0);
     const nm = cand.parsedMeld;
     const em = cand.existingMeld;
     if (nm && nm.length === 16) {
-        for (let i = 0; i < 16; i++) f[1 + i] = (nm[i] > (em?.[i] || 0)) ? 1 : 0;
+        //for (let i = 0; i < 16; i++) f[1 + i] = (nm[i] > (em?.[i] || 0)) ? 1 : 0;
+        for (let i = 0; i < 16; i++) f[1 + i] = nm[i] ? 1 : 0;
     }
     if (em && em.length === 16) {
-        for (let i = 0; i < 14; i++) f[17 + i] = em[i] ? 1 : 0;
-        f[31] = em[14] ? 1 : 0;
-        f[32] = em[15] ? 1 : 0;
+        for (let i = 0; i < 16; i++) f[17 + i] = em[i] ? 1 : 0;
+        //f[31] = em[14] ? 1 : 0;
+        //f[32] = em[15] ? 1 : 0;
     }
     return f;
 }
@@ -472,10 +474,13 @@ function _encodeRunCandidateFloats(cand) {
     const rm = cand.parsedMeld;
     const er = cand.existingRunner;
     if (rm && rm.length === 6) {
-        f[0] = Math.round(rm[0] / 13 * 255) / 255;
-        for (let i = 0; i < 4; i++) f[1 + i] = (rm[i + 1] > (er?.[i + 1] || 0)) ? 1 : 0;
+        //f[0] = Math.round(rm[0] / 13 * 255) / 255;
+        f[0] = rm[0];
+        //for (let i = 0; i < 4; i++) f[1 + i] = (rm[i + 1] > (er?.[i + 1] || 0)) ? 1 : 0;
+        for (let i = 0; i < 4; i++) f[1 + i] = rm[i + 1] ? 1 : 0;
         if (er && er.length === 6) {
-            for (let i = 0; i < 4; i++) f[6 + i] = Math.round((er[i + 1] || 0) / 2 * 255) / 255;
+            //for (let i = 0; i < 4; i++) f[6 + i] = Math.round((er[i + 1] || 0) / 2 * 255) / 255;
+            for (let i = 0; i < 4; i++) f[6 + i] = er[i + 1] ? 1 : 0;
         }
     }
     return f;
