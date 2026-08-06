@@ -277,6 +277,26 @@ server.router.post('/api/bots/delete', async (ctx) => {
     } catch (e) { ctx.status = 500; ctx.body = { error: 'Failed' }; }
 });
 
+// Streams a bot's persisted file to the browser as a download.
+//   GET /api/bots/download/:botName            → <botName>.json (weights)
+//   GET /api/bots/download/:botName?file=meta  → <botName>.meta.json
+server.router.get('/api/bots/download/:botName', (ctx) => {
+    setCors(ctx);
+    const botsDir = path.join(process.cwd(), 'bots');
+    const botName = ctx.params.botName;
+    const isMeta = ctx.query.file === 'meta';
+    const filename = isMeta ? `${botName}.meta.json` : `${botName}.json`;
+    const filePath = path.join(botsDir, filename);
+    if (!fs.existsSync(filePath)) {
+        ctx.status = 404;
+        ctx.body = { error: 'Bot not found' };
+        return;
+    }
+    ctx.set('Content-Type', 'application/json');
+    ctx.set('Content-Disposition', `attachment; filename="${filename}"`);
+    ctx.body = fs.readFileSync(filePath);
+});
+
 // --- STANDARD GAME API ROUTES ---
 
 server.router.get('/api/tournaments', (ctx) => {
@@ -829,6 +849,111 @@ server.router.delete('/api/admin/users/:name', async (ctx) => {
     }
     writeJSON(sessionsFile, sessions);
     ctx.body = { success: true };
+  } catch (e) {
+    ctx.status = 400;
+    ctx.body = { error: e.message };
+  }
+});
+
+server.router.post('/api/admin/users/:name/rename', async (ctx) => {
+  setCors(ctx);
+  if (!requireAdmin(ctx)) return;
+  try {
+    const name = String(ctx.params.name || '').trim();
+    const body = await parseBody(ctx);
+    const newName = String(body?.newUsername || '').trim();
+    if (!/^[a-zA-Z0-9_.-]{2,20}$/.test(newName)) {
+      ctx.status = 400;
+      ctx.body = { error: 'O novo nome deve ter 2 a 20 caracteres (letras, números, _ . -).' };
+      return;
+    }
+    if (newName.toLowerCase() === name.toLowerCase()) {
+      ctx.body = { success: true, username: name };
+      return;
+    }
+    const users = readJSON(usersFile);
+    const key = Object.keys(users).find(k => k.toLowerCase() === name.toLowerCase());
+    if (!key) {
+      ctx.status = 404;
+      ctx.body = { error: 'Usuário não encontrado.' };
+      return;
+    }
+    if (ADMIN_USERS.includes(key.toLowerCase())) {
+      ctx.status = 403;
+      ctx.body = { error: 'Administradores definidos por variável de ambiente são imutáveis.' };
+      return;
+    }
+    const takenKey = Object.keys(users).find(k => k.toLowerCase() === newName.toLowerCase());
+    if (takenKey) {
+      ctx.status = 409;
+      ctx.body = { error: 'Este nome de usuário já está em uso.' };
+      return;
+    }
+
+    // Move the account record, preserving password/role metadata.
+    users[newName] = { ...users[key], isAdmin: users[key].isAdmin === true };
+    delete users[key];
+    writeJSON(usersFile, users);
+
+    // Keep existing sessions valid by remapping token → new username.
+    const sessions = readJSON(sessionsFile);
+    for (const [token, sessUser] of Object.entries(sessions)) {
+      if (String(sessUser).toLowerCase() === name.toLowerCase()) sessions[token] = newName;
+    }
+    writeJSON(sessionsFile, sessions);
+
+    // Rewrite every tournament reference (createdBy, players, fixedTeams,
+    // and round seat assignments). Stats derive from these assignments, so
+    // leaderboards follow automatically.
+    let tournaments = [];
+    try { tournaments = JSON.parse(fs.readFileSync(tourneyFile, 'utf8')); } catch { tournaments = []; }
+    let tourneyChanged = false;
+    const renameIfMatch = (val) => {
+      if (String(val || '').toLowerCase() !== name.toLowerCase()) return val;
+      tourneyChanged = true;
+      return newName;
+    };
+    for (const t of tournaments) {
+      t.createdBy = renameIfMatch(t.createdBy);
+      if (Array.isArray(t.players)) t.players = t.players.map(renameIfMatch);
+      if (Array.isArray(t.fixedTeams)) t.fixedTeams = t.fixedTeams.map(team => Array.isArray(team) ? team.map(renameIfMatch) : team);
+      for (const r of (t.rounds || [])) {
+        for (const a of (r.assignments || [])) {
+          if (Array.isArray(a.team0)) a.team0 = a.team0.map(renameIfMatch);
+          if (Array.isArray(a.team1)) a.team1 = a.team1.map(renameIfMatch);
+        }
+      }
+    }
+    if (tourneyChanged) writeJSON(tourneyFile, tournaments);
+
+    // Rename in-progress match seats so seat-claim reservations still resolve.
+    try {
+      const matchList = await gameDB.listMatches('buraco');
+      const list = Array.isArray(matchList) ? matchList : (matchList?.matches || []);
+      for (const match of list) {
+        const matchID = typeof match === 'string' ? match : (match.id || match.matchID);
+        if (!matchID) continue;
+        try {
+          const data = await gameDB.fetch(matchID, { metadata: true });
+          if (!data?.metadata) continue;
+          let metaChanged = false;
+          const sd = data.metadata.setupData || {};
+          if (sd.assignments) {
+            for (const [seat, seatName] of Object.entries(sd.assignments)) {
+              if (String(seatName || '').toLowerCase() === name.toLowerCase()) { sd.assignments[seat] = newName; metaChanged = true; }
+            }
+          }
+          if (data.metadata.players) {
+            for (const p of Object.values(data.metadata.players)) {
+              if (p && String(p.name || '').toLowerCase() === name.toLowerCase()) { p.name = newName; metaChanged = true; }
+            }
+          }
+          if (metaChanged) await gameDB.setMetadata(matchID, data.metadata);
+        } catch (e) {}
+      }
+    } catch (e) {}
+
+    ctx.body = { success: true, username: newName };
   } catch (e) {
     ctx.status = 400;
     ctx.body = { error: e.message };

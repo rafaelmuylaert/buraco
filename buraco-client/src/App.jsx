@@ -1022,6 +1022,34 @@ const App = () => {
     saveTournamentsToAPI(updated);
   };
 
+  const handleReactivateTournament = async (tID) => {
+    const t = tournaments.find(x => x.id === tID);
+    if (!t) return;
+    const leaderboard = getLeaderboard(t);
+    let targetPoints = t.targetPoints, maxRounds = t.maxRounds;
+    if (t.format === 'points' && leaderboard.isFinished) {
+      const leaderPts = leaderboard.standings?.[0]?.[1]?.points ?? targetPoints;
+      const suggested = Math.max(targetPoints, leaderPts + 500);
+      const input = prompt(`Reativar torneio "pontos"? A meta (${targetPoints} pts) já foi atingida — defina a nova meta de pontos:`, suggested);
+      if (!input) return;
+      const parsed = parseInt(input, 10);
+      if (!Number.isFinite(parsed) || parsed <= leaderPts) return alert("A nova meta deve ser maior que a pontuação atual do líder.");
+      targetPoints = parsed;
+    } else if (t.format === 'rounds' && t.rounds.length >= maxRounds) {
+      const input = prompt(`Reativar torneio "rodadas"? O máximo (${maxRounds} rodadas) já foi atingido — defina o novo número máximo de rodadas:`, maxRounds + 1);
+      if (!input) return;
+      const parsed = parseInt(input, 10);
+      if (!Number.isFinite(parsed) || parsed <= maxRounds) return alert("O novo máximo deve ser maior que o atual.");
+      maxRounds = parsed;
+    }
+    const updated = tournaments.map(x => x.id === tID ? {
+      ...x, status: 'active', isGeneratingNext: false,
+      ...(t.format === 'points' ? { targetPoints } : {}),
+      ...(t.format === 'rounds' ? { maxRounds } : {})
+    } : x);
+    saveTournamentsToAPI(updated);
+  };
+
   const handleToggleTournamentVisibility = async (tID) => {
     const updated = tournaments.map(t => t.id === tID ? { ...t, private: !t.private } : t);
     saveTournamentsToAPI(updated);
@@ -1145,6 +1173,33 @@ const App = () => {
       if (!res.ok) return alert(data.error || 'Falha ao remover usuário.');
       refreshAdminUsers();
     } catch { alert("Erro ao remover usuário."); }
+  };
+
+  const handleAdminRenameUser = async (username) => {
+    const newName = prompt(`Renomear usuário "${username}" para:`);
+    if (!newName || !newName.trim()) return;
+    const trimmed = newName.trim();
+    if (trimmed.toLowerCase() === username.toLowerCase()) return alert("O nome já é esse.");
+    try {
+      const res = await fetch(`${API_ADDRESS}/api/admin/users/${encodeURIComponent(username)}/rename`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentUser?.token}` },
+        body: JSON.stringify({ newUsername: trimmed })
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || 'Falha ao renomear usuário.');
+      refreshAdminUsers();
+      if (currentUser?.username?.toLowerCase() === username.toLowerCase()) {
+        const saved = getSavedAuth();
+        const updatedAuth = { ...saved, username: trimmed };
+        localStorage.setItem(AUTH_KEY, JSON.stringify(updatedAuth));
+        setCurrentUser(updatedAuth);
+        alert(`Usuário renomeado para "${trimmed}". Recarregando para atualizar a sessão...`);
+        window.location.reload();
+      } else {
+        alert(`Usuário renomeado para "${trimmed}".`);
+      }
+    } catch { alert("Erro ao renomear usuário."); }
   };
 
   const RUNNER_RANKS = [
@@ -1322,6 +1377,8 @@ const App = () => {
                   setShowTrainBotPopup(true);
                 }} style={{ background: '#8a2be2', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}> Treinar</button>
                 <button onClick={async () => { if (!confirm(`Apagar bot "${bot.name}"?`)) return; await fetch(`${API_ADDRESS}/api/bots/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botName: bot.name }) }); setBotInfoList(prev => prev.filter(b => b.name !== bot.name)); setAvailableBots(prev => prev.filter(b => b !== bot.name)); }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Apagar</button>
+                <a href={`${API_ADDRESS}/api/bots/download/${encodeURIComponent(bot.name)}`} download style={{ background: '#4da6ff', color: 'white', textDecoration: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Baixar Pesos</a>
+                <a href={`${API_ADDRESS}/api/bots/download/${encodeURIComponent(bot.name)}?file=meta`} download style={{ background: '#4da6ff', color: 'white', textDecoration: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Baixar Meta</a>
               </div>
             </div>
           ))}
@@ -1356,6 +1413,9 @@ const App = () => {
                         </button>
                       )}
                       <button onClick={() => handleAdminResetPassword(u.username)} style={{ background: '#4da6ff', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Redefinir Senha</button>
+                      {u.envAdmin ? null : (
+                        <button onClick={() => handleAdminRenameUser(u.username)} style={{ background: '#b088f9', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Renomear</button>
+                      )}
                       {!isSelf && !u.envAdmin && (
                         <button onClick={() => handleAdminRemoveUser(u.username)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Remover</button>
                       )}
@@ -1422,6 +1482,7 @@ const App = () => {
               <strong style={{ color: '#888' }}>{t.name}</strong>
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 <button onClick={() => handleToggleTournamentVisibility(t.id)} title={t.private ? 'Privado — clique para tornar público' : 'Público — clique para tornar privado'} style={{ background: t.private ? '#8a2be2' : '#2a9d8f', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>{t.private ? '🔒 Privado' : '🔓 Público'}</button>
+                <button onClick={() => handleReactivateTournament(t.id)} style={{ background: '#50fa7b', color: '#000', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Reativar</button>
                 <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar</button>
               </div>
             </div>
