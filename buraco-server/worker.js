@@ -152,11 +152,11 @@ for (let i = 0; i < 52; i++) _baseDeck.push(i);
 for (let i = 0; i < 52; i++) _baseDeck.push(i);
 let _fixedDeck = null;
 
-async function processJob(matches, rules, netConfig) {
+async function processJob(matches, rules, netConfig, deck = null) {
     const results = [];
     if (netConfig) setActiveNetConfig(netConfig);
     for (const { dnaA, dnaB } of matches) {
-        const pairDeck = rules.fixedDeck ? _fixedDeck : shuffle([..._baseDeck]);
+        const pairDeck = deck ?? (rules.fixedDeck ? _fixedDeck : shuffle([..._baseDeck]));
 
         const gA = prepareGenome(dnaA instanceof SharedArrayBuffer ? new Float32Array(dnaA) : new Float32Array(dnaA), netConfig);
         const gB = prepareGenome(dnaB instanceof SharedArrayBuffer ? new Float32Array(dnaB) : new Float32Array(dnaB), netConfig);
@@ -179,7 +179,7 @@ async function processJob(matches, rules, netConfig) {
 if (workerData.matches.length === 0) {
     parentPort.on('message', async ({ type, matches, rules, deck, netConfig }) => {
         if (type === 'shuffleDeck') { _fixedDeck = deck; return; }
-        parentPort.postMessage(await processJob(matches, rules, netConfig));
+        parentPort.postMessage(await processJob(matches, rules, netConfig, deck));
     });
 } else {
     parentPort.postMessage(await processJob(workerData.matches, workerData.rules, workerData.netConfig));

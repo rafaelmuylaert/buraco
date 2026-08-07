@@ -377,7 +377,8 @@ function _buildCurrentFeatures(G, player, myTeam, oppTeam) {
         e(hs(player) / 22), e(hs((player + 1) % numP) / 22),
         e(hs((player + 2) % numP) / 22), e(hs((player + 3) % numP) / 22),
         e((G.deck?.length || 0) / 104), e((G.discardPile?.length || 0) / 104),
-        G.teamMortos?.[myTeam] ? 255 : 0, G.teamMortos?.[oppTeam] ? 255 : 0,
+        G.teamMortos?.[myTeam] ? 255 : 0, 
+        G.teamMortos?.[oppTeam] ? 255 : 0,
         e((G.pots?.length || 0) / 2),
         (G.cleanMelds?.[myTeam] || 0) > 0 ? 255 : 0,
         (G.cleanMelds?.[oppTeam] || 0) > 0 ? 255 : 0,
@@ -457,10 +458,10 @@ function _encodeSeqCandidateFloats(cand) {
     const em = cand.existingMeld;
     if (nm && nm.length === 16) {
         //for (let i = 0; i < 16; i++) f[1 + i] = (nm[i] > (em?.[i] || 0)) ? 1 : 0;
-        for (let i = 0; i < 16; i++) f[1 + i] = nm[i] ? 1 : 0;
+        for (let i = 0; i < 16; i++) f[1 + i] = nm[i];
     }
     if (em && em.length === 16) {
-        for (let i = 0; i < 16; i++) f[17 + i] = em[i] ? 1 : 0;
+        for (let i = 0; i < 16; i++) f[17 + i] = em[i];
         //f[31] = em[14] ? 1 : 0;
         //f[32] = em[15] ? 1 : 0;
     }
@@ -477,10 +478,10 @@ function _encodeRunCandidateFloats(cand) {
         //f[0] = Math.round(rm[0] / 13 * 255) / 255;
         f[0] = rm[0];
         //for (let i = 0; i < 4; i++) f[1 + i] = (rm[i + 1] > (er?.[i + 1] || 0)) ? 1 : 0;
-        for (let i = 0; i < 4; i++) f[1 + i] = rm[i + 1] ? 1 : 0;
+        for (let i = 0; i < 4; i++) f[1 + i] = rm[i + 1];
         if (er && er.length === 6) {
             //for (let i = 0; i < 4; i++) f[6 + i] = Math.round((er[i + 1] || 0) / 2 * 255) / 255;
-            for (let i = 0; i < 4; i++) f[6 + i] = er[i + 1] ? 1 : 0;
+            for (let i = 0; i < 4; i++) f[6 + i] = er[i + 1];
         }
     }
     return f;

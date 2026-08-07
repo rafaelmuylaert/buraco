@@ -181,7 +181,7 @@ class WorkerPool {
         return snap;
     }
 
-    run(matchPairs, rules, netConfig) {
+    run(matchPairs, rules, netConfig, deck = null) {
         if (matchPairs.length === 0) return Promise.resolve([]);
         return new Promise((resolve) => {
             const allResults = new Array(matchPairs.length);
@@ -192,7 +192,7 @@ class WorkerPool {
             const remaining = { count: chunks.length };
             const onDone = resolve;
             for (const { chunk, offset } of chunks)
-                this.queue.push({ matches: chunk, rules, netConfig, offset, allResults, remaining, onDone });
+                this.queue.push({ matches: chunk, rules, netConfig, deck, offset, allResults, remaining, onDone });
             this._dispatch();
         });
     }
@@ -203,7 +203,7 @@ class WorkerPool {
             const job = this.queue.shift();
             w.idle = false;
             w.currentJob = { ...job, size: job.matches.length };
-            w.postMessage({ matches: job.matches, rules: job.rules, netConfig: job.netConfig });
+            w.postMessage({ matches: job.matches, rules: job.rules, netConfig: job.netConfig, deck: job.deck });
         }
     }
 
@@ -220,8 +220,8 @@ function getPool() {
     return _pool;
 }
 
-function runMatchBatch(matchPairs, rules, netConfig) {
-    return getPool().run(matchPairs, rules, netConfig);
+function runMatchBatch(matchPairs, rules, netConfig, deck = null) {
+    return getPool().run(matchPairs, rules, netConfig, deck);
 }
 
 async function runPlayoffTournament(population, rules, netConfig) {
@@ -407,7 +407,8 @@ export const TrainerService = {
         const allDiffs = [];
         const finalistScores = new Array(finalists.length).fill(0);
         if (statPairs.length > 0) {
-            const results = await runMatchBatch(statPairs, rules, netConfig);
+            const rrDeck = shuffle([...baseDeck]);
+            const results = await runMatchBatch(statPairs, rules, netConfig, rrDeck);
             results.forEach(([sA, , rawA, rawB], idx) => {
                 const [i, j] = statMeta[idx];
                 allDiffs.push(rawA, rawB);
@@ -469,18 +470,38 @@ export const TrainerService = {
                     for (let j = i + 1; j < candidates.length; j++)
                         pairs.push({ i, j, dnaA: toBuffer(candidates[i].genome, netConfig), dnaB: toBuffer(candidates[j].genome, netConfig) });
 
-                const results = await runMatchBatch(pairs.map(p => ({ dnaA: p.dnaA, dnaB: p.dnaB })), rules, netConfig);
+                const rrDeck = shuffle([...baseDeck]);
+                const results = await runMatchBatch(pairs.map(p => ({ dnaA: p.dnaA, dnaB: p.dnaB })), rules, netConfig, rrDeck);
                 results.forEach(([sA], idx) => {
                     wins[pairs[idx].i] += sA;
                     wins[pairs[idx].j] -= sA;
                 });
 
                 const bestIdx = wins.indexOf(Math.max(...wins));
-                latestChampion = new Float32Array(candidates[bestIdx].genome);
+                const candidate = new Float32Array(candidates[bestIdx].genome);
 
-                fs.writeFileSync(path.join(BOTS_DIR, `${botName}.json`), JSON.stringify(Array.from(latestChampion)));
-                const currentLifetimeGen = lifetimeGenOffset + (activeTrainings.get(botName)?.currentGeneration || 0);
-                fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({ rules, netParams, lifetimeGenerations: currentLifetimeGen, trainParams: { populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, weightClip, greedyMode: params.greedyMode, telepathy: params.telepathy, fixedDeck: params.fixedDeck, scoreCardPoints: params.scoreCardPoints, scoreHandPenalty: params.scoreHandPenalty, dirtyCanastraBonus: params.dirtyCanastraBonus, cleanCanastraBonus: params.cleanCanastraBonus, mortoPenalty: params.mortoPenalty, endGameBonus: params.endGameBonus, cardPointValues: params.cardPointValues, meldSizeBonus: params.meldSizeBonus } }));
+                let champion = candidate;
+                let guardRejected = false;
+                const saved = TrainerService.getBotWeights(botName);
+                if (saved && saved.length === netConfig.TOTAL_DNA_SIZE) {
+                    try {
+                        const [[guardA]] = await runMatchBatch(
+                            [{ dnaA: toBuffer(candidate, netConfig), dnaB: toBuffer(new Float32Array(saved), netConfig) }],
+                            rules, netConfig
+                        );
+                        if (guardA < 0) {
+                            guardRejected = true;
+                            champion = new Float32Array(saved);
+                        }
+                    } catch (e) {}
+                }
+                latestChampion = champion;
+
+                if (!guardRejected) {
+                    fs.writeFileSync(path.join(BOTS_DIR, `${botName}.json`), JSON.stringify(Array.from(latestChampion)));
+                    const currentLifetimeGen = lifetimeGenOffset + (activeTrainings.get(botName)?.currentGeneration || 0);
+                    fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({ rules, netParams, lifetimeGenerations: currentLifetimeGen, trainParams: { populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, weightClip, greedyMode: params.greedyMode, telepathy: params.telepathy, fixedDeck: params.fixedDeck, scoreCardPoints: params.scoreCardPoints, scoreHandPenalty: params.scoreHandPenalty, dirtyCanastraBonus: params.dirtyCanastraBonus, cleanCanastraBonus: params.cleanCanastraBonus, mortoPenalty: params.mortoPenalty, endGameBonus: params.endGameBonus, cardPointValues: params.cardPointValues, meldSizeBonus: params.meldSizeBonus } }));
+                }
 
                 let benchmarkDiff = null;
                 if (originalDNA) {
@@ -502,7 +523,7 @@ export const TrainerService = {
                 const roundMs = Date.now() - roundStart;
                 const elapsedMs = Date.now() - lastBenchmarkTime;
                 lastBenchmarkTime = Date.now();
-                console.log(`[${botName}] 🏆 Champion: Island ${candidates[bestIdx].k} | Bench: ${benchmarkDiff ?? 'N/A'} | ⏱ ${fmt(elapsedMs)} since last | Tournament: ${fmt(tournamentMs)} | Round: ${fmt(roundMs)}`);
+                console.log(`[${botName}] 🏆 Champion: Island ${candidates[bestIdx].k}${guardRejected ? ' | ⛔ REJECTED (saved still leads)' : ''} | Bench: ${benchmarkDiff ?? 'N/A'} | ⏱ ${fmt(elapsedMs)} since last | Tournament: ${fmt(tournamentMs)} | Round: ${fmt(roundMs)}`);
                 roundStartTimes.delete(roundGen);
             } finally {
                 championTournamentRunning = false;
