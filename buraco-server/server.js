@@ -26,6 +26,17 @@ import { TrainerService } from './train.js';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import nodePersist from 'node-persist';
+
+// boardgame.io's FlatFile.connect() calls nodePersist.init() with only
+// {dir, logging, ttl} — no way to pass forgiveness through its constructor.
+// Patch the init to always tolerate corrupt storage files: a bad file then
+// resolves to {} instead of rejecting, so runtime corruption (e.g. a write
+// killed mid-flight) can never crash the server via unwrapped read paths.
+const _nodePersistInit = nodePersist.init.bind(nodePersist);
+nodePersist.init = async (userOptions = {}) => {
+    return _nodePersistInit({ ...userOptions, forgiveParseErrors: true });
+};
 
 const dbPath = path.join(process.cwd(), 'db');
 if (!fs.existsSync(dbPath)) fs.mkdirSync(dbPath);
@@ -43,7 +54,10 @@ try {
       try {
         const content = fs.readFileSync(fp, 'utf8');
         if (!content.trim()) throw new Error("Empty file");
-        JSON.parse(content); 
+        const parsed = JSON.parse(content);
+        // node-persist storage files must be {key, value, ttl} objects; anything
+        // else parses fine but makes node-persist reject on read.
+        if (!parsed || typeof parsed !== 'object' || parsed.key == null) throw new Error("Invalid storage shape");
       } catch (e) {
         fs.unlinkSync(fp); 
         deletedGhosts++;
