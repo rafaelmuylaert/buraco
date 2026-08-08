@@ -12,16 +12,20 @@
 //   TrainerService.getTrainingStatus(botName)             — Returns progress info
 //   runDebugMatch(dna, rules)                             — Runs a single debug match
 //   runMatchBatch(matchPairs, rules)                      — Dispatches matches to worker pool
-//   runPlayoffTournament(population, rules)               — Single-elimination bracket from population
+//   runIslandGeneration(population, weightClip)           — Two-stage round-robin island generation
+//   runBattleRoyale(roundGen)                             — Champion arena: RR of all island champions
 //   breedNodeLevel(parentA, parentB, scoreA, scoreB)      — Node-level crossover with weighted selection
 //   mutate(genome, rate, strength)                        — Gaussian random perturbation
 //   generateRandomGenome()                                — Xavier-initialized random weights
 //
 // Key architecture:
 //   - WorkerPool: Manages N worker threads (cpus()-1), dispatches match batches in chunks
-//   - Island evolution: Multiple independent populations evolve separately
-//   - Broadcast migration: Best of each island gets injected into other islands periodically
-//   - Champion tournament: Every N generations, all island elites compete head-to-head
+//   - Island evolution: Islands 1..N-1 evolve independently (two-stage round-robin per generation)
+//   - Champion arena (island 0): Idle between milestones; at each milestone it runs a battle royale
+//     of the champions published by all normal islands plus its own kept elite, under several deck
+//     shuffles. The winner is promoted to the official bot (monotonic: the saved champion is inside
+//     the round-robin). Island 0 runs the final battle royale when all islands finish.
+//   - Broadcast migration: Latest champion gets injected into other islands periodically
 //   - Benchmark: Best bot is always tested against original random DNA
 //
 // Key terms:
@@ -142,6 +146,25 @@ function shuffle(arr) {
     return arr;
 }
 
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+const nC2 = (n) => (n * (n - 1)) / 2;
+
+function genomesEqual(a, b) {
+    if (a === b) return true;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+}
+
+function dedupGenomes(arrays) {
+    const out = [];
+    for (const g of arrays) {
+        if (g && !out.some(e => genomesEqual(e, g))) out.push(g);
+    }
+    return out;
+}
+
 function toBuffer(genome, netConfig) {
     const totalSize = (netConfig || AI_CONFIG).TOTAL_DNA_SIZE;
     const buf = new SharedArrayBuffer(totalSize * 4);
@@ -222,33 +245,6 @@ function getPool() {
 
 function runMatchBatch(matchPairs, rules, netConfig, deck = null) {
     return getPool().run(matchPairs, rules, netConfig, deck);
-}
-
-async function runPlayoffTournament(population, rules, netConfig) {
-    let remaining = population.map((genome, i) => ({ genome, id: i }));
-    shuffle(remaining);
-    while (remaining.length & (remaining.length - 1)) remaining.push(null);
-
-    while (remaining.length > 4) {
-        const pairs = [];
-        const pairIndices = [];
-        for (let i = 0; i < remaining.length; i += 2) {
-            const a = remaining[i], b = remaining[i + 1];
-            if (!a || !b) { pairIndices.push({ a, b, bye: true }); continue; }
-            pairs.push({ dnaA: toBuffer(a.genome, netConfig), dnaB: toBuffer(b.genome, netConfig) });
-            pairIndices.push({ a, b, bye: false });
-        }
-
-        const scores = pairs.length > 0 ? await runMatchBatch(pairs, rules, netConfig) : [];
-        let scoreIdx = 0;
-        remaining = pairIndices.map(({ a, b, bye }) => {
-            if (bye) return a || b;
-            const [sA] = scores[scoreIdx++];
-            return sA >= 0 ? a : b;
-        });
-    }
-
-    return remaining.filter(Boolean).map(r => r.genome);
 }
 
 export async function runDebugMatch(dna, rules = {}, netConfig) {
@@ -337,6 +333,30 @@ export const TrainerService = {
         if (params.cardPointValues != null) rules = { ...rules, cardPointValues:     params.cardPointValues };
         if (params.meldSizeBonus   != null) rules = { ...rules, meldSizeBonus:       params.meldSizeBonus };
 
+        const NUM_ISLANDS = Math.max(2, cpus().length - 1);
+
+        // Island-evolution tuning (persisted to meta.json trainParams).
+        // Normal islands: RR#1 over the whole population on one shared shuffle ranks the field,
+        // the top ADVANCE advance, and RR#2 on a fresh shuffle picks the top NUM_CHAMPIONS.
+        const ADVANCE = Math.max(4, params.advanceCount || Math.floor(POPULATION_SIZE / 2));
+        const NUM_CHAMPIONS = Math.min(4, Math.max(2, params.numChampions || 4));
+        const BATTLE_ROYALE_SHUFFLES = Math.max(1, params.battleRoyaleShuffles || 3);
+
+        // Champion arena sizing: each normal island publishes its top `championsPerIsland` genomes
+        // at every milestone. Island 0's battle royale (candidates from all islands + its kept elite
+        // + the saved champion) is auto-sized so its per-milestone load lands just below a normal
+        // island's (SAVE_EVERY × (RR#1 + RR#2) matches).
+        const normalIslandMilestoneLoad = SAVE_EVERY * (nC2(POPULATION_SIZE) + nC2(ADVANCE));
+        const championIslandBudget = 0.95 * normalIslandMilestoneLoad;
+        let maxRoyaleCandidates = 2;
+        while (BATTLE_ROYALE_SHUFFLES * nC2(maxRoyaleCandidates + 1) <= championIslandBudget) maxRoyaleCandidates++;
+        const championsPerIsland = params.championsPerIsland != null
+            ? Math.max(1, params.championsPerIsland)
+            : Math.max(1, Math.min(
+                Math.ceil((maxRoyaleCandidates - (NUM_CHAMPIONS + 1)) / (NUM_ISLANDS - 1)),
+                ADVANCE
+            ));
+
         const seedDNA = TrainerService.getBotWeights(botName);
         const originalDNA = generateRandomGenome(netConfig);
 
@@ -371,8 +391,6 @@ export const TrainerService = {
             islands: []
         });
 
-        const NUM_ISLANDS = Math.max(2, cpus().length - 1);
-
         const baseDeck = [];
         for (let i = 0; i < 52; i++) baseDeck.push(i);
         for (let i = 0; i < 52; i++) baseDeck.push(i);
@@ -385,150 +403,217 @@ export const TrainerService = {
             );
         });
 
-        const islandElites = new Array(NUM_ISLANDS).fill(null);
-        const islandBroadcastGen = new Array(NUM_ISLANDS).fill(0);
+        // championPool[k] = top `championsPerIsland` genomes published by normal island k at its last milestone
+        const championPool = new Array(NUM_ISLANDS).fill(null);
+        const publishedGen = new Array(NUM_ISLANDS).fill(0);
+        const islandDone = new Array(NUM_ISLANDS).fill(false);
+        // Island 0 (arena) keeps its top-NUM_CHAMPIONS unmutated between battle royales
+        let keptArenaElites = [];
         const islandLastInjectedGen = new Array(NUM_ISLANDS).fill(0);
         let latestChampion = null;
-        let championTournamentRunning = false;
-        let lastChampionTournamentGen = 0;
         let lastBenchmarkTime = Date.now();
         const roundStartTimes = new Map();
 
         const fmt = ms => ms < 60000 ? `${(ms/1000).toFixed(1)}s` : `${Math.floor(ms/60000)}m${((ms%60000)/1000).toFixed(0)}s`;
 
+        // Two-stage round-robin island generation.
+        // RR#1: full round-robin on one shared deck shuffle ranks the whole population; the top
+        // ADVANCE advance. RR#2: those ADVANCE play a fresh-shuffle round-robin; the top
+        // NUM_CHAMPIONS become this island's champions for the next generation and the arena pool.
         const runIslandGeneration = async (pop, weightClip) => {
-        const finalists = await runPlayoffTournament(pop, rules, netConfig);
-        const statPairs = [], statMeta = [];
-        for (let i = 0; i < finalists.length; i++)
-            for (let j = i + 1; j < finalists.length; j++) {
-                statPairs.push({ dnaA: toBuffer(finalists[i], netConfig), dnaB: toBuffer(finalists[j], netConfig) });
-                statMeta.push([i, j]);
-            }
-        const allDiffs = [];
-        const finalistScores = new Array(finalists.length).fill(0);
-        if (statPairs.length > 0) {
-            const rrDeck = shuffle([...baseDeck]);
-            const results = await runMatchBatch(statPairs, rules, netConfig, rrDeck);
-            results.forEach(([sA, , rawA, rawB], idx) => {
-                const [i, j] = statMeta[idx];
-                allDiffs.push(rawA, rawB);
-                finalistScores[i] += sA;
-                finalistScores[j] -= sA;
-            });
-        } else { allDiffs.push(0); }
-
-        const rankedFinalists = finalists
-            .map((f, i) => ({ genome: f, score: finalistScores[i] }))
-            .sort((a, b) => b.score - a.score)
-            .map(x => x.genome);
-        const rankedScores = [...finalistScores].sort((a, b) => b - a);
-
-        // 1 clone of best
-        const nextPop = [new Float32Array(rankedFinalists[0])];
-
-        // mutate all finalists
-        for (const f of rankedFinalists) nextPop.push(mutate(f, 0.05, 0.1, weightClip));
-
-        // all pairwise crosses
-        const crosses = [];
-        for (let i = 0; i < rankedFinalists.length; i++)
-            for (let j = i + 1; j < rankedFinalists.length; j++)
-                crosses.push(breedNodeLevel(rankedFinalists[i], rankedFinalists[j], rankedScores[i], rankedScores[j], netConfig, weightClip));
-        for (const c of crosses) nextPop.push(c);
-
-        // hybrids of (best, each cross) until full
-        let ci = 0;
-        while (nextPop.length < pop.length) {
-            const cross = crosses[ci % crosses.length];
-            nextPop.push(breedNodeLevel(rankedFinalists[0], cross, rankedScores[0], rankedScores[0] * 0.5, netConfig, weightClip));
-            ci++;
-        }
-
-        return {
-            nextPop,
-            rankedFinalists,
-            bestDiff: Math.max(...allDiffs),
-            avgDiff: allDiffs.reduce((a, b) => a + b, 0) / allDiffs.length
-        };
-    };
-
-
-        const runChampionTournament = async (roundGen = 0) => {
-            if (championTournamentRunning) return;
-            championTournamentRunning = true;
-            const tournamentStart = Date.now();
-            const roundStart = roundStartTimes.get(roundGen) ?? tournamentStart;
-            try {
-                const candidates = islandElites
-                    .map((genome, k) => genome ? { k, genome } : null)
-                    .filter(Boolean);
-                if (candidates.length < 2) return;
-
-                const wins = new Array(candidates.length).fill(0);
-                const pairs = [];
-                for (let i = 0; i < candidates.length; i++)
-                    for (let j = i + 1; j < candidates.length; j++)
-                        pairs.push({ i, j, dnaA: toBuffer(candidates[i].genome, netConfig), dnaB: toBuffer(candidates[j].genome, netConfig) });
-
-                const rrDeck = shuffle([...baseDeck]);
-                const results = await runMatchBatch(pairs.map(p => ({ dnaA: p.dnaA, dnaB: p.dnaB })), rules, netConfig, rrDeck);
-                results.forEach(([sA], idx) => {
-                    wins[pairs[idx].i] += sA;
-                    wins[pairs[idx].j] -= sA;
+            const rr1Pairs = [], rr1Meta = [];
+            for (let i = 0; i < pop.length; i++)
+                for (let j = i + 1; j < pop.length; j++) {
+                    rr1Pairs.push({ dnaA: toBuffer(pop[i], netConfig), dnaB: toBuffer(pop[j], netConfig) });
+                    rr1Meta.push([i, j]);
+                }
+            const allDiffs = [];
+            const scores1 = new Array(pop.length).fill(0);
+            if (rr1Pairs.length > 0) {
+                const rr1Deck = shuffle([...baseDeck]);
+                const results1 = await runMatchBatch(rr1Pairs, rules, netConfig, rr1Deck);
+                results1.forEach(([sA, , rawA, rawB], idx) => {
+                    const [i, j] = rr1Meta[idx];
+                    allDiffs.push(rawA, rawB);
+                    scores1[i] += sA;
+                    scores1[j] -= sA;
                 });
+            } else { allDiffs.push(0); }
 
-                const bestIdx = wins.indexOf(Math.max(...wins));
-                const candidate = new Float32Array(candidates[bestIdx].genome);
+            const ranked1 = pop
+                .map((g, i) => ({ genome: g, score: scores1[i] }))
+                .sort((a, b) => b.score - a.score);
+            const advanced = ranked1.slice(0, ADVANCE);
 
-                let champion = candidate;
-                let guardRejected = false;
-                const saved = TrainerService.getBotWeights(botName);
-                if (saved && saved.length === netConfig.TOTAL_DNA_SIZE) {
-                    try {
-                        const [[guardA]] = await runMatchBatch(
-                            [{ dnaA: toBuffer(candidate, netConfig), dnaB: toBuffer(new Float32Array(saved), netConfig) }],
-                            rules, netConfig
-                        );
-                        if (guardA < 0) {
-                            guardRejected = true;
-                            champion = new Float32Array(saved);
-                        }
-                    } catch (e) {}
+            const rr2Pairs = [], rr2Meta = [];
+            for (let i = 0; i < advanced.length; i++)
+                for (let j = i + 1; j < advanced.length; j++) {
+                    rr2Pairs.push({ dnaA: toBuffer(advanced[i].genome, netConfig), dnaB: toBuffer(advanced[j].genome, netConfig) });
+                    rr2Meta.push([i, j]);
                 }
-                latestChampion = champion;
+            const scores2 = new Array(advanced.length).fill(0);
+            if (rr2Pairs.length > 0) {
+                const rr2Deck = shuffle([...baseDeck]);
+                const results2 = await runMatchBatch(rr2Pairs, rules, netConfig, rr2Deck);
+                results2.forEach(([sA], idx) => {
+                    const [i, j] = rr2Meta[idx];
+                    scores2[i] += sA;
+                    scores2[j] -= sA;
+                });
+            }
 
-                if (!guardRejected) {
-                    fs.writeFileSync(path.join(BOTS_DIR, `${botName}.json`), JSON.stringify(Array.from(latestChampion)));
-                    const currentLifetimeGen = lifetimeGenOffset + (activeTrainings.get(botName)?.currentGeneration || 0);
-                    fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({ rules, netParams, lifetimeGenerations: currentLifetimeGen, trainParams: { populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, weightClip, greedyMode: params.greedyMode, telepathy: params.telepathy, fixedDeck: params.fixedDeck, scoreCardPoints: params.scoreCardPoints, scoreHandPenalty: params.scoreHandPenalty, dirtyCanastraBonus: params.dirtyCanastraBonus, cleanCanastraBonus: params.cleanCanastraBonus, mortoPenalty: params.mortoPenalty, endGameBonus: params.endGameBonus, cardPointValues: params.cardPointValues, meldSizeBonus: params.meldSizeBonus } }));
+            const ranked2 = advanced
+                .map((x, i) => ({ genome: x.genome, score: scores2[i] }))
+                .sort((a, b) => b.score - a.score);
+            const champs = ranked2.slice(0, NUM_CHAMPIONS);
+
+            // next population: NUM_CHAMPIONS unmutated clones + fillers cycling the pairwise crosses
+            // of the champions, then single-parent mutations of each champion until full.
+            const nextPop = champs.map(c => new Float32Array(c.genome));
+            const pairCrosses = [];
+            for (let i = 0; i < champs.length; i++)
+                for (let j = i + 1; j < champs.length; j++)
+                    pairCrosses.push(breedNodeLevel(champs[i].genome, champs[j].genome, champs[i].score, champs[j].score, netConfig, weightClip));
+            const numCrosses = Math.round((pop.length - champs.length) * 0.6);
+            let ci = 0;
+            while (pairCrosses.length > 0 && nextPop.length < champs.length + numCrosses) {
+                nextPop.push(new Float32Array(pairCrosses[ci % pairCrosses.length]));
+                ci++;
+            }
+            let mi = 0;
+            while (nextPop.length < pop.length) {
+                nextPop.push(mutate(champs[mi % champs.length].genome, 0.05, 0.1, weightClip));
+                mi++;
+            }
+
+            return {
+                nextPop,
+                ranked2,
+                bestDiff: allDiffs.length > 0 ? Math.max(...allDiffs) : 0,
+                avgDiff: allDiffs.reduce((a, b) => a + b, 0) / (allDiffs.length || 1)
+            };
+        };
+
+        const writeChampionMeta = (champion) => {
+            const currentLifetimeGen = lifetimeGenOffset + (activeTrainings.get(botName)?.currentGeneration || 0);
+            fs.writeFileSync(path.join(BOTS_DIR, `${botName}.meta.json`), JSON.stringify({
+                rules, netParams, lifetimeGenerations: currentLifetimeGen,
+                trainParams: {
+                    populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, weightClip,
+                    advanceCount: ADVANCE, numChampions: NUM_CHAMPIONS, battleRoyaleShuffles: BATTLE_ROYALE_SHUFFLES, championsPerIsland,
+                    greedyMode: params.greedyMode, telepathy: params.telepathy, fixedDeck: params.fixedDeck,
+                    scoreCardPoints: params.scoreCardPoints, scoreHandPenalty: params.scoreHandPenalty,
+                    dirtyCanastraBonus: params.dirtyCanastraBonus, cleanCanastraBonus: params.cleanCanastraBonus,
+                    mortoPenalty: params.mortoPenalty, endGameBonus: params.endGameBonus,
+                    cardPointValues: params.cardPointValues, meldSizeBonus: params.meldSizeBonus
+                }
+            }));
+        };
+
+        // Champion arena battle royale: all published champions from normal islands ∪ kept arena
+        // elites ∪ the saved champion (deduped), played as a round-robin under BATTLE_ROYALE_SHUFFLES
+        // fresh deck shuffles, scores summed. The winner is promoted (monotonic by construction — the
+        // saved champion is inside the round-robin). Returns the new kept arena elite (top-NUM_CHAMPIONS).
+        const runBattleRoyale = async (roundGen = 0) => {
+            const royaleStart = Date.now();
+            const roundStart = roundStartTimes.get(roundGen) ?? royaleStart;
+            let kept = keptArenaElites;
+
+            const collected = [];
+            for (let k = 1; k < NUM_ISLANDS; k++)
+                if (championPool[k]) collected.push(...championPool[k]);
+            const saved = TrainerService.getBotWeights(botName);
+            const savedGenome = (saved && saved.length === netConfig.TOTAL_DNA_SIZE)
+                ? new Float32Array(saved) : null;
+            const candidates = dedupGenomes([...keptArenaElites, ...(savedGenome ? [savedGenome] : []), ...collected]);
+            if (candidates.length === 0) return kept;
+
+            if (candidates.length === 1) {
+                latestChampion = new Float32Array(candidates[0]);
+                kept = [new Float32Array(candidates[0])];
+            } else {
+                const wins = new Array(candidates.length).fill(0);
+                for (let s = 0; s < BATTLE_ROYALE_SHUFFLES; s++) {
+                    const rrDeck = shuffle([...baseDeck]);
+                    const pairs = [];
+                    for (let i = 0; i < candidates.length; i++)
+                        for (let j = i + 1; j < candidates.length; j++)
+                            pairs.push({ i, j, dnaA: toBuffer(candidates[i], netConfig), dnaB: toBuffer(candidates[j], netConfig) });
+                    const results = await runMatchBatch(pairs, rules, netConfig, rrDeck);
+                    results.forEach(([sA], idx) => {
+                        wins[pairs[idx].i] += sA;
+                        wins[pairs[idx].j] -= sA;
+                    });
                 }
 
-                let benchmarkDiff = null;
-                if (originalDNA) {
-                    try {
-                        const benchDeck = [...baseDeck];
-                        shuffle(benchDeck);
-                        getPool().broadcastDeck(benchDeck);
-                        const [[benchScore]] = await runMatchBatch(
-                            [{ dnaA: toBuffer(latestChampion, netConfig), dnaB: toBuffer(originalDNA, netConfig) }],
-                            { ...rules, fixedDeck: true }, netConfig
-                        );
-                        benchmarkDiff = benchScore;
-                    } catch (e) {}
-                }
-                const prev = activeTrainings.get(botName);
-                if (prev) activeTrainings.set(botName, { ...prev, benchmarkDiff });
+                const ranked = candidates
+                    .map((g, i) => ({ genome: g, score: wins[i] }))
+                    .sort((a, b) => b.score - a.score);
+                latestChampion = new Float32Array(ranked[0].genome);
+                kept = ranked.slice(0, NUM_CHAMPIONS).map(r => new Float32Array(r.genome));
+            }
 
-                const tournamentMs = Date.now() - tournamentStart;
-                const roundMs = Date.now() - roundStart;
-                const elapsedMs = Date.now() - lastBenchmarkTime;
-                lastBenchmarkTime = Date.now();
-                console.log(`[${botName}] 🏆 Champion: Island ${candidates[bestIdx].k}${guardRejected ? ' | ⛔ REJECTED (saved still leads)' : ''} | Bench: ${benchmarkDiff ?? 'N/A'} | ⏱ ${fmt(elapsedMs)} since last | Tournament: ${fmt(tournamentMs)} | Round: ${fmt(roundMs)}`);
-                roundStartTimes.delete(roundGen);
+            fs.writeFileSync(path.join(BOTS_DIR, `${botName}.json`), JSON.stringify(Array.from(latestChampion)));
+            writeChampionMeta(latestChampion);
+
+            let benchmarkDiff = null;
+            if (originalDNA) {
+                try {
+                    const benchDeck = [...baseDeck];
+                    shuffle(benchDeck);
+                    getPool().broadcastDeck(benchDeck);
+                    const [[benchScore]] = await runMatchBatch(
+                        [{ dnaA: toBuffer(latestChampion, netConfig), dnaB: toBuffer(originalDNA, netConfig) }],
+                        { ...rules, fixedDeck: true }, netConfig
+                    );
+                    benchmarkDiff = benchScore;
+                } catch (e) {}
+            }
+            const prev = activeTrainings.get(botName);
+            if (prev) activeTrainings.set(botName, { ...prev, benchmarkDiff });
+
+            const royaleMs = Date.now() - royaleStart;
+            const roundMs = Date.now() - roundStart;
+            const elapsedMs = Date.now() - lastBenchmarkTime;
+            lastBenchmarkTime = Date.now();
+            console.log(`[${botName}] 🏆 Battle Royale (round ${roundGen}): ${candidates.length} candidates | Champion promoted | Bench: ${benchmarkDiff ?? 'N/A'} | ⏱ ${fmt(elapsedMs)} since last | Royale: ${fmt(royaleMs)} | Round: ${fmt(roundMs)}`);
+            roundStartTimes.delete(roundGen);
+            return kept;
+        };
+
+        // Island 0 = champion arena. Idle between milestones; once every normal island has published
+        // at a milestone, run a battle royale. Runs the final battle royale when all islands finish.
+        const runChampionIsland = async () => {
+            try {
+                const milestones = [];
+                for (let m = SAVE_EVERY; m < GENERATIONS; m += SAVE_EVERY) milestones.push(m);
+                if (GENERATIONS % SAVE_EVERY !== 0) milestones.push(GENERATIONS);
+                if (milestones.length === 0) milestones.push(GENERATIONS);
+
+                let mi = 0;
+                while (!stopFlags.has(botName)) {
+                    const allDone = islandDone.slice(1).every(d => d);
+                    if (mi < milestones.length && publishedGen.slice(1).every(g => g >= milestones[mi])) {
+                        keptArenaElites = await runBattleRoyale(milestones[mi]);
+                        mi++;
+                        continue;
+                    }
+                    if (allDone) break;
+                    await sleep(1000);
+                }
+                // Final battle royale if some milestones never fired (early stop / island errors).
+                if (!stopFlags.has(botName) && mi < milestones.length) {
+                    keptArenaElites = await runBattleRoyale(milestones[mi]);
+                }
+            } catch (err) {
+                islandErrors.push(err);
+                console.error(`[TRAINER] Champion island error:`, err);
             } finally {
-                championTournamentRunning = false;
+                completedIslands++;
+                islandDone[0] = true;
             }
         };
+
 
         let completedIslands = 0;
         const islandErrors = [];
@@ -547,12 +632,15 @@ export const TrainerService = {
                             islandLastInjectedGen[islandIdx] = gen;
                         }
 
-                        islandElites[islandIdx] = result.rankedFinalists[0];
-                        islandBroadcastGen[islandIdx] = gen;
+                        // publish this island's top champions to the arena pool
+                        championPool[islandIdx] = result.ranked2
+                            .slice(0, championsPerIsland)
+                            .map(x => new Float32Array(x.genome));
+                        publishedGen[islandIdx] = gen;
 
                         fs.writeFileSync(
                             path.join(BOTS_DIR, `${botName}_${islandIdx}.json`),
-                            JSON.stringify(Array.from(result.rankedFinalists[0]))
+                            JSON.stringify(Array.from(result.ranked2[0].genome))
                         );
 
                         const prevProgress = activeTrainings.get(botName);
@@ -570,14 +658,6 @@ export const TrainerService = {
                         const t = getPool().getAndResetTimings();
                         const mspt = t.planTurnCalls > 0 ? (t.planTurn / t.planTurnCalls).toFixed(2) : '?';
                         //console.log(`[${botName}] [TIMING/${SAVE_EVERY}gens] planTurn=${(t.planTurn||0).toFixed(0)}ms (${mspt}ms/turn) turns=${t.planTurnCalls||0}`);
-
-                        const minBroadcastGen = Math.min(...islandBroadcastGen);
-                        const roundGen = Math.floor(minBroadcastGen / SAVE_EVERY) * SAVE_EVERY;
-                        if (!roundStartTimes.has(roundGen)) roundStartTimes.set(roundGen, Date.now());
-                        if (roundGen > lastChampionTournamentGen && islandElites.every(e => e !== null)) {
-                            lastChampionTournamentGen = roundGen;
-                            runChampionTournament(roundGen);
-                        }
                     }
                 }
             } catch (err) {
@@ -585,12 +665,15 @@ export const TrainerService = {
                 console.error(`[TRAINER] Island ${islandIdx} error:`, err);
             } finally {
                 completedIslands++;
+                islandDone[islandIdx] = true;
             }
         };
 
         try {
-            await Promise.allSettled(Array.from({ length: NUM_ISLANDS }, (_, k) => runIsland(k)));
-            if (islandElites.some(e => e !== null)) await runChampionTournament(lastChampionTournamentGen + SAVE_EVERY);
+            await Promise.allSettled([
+                runChampionIsland(),
+                ...Array.from({ length: NUM_ISLANDS - 1 }, (_, k) => runIsland(k + 1))
+            ]);
             if (islandErrors.length) console.error(`[TRAINER] ${islandErrors.length} island(s) failed for ${botName}`);
         } catch (error) {
             console.error(`[TRAINER] Error for ${botName}:`, error);
