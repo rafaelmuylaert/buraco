@@ -745,17 +745,16 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
             const occupied = !!md?.name;
             const name = md?.name || G.rules?.assignments?.[p] || `P${p}`;
             const isBot = String(name || '').toLowerCase().includes('bot');
-            const disconnected = occupied && !isBot && md?.isConnected === false;
             const showActions = occupied && !isMe && !!apiAddress;
             const showRename = isMe && !isTournament && !!apiAddress;
             return (
               <div key={p} style={{ 
                 fontSize: '0.70em', display: 'flex', flexDirection: 'column',
-                color: isTurn ? '#ffd700' : (isMe ? '#4da6ff' : '#888'), 
-                fontWeight: (isTurn || isMe) ? 'bold' : 'normal', 
+                color: isTurn ? '#ffd700' : '#888', 
+                fontWeight: isTurn ? 'bold' : 'normal', 
                 marginBottom: '2px',
-                background: isMe ? 'rgba(77, 166, 255, 0.2)' : (disconnected ? 'rgba(255, 107, 107, 0.15)' : 'transparent'),
-                border: isMe ? '1px solid #4da6ff' : (disconnected ? '1px solid rgba(255, 107, 107, 0.6)' : '1px solid transparent'),
+                background: isTurn ? 'rgba(77, 166, 255, 0.2)' : 'transparent',
+                border: isTurn ? '1px solid #4da6ff' : '1px solid transparent',
                 padding: '3px 4px', borderRadius: '4px',
                 overflow: 'hidden', minWidth: 0
               }}>
@@ -764,7 +763,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                     onClick={showActions ? () => setRemovePopup({ seatID: p, seatName: name }) : (showRename ? () => setRenamePopup({ seatID: p, seatName: name }) : undefined)}
                     title={showActions ? `Clique para gerenciar o assento de ${name}` : (showRename ? 'Clique para renomear sua mesa' : undefined)}
                     style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0, cursor: (showActions || showRename) ? 'pointer' : 'default', color: showActions ? '#ff9900' : undefined, textDecoration: showActions ? 'underline' : 'none' }}
-                  >{isBot ? '🤖' : '👤'} {isTurn ? '» ' : ''}{name}{disconnected ? ' 🔴' : (occupied && !isBot ? ' 🟢' : '')}</span>
+                  >{isBot ? '🤖' : '👤'} {isTurn ? '» ' : ''}{name}</span>
                   <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.handSizes[p] ?? 0}</span>
                 </div>
               </div>

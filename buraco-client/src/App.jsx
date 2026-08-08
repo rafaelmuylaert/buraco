@@ -763,13 +763,26 @@ const App = () => {
     }
   };
 
-  const handleReconnect = (mID, pID) => {
+  const handleReconnect = async (mID, pID) => {
     const sessions = getSavedSessions();
     const session = sessions[`${mID}_${pID}`];
-    if (session) {
-      setMatchID(session.matchID); setPlayerID(session.playerID); setCredentials(session.credentials);
-      setView('game');
+    if (!session) return;
+    // Probe the current seat state: if a live human took over the seat while the
+    // owner was away, the saved credentials no longer work — warn instead of
+    // leaving the board stuck on "Carregando Mesa...".
+    try {
+      const { matches } = await lobbyClient.listMatches('buraco');
+      const match = matches.find(x => String(x.matchID) === String(mID));
+      const seat = match?.players?.find(x => String(x.id) === String(pID));
+      if (seat && seat.name && seat.isConnected === true) {
+        alert(`Seu assento na mesa foi ocupado por ${seat.name}. Escolha outro assento ou crie uma nova mesa.`);
+        return;
+      }
+    } catch (e) {
+      console.error("Falha ao verificar o assento.", e);
     }
+    setMatchID(session.matchID); setPlayerID(session.playerID); setCredentials(session.credentials);
+    setView('game');
   };
 
   const handleCreateTournament = async () => {
@@ -1992,7 +2005,8 @@ const App = () => {
                             const seatName = assignedName || `Assento ${p.id}`;
                             const sessionKey = `${m.matchID}_${p.id}`;
                             const hasLocalCredentials = !!savedSessions[sessionKey];
-                            const isOccupiedByOther = !!p.name && !hasLocalCredentials;
+                            const isTakeover = p.data?.seatStatus === 'available_for_takeover';
+                            const isOccupiedByOther = !!p.name && !isTakeover && !hasLocalCredentials;
                             const seatReservedFor = m.setupData?.isTournament === true && assignedName && isRegisteredName(assignedName) ? assignedName : null;
                             const isOwner = seatReservedFor && currentUser && String(seatReservedFor).toLowerCase() === currentUser.username.toLowerCase();
 

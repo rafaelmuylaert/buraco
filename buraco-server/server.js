@@ -1228,11 +1228,14 @@ setInterval(async () => {
 }, 5000);
 
 // ── LIFECHECK ─────────────────────────────────────────────────────────────
-// Frees the seat of any human player whose connection has been down for more
-// than LIFECHECK_GRACE_SECS (default 10s). The seat is NOT auto-converted to a
-// bot: another human can re-seat from the lobby, or a player already in the
-// game can replace them with a bot via the seat popup. Applies to quick games
-// AND tournaments. Still-connected humans are never touched here.
+// Marks the seat of any human player whose connection has been down for more
+// than LIFECHECK_GRACE_SECS (default 10s) as "available for takeover": the
+// seat keeps its name and credentials so the original player's session can
+// reclaim it automatically on reconnect, while data.seatStatus tells the UI
+// (and any other player) the seat is open to be taken over. The seat is NOT
+// auto-converted to a bot: another human can sit from the lobby, or a player
+// already in the game can replace them with a bot via the seat popup. Applies
+// to quick games AND tournaments. Still-connected humans are never touched here.
 const LIFECHECK_GRACE_MS = (Number(process.env.LIFECHECK_GRACE_SECS) || 10) * 1000;
 const lifecheckSince = new Map();
 
@@ -1281,13 +1284,31 @@ setInterval(async () => {
         if (assigned.toLowerCase().includes('bot')) { lifecheckSince.delete(key); continue; }
         const seat = metadata.players[p];
         if (!seat?.name) { lifecheckSince.delete(key); continue; }
-        if (seat.isConnected === true) { lifecheckSince.delete(key); continue; }
+        if (seat.isConnected === true) {
+          // The owner (or a new claimant) is back online — drop the takeover flag.
+          if (seat.data?.seatStatus === 'available_for_takeover') {
+            const data = { ...seat.data };
+            delete data.seatStatus;
+            seat.data = Object.keys(data).length > 0 ? data : undefined;
+            await gameDB.setMetadata(matchID, metadata);
+          }
+          lifecheckSince.delete(key);
+          continue;
+        }
         const since = lifecheckSince.get(key) ?? Date.now();
         if (Date.now() - since >= LIFECHECK_GRACE_MS) {
-          metadata.players[p] = { id: Number(p) };
+          // Keep name + credentials so the owner's saved session can reclaim the
+          // seat automatically on re-sync; data.seatStatus flags it as up for grabs.
+          metadata.players[p] = {
+            id: Number(p),
+            name: seat?.name || assigned,
+            credentials: seat?.credentials,
+            isConnected: false,
+            data: { ...(seat?.data || {}), seatStatus: 'available_for_takeover' }
+          };
           await gameDB.setMetadata(matchID, metadata);
           lifecheckSince.delete(key);
-          console.log(`[LIFECHECK] Freed disconnected seat ${p} in match ${matchID} (${assigned}).`);
+          console.log(`[LIFECHECK] Seat ${p} in match ${matchID} is now available for takeover (${assigned}).`);
         } else {
           lifecheckSince.set(key, since);
         }
