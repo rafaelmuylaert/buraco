@@ -94,6 +94,44 @@ function safeDBMethod(target, fn) {
   };
 }
 
+// Remove every on-disk file belonging to a match (state/initial/log/metadata).
+// Used when a match's files are unreadable/missing so orphans don't keep being
+// listed as ghosts or crash boardgame.io's lobby routes.
+function sweepGhostFiles(matchID) {
+  const suffixes = ['', ':initial', ':log', ':metadata'];
+  for (const suffix of suffixes) {
+    try {
+      const fp = path.join(gamesPath, matchID + suffix);
+      if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    } catch (_) {}
+  }
+}
+
+// A "safe" fetch that never hands boardgame.io a `metadata: undefined` shape.
+// The lobby route does `metadata.unlisted` on the fetch result, and the
+// single-match/join routes read `metadata.players` — both crash on undefined.
+// A match's metadata can transiently read as missing when the auto-history job
+// (or admin delete / leave-last-seat) wipes it between `listMatches` and the
+// route's own `fetch` (TOCTOU), or when a write is killed mid-flight. We retry
+// briefly to ride out an in-flight write, then sweep the ghost and return a
+// benign placeholder so boardgame.io treats the match as unlisted instead of
+// throwing `Cannot read properties of undefined (reading 'unlisted')`.
+async function safeFetch(target, fn, args) {
+  const run = () => fn.apply(target, args);
+  const opts = args[1] || {};
+  let result = await run();
+  if (!opts.metadata || (result && result.metadata != null)) return result;
+  for (let i = 0; i < 3; i++) {
+    await new Promise(r => setTimeout(r, 10));
+    result = await run();
+    if (result && result.metadata != null) return result;
+  }
+  const matchID = args[0];
+  console.warn(`[DB] Match ${matchID} metadata unreadable — sweeping ghost files`);
+  sweepGhostFiles(matchID);
+  return { metadata: { gameName: BuracoGame.name, players: {}, unlisted: true } };
+}
+
 const gameDB = new Proxy(_rawDB, {
   get(target, prop) {
     const val = target[prop];
@@ -103,15 +141,31 @@ const gameDB = new Proxy(_rawDB, {
         try {
           const result = await val.apply(target, args);
           // Filter out any undefined/null entries that cause endsWith crash
-          if (Array.isArray(result)) return result.filter(Boolean);
-          return result;
+          const ids = Array.isArray(result) ? result.filter(Boolean) : [];
+          // A match can be wiped between listMatches and the route's own fetch;
+          // re-verify each ID's metadata so ghosts never make it into the lobby
+          // listing (or crash `metadata.unlisted` downstream).
+          const verified = [];
+          for (const matchID of ids) {
+            try {
+              const data = await target.fetch(matchID, { metadata: true });
+              if (data && data.metadata != null) verified.push(matchID);
+              else sweepGhostFiles(matchID);
+            } catch (e) {
+              console.warn(`[DB] listMatches fetch failed for ${matchID}: ${e.message}`);
+            }
+          }
+          return verified;
         } catch (e) {
           console.warn('[DB] listMatches error, returning empty:', e.message);
           return [];
         }
       };
     }
-    if (['fetch', 'setState', 'setMetadata', 'setInitialState'].includes(prop))
+    if (prop === 'fetch') {
+      return async (...args) => safeFetch(target, val, args);
+    }
+    if (['setState', 'setMetadata', 'setInitialState'].includes(prop))
       return safeDBMethod(target, val);
     return val.bind(target);
   }
