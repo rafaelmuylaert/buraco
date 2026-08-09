@@ -53,7 +53,7 @@ function lookup(messages, key) {
 
 function interpolate(str, params) {
   if (!str || !params) return str || '';
-  return str.replace(/\{\{(\w+)\}\}/g, (m, name) => {
+  return str.replace(/\{(\w+)\}/g, (m, name) => {
     const v = params[name];
     return v === undefined || v === null ? m : String(v);
   });
