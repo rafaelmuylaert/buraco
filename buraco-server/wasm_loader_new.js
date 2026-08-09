@@ -569,7 +569,7 @@ export async function runTurn(S, playerID, iface) {
         for (const m of moves) {
             if (m.phase !== 0 || S.hasDrawn) continue;
             if (!stillMyTurn()) break;
-            _executeTurnMove(m, iface, null);
+            await _executeTurnMove(m, iface, null);
             iface.refreshState(S);
         }
         if (!S.hasDrawn && stillMyTurn()) {
@@ -584,7 +584,7 @@ export async function runTurn(S, playerID, iface) {
     for (const m of meldMoves) {
         if (m.score < 0) continue;
         if (!stillMyTurn()) break;
-        _executeTurnMove(m, iface, null);
+        await _executeTurnMove(m, iface, null);
         iface.refreshState(S);
     }
 
@@ -594,7 +594,7 @@ export async function runTurn(S, playerID, iface) {
     const discardMoves = buildDiscardMoveList(S, playerID) || [];
     for (const m of discardMoves) {
         if (!stillMyTurn()) break;
-        const ok = _executeTurnMove(m, iface, null);
+        const ok = await _executeTurnMove(m, iface, null);
         iface.refreshState(S);
         if (ok) break;
     }
@@ -673,27 +673,29 @@ export function buildDiscardMoveList(G, player) {
 
 // Executes a single turn move. Returns whether the underlying move was accepted (true) or
 // rejected (false). An iface callback that returns undefined is treated as "assumed accepted".
-export function _executeTurnMove(m, iface, log) {
+// iface callbacks may be synchronous (training worker) or async (live bot awaiting server
+// confirmation), so each is awaited.
+export async function _executeTurnMove(m, iface, log) {
     const ok = (r) => r === undefined ? true : !!r;
     if (!m) return false;
     if (m.phase === 0) {
-        if (m.moveType === 'declareExhausted') { log?.('declareExhausted'); return ok(iface.exhaust()); }
-        else if (m.moveType === 'drawCard') { log?.(`drawCard${m._fallback ? ' [fallback]' : ''}`); return ok(iface.draw()); }
-        else if (m.moveType === 'pickUpDiscard') { log?.(`pickUpDiscard ${JSON.stringify(m.cardCounts)}`); return ok(iface.pickup(m.cardCounts, m.pickupTarget || { type: 'new' })); }
+        if (m.moveType === 'declareExhausted') { log?.('declareExhausted'); return ok(await iface.exhaust()); }
+        else if (m.moveType === 'drawCard') { log?.(`drawCard${m._fallback ? ' [fallback]' : ''}`); return ok(await iface.draw()); }
+        else if (m.moveType === 'pickUpDiscard') { log?.(`pickUpDiscard ${JSON.stringify(m.cardCounts)}`); return ok(await iface.pickup(m.cardCounts, m.pickupTarget || { type: 'new' })); }
     }
     if (m.phase === 1) {
-        if (m.moveType === 'playMeld' || m.moveType === 'playRunner') { log?.(`${m.moveType} ${JSON.stringify(m.cardCounts)}`); return ok(iface.meld(m.cardCounts)); }
+        if (m.moveType === 'playMeld' || m.moveType === 'playRunner') { log?.(`${m.moveType} ${JSON.stringify(m.cardCounts)}`); return ok(await iface.meld(m.cardCounts)); }
         else if (m.moveType === 'appendToMeld' || m.moveType === 'appendRunner') {
             const tgt = m.moveType === 'appendToMeld'
                 ? { type: 'seq', suit: m.targetSuit, index: m.targetSlot }
                 : { type: 'runner', index: m.targetSlot };
             log?.(`${m.moveType} ${tgt.type}[${tgt.suit || ''}${tgt.index}] ${JSON.stringify(m.cardCounts)}`);
-            return ok(iface.append(tgt, m.cardCounts));
+            return ok(await iface.append(tgt, m.cardCounts));
         }
     }
     if (m.phase === 2) {
         log?.(`discardCard(${m.discardCard})${m._fallback ? ' [fallback]' : ''}`);
-        return ok(iface.discard(m.discardCard));
+        return ok(await iface.discard(m.discardCard));
     }
     return false;
 }

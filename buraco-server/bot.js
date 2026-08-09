@@ -93,11 +93,31 @@ const meldToStr = (meld, suit) => {
 };
 
 function makeIface(client, botName, playerID) {
-  // boardgame.io's client.moves dispatchers return undefined; the reducer applies moves
-  // optimistically, so client.getState() right after dispatch tells us whether it applied.
-  const stateOk = (pred) => {
-    const G = client.getState()?.G;
-    return G === undefined ? true : !!pred(G);
+  // boardgame.io's client applies moves OPTIMISTICALLY (its local _stateID advances ahead of
+  // the server) but the server silently rejects stale/inactive moves WITHOUT replying. The
+  // client then drops server broadcasts whose _stateID is below its optimistic one, so the
+  // bot's local state can race ahead of the server and keep issuing moves that get rejected
+  // ("player not active" / "game over" spam). To act only on server-confirmed truth we
+  // dispatch ONE move at a time and await a fresh server sync before evaluating the result.
+  const syncWaiters = [];
+  client.transport.socket.on('sync', () => {
+    const w = syncWaiters.shift();
+    if (w) w();
+  });
+  const waitForServer = () => new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      const i = syncWaiters.indexOf(resolve);
+      if (i >= 0) syncWaiters.splice(i, 1);
+      resolve();
+    }, 4000);
+    syncWaiters.push(() => { clearTimeout(timer); resolve(); });
+    client.transport.requestSync();
+  });
+  const runMove = async (apply, check) => {
+    apply();
+    await waitForServer();
+    const st = client.getState();
+    return st === null || st === undefined ? true : !!check(st);
   };
   return {
     getStateId: () => client.getState()?._stateID ?? 0,
@@ -109,21 +129,19 @@ function makeIface(client, botName, playerID) {
     isMyTurn: () => client.getState()?.ctx?.currentPlayer === playerID,
     draw:     () => {
         console.log(`[BOT] ${botName} => drawCard`);
-        const before = client.getState()?.G?.hasDrawn ?? false;
-        client.moves.drawCard();
-        return stateOk(G => before === false && G.hasDrawn === true);
+        return runMove(() => client.moves.drawCard(),
+            (st) => st.ctx.currentPlayer === playerID && st.G.hasDrawn === true);
     },
     pickup:   (cc, tgt) => {
         console.log(`[BOT] ${botName} => pickUpDiscard cc=${ccStr(cc)} tgt=${JSON.stringify(tgt)}`);
-        const before = client.getState()?.G?.hasDrawn ?? false;
-        client.moves.pickUpDiscard(cc, tgt);
-        return stateOk(G => before === false && G.hasDrawn === true);
+        return runMove(() => client.moves.pickUpDiscard(cc, tgt),
+            (st) => st.ctx.currentPlayer === playerID && st.G.hasDrawn === true);
     },
     meld:     (cc) => {
         console.log(`[BOT] ${botName} => playMeld cc=${ccStr(cc)}`);
-        const before = client.getState()?.G?.handSizes?.[playerID];
-        client.moves.playMeld(cc);
-        return stateOk(G => (G.handSizes?.[playerID] ?? 0) < (before ?? Infinity));
+        const before = client.getState()?.G?.handSizes?.[playerID] ?? Infinity;
+        return runMove(() => client.moves.playMeld(cc),
+            (st) => (st.G.handSizes?.[playerID] ?? Infinity) < before);
     },
     append:   (tgt, cc) => {
         const st = client.getState();
@@ -140,25 +158,23 @@ function makeIface(client, botName, playerID) {
             }
         }
         console.log(`[BOT] ${botName} => appendToMeld target=[${existingStr}] cc=${ccStr(cc)}`);
-        const before = G2?.handSizes?.[playerID];
-        client.moves.appendToMeld(tgt, cc);
-        return stateOk(G => (G.handSizes?.[playerID] ?? 0) < (before ?? Infinity));
+        const before = G2?.handSizes?.[playerID] ?? Infinity;
+        return runMove(() => client.moves.appendToMeld(tgt, cc),
+            (st) => (st.G.handSizes?.[playerID] ?? Infinity) < before);
     },
     discard:  (id) => {
         const cid = id === 54 ? 54 : id;
         //console.log(`[BOT] ${botName} => discardCard id=${id} (${discardStr(cid)})`);
         const before = client.getState()?.ctx?.currentPlayer;
-        client.moves.discardCard(id);
-        const after = client.getState()?.ctx?.currentPlayer;
-        // A successful discard ends the turn, advancing currentPlayer locally; a rejected one
-        // (e.g. we already lost the turn to a racing opponent) leaves it unchanged.
-        return after === undefined || after !== before;
+        // A successful discard ends the turn (game.js discardCard -> events.endTurn), so the
+        // server-confirmed currentPlayer advances; a rejected one leaves it unchanged.
+        return runMove(() => client.moves.discardCard(id),
+            (st) => st.ctx.currentPlayer === undefined || st.ctx.currentPlayer !== before);
     },
     exhaust:  () => {
         console.log(`[BOT] ${botName} => declareExhausted`);
-        client.moves.declareExhausted();
-        const st = client.getState();
-        return !!st?.ctx?.gameover || !!st?.G?.isExhausted;
+        return runMove(() => client.moves.declareExhausted(),
+            (st) => !!st.ctx.gameover || !!st.G.isExhausted);
     },
   };
 }
