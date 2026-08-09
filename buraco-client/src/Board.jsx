@@ -26,18 +26,20 @@
 
 import React, { useState, useEffect } from 'react';
 import {isMeldClean, getMeldLength, calculateMeldPoints, meldToCards, handToCards, intToCardObj} from './game.js';
+import { useT } from './i18n.jsx';
 
 
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(e) { return { error: e }; }
   render() {
+    const t = this.props.t || ((k) => k);
     if (this.state.error) {
       return (
         <div style={{ color: 'white', padding: '40px', backgroundColor: '#1b4332', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-          <h1 style={{ color: '#ffd700' }}>Fim de Jogo</h1>
-          <p style={{ color: '#ccc' }}>A partida terminou. Por favor, volte ao salão.</p>
-          <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>Voltar ao Salão</button>
+          <h1 style={{ color: '#ffd700' }}>{t('board.gameOver')}</h1>
+          <p style={{ color: '#ccc' }}>{t('board.gameOverDesc')}</p>
+          <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>{t('common.backToLounge')}</button>
         </div>
       );
     }
@@ -92,10 +94,12 @@ const CardBack = ({ label, count, onClick, deckColor }) => (
 );
 
 export function BuracoBoard(props) {
-  return <ErrorBoundary><BuracoBoardInner {...props} /></ErrorBoundary>;
+  const { t } = useT();
+  return <ErrorBoundary t={t}><BuracoBoardInner {...props} /></ErrorBoundary>;
 }
 
 function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament = null, tournamentStandings = null, apiAddress = null, matchData = null }) {
+  const { t } = useT();
   // State: Set of uids instead of {cardType: count}
   const [selectedCards, setSelectedCards] = useState(new Set());
   const [gameOverMinimized, setGameOverMinimized] = useState(false);
@@ -230,12 +234,12 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
   const gameOverPopup = gameover ? (() => {
     const s0 = gameover.scores?.[0] ?? { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 };
     const s1 = gameover.scores?.[1] ?? { table: 0, hand: 0, mortoPenalty: 0, baterBonus: 0, total: 0 };
-    const team0NamesArr = (G.teamPlayers[0] || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`);
-    const team1NamesArr = (G.teamPlayers[1] || []).map(p => G.rules?.assignments?.[p] || `Jogador ${p}`);
+    const team0NamesArr = (G.teamPlayers[0] || []).map(p => G.rules?.assignments?.[p] || t('board.playerNameFallback', { n: p }));
+    const team1NamesArr = (G.teamPlayers[1] || []).map(p => G.rules?.assignments?.[p] || t('board.playerNameFallback', { n: p }));
     const team0Names = team0NamesArr.join(' & ');
     const team1Names = team1NamesArr.join(' & ');
     const savedAuth = (() => { try { return JSON.parse(localStorage.getItem('buraco_auth') || 'null'); } catch { return null; } })();
-    const myName = G.rules?.assignments?.[playerID] || savedAuth?.username || "Eu";
+    const myName = G.rules?.assignments?.[playerID] || savedAuth?.username || t('board.me');
     const isTournament = !!tournament;
     const isTournamentComplete = tournament && tournament.status === 'completed';
     const showNextButton = !isTournament || (isTournament && !isTournamentComplete);
@@ -283,7 +287,7 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
     if (gameOverMinimized) {
       return (
         <button onClick={() => setGameOverMinimized(false)} style={{ position: 'fixed', bottom: '20px', right: '20px', zIndex: 1001, padding: '10px 16px', background: '#ffd700', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>
-          📊 Resultado
+          {t('board.resultButton')}
         </button>
       );
     }
@@ -316,34 +320,34 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
           style={{ ...panelStyle, pointerEvents: 'auto', background: '#1b4332', border: '2px solid #ffd700', borderRadius: '16px', padding: '30px', maxHeight: '90vh', overflowY: 'auto', color: 'white', fontFamily: 'sans-serif', cursor: dragging ? 'grabbing' : 'grab', userSelect: 'none' }}
         >
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-20px', position: 'relative', zIndex: 2 }}>
-            <button onClick={() => setGameOverMinimized(true)} style={{ background: 'transparent', border: 'none', color: '#ccc', fontSize: '1.5em', cursor: 'pointer', padding: '0 6px', lineHeight: 1 }} title="Minimizar">−</button>
+            <button onClick={() => setGameOverMinimized(true)} style={{ background: 'transparent', border: 'none', color: '#ccc', fontSize: '1.5em', cursor: 'pointer', padding: '0 6px', lineHeight: 1 }} title={t('board.minimizeTitle')}>−</button>
           </div>
           <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-            <h1 style={{ fontSize: '2.4em', color: '#ffd700', margin: '0 0 8px 0' }}>Fim de Jogo!</h1>
-            <h2 style={{ margin: 0, color: '#ccc', fontSize: '1em' }}>Motivo: {gameover.reason}</h2>
+            <h1 style={{ fontSize: '2.4em', color: '#ffd700', margin: '0 0 8px 0' }}>{t('board.gameOverTitle')}</h1>
+            <h2 style={{ margin: 0, color: '#ccc', fontSize: '1em' }}>{t('board.reason', { reason: gameover.reason === 'Bateu!' ? t('board.reasonBateu') : (gameover.reason === 'Monte Esgotado' ? t('board.reasonMonte') : gameover.reason) })}</h2>
           </div>
           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', marginBottom: '24px' }}>
             <div style={{ background: 'rgba(0,0,0,0.5)', padding: '16px', borderRadius: '12px', border: '2px solid #4da6ff', flex: '1', minWidth: '200px' }}>
-              <h3 style={{ textAlign: 'center', color: '#4da6ff', margin: '0 0 12px 0' }}>{team0Names || 'Equipe 0'}</h3>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', fontSize: '0.9em' }}><span>Pontos na Mesa:</span><span>{s0.table}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>Dedução (Mão):</span><span>{s0.hand}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>Multa do Morto:</span><span>{s0.mortoPenalty}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ffd700', fontSize: '0.9em' }}><span>Bônus:</span><span>{s0.baterBonus}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', fontSize: '1.2em', fontWeight: 'bold' }}><span>Total:</span><span>{s0.total}</span></div>
+              <h3 style={{ textAlign: 'center', color: '#4da6ff', margin: '0 0 12px 0' }}>{team0Names || t('board.teamFallback', { n: 0 })}</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', fontSize: '0.9em' }}><span>{t('board.tablePoints')}</span><span>{s0.table}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>{t('board.handDeduction')}</span><span>{s0.hand}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>{t('board.mortoPenalty')}</span><span>{s0.mortoPenalty}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ffd700', fontSize: '0.9em' }}><span>{t('board.bonus')}</span><span>{s0.baterBonus}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', fontSize: '1.2em', fontWeight: 'bold' }}><span>{t('board.total')}</span><span>{s0.total}</span></div>
             </div>
             <div style={{ background: 'rgba(0,0,0,0.5)', padding: '16px', borderRadius: '12px', border: '2px solid #ff4d4d', flex: '1', minWidth: '200px' }}>
-              <h3 style={{ textAlign: 'center', color: '#ff4d4d', margin: '0 0 12px 0' }}>{team1Names || 'Equipe 1'}</h3>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', fontSize: '0.9em' }}><span>Pontos na Mesa:</span><span>{s1.table}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>Dedução (Mão):</span><span>{s1.hand}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>Multa do Morto:</span><span>{s1.mortoPenalty}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ffd700', fontSize: '0.9em' }}><span>Bônus:</span><span>{s1.baterBonus}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', fontSize: '1.2em', fontWeight: 'bold' }}><span>Total:</span><span>{s1.total}</span></div>
+              <h3 style={{ textAlign: 'center', color: '#ff4d4d', margin: '0 0 12px 0' }}>{team1Names || t('board.teamFallback', { n: 1 })}</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', fontSize: '0.9em' }}><span>{t('board.tablePoints')}</span><span>{s1.table}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>{t('board.handDeduction')}</span><span>{s1.hand}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>{t('board.mortoPenalty')}</span><span>{s1.mortoPenalty}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ffd700', fontSize: '0.9em' }}><span>{t('board.bonus')}</span><span>{s1.baterBonus}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', fontSize: '1.2em', fontWeight: 'bold' }}><span>{t('board.total')}</span><span>{s1.total}</span></div>
             </div>
             {updatedStandings && (
               <div style={{ background: '#222', padding: '16px', borderRadius: '12px', border: '2px solid #ffd700', minWidth: '220px' }}>
-                <h3 style={{ textAlign: 'center', color: '#ffd700', margin: '0 0 12px 0' }}>Classificação</h3>
+                <h3 style={{ textAlign: 'center', color: '#ffd700', margin: '0 0 12px 0' }}>{t('board.standings')}</h3>
                 <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '0.85em' }}>
-                  <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Jogador</th><th>Pts</th><th>V-E-D</th></tr></thead>
+                  <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>{t('board.player')}</th><th>{t('board.pts')}</th><th>{t('board.ved')}</th></tr></thead>
                   <tbody>{updatedStandings.map(([pName, st]) => {
                     const isMe = G.rules?.assignments?.[playerID] === pName;
                     return (<tr key={pName} style={{ borderBottom: '1px solid #333', background: isMe ? 'rgba(255,215,0,0.2)' : 'transparent' }}>
@@ -357,10 +361,10 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
             )}
           </div>
           <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
-            <button onClick={handleReturnLobby} style={{ padding: '12px 24px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer' }}>Voltar ao Salão</button>
+            <button onClick={handleReturnLobby} style={{ padding: '12px 24px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer' }}>{t('common.backToLounge')}</button>
             {showNextButton && (
               <button onClick={handleNextMatch} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 12px rgba(77,166,255,0.6)' }}>
-                {isTournament ? "Próxima Mesa" : "Jogar Novamente"}
+                {isTournament ? t('board.nextMatch') : t('board.playAgain')}
               </button>
             )}
           </div>
@@ -370,14 +374,14 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
   })() : null;
 
 
-if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregando Mesa...</div>;
+if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>{t('board.loadingTable')}</div>;
 
   if (!G.cards || !G.teams || !G.teamPlayers || !G.table) {
     return (
       <div style={{ color: 'white', padding: '40px', backgroundColor: '#1b4332', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-        <h1 style={{ color: '#ffd700' }}>Fim de Jogo</h1>
-        <p style={{ color: '#ccc' }}>A partida terminou. Por favor, volte ao salão.</p>
-        <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>Voltar ao Salão</button>
+        <h1 style={{ color: '#ffd700' }}>{t('board.gameOver')}</h1>
+        <p style={{ color: '#ccc' }}>{t('board.gameOverDesc')}</p>
+        <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>{t('common.backToLounge')}</button>
       </div>
     );
   }
@@ -472,16 +476,16 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'kick failed');
-      alert(`Assento ${seatID} liberado! ${seatName} agora pode reentrar de outro computador/browser.`);
+      alert(t('board.kickSeatDone', { id: seatID, name: seatName }));
     } catch (e) {
-      alert(e.message && e.message.includes('conectado') ? e.message : "Falha ao remover jogador do assento.");
+      alert(e.message && e.message.includes('conectado') ? e.message : t('board.kickSeatFail'));
     }
   };
 
   const isTournament = !!tournament;
 
   const handleReplaceWithBot = async (seatID, seatName) => {
-    if (!window.confirm(`Substituir ${seatName} por um bot? O assento será liberado para o bot entrar.`)) return;
+    if (!window.confirm(t('board.replaceWithBotConfirm', { name: seatName }))) return;
     moves.renamePlayer(seatID, `Bot ${seatID}`);
     try {
       const res = await fetch(`${apiAddress}/api/quick/replace-bot`, {
@@ -489,16 +493,16 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
         headers: savedAuthHeaders(),
         body: JSON.stringify({ matchID, playerID: seatID.toString() })
       });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || 'Falha ao substituir por bot.'); }
-      else alert(`${seatName} substituído por Bot ${seatID}.`);
-    } catch { alert("Falha ao substituir por bot."); }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || t('board.replaceWithBotError')); }
+      else alert(t('board.replaceWithBotDone', { name: seatName, id: seatID }));
+    } catch { alert(t('board.replaceWithBotFail')); }
   };
 
   const handleRenameSubmit = async () => {
     if (!apiAddress) return;
     const newName = renameForm.name.trim();
-    if (newName.length < 2) { setRenameError('O nome deve ter pelo menos 2 caracteres.'); return; }
-    if (renameForm.password.length < 6) { setRenameError('A senha deve ter pelo menos 6 caracteres.'); return; }
+    if (newName.length < 2) { setRenameError(t('board.renameNameMin')); return; }
+    if (renameForm.password.length < 6) { setRenameError(t('board.renamePassMin')); return; }
     setRenameBusy(true);
     setRenameError('');
     try {
@@ -544,14 +548,14 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       setRenamePopup(null);
       setRenameForm({ name: '', password: '' });
     } catch (e) {
-      setRenameError(e.message || 'Falha ao renomear.');
+      setRenameError(e.message || t('board.renameFail'));
     } finally {
       setRenameBusy(false);
     }
   };
 
   const handleLeaveSeat = async () => {
-    if (!window.confirm('Sair desta mesa? Seu assento será liberado e outros poderão entrar ou colocar um bot.')) return;
+    if (!window.confirm(t('board.leaveSeatConfirm'))) return;
     try {
       const savedAuth = (() => { try { return JSON.parse(localStorage.getItem('buraco_auth') || 'null'); } catch { return null; } })();
       const res = await fetch(`${apiAddress}/api/quick/release-seat`, {
@@ -559,12 +563,12 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
         headers: { 'Content-Type': 'application/json', ...(savedAuth?.token ? { 'Authorization': `Bearer ${savedAuth.token}` } : {}) },
         body: JSON.stringify({ matchID, playerID: playerID.toString() })
       });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || 'Falha ao sair da mesa.'); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || t('board.leaveSeatError')); return; }
       const sessions = (() => { try { return JSON.parse(localStorage.getItem('buraco_sessions') || '{}'); } catch { return {}; } })();
       delete sessions[`${matchID}_${playerID}`];
       localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
       window.location.reload();
-    } catch { alert("Falha ao sair da mesa."); }
+    } catch { alert(t('board.leaveSeatFail')); }
   };
 
   const renderTeamTable = (teamId, title, isMyTeam) => {
@@ -621,7 +625,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                 }} />
               );
             })}
-            <div style={{ position: 'absolute', bottom: '15%', left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.72)', color: borderColor !== 'transparent' ? borderColor : '#ddd', fontSize: '0.7em', fontWeight: 'bold', padding: '1px 5px', borderRadius: '4px', whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 99 }}>{points} pts</div>
+            <div style={{ position: 'absolute', bottom: '15%', left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.72)', color: borderColor !== 'transparent' ? borderColor : '#ddd', fontSize: '0.7em', fontWeight: 'bold', padding: '1px 5px', borderRadius: '4px', whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 99 }}>{t('board.meldPoints', { pts: points })}</div>
           </div>
         </div>
       );
@@ -642,7 +646,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: compact ? '5px' : '10px', alignContent: 'flex-start', flex: 1, minWidth: 0 }}>
             {sequences.map(renderMeld)}
             {isMyTeam && (
-              <div onClick={() => {
+                <div onClick={() => {
                   if (!isMyTurn) return;
                   if (!G.hasDrawn && isClosedDiscard && G.discardPile.length > 0) {
                     moves.pickUpDiscard(selectedCardIdsArray(), { type: 'new' }); setSelectedCards(new Set());
@@ -651,7 +655,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                   }
                 }}
                 style={{ border: '2px dashed #40916c', borderRadius: '8px', padding: '10px', display: 'flex', alignItems: 'center', cursor: (isMyTurn && ((G.hasDrawn && selectedCount >= 3) || (!G.hasDrawn && isClosedDiscard))) ? 'pointer' : 'default', color: '#888' }}>
-                + Baixar Jogo
+                {t('board.playMeld')}
               </div>
             )}
           </div>
@@ -669,11 +673,11 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: `${LEFT_COL_W}px`, minWidth: `${LEFT_COL_W}px`, flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
         
         <button onClick={handleLeaveSeat} style={{ width: '100%', background: '#4da6ff', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.8em', boxSizing: 'border-box' }}>
-          Salão
+          {t('common.lounge')}
         </button>
 
         <div style={{ textAlign: 'center' }}>
-          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Monte</h4>
+          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>{t('board.deck')}</h4>
           {deckEmpty ? (
             <div 
               onClick={isMyTurn && !G.hasDrawn ? () => moves.declareExhausted() : undefined} 
@@ -683,16 +687,16 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                 justifyContent: 'center', alignItems: 'center', color: '#ff4d4d', cursor: (isMyTurn && !G.hasDrawn) ? 'pointer' : 'default', textAlign: 'center',
                 boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', transition: 'all 0.2s'
               }}>
-              <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>Fim de</span>
-              <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>Jogo</span>
+              <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>{t('board.deckEnd1')}</span>
+              <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>{t('board.deckEnd2')}</span>
             </div>
           ) : (
-            <CardBack label="Comprar" count={deckCount} deckColor={G.deck.length > 0 ? (visibleCount[G.deck[G.deck.length-1] % 54] > 0 ? dcFlip(G.deck[G.deck.length-1]) : dc(G.deck[G.deck.length-1])) : '#0a3d62'} onClick={isMyTurn && !G.hasDrawn ? () => moves.drawCard() : undefined} />
+            <CardBack label={t('board.draw')} count={deckCount} deckColor={G.deck.length > 0 ? (visibleCount[G.deck[G.deck.length-1] % 54] > 0 ? dcFlip(G.deck[G.deck.length-1]) : dc(G.deck[G.deck.length-1])) : '#0a3d62'} onClick={isMyTurn && !G.hasDrawn ? () => moves.drawCard() : undefined} />
           )}
         </div>
         
         <div style={{ textAlign: 'center', width: '100%' }}>
-          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Lixo ({G.discardPile.length})</h4>
+          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>{t('board.discardPile', { n: G.discardPile.length })}</h4>
           <div onClick={handleDiscardPileClick} style={{ cursor: (isMyTurn && (!G.hasDrawn || (selectedCount === 1 && G.hasDrawn))) ? 'pointer' : 'not-allowed' }}>
             {G.discardPile.length > 0 ? (
               G.rules?.openDiscardView ? (
@@ -705,16 +709,16 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                 <Card card={topDiscard} deckColor={topDiscard ? dc(topDiscard.id) : undefined} />
               )
             ) : (
-              <div style={{ border: '2px dashed #40916c', width: '60px', height: '90px', borderRadius: '8px', textAlign: 'center', lineHeight: '90px', color: '#888', margin: '0 auto' }}>Vazio</div>
+              <div style={{ border: '2px dashed #40916c', width: '60px', height: '90px', borderRadius: '8px', textAlign: 'center', lineHeight: '90px', color: '#888', margin: '0 auto' }}>{t('board.discardEmpty')}</div>
             )}
           </div>
         </div>
 
         <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '8px', boxSizing: 'border-box' }}>
-          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Mortos</h4>
+          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>{t('board.mortos')}</h4>
           {(() => {
             return [myTeam, oppTeam].map((team, ti) => {
-              const label = ti === 0 ? 'Nós' : 'Eles';
+              const label = ti === 0 ? t('board.us') : t('board.them');
               const hasMorto = G.teamMortos[team];
               // Show icon only if this team's morto is still in the pot (not yet picked up)
               const mortoAvailable = G.pots.length > ti;
@@ -737,13 +741,13 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
         </div>
 
         <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '8px', boxSizing: 'border-box' }}>
-          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>Jogadores</h4>
+          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>{t('board.players')}</h4>
           {Object.keys(G.handSizes).map(p => {
             const isTurn = ctx.currentPlayer === p;
             const isMe = p === playerID;
             const md = matchData?.find(m => m.id?.toString() === p);
             const occupied = !!md?.name;
-            const name = md?.name || G.rules?.assignments?.[p] || `P${p}`;
+            const name = md?.name || G.rules?.assignments?.[p] || t('board.playerFallback', { n: p });
             const isBot = String(name || '').toLowerCase().includes('bot');
             const showActions = occupied && !isMe && !!apiAddress;
             const showRename = isMe && !isTournament && !!apiAddress;
@@ -761,7 +765,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 0 }}>
                   <span
                     onClick={showActions ? () => setRemovePopup({ seatID: p, seatName: name }) : (showRename ? () => setRenamePopup({ seatID: p, seatName: name }) : undefined)}
-                    title={showActions ? `Clique para gerenciar o assento de ${name}` : (showRename ? 'Clique para renomear sua mesa' : undefined)}
+                    title={showActions ? t('board.manageSeatTitle', { name }) : (showRename ? t('board.renameSeatTitle') : undefined)}
                     style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0, cursor: (showActions || showRename) ? 'pointer' : 'default', color: showActions ? '#ff9900' : undefined, textDecoration: showActions ? 'underline' : 'none' }}
                   >{isBot ? '🤖' : '👤'} {isTurn ? '» ' : ''}{name}</span>
                   <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.handSizes[p] ?? 0}</span>
@@ -776,7 +780,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
             return flat.some(v => v > 0);
           }) && (
           <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '8px', boxSizing: 'border-box' }}>
-            <h4 style={{ margin: '0 0 10px 0', fontSize: '0.8em', color: '#ccc' }}>Memorizadas</h4>
+            <h4 style={{ margin: '0 0 10px 0', fontSize: '0.8em', color: '#ccc' }}>{t('board.remembered')}</h4>
             {Object.keys(G.knownCards).map(p => {
               const flat = G.knownCards[p] || [];
               const knownCards = [];
@@ -786,7 +790,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
                   for (let j = 0; j < cnt; j++) knownCards.push(cId);
               }
               if (knownCards.length === 0) return null;
-              const name = G.rules?.assignments?.[p] || `P${p}`;
+              const name = G.rules?.assignments?.[p] || t('board.playerFallback', { n: p });
               return (
                 <div key={p} style={{ marginBottom: '8px' }}>
                   <div style={{ fontSize: '0.7em', color: '#888', marginBottom: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}:</div>
@@ -804,14 +808,14 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '25px', overflowY: 'auto', overflowX: 'hidden', paddingRight: '10px', paddingBottom: '20px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flexShrink: 0 }}>
-          <div style={{ flexShrink: 0 }}>{renderTeamTable(oppTeam, "Mesa Deles", false)}</div>
-          <div style={{ flexShrink: 0 }}>{renderTeamTable(myTeam, "Nossa Mesa", true)}</div>
+          <div style={{ flexShrink: 0 }}>{renderTeamTable(oppTeam, t('board.theirTable'), false)}</div>
+          <div style={{ flexShrink: 0 }}>{renderTeamTable(myTeam, t('board.ourTable'), true)}</div>
         </div>
         <div style={{ flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '0 0 10px 0' }}>
-            <h2 style={{ fontSize: '1.2em', margin: 0 }}>Minha Mão {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>(Compre do Monte ou Lixo)</span> : ""}</h2>
+            <h2 style={{ fontSize: '1.2em', margin: 0 }}>{t('board.myHand')} {(!G.hasDrawn && ctx.currentPlayer === playerID) ? <span style={{ color: '#ff4d4d', fontSize: '0.7em' }}>{t('board.buyHint')}</span> : ""}</h2>
             {G.rules?.allowUndo && isMyTurn && G.hasDrawn && (G.lastMoveType !== 'draw') && (
-              <button onClick={() => { undo(); setSelectedCards(new Set()); }} style={{ padding: '4px 10px', background: '#ffb86c', color: '#000', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8em' }}>↩ Desfazer</button>
+              <button onClick={() => { undo(); setSelectedCards(new Set()); }} style={{ padding: '4px 10px', background: '#ffb86c', color: '#000', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8em' }}>{t('board.undo')}</button>
             )}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
@@ -837,28 +841,28 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
               <h3 style={{ margin: '0 0 8px 0', color: '#ffd700' }}>{removePopup.seatName}</h3>
               <p style={{ color: '#ccc', margin: '0 0 12px 0', fontSize: '0.95em', lineHeight: '1.4' }}>
                 {isBot
-                  ? `Remover ${removePopup.seatName} do assento ${removePopup.seatID}? A vaga será liberada.`
-                  : `O que fazer com o assento ${removePopup.seatID} (${removePopup.seatName})?`}
+                  ? t('board.removeBotPrompt', { name: removePopup.seatName, id: removePopup.seatID })
+                  : t('board.removeSeatPrompt', { id: removePopup.seatID, name: removePopup.seatName })}
               </p>
               {humanConnected && (
                 <p style={{ color: '#ffcc66', margin: '0 0 12px 0', fontSize: '0.85em', lineHeight: '1.4' }}>
-                  Este jogador ainda está conectado. Só é possível remover/substituir após desconexão.
+                  {t('board.playerConnected')}
                 </p>
               )}
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button onClick={() => setRemovePopup(null)} style={{ padding: '8px 18px', background: '#555', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
+                <button onClick={() => setRemovePopup(null)} style={{ padding: '8px 18px', background: '#555', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t('common.cancel')}</button>
                 {!isBot && (
                   <button
                     onClick={canReplace ? () => { handleReplaceWithBot(removePopup.seatID, removePopup.seatName); setRemovePopup(null); } : undefined}
                     disabled={!canReplace}
-                    title={canReplace ? 'Liberar o assento para um bot entrar' : 'Aguardando desconexão do jogador'}
-                    style={{ padding: '8px 18px', background: canReplace ? '#2a9d8f' : '#444', color: canReplace ? 'white' : '#888', border: 'none', borderRadius: '6px', cursor: canReplace ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>🤖 Substituir por Bot</button>
+                    title={canReplace ? t('board.freeSeatForBot') : t('board.waitingDisconnect')}
+                    style={{ padding: '8px 18px', background: canReplace ? '#2a9d8f' : '#444', color: canReplace ? 'white' : '#888', border: 'none', borderRadius: '6px', cursor: canReplace ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>{t('board.replaceWithBot')}</button>
                 )}
                 <button
                   onClick={canRemove ? () => { handleRemovePlayer(removePopup.seatID, removePopup.seatName); setRemovePopup(null); } : undefined}
                   disabled={!canRemove}
-                  title={canRemove ? 'Liberar a vaga para reentrar' : 'Aguardando desconexão do jogador'}
-                  style={{ padding: '8px 18px', background: canRemove ? '#ff9900' : '#444', color: canRemove ? '#000' : '#888', border: 'none', borderRadius: '6px', cursor: canRemove ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>Remover</button>
+                  title={canRemove ? t('board.freeSeatReenter') : t('board.waitingDisconnect')}
+                  style={{ padding: '8px 18px', background: canRemove ? '#ff9900' : '#444', color: canRemove ? '#000' : '#888', border: 'none', borderRadius: '6px', cursor: canRemove ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>{t('board.remove')}</button>
               </div>
             </div>
           </div>
@@ -868,14 +872,14 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
       {renamePopup && (
         <div onClick={() => setRenamePopup(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#1b4332', border: '2px solid #2a9d8f', borderRadius: '12px', padding: '24px', maxWidth: '340px', width: '100%', textAlign: 'center', boxShadow: '0 8px 30px rgba(0,0,0,0.5)' }}>
-            <h3 style={{ margin: '0 0 8px 0', color: '#ffd700' }}>Renomear minha mesa</h3>
+            <h3 style={{ margin: '0 0 8px 0', color: '#ffd700' }}>{t('board.renameTitle')}</h3>
             <p style={{ color: '#ccc', margin: '0 0 14px 0', fontSize: '0.9em', lineHeight: '1.4' }}>
-              Digite seu nome de usuário e senha. Se a conta não existir, ela será criada automaticamente.
+              {t('board.renameDesc')}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
               <input
                 type="text"
-                placeholder="Nome de usuário"
+                placeholder={t('board.renameUserPlaceholder')}
                 value={renameForm.name}
                 onChange={e => setRenameForm({ ...renameForm, name: e.target.value })}
                 autoComplete="username"
@@ -883,7 +887,7 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
               />
               <input
                 type="password"
-                placeholder="Senha (mínimo 6 caracteres)"
+                placeholder={t('board.renamePassPlaceholder')}
                 value={renameForm.password}
                 onChange={e => setRenameForm({ ...renameForm, password: e.target.value })}
                 autoComplete="current-password"
@@ -892,8 +896,8 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>Carregan
             </div>
             {renameError && <div style={{ color: '#ff6b6b', fontSize: '0.85em', marginBottom: '10px' }}>{renameError}</div>}
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-              <button onClick={() => { setRenamePopup(null); setRenameForm({ name: '', password: '' }); setRenameError(''); }} style={{ padding: '8px 18px', background: '#555', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
-              <button onClick={handleRenameSubmit} disabled={renameBusy} style={{ padding: '8px 18px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '6px', cursor: renameBusy ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>{renameBusy ? 'Salvando…' : 'Renomear'}</button>
+              <button onClick={() => { setRenamePopup(null); setRenameForm({ name: '', password: '' }); setRenameError(''); }} style={{ padding: '8px 18px', background: '#555', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t('common.cancel')}</button>
+              <button onClick={handleRenameSubmit} disabled={renameBusy} style={{ padding: '8px 18px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '6px', cursor: renameBusy ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>{renameBusy ? t('board.renameSaving') : t('board.renameSubmit')}</button>
             </div>
           </div>
         </div>

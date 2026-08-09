@@ -8,6 +8,7 @@ A full-stack, real-time multiplayer digital Buraco card game built specifically 
 * **Tournament Director Dashboard:** Automatically orchestrates Tournaments. Supports "Points to Win", "Max Rounds", and "Playoff (Elimination)" formats.
 * **Auto-Phase Generation:** The engine safely detects when a round is over, calculates the standings (Wins/Draws/Losses/Points), and automatically generates the tables for the next phase.
 * **Smart UI:** Physical-style cards with corner indicators for tight, space-saving horizontal and vertical stacking.
+* **i18n:** The client UI is translated into Portuguese, English, and Italian via a lightweight in-repo module (`src/i18n.jsx` + `src/locales/*`); auto-detects the browser language with a manual override.
 * **AI Bots:** Pre-trained bots (including the shipped `BotRafa` brain) automatically claim empty "bot" seats, so tournaments never stall waiting for players.
 * **Genetic Training Pipeline:** Train your own bots in-browser via the Admin dashboard — a hand-written WASM neural engine, island-parallel genetic algorithm, and a "Campeões" arena decide which brains keep improving.
 * **Admin Dashboard:** A gated admin panel (⚙️) for managing tables and users, force-kicking disconnected players, and running bot training.

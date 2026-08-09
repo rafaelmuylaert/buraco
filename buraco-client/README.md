@@ -15,6 +15,29 @@ bot-training documentation.
 * `npm run preview` — serve the built `dist/` (port 5173)
 * `npm run lint` — run ESLint
 
+## Internationalization
+
+The UI is translated via a lightweight in-repo module (`src/i18n.jsx`) with
+no external dependencies. Catalogs live in `src/locales/{pt,en,it}.js`; `pt`
+is the source of truth (the UI was originally pt-BR). Use the `useT()` hook:
+
+```js
+const { t, tN, lang, setLang, availableLangs, langLabel } = useT();
+t('lounge.quickGame');                          // simple lookup
+t('tourney.formatOf', { fmt, players, round }); // {var} interpolation
+tN('tourney.winner', 2, { names, pts });        // plural keys .one/.other
+```
+
+Language auto-detects from `navigator.language`, honors a manual override in
+`localStorage['buraco_lang']`, and keeps `<html lang>` in sync. The switcher
+lives in the lounge header and the first-run bootstrap screen.
+
+**Conventions:** keep untranslated the server-sourced names, API `data.error`
+passthroughs, and `game.js` debug/log strings. `game.js` gameover reasons
+(`'Bateu!'`/`'Monte Esgotado'`) are mapped to `board.reasonBateu`/
+`board.reasonMonte` in the Board UI — never touch `game.js` (it is the single
+source of truth shared with the server and bots).
+
 ## Deployment
 
 In production the client runs inside the `buraco-client` Docker container

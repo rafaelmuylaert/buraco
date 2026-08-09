@@ -36,6 +36,7 @@ import { LobbyClient } from 'boardgame.io/client';
 import { io } from 'socket.io-client';
 import { BuracoGame, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS } from './game.js';
 import { BuracoBoard } from './Board.jsx';
+import { useT } from './i18n.jsx';
 
 const { port, hostname, protocol, origin } = window.location;
 const IS_DIRECT = ['8000','5173'].includes(port);
@@ -84,19 +85,32 @@ const DEFAULT_GAME_CONFIG = {
 };
 const { cardPointValues: _dpv, meldSizeBonus: _msb, allowUndo: _au, ...DEFAULT_TRAIN_RULES } = DEFAULT_RULES;
 
-const tourneyFormatLabel = (t) => {
-  if (t.format === 'running') return 'CORRIDA (SEM FIM)';
-  if (t.format === 'points') return `PONTOS (Meta: ${t.targetPoints} pts)`;
-  if (t.format === 'rounds') return `RODADAS (Máx: ${t.maxRounds})`;
-  if (t.format === 'playoff') return 'ELIMINATÓRIA (MATA-MATA)';
+const tourneyFormatLabel = (t, tr) => {
+  if (t.format === 'running') return tr('tourney.formatLabelShort.running');
+  if (t.format === 'points') return tr('tourney.formatLabelShort.points', { pts: t.targetPoints });
+  if (t.format === 'rounds') return tr('tourney.formatLabelShort.rounds', { rounds: t.maxRounds });
+  if (t.format === 'playoff') return tr('tourney.formatLabelShort.playoff');
   return (t.format || '').toUpperCase();
 };
 
-const tourneyShuffleLabel = (t) => {
-  if (t.shuffleMode === 'rounds') return `A cada ${t.shuffleEvery || 1} partidas`;
-  if (t.shuffleMode === 'points') return `Corrida a ${t.shufflePoints || 0} pts`;
-  return 'Toda partida';
+const tourneyShuffleLabel = (t, tr) => {
+  if (t.shuffleMode === 'rounds') return tr('tourney.shuffleLabel.rounds', { n: t.shuffleEvery || 1 });
+  if (t.shuffleMode === 'points') return tr('tourney.shuffleLabel.points', { n: t.shufflePoints || 0 });
+  return tr('tourney.shuffleLabel.everyRound');
 };
+
+const LangSwitcher = ({ t, lang, setLang, availableLangs, langLabel }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#aaa', fontSize: '0.85em' }}>
+    <span>🌐 {t('lang.label')}</span>
+    <select
+      value={lang}
+      onChange={e => setLang(e.target.value)}
+      style={{ background: '#222', color: 'white', border: '1px solid #444', borderRadius: '5px', padding: '4px 6px', cursor: 'pointer' }}
+    >
+      {availableLangs.map(l => <option key={l} value={l}>{langLabel(l)}</option>)}
+    </select>
+  </div>
+);
 
 const BuracoClient = Client({ 
   game: BuracoGame, 
@@ -166,6 +180,7 @@ function LogTree({ nodes, setVersion }) {
 }
 
 function BotDebugPanel({ apiBase, botName, rules, onClose }) {
+  const { t } = useT();
   const [logs, setLogs] = React.useState([]);
   const [running, setRunning] = React.useState(false);
   const [result, setResult] = React.useState(null);
@@ -208,27 +223,32 @@ function BotDebugPanel({ apiBase, botName, rules, onClose }) {
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '20px', fontFamily: 'monospace' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <h2 style={{ color: '#50fa7b', margin: 0 }}>🤖 Debug — {botName || 'sem bot'}</h2>
+        <h2 style={{ color: '#50fa7b', margin: 0 }}>{t('debug.title', { name: botName || t('debug.noBot') })}</h2>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <select value={debugLevel} onChange={e => setDebugLevel(parseInt(e.target.value))} title="Nível de log do debug (2 = mais verboso, com pesos/memória)" style={{ padding: '8px', background: '#222', color: '#50fa7b', border: '1px solid #50fa7b', borderRadius: '5px', cursor: 'pointer' }}>
-            <option value={0}>Log: 0 · Silencioso</option>
-            <option value={1}>Log: 1 · Básico</option>
-            <option value={2}>Log: 2 · Verboso</option>
+          <select value={debugLevel} onChange={e => setDebugLevel(parseInt(e.target.value))} title={t('debug.levelTitle')} style={{ padding: '8px', background: '#222', color: '#50fa7b', border: '1px solid #50fa7b', borderRadius: '5px', cursor: 'pointer' }}>
+            <option value={0}>{t('debug.level0')}</option>
+            <option value={1}>{t('debug.level1')}</option>
+            <option value={2}>{t('debug.level2')}</option>
           </select>
           <button onClick={runDebugMatch} disabled={running} style={{ padding: '8px 18px', background: running ? '#555' : '#50fa7b', color: '#000', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: running ? 'not-allowed' : 'pointer' }}>
-            {running ? '⏳ Rodando...' : '▶ Rodar Partida Debug'}
+            {running ? t('debug.running') : t('debug.run')}
           </button>
-          <button onClick={() => { setLogs([]); treeRef.current = []; setVersion(v => v + 1); }} style={{ padding: '8px 12px', background: '#444', color: '#ccc', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Limpar</button>
-          <button onClick={onClose} style={{ padding: '8px 12px', background: '#e63946', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>✕ Fechar</button>
+          <button onClick={() => { setLogs([]); treeRef.current = []; setVersion(v => v + 1); }} style={{ padding: '8px 12px', background: '#444', color: '#ccc', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>{t('common.clear')}</button>
+          <button onClick={onClose} style={{ padding: '8px 12px', background: '#e63946', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>{t('common.close')}</button>
         </div>
       </div>
       {result && (
         <div style={{ background: result.error ? '#3d0000' : '#003d1a', color: result.error ? '#ff5555' : '#50fa7b', padding: '8px 12px', borderRadius: '5px', marginBottom: '8px', fontSize: '0.9em' }}>
-          {result.error ? `Erro: ${result.error}` : `A=${result.rawA} B=${result.rawB} | Vencedor: ${result.scoreA > 0 ? 'A' : result.scoreA < 0 ? 'B' : 'Empate'}`}
+          {result.error
+            ? t('debug.error', { msg: result.error })
+            : t('debug.result', {
+                a: result.rawA, b: result.rawB,
+                winner: result.scoreA > 0 ? t('debug.winnerA') : result.scoreA < 0 ? t('debug.winnerB') : t('debug.draw')
+              })}
         </div>
       )}
       <div style={{ flex: 1, overflowY: 'auto', background: '#0d0d0d', border: '1px solid #333', borderRadius: '5px', padding: '10px', fontSize: '0.78em', lineHeight: '1.5' }}>
-        {logs.length === 0 && <span style={{ color: '#555' }}>Aguardando logs do servidor...</span>}
+        {logs.length === 0 && <span style={{ color: '#555' }}>{t('debug.waitingLogs')}</span>}
         <LogTree nodes={treeRef.current} setVersion={setVersion} />
         <div ref={logsEndRef} />
       </div>
@@ -252,6 +272,7 @@ function AdminCard({ title, color, open, onToggle, right, children }) {
 }
 
 function LogPanel({ apiBase, collapsed, onToggle }) {
+  const { t } = useT();
   const [lines, setLines] = React.useState([]);
   const [paused, setPaused] = React.useState(false);
   const endRef = React.useRef(null);
@@ -274,18 +295,18 @@ function LogPanel({ apiBase, collapsed, onToggle }) {
   return (
     <div style={{ background: '#222', padding: '16px 20px', borderRadius: '10px', border: '1px solid #444', width: '100%', boxSizing: 'border-box' }}>
       <div onClick={onToggle} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none', gap: '10px', flexWrap: 'wrap' }}>
-        <h2 style={{ color: '#50fa7b', margin: 0, fontSize: '1.25em' }}>Log do Servidor</h2>
+        <h2 style={{ color: '#50fa7b', margin: 0, fontSize: '1.25em' }}>{t('debug.serverLog')}</h2>
         <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button onClick={() => setPaused(p => !p)} style={{ padding: '6px 12px', background: paused ? '#ffb86c' : '#444', color: paused ? '#000' : '#ccc', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.85em' }}>
-            {paused ? '▶ Retomar' : '⏸ Pausar'}
+            {paused ? t('debug.resume') : t('debug.pause')}
           </button>
-          <button onClick={() => setLines([])} style={{ padding: '6px 12px', background: '#444', color: '#ccc', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.85em' }}>Limpar</button>
+          <button onClick={() => setLines([])} style={{ padding: '6px 12px', background: '#444', color: '#ccc', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.85em' }}>{t('common.clear')}</button>
           <span style={{ color: '#888', fontSize: '0.9em' }}>{collapsed ? '▼' : '▲'}</span>
         </div>
       </div>
       {!collapsed && (
         <div style={{ marginTop: '12px', height: '260px', overflowY: 'auto', background: '#0d0d0d', border: '1px solid #333', borderRadius: '5px', padding: '10px', fontSize: '0.75em', lineHeight: '1.5', fontFamily: 'monospace', color: '#ddd', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-          {lines.length === 0 && <span style={{ color: '#555' }}>Aguardando logs do servidor...</span>}
+          {lines.length === 0 && <span style={{ color: '#555' }}>{t('debug.waitingLogs')}</span>}
           {lines.map((l, i) => (
             <div key={i} style={{ color: /error|failed|crash/i.test(l) ? '#ff5555' : (/\[CLEANUP\]|\[HISTORY\]/i.test(l) ? '#b088f9' : '#ddd') }}>{l}</div>
           ))}
@@ -297,6 +318,7 @@ function LogPanel({ apiBase, collapsed, onToggle }) {
 }
 
 const App = () => {
+  const { t, tN, lang, setLang, availableLangs, langLabel } = useT();
   const [view, setView] = useState('lounge'); 
   const [matches, setMatches] = useState([]);
   const [matchID, setMatchID] = useState(null);
@@ -403,7 +425,7 @@ const App = () => {
 
   const getSavedSessions = () => JSON.parse(localStorage.getItem('buraco_sessions') || '{}');
 
-  const myDisplayName = currentUser?.username || 'Eu';
+  const myDisplayName = currentUser?.username || t('lounge.myName');
 
   const isRegisteredName = (name) =>
     registeredUsers.some(u => u.toLowerCase() === String(name).toLowerCase());
@@ -498,13 +520,13 @@ const App = () => {
         body: JSON.stringify(adminBootstrapForm)
       });
       const data = await res.json();
-      if (!res.ok) { setAdminBootstrapError(data.error || 'Falha ao criar o administrador.'); return; }
+      if (!res.ok) { setAdminBootstrapError(data.error || t('app.errors.createAdminFailed')); return; }
       const auth = { token: data.token, username: data.username, isAdmin: data.isAdmin };
       localStorage.setItem(AUTH_KEY, JSON.stringify(auth));
       setCurrentUser(auth);
       setNeedsAdmin(false);
     } catch {
-      setAdminBootstrapError('Sem conexão com o servidor.');
+      setAdminBootstrapError(t('app.errors.serverUnreachable'));
     }
   };
 
@@ -518,14 +540,14 @@ const App = () => {
         body: JSON.stringify(authForm)
       });
       const data = await res.json();
-      if (!res.ok) { setAuthError(data.error || 'Falha na autenticação.'); return; }
+      if (!res.ok) { setAuthError(data.error || t('app.errors.authFailed')); return; }
       const auth = { token: data.token, username: data.username, isAdmin: data.isAdmin };
       localStorage.setItem(AUTH_KEY, JSON.stringify(auth));
       setCurrentUser(auth);
       setShowAuthPopup(false);
       setAuthForm({ username: '', password: '' });
     } catch {
-      setAuthError('Sem conexão com o servidor.');
+      setAuthError(t('app.errors.serverUnreachable'));
     }
   };
 
@@ -574,8 +596,8 @@ const App = () => {
   }, []);
 
   const handleStartTraining = async () => {
-    if (!trainBotConfig.name.trim()) return alert("Digite um nome para o bot!");
-    if (netOverBudget) return alert("Rede neural grande demais para o buffer de pesos!");
+    if (!trainBotConfig.name.trim()) return alert(t('train.nameRequired'));
+    if (netOverBudget) return alert(t('train.netTooBig'));
     try {
       const res = await fetch(`${API_ADDRESS}/api/bots/train`, {
         method: 'POST',
@@ -609,11 +631,11 @@ const App = () => {
         })
       });
       const data = await res.json();
-      alert(`Laboratório Iniciado: ${data.message || "Treinamento em andamento no servidor!"}`);
+      alert(t('train.labStarted', { msg: data.message || t('train.labStartedDefault') }));
       setShowTrainBotPopup(false);
       setTrainBotIsNew(false);
     } catch (e) {
-      alert("Erro ao iniciar o laboratório de IA.");
+      alert(t('train.labStartError'));
     }
   };
 
@@ -674,11 +696,11 @@ const App = () => {
       
       let assignmentsMap = { '0': myName };
       const humanSeats = numPlayers - 1 - numBots;
-      for (let i = 1; i < numPlayers; i++) assignmentsMap[i.toString()] = i <= humanSeats ? `Jogador ${i}` : `Bot ${i}`;
+      for (let i = 1; i < numPlayers; i++) assignmentsMap[i.toString()] = i <= humanSeats ? t('lounge.openQuick.playerSeat', { n: i }) : `Bot ${i}`;
 
       lobbyClient.createMatch('buraco', {
          numPlayers: numPlayers,
-         setupData: { ...rules, numPlayers: numPlayers, isTournament: false, assignments: assignmentsMap, name: rules.name || `Mesa de ${myName}` }
+         setupData: { ...rules, numPlayers: numPlayers, isTournament: false, assignments: assignmentsMap, name: rules.name || t('lounge.openQuick.tableOf', { name: myName }) }
       }).then(async ({ matchID }) => {
          const { playerCredentials } = await lobbyClient.joinMatch('buraco', matchID, { playerID: '0', playerName: myName });
          const sessions = getSavedSessions();
@@ -737,18 +759,18 @@ const App = () => {
           }
       }
     }
-  }, [tournaments, matches]);
+  }, [tournaments, matches, t]);
 
   const handleJoinMatch = async (match, seatID) => {
     const assignedName = match.setupData?.assignments?.[seatID];
     const isTourney = match.setupData?.isTournament === true;
     const reserved = isTourney && assignedName && isRegisteredName(assignedName);
     if (reserved && (!currentUser || String(assignedName).toLowerCase() !== currentUser.username.toLowerCase())) {
-      alert(`Assento reservado para ${assignedName}. Entre com essa conta para jogar.`);
+      alert(t('lounge.join.reserved', { name: assignedName }));
       return;
     }
     let pName = currentUser?.username || assignedName || null;
-    if (!pName) pName = prompt("Digite seu nome para entrar na mesa:");
+    if (!pName) pName = prompt(t('lounge.join.namePrompt'));
     if (!pName) return;
     try {
       const headers = { 'Content-Type': 'application/json' };
@@ -760,7 +782,7 @@ const App = () => {
       });
       const data = await res.json();
       if (!res.ok || !data.playerCredentials) {
-        alert(data.error || "Não foi possível entrar neste assento.");
+        alert(data.error || t('lounge.join.joinFailed'));
         return;
       }
       const sessions = getSavedSessions();
@@ -769,7 +791,7 @@ const App = () => {
       setMatchID(match.matchID); setPlayerID(seatID); setCredentials(data.playerCredentials);
       setView('game');
     } catch (e) {
-      alert("Erro ao entrar no assento.");
+      alert(t('lounge.join.joinError'));
     }
   };
 
@@ -785,7 +807,7 @@ const App = () => {
       const match = matches.find(x => String(x.matchID) === String(mID));
       const seat = match?.players?.find(x => String(x.id) === String(pID));
       if (seat && seat.name && seat.isConnected === true) {
-        alert(`Seu assento na mesa foi ocupado por ${seat.name}. Escolha outro assento ou crie uma nova mesa.`);
+        alert(t('lounge.join.seatOccupied', { name: seat.name }));
         return;
       }
     } catch (e) {
@@ -802,7 +824,7 @@ const App = () => {
     if (remainder !== 0) {
       const botsNeeded = newTourney.rules.numPlayers - remainder;
       for (let i = 0; i < botsNeeded; i++) {
-        playerList.push(`Bot ${i + 1}`);
+        playerList.push(t('tourney.botPlayer', { n: i + 1 }));
       }
     }
     
@@ -814,9 +836,9 @@ const App = () => {
 
     const targetBotName = newTourney.botName || "UntrainedBot";
 
-    const t = {
+    const newT = {
       id: Date.now().toString(),
-      name: newTourney.name || `Torneio ${tournaments.length + 1}`,
+      name: newTourney.name || t('tourney.defaultName', { n: tournaments.length + 1 }),
       type: tourneyType,
       private: !!newTourney.private,
       createdBy: currentUser?.username || null,
@@ -834,10 +856,10 @@ const App = () => {
       rounds: []
     };
     
-    const updated = [...tournaments, t];
+    const updated = [...tournaments, newT];
     setTournaments(updated);
     setNewTourney({ ...newTourney, name: '', players: '' });
-    await executePhaseGeneration(t.id, updated);
+    await executePhaseGeneration(newT.id, updated);
     setView('lounge'); 
   };
 
@@ -845,13 +867,13 @@ const App = () => {
     const myName = myDisplayName;
     const numPlayers = 4;
     const numBots = Math.max(1, Math.min(3, quickGameConfig.numBots || 3));
-    const tableName = (quickGameConfig.tableName || '').trim() || `Mesa de ${myName}`;
+    const tableName = (quickGameConfig.tableName || '').trim() || t('lounge.openQuick.tableOf', { name: myName });
     const targetBotName = quickGameConfig.botName || "UntrainedBot";
     
     let assignmentsMap = { '0': myName };
     const humanSeats = numPlayers - 1 - numBots;
     for (let seat = 1; seat < numPlayers; seat++) {
-        assignmentsMap[seat.toString()] = seat <= humanSeats ? `Jogador ${seat}` : `Bot ${seat}`;
+        assignmentsMap[seat.toString()] = seat <= humanSeats ? t('lounge.openQuick.playerSeat', { n: seat }) : `Bot ${seat}`;
     }
 
     try {
@@ -882,21 +904,21 @@ const App = () => {
       setTimeout(() => setView('game'), 500);
 
     } catch (e) { 
-        alert("Erro ao criar partida rápida. " + e.message); 
+        alert(t('lounge.openQuick.createError', { msg: e.message })); 
     }
   };
 
   const executePhaseGeneration = async (tID, currentTournaments) => {
     const tIndex = currentTournaments.findIndex(x => x.id === tID);
     if (tIndex === -1) return;
-    const t = currentTournaments[tIndex];
+    const trn = currentTournaments[tIndex];
 
     let matchPromises = [];
     let assignmentsInfo = [];
-    let eligiblePlayers = [...t.players];
+    let eligiblePlayers = [...trn.players];
 
-    if (t.format === 'playoff' && t.rounds.length > 0) {
-      const lastRound = t.rounds[t.rounds.length - 1];
+    if (trn.format === 'playoff' && trn.rounds.length > 0) {
+      const lastRound = trn.rounds[trn.rounds.length - 1];
       eligiblePlayers = [];
       lastRound.assignments.forEach(a => {
         const matchRecord = history.find(h => h.matchID === a.matchID);
@@ -907,31 +929,31 @@ const App = () => {
           else eligiblePlayers.push(...a.team1);
         }
       });
-      if (eligiblePlayers.length <= (t.rules.numPlayers === 4 ? 2 : 1)) {
-        t.status = 'completed';
-        t.isGeneratingNext = false;
+      if (eligiblePlayers.length <= (trn.rules.numPlayers === 4 ? 2 : 1)) {
+        trn.status = 'completed';
+        trn.isGeneratingNext = false;
         saveTournamentsToAPI(currentTournaments);
         return;
       }
     }
 
-    if (t.type === 'team' && t.format !== 'playoff') {
-      let shuffledTeams = [...t.fixedTeams].sort(() => Math.random() - 0.5);
+    if (trn.type === 'team' && trn.format !== 'playoff') {
+      let shuffledTeams = [...trn.fixedTeams].sort(() => Math.random() - 0.5);
       for (let i = 0; i < shuffledTeams.length; i += 2) {
         const t0 = shuffledTeams[i]; const t1 = shuffledTeams[i+1];
         assignmentsInfo.push({ team0: t0, team1: t1, map: { '0': t0[0], '1': t1[0], '2': t0[1], '3': t1[1] } });
       }
     } else {
-      const shuffleMode = t.shuffleMode || 'every-round';
+      const shuffleMode = trn.shuffleMode || 'every-round';
       let shouldShuffle = true;
-      if (t.rounds.length > 0) {
+      if (trn.rounds.length > 0) {
         if (shuffleMode === 'rounds') {
-          shouldShuffle = (t.rounds.length % Math.max(1, t.shuffleEvery || 1)) === 0;
+          shouldShuffle = (trn.rounds.length % Math.max(1, trn.shuffleEvery || 1)) === 0;
         } else if (shuffleMode === 'points') {
-          const since = t.lastShuffleRound || 0;
+          const since = trn.lastShuffleRound || 0;
           let pts = {};
-          t.players.forEach(p => pts[p] = 0);
-          t.rounds.forEach((r, idx) => {
+          trn.players.forEach(p => pts[p] = 0);
+          trn.rounds.forEach((r, idx) => {
             const roundNum = idx + 1;
             if (roundNum < since) return;
             r.assignments.forEach(a => {
@@ -943,13 +965,13 @@ const App = () => {
               a.team1.forEach(p => { if (pts[p] !== undefined) pts[p] += s1; });
             });
           });
-          shouldShuffle = Math.max(0, ...Object.values(pts)) >= Math.max(0, t.shufflePoints || 0);
+          shouldShuffle = Math.max(0, ...Object.values(pts)) >= Math.max(0, trn.shufflePoints || 0);
         }
       }
 
       if (shouldShuffle) {
         let shuffled = eligiblePlayers.sort(() => Math.random() - 0.5);
-        if (t.rules.numPlayers === 4) {
+        if (trn.rules.numPlayers === 4) {
           for (let i = 0; i < shuffled.length; i += 4) {
             const t0 = [shuffled[i], shuffled[i+2]]; const t1 = [shuffled[i+1], shuffled[i+3]];
             assignmentsInfo.push({ team0: t0, team1: t1, map: { '0': t0[0], '1': t1[0], '2': t0[1], '3': t1[1] } });
@@ -960,9 +982,9 @@ const App = () => {
             assignmentsInfo.push({ team0: t0, team1: t1, map: { '0': t0[0], '1': t1[0] } });
           }
         }
-        t.lastShuffleRound = t.rounds.length + 1;
+        trn.lastShuffleRound = trn.rounds.length + 1;
       } else {
-        const prevRound = t.rounds[t.rounds.length - 1];
+        const prevRound = trn.rounds[trn.rounds.length - 1];
         assignmentsInfo = prevRound.assignments.map(a => {
           const map = a.team0.length === 2
             ? { '0': a.team0[0], '1': a.team1[0], '2': a.team0[1], '3': a.team1[1] }
@@ -974,21 +996,21 @@ const App = () => {
 
     for (let info of assignmentsInfo) {
       matchPromises.push(lobbyClient.createMatch('buraco', {
-         numPlayers: t.rules.numPlayers,
-         setupData: { ...t.rules, isTournament: true, tournamentID: t.id, assignments: info.map }
+         numPlayers: trn.rules.numPlayers,
+         setupData: { ...trn.rules, isTournament: true, tournamentID: trn.id, assignments: info.map }
       }));
     }
 
     try {
       const createdMatches = await Promise.all(matchPromises);
-      const newRound = { roundNum: t.rounds.length + 1, assignments: [] };
+      const newRound = { roundNum: trn.rounds.length + 1, assignments: [] };
       for (let i = 0; i < createdMatches.length; i++) {
         newRound.assignments.push({ matchID: createdMatches[i].matchID, team0: assignmentsInfo[i].team0, team1: assignmentsInfo[i].team1 });
       }
-      t.rounds.push(newRound);
-      t.isGeneratingNext = false;
+      trn.rounds.push(newRound);
+      trn.isGeneratingNext = false;
       saveTournamentsToAPI(currentTournaments);
-    } catch (e) { alert("Erro ao gerar mesas: " + e.message); }
+    } catch (e) { alert(t('tourney.createError', { msg: e.message })); }
   };
 
   const getScoreTotal = (teamScore) => 
@@ -1040,35 +1062,35 @@ const App = () => {
   };
 
   const handleEndTournament = async (tID) => {
-    if (!confirm("Encerrar o torneio agora? A classificação atual será mantida como resultado final e nenhuma nova rodada será gerada.")) return;
+    if (!confirm(t('admin.endTournamentConfirm'))) return;
     const updated = tournaments.map(t => t.id === tID ? { ...t, status: 'completed', isGeneratingNext: false } : t);
     saveTournamentsToAPI(updated);
   };
 
   const handleReactivateTournament = async (tID) => {
-    const t = tournaments.find(x => x.id === tID);
-    if (!t) return;
-    const leaderboard = getLeaderboard(t);
-    let targetPoints = t.targetPoints, maxRounds = t.maxRounds;
-    if (t.format === 'points' && leaderboard.isFinished) {
+    const trn = tournaments.find(x => x.id === tID);
+    if (!trn) return;
+    const leaderboard = getLeaderboard(trn);
+    let targetPoints = trn.targetPoints, maxRounds = trn.maxRounds;
+    if (trn.format === 'points' && leaderboard.isFinished) {
       const leaderPts = leaderboard.standings?.[0]?.[1]?.points ?? targetPoints;
       const suggested = Math.max(targetPoints, leaderPts + 500);
-      const input = prompt(`Reativar torneio "pontos"? A meta (${targetPoints} pts) já foi atingida — defina a nova meta de pontos:`, suggested);
+      const input = prompt(t('admin.reactivatePointsPrompt', { pts: targetPoints }), suggested);
       if (!input) return;
       const parsed = parseInt(input, 10);
-      if (!Number.isFinite(parsed) || parsed <= leaderPts) return alert("A nova meta deve ser maior que a pontuação atual do líder.");
+      if (!Number.isFinite(parsed) || parsed <= leaderPts) return alert(t('admin.reactivatePointsInvalid'));
       targetPoints = parsed;
-    } else if (t.format === 'rounds' && t.rounds.length >= maxRounds) {
-      const input = prompt(`Reativar torneio "rodadas"? O máximo (${maxRounds} rodadas) já foi atingido — defina o novo número máximo de rodadas:`, maxRounds + 1);
+    } else if (trn.format === 'rounds' && trn.rounds.length >= maxRounds) {
+      const input = prompt(t('admin.reactivateRoundsPrompt', { rounds: maxRounds }), maxRounds + 1);
       if (!input) return;
       const parsed = parseInt(input, 10);
-      if (!Number.isFinite(parsed) || parsed <= maxRounds) return alert("O novo máximo deve ser maior que o atual.");
+      if (!Number.isFinite(parsed) || parsed <= maxRounds) return alert(t('admin.reactivateRoundsInvalid'));
       maxRounds = parsed;
     }
     const updated = tournaments.map(x => x.id === tID ? {
       ...x, status: 'active', isGeneratingNext: false,
-      ...(t.format === 'points' ? { targetPoints } : {}),
-      ...(t.format === 'rounds' ? { maxRounds } : {})
+      ...(trn.format === 'points' ? { targetPoints } : {}),
+      ...(trn.format === 'rounds' ? { maxRounds } : {})
     } : x);
     saveTournamentsToAPI(updated);
   };
@@ -1079,7 +1101,7 @@ const App = () => {
   };
 
   const handleAdminDeleteTournament = async (tID) => {
-    if (!confirm("Tem certeza? Isso apagará o torneio E DESTRUIRÁ todas as mesas associadas permanentemente.")) return;
+    if (!confirm(t('admin.deleteTournamentConfirm'))) return;
     const tToDelete = tournaments.find(t => t.id === tID);
     if (tToDelete) {
       const matchIDs = tToDelete.rounds.flatMap(r => r.assignments.map(a => a.matchID));
@@ -1098,7 +1120,7 @@ const App = () => {
   };
 
   const handleCleanOrphans = async () => {
-    if (!confirm("Isso apagará todas as mesas fantasma do disco. Continuar?")) return;
+    if (!confirm(t('admin.cleanOrphansConfirm'))) return;
     
     const validMatchIDs = tournaments.flatMap(t => t.rounds.flatMap(r => r.assignments.map(a => a.matchID)));
     const orphanMatches = matches.filter(m => !validMatchIDs.includes(m.matchID));
@@ -1112,20 +1134,20 @@ const App = () => {
         });
       } catch(e) {}
     }
-    alert(`${orphanMatches.length} mesas fantasma apagadas! IMPORTANTE: Se elas continuarem na tela, reinicie o container do servidor no terminal (sudo docker compose restart buraco-server) para limpar o cache da memória RAM!`);
+    alert(t('admin.cleanOrphansDone', { n: orphanMatches.length }));
     window.location.reload();
   };
 
   const handleAdminForceKick = async (matchID, seatID) => {
-    if (!confirm(`Forçar a saída do jogador no assento ${seatID}?`)) return;
+    if (!confirm(t('admin.kickSeatConfirm', { id: seatID }))) return;
     try {
       await fetch(`${API_ADDRESS}/api/admin/kick`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentUser?.token}` },
         body: JSON.stringify({ matchID, playerID: seatID })
       });
-      alert('Assento liberado! O jogador foi removido da mesa.');
-    } catch (e) { alert("Erro ao liberar assento."); }
+      alert(t('admin.kickSeatDone'));
+    } catch (e) { alert(t('admin.kickSeatError')); }
   };
 
   const refreshAdminUsers = async () => {
@@ -1141,8 +1163,8 @@ const App = () => {
 
   const handleAdminAddUser = async (e) => {
     e.preventDefault();
-    if (!newAdminUser.username.trim()) return alert("Digite um nome de usuário.");
-    if (newAdminUser.password.length < 6) return alert("A senha deve ter pelo menos 6 caracteres.");
+    if (!newAdminUser.username.trim()) return alert(t('app.errors.usernameRequired'));
+    if (newAdminUser.password.length < 6) return alert(t('app.errors.passwordMin'));
     try {
       const res = await fetch(`${API_ADDRESS}/api/admin/users`, {
         method: 'POST',
@@ -1150,10 +1172,10 @@ const App = () => {
         body: JSON.stringify(newAdminUser)
       });
       const data = await res.json();
-      if (!res.ok) return alert(data.error || 'Falha ao adicionar usuário.');
+      if (!res.ok) return alert(data.error || t('admin.addUserError'));
       setNewAdminUser({ username: '', password: '', isAdmin: false });
       refreshAdminUsers();
-    } catch { alert("Erro ao adicionar usuário."); }
+    } catch { alert(t('admin.addUserFail')); }
   };
 
   const handleAdminToggleAdmin = async (username, makeAdmin) => {
@@ -1164,15 +1186,15 @@ const App = () => {
         body: JSON.stringify({ isAdmin: makeAdmin })
       });
       const data = await res.json();
-      if (!res.ok) return alert(data.error || 'Falha ao alterar administrador.');
+      if (!res.ok) return alert(data.error || t('admin.toggleAdminError'));
       refreshAdminUsers();
-    } catch { alert("Erro ao alterar administrador."); }
+    } catch { alert(t('admin.toggleAdminFail')); }
   };
 
   const handleAdminResetPassword = async (username) => {
-    const password = prompt(`Nova senha para "${username}":`);
+    const password = prompt(t('admin.resetPasswordPrompt', { name: username }));
     if (!password) return;
-    if (password.length < 6) return alert("A senha deve ter pelo menos 6 caracteres.");
+    if (password.length < 6) return alert(t('app.errors.passwordMin'));
     try {
       const res = await fetch(`${API_ADDRESS}/api/admin/users/${encodeURIComponent(username)}/password`, {
         method: 'POST',
@@ -1180,29 +1202,29 @@ const App = () => {
         body: JSON.stringify({ password })
       });
       const data = await res.json();
-      if (!res.ok) return alert(data.error || 'Falha ao redefinir senha.');
-      alert('Senha redefinida!');
-    } catch { alert("Erro ao redefinir senha."); }
+      if (!res.ok) return alert(data.error || t('admin.resetPasswordError'));
+      alert(t('admin.resetPasswordDone'));
+    } catch { alert(t('admin.resetPasswordFail')); }
   };
 
   const handleAdminRemoveUser = async (username) => {
-    if (!confirm(`Remover o usuário "${username}"? Todas as sessões dele serão encerradas.`)) return;
+    if (!confirm(t('admin.removeUserConfirm', { name: username }))) return;
     try {
       const res = await fetch(`${API_ADDRESS}/api/admin/users/${encodeURIComponent(username)}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${currentUser?.token}` }
       });
       const data = await res.json();
-      if (!res.ok) return alert(data.error || 'Falha ao remover usuário.');
+      if (!res.ok) return alert(data.error || t('admin.removeUserError'));
       refreshAdminUsers();
-    } catch { alert("Erro ao remover usuário."); }
+    } catch { alert(t('admin.removeUserFail')); }
   };
 
   const handleAdminRenameUser = async (username) => {
-    const newName = prompt(`Renomear usuário "${username}" para:`);
+    const newName = prompt(t('admin.renameUserPrompt', { name: username }));
     if (!newName || !newName.trim()) return;
     const trimmed = newName.trim();
-    if (trimmed.toLowerCase() === username.toLowerCase()) return alert("O nome já é esse.");
+    if (trimmed.toLowerCase() === username.toLowerCase()) return alert(t('admin.renameUserSame'));
     try {
       const res = await fetch(`${API_ADDRESS}/api/admin/users/${encodeURIComponent(username)}/rename`, {
         method: 'POST',
@@ -1210,19 +1232,19 @@ const App = () => {
         body: JSON.stringify({ newUsername: trimmed })
       });
       const data = await res.json();
-      if (!res.ok) return alert(data.error || 'Falha ao renomear usuário.');
+      if (!res.ok) return alert(data.error || t('admin.renameUserError'));
       refreshAdminUsers();
       if (currentUser?.username?.toLowerCase() === username.toLowerCase()) {
         const saved = getSavedAuth();
         const updatedAuth = { ...saved, username: trimmed };
         localStorage.setItem(AUTH_KEY, JSON.stringify(updatedAuth));
         setCurrentUser(updatedAuth);
-        alert(`Usuário renomeado para "${trimmed}". Recarregando para atualizar a sessão...`);
+        alert(t('admin.renameUserReload', { name: trimmed }));
         window.location.reload();
       } else {
-        alert(`Usuário renomeado para "${trimmed}".`);
+        alert(t('admin.renameUserDone', { name: trimmed }));
       }
-    } catch { alert("Erro ao renomear usuário."); }
+    } catch { alert(t('admin.renameUserFail')); }
   };
 
   const RUNNER_RANKS = [
@@ -1262,8 +1284,8 @@ const App = () => {
   if (needsAdmin === null) {
     return (
       <div className="app-view-root" style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px' }}>
-        <h1 style={{ color: '#ffd700', margin: 0 }}>Buraco</h1>
-        <p style={{ color: '#aaa' }}>Carregando...</p>
+        <h1 style={{ color: '#ffd700', margin: 0 }}>{t('app.loadingScreen.title')}</h1>
+        <p style={{ color: '#aaa' }}>{t('app.loadingScreen.loading')}</p>
       </div>
     );
   }
@@ -1272,16 +1294,19 @@ const App = () => {
     return (
       <div className="app-view-root" style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ background: '#1b4332', padding: '40px', borderRadius: '15px', border: '2px solid #ffd700', maxWidth: '440px', width: '100%' }}>
-          <h1 style={{ color: '#ffd700', margin: '0 0 6px 0', fontSize: '1.4em' }}>Primeiro Acesso</h1>
+          <h1 style={{ color: '#ffd700', margin: '0 0 6px 0', fontSize: '1.4em' }}>{t('app.bootstrap.title')}</h1>
           <p style={{ color: '#ccc', margin: '0 0 20px 0', fontSize: '0.95em', lineHeight: '1.5' }}>
-            Nenhum administrador existe ainda. Crie a conta de administrador inicial para liberar o uso do app.
+            {t('app.bootstrap.desc')}
           </p>
           <form onSubmit={submitAdminBootstrap} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            <input type="text" placeholder="Nome de administrador" value={adminBootstrapForm.username} onChange={e => setAdminBootstrapForm({ ...adminBootstrapForm, username: e.target.value })} autoComplete="username" style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
-            <input type="password" placeholder="Senha (mín. 6)" value={adminBootstrapForm.password} onChange={e => setAdminBootstrapForm({ ...adminBootstrapForm, password: e.target.value })} autoComplete="new-password" style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
+            <input type="text" placeholder={t('app.bootstrap.adminNamePlaceholder')} value={adminBootstrapForm.username} onChange={e => setAdminBootstrapForm({ ...adminBootstrapForm, username: e.target.value })} autoComplete="username" style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
+            <input type="password" placeholder={t('app.bootstrap.passwordPlaceholder')} value={adminBootstrapForm.password} onChange={e => setAdminBootstrapForm({ ...adminBootstrapForm, password: e.target.value })} autoComplete="new-password" style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
             {adminBootstrapError && <div style={{ color: '#ff5555', fontSize: '0.9em' }}>{adminBootstrapError}</div>}
-            <button type="submit" style={{ padding: '12px 20px', background: '#ffd700', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '1em' }}>Criar Conta de Administrador</button>
+            <button type="submit" style={{ padding: '12px 20px', background: '#ffd700', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '1em' }}>{t('app.bootstrap.createAdmin')}</button>
           </form>
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
+            <LangSwitcher t={t} lang={lang} setLang={setLang} availableLangs={availableLangs} langLabel={langLabel} />
+          </div>
         </div>
       </div>
     );
@@ -1305,9 +1330,9 @@ const App = () => {
     if (!currentUser?.isAdmin) {
       return (
         <div className="app-view-root" style={{ padding: '50px', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px' }}>
-          <h1 style={{ color: '#ff4d4d', margin: 0 }}>Acesso Restrito</h1>
-          <p style={{ color: '#aaa' }}>Você precisa entrar com uma conta de administrador para acessar este painel.</p>
-          <button onClick={() => setView('lounge')} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Voltar ao Salão</button>
+          <h1 style={{ color: '#ff4d4d', margin: 0 }}>{t('app.restricted.title')}</h1>
+          <p style={{ color: '#aaa' }}>{t('app.restricted.desc')}</p>
+          <button onClick={() => setView('lounge')} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>{t('common.backToLounge')}</button>
         </div>
       );
     }
@@ -1315,53 +1340,53 @@ const App = () => {
     return (
       <div className="app-view-root" style={{ padding: '50px', overflowX: 'hidden', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #ff4d4d', paddingBottom: '20px' }}>
-          <h1 style={{ color: '#ff4d4d', margin: 0, flex: '1 1 100%' }}>Painel de Administração</h1>
+          <h1 style={{ color: '#ff4d4d', margin: 0, flex: '1 1 100%' }}>{t('admin.title')}</h1>
           <button onClick={() => { setTrainBotIsNew(availableBots.length === 0); setTrainBotConfig(prev => ({ ...prev, name: availableBots[0] || 'BotPrometheus' })); setShowTrainBotPopup(true); }} style={{ ...PRIMARY_ACTION, background: '#8a2be2', color: 'white' }}>
-             Laboratório de IA (Treinar Bot)
+             {t('admin.aiLab')}
           </button>
-          <button onClick={() => setView('lounge')} style={{ ...PRIMARY_ACTION, background: '#555', color: 'white' }}>Sair do Modo Admin</button>
+          <button onClick={() => setView('lounge')} style={{ ...PRIMARY_ACTION, background: '#555', color: 'white' }}>{t('admin.exitAdmin')}</button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <LogPanel apiBase={API_ADDRESS} collapsed={!adminCardOpen('logs')} onToggle={() => toggleAdminCard('logs')} />
 
-        <AdminCard title="Gerenciar Bots" color="#b088f9" open={adminCardOpen('bots')} onToggle={() => toggleAdminCard('bots')}>
+        <AdminCard title={t('admin.manageBots')} color="#b088f9" open={adminCardOpen('bots')} onToggle={() => toggleAdminCard('bots')}>
           {trainingStatus && trainingStatus.isTraining && trainingStatus.sessions.map(session => (
           <div key={session.botName} style={{ width: '100%', background: '#2b1055', padding: '20px', borderRadius: '10px', border: '1px solid #8a2be2', boxSizing: 'border-box', marginBottom: '15px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-              <h3 style={{ margin: 0, color: '#ffb86c' }}> Treinamento em Andamento: {session.botName}</h3>
+              <h3 style={{ margin: 0, color: '#ffb86c' }}> {t('admin.trainingInProgress', { name: session.botName })}</h3>
               <button onClick={async () => {
-                if (!confirm(`Parar o treinamento de "${session.botName}"? O progresso atual será salvo.`)) return;
+                if (!confirm(t('admin.stopConfirm', { name: session.botName }))) return;
                 await fetch(`${API_ADDRESS}/api/bots/stop`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botName: session.botName }) });
-              }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 14px', fontWeight: 'bold', cursor: 'pointer' }}>⏹ Parar</button>
+              }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 14px', fontWeight: 'bold', cursor: 'pointer' }}>{t('admin.stop')}</button>
             </div>
             <div style={{ background: '#111', borderRadius: '5px', width: '100%', height: '20px', overflow: 'hidden' }}>
               <div style={{ width: `${(session.progress.currentGeneration / session.progress.totalGenerations) * 100}%`, background: '#8a2be2', height: '100%', transition: 'width 1s' }} />
             </div>
             <div style={{ marginTop: '8px', color: '#aaa', fontSize: '0.85em', textAlign: 'right' }}>
-              Sessão atual: <strong style={{color:'white'}}>{session.progress.currentGeneration} / {session.progress.totalGenerations}</strong>
-              {session.progress.lifetimeGenOffset > 0 && <span style={{color:'#b088f9'}}> &nbsp;(Total: {session.progress.lifetimeGenOffset + session.progress.currentGeneration} ger.)</span>}
+              {t('admin.currentSession', { cur: session.progress.currentGeneration, total: session.progress.totalGenerations })}
+              {session.progress.lifetimeGenOffset > 0 && <span style={{color:'#b088f9'}}> &nbsp;{t('admin.totalGenerations', { total: session.progress.lifetimeGenOffset + session.progress.currentGeneration })}</span>}
             </div>
 
             <div style={{ marginTop: '15px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px' }}>
               {(session.progress.islands || []).map((island, k) => island && (
                 <div key={k} style={{ background: '#1a0a33', border: '1px solid #5a2a9a', borderRadius: '8px', padding: '10px', fontSize: '0.85em' }}>
-                  <div style={{ color: '#b088f9', fontWeight: 'bold', marginBottom: '6px' }}> Ilha {k + 1} 🏝️ Gen {island.gen}</div>
-                  <div> MaxDiff: <strong style={{color:'#ffd700'}}>{island.bestDiff?.toFixed(0)}</strong></div>
-                  <div> AvgDiff: <strong style={{color:'#4da6ff'}}>{island.avgDiff?.toFixed(0)}</strong></div>
+                  <div style={{ color: '#b088f9', fontWeight: 'bold', marginBottom: '6px' }}> {t('admin.island', { n: k + 1, gen: island.gen })}</div>
+                  <div> {t('admin.maxDiff')}: <strong style={{color:'#ffd700'}}>{island.bestDiff?.toFixed(0)}</strong></div>
+                  <div> {t('admin.avgDiff')}: <strong style={{color:'#4da6ff'}}>{island.avgDiff?.toFixed(0)}</strong></div>
                 </div>
               ))}
             </div>
 
             {session.progress.benchmarkDiff != null && (
               <div style={{ marginTop: '15px', textAlign: 'center', fontSize: '1.1em', fontWeight: 'bold', color: session.progress.benchmarkDiff >= 0 ? '#50fa7b' : '#ff5555' }}>
-                🧠 Evolução vs Bot Original (Bench): {session.progress.benchmarkDiff > 0 ? '+' : ''}{session.progress.benchmarkDiff?.toFixed(0)} pts
+                {t('admin.benchDiff', { sign: session.progress.benchmarkDiff > 0 ? t('admin.plus') : '', diff: session.progress.benchmarkDiff?.toFixed(0) })}
               </div>
             )}
           </div>
           ))}
 
-          {botInfoList.length === 0 ? <p style={{ color: '#888' }}>Nenhum bot treinado.</p> : null}
+          {botInfoList.length === 0 ? <p style={{ color: '#888' }}>{t('admin.noBotsTrained')}</p> : null}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
           {botInfoList.map(bot => (
             <div key={bot.name} style={{ background: '#111', border: '1px solid #333', borderRadius: '8px', padding: '15px', width: '300px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -1369,8 +1394,8 @@ const App = () => {
                 <div style={{ fontWeight: 'bold', color: bot.isTraining ? '#ffb86c' : 'white' }}>{bot.name} {bot.isTraining ? '' : ''}</div>
                 <div style={{ fontSize: '0.75em', color: '#888' }}>
                   {bot.isTraining
-                    ? `Sessão: Gen ${bot.currentGen}/${bot.totalGen}${bot.meta?.lifetimeGenerations ? ` · Total: ${bot.meta.lifetimeGenerations} ger.` : ''}`
-                    : `${bot.meta?.lifetimeGenerations ? `${bot.meta.lifetimeGenerations} ger. treinadas · ` : ''}Salvo: ${new Date(bot.lastModified).toLocaleDateString()}`}
+                    ? t('admin.sessionGen', { cur: bot.currentGen, total: bot.totalGen, rest: bot.meta?.lifetimeGenerations ? t('admin.totalGenerations', { total: bot.meta.lifetimeGenerations }) : '' })
+                    : `${bot.meta?.lifetimeGenerations ? t('admin.trainedGenerations', { n: bot.meta.lifetimeGenerations }) : ''}${t('admin.savedOn', { date: new Date(bot.lastModified).toLocaleDateString() })}`}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
@@ -1403,26 +1428,26 @@ const App = () => {
                     rules: bot.meta?.rules || prev.rules
                   }));
                   setShowTrainBotPopup(true);
-                }} style={{ background: '#8a2be2', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}> Treinar</button>
-                <button onClick={async () => { if (!confirm(`Apagar bot "${bot.name}"?`)) return; await fetch(`${API_ADDRESS}/api/bots/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botName: bot.name }) }); setBotInfoList(prev => prev.filter(b => b.name !== bot.name)); setAvailableBots(prev => prev.filter(b => b !== bot.name)); }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Apagar</button>
-                <a href={`${API_ADDRESS}/api/bots/download/${encodeURIComponent(bot.name)}`} download style={{ background: '#4da6ff', color: 'white', textDecoration: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Baixar Pesos</a>
-                <a href={`${API_ADDRESS}/api/bots/download/${encodeURIComponent(bot.name)}?file=meta`} download style={{ background: '#4da6ff', color: 'white', textDecoration: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Baixar Meta</a>
+                }} style={{ background: '#8a2be2', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}> {t('admin.training')}</button>
+                <button onClick={async () => { if (!confirm(t('admin.deleteBotConfirm', { name: bot.name }))) return; await fetch(`${API_ADDRESS}/api/bots/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botName: bot.name }) }); setBotInfoList(prev => prev.filter(b => b.name !== bot.name)); setAvailableBots(prev => prev.filter(b => b !== bot.name)); }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>{t('admin.delete')}</button>
+                <a href={`${API_ADDRESS}/api/bots/download/${encodeURIComponent(bot.name)}`} download style={{ background: '#4da6ff', color: 'white', textDecoration: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>{t('admin.downloadWeights')}</a>
+                <a href={`${API_ADDRESS}/api/bots/download/${encodeURIComponent(bot.name)}?file=meta`} download style={{ background: '#4da6ff', color: 'white', textDecoration: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>{t('admin.downloadMeta')}</a>
               </div>
             </div>
           ))}
           </div>
         </AdminCard>
 
-        <AdminCard title="Gerenciar Usuários" color="#2a9d8f" open={adminCardOpen('users')} onToggle={() => toggleAdminCard('users')}>
+        <AdminCard title={t('admin.manageUsers')} color="#2a9d8f" open={adminCardOpen('users')} onToggle={() => toggleAdminCard('users')}>
               <form onSubmit={handleAdminAddUser} style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '15px', alignItems: 'center' }}>
-                <input type="text" placeholder="Novo usuário" value={newAdminUser.username} onChange={e => setNewAdminUser({ ...newAdminUser, username: e.target.value })} style={{ padding: '7px', borderRadius: '5px', border: 'none', flex: '1 1 120px', minWidth: 0 }} />
-                <input type="password" placeholder="Senha (mín. 6)" value={newAdminUser.password} onChange={e => setNewAdminUser({ ...newAdminUser, password: e.target.value })} style={{ padding: '7px', borderRadius: '5px', border: 'none', flex: '1 1 120px', minWidth: 0 }} />
+                <input type="text" placeholder={t('admin.newUserPlaceholder')} value={newAdminUser.username} onChange={e => setNewAdminUser({ ...newAdminUser, username: e.target.value })} style={{ padding: '7px', borderRadius: '5px', border: 'none', flex: '1 1 120px', minWidth: 0 }} />
+                <input type="password" placeholder={t('app.bootstrap.passwordPlaceholder')} value={newAdminUser.password} onChange={e => setNewAdminUser({ ...newAdminUser, password: e.target.value })} style={{ padding: '7px', borderRadius: '5px', border: 'none', flex: '1 1 120px', minWidth: 0 }} />
                 <label style={{ color: '#ddd', fontSize: '0.85em', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <input type="checkbox" checked={newAdminUser.isAdmin} onChange={e => setNewAdminUser({ ...newAdminUser, isAdmin: e.target.checked })} /> admin
                 </label>
-                <button type="submit" style={{ padding: '8px 14px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Adicionar</button>
+                <button type="submit" style={{ padding: '8px 14px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>{t('admin.add')}</button>
               </form>
-              {adminUsers.length === 0 ? <p style={{ color: '#888' }}>Nenhum usuário.</p> : null}
+              {adminUsers.length === 0 ? <p style={{ color: '#888' }}>{t('admin.noUsers')}</p> : null}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
               {adminUsers.map(u => {
                 const isSelf = currentUser?.username?.toLowerCase() === u.username.toLowerCase();
@@ -1430,22 +1455,22 @@ const App = () => {
                   <div key={u.username} style={{ background: '#111', border: '1px solid #333', borderRadius: '8px', padding: '15px', width: '300px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <div>
                       <span style={{ fontWeight: 'bold', color: u.isAdmin ? '#ffd700' : 'white' }}>{u.username}</span>
-                      {u.isAdmin && <span style={{ color: '#ffd700', fontSize: '0.75em', marginLeft: '6px' }}>🛡 admin</span>}
-                      {u.envAdmin && <span style={{ color: '#b088f9', fontSize: '0.75em', marginLeft: '6px' }}>(env)</span>}
-                      {isSelf && <span style={{ color: '#4da6ff', fontSize: '0.75em', marginLeft: '6px' }}>(você)</span>}
+                      {u.isAdmin && <span style={{ color: '#ffd700', fontSize: '0.75em', marginLeft: '6px' }}>{t('admin.adminBadge')}</span>}
+                      {u.envAdmin && <span style={{ color: '#b088f9', fontSize: '0.75em', marginLeft: '6px' }}>{t('admin.envBadge')}</span>}
+                      {isSelf && <span style={{ color: '#4da6ff', fontSize: '0.75em', marginLeft: '6px' }}>{t('admin.youBadge')}</span>}
                     </div>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                       {u.envAdmin ? null : (
                         <button onClick={() => handleAdminToggleAdmin(u.username, !u.isAdmin)} style={{ background: u.isAdmin ? '#333' : '#2a9d8f', color: u.isAdmin ? '#ccc' : 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>
-                          {u.isAdmin ? 'Remover Admin' : 'Tornar Admin'}
+                          {u.isAdmin ? t('admin.removeAdmin') : t('admin.makeAdmin')}
                         </button>
                       )}
-                      <button onClick={() => handleAdminResetPassword(u.username)} style={{ background: '#4da6ff', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Redefinir Senha</button>
+                      <button onClick={() => handleAdminResetPassword(u.username)} style={{ background: '#4da6ff', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>{t('admin.resetPassword')}</button>
                       {u.envAdmin ? null : (
-                        <button onClick={() => handleAdminRenameUser(u.username)} style={{ background: '#b088f9', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Renomear</button>
+                        <button onClick={() => handleAdminRenameUser(u.username)} style={{ background: '#b088f9', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>{t('admin.rename')}</button>
                       )}
                       {!isSelf && !u.envAdmin && (
-                        <button onClick={() => handleAdminRemoveUser(u.username)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>Remover</button>
+                        <button onClick={() => handleAdminRemoveUser(u.username)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>{t('admin.remove')}</button>
                       )}
                     </div>
                   </div>
@@ -1454,45 +1479,45 @@ const App = () => {
               </div>
         </AdminCard>
 
-        <AdminCard title="Gerenciar Torneios" color="#ffd700" open={adminCardOpen('tournaments')} onToggle={() => toggleAdminCard('tournaments')}>
-          {tournaments.filter(t => t.status !== 'completed').length === 0 ? <p style={{ color: '#888' }}>Nenhum torneio ativo.</p> : null}
+        <AdminCard title={t('admin.manageTournaments')} color="#ffd700" open={adminCardOpen('tournaments')} onToggle={() => toggleAdminCard('tournaments')}>
+          {tournaments.filter(t => t.status !== 'completed').length === 0 ? <p style={{ color: '#888' }}>{t('admin.noActiveTournaments')}</p> : null}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
-          {tournaments.filter(t => t.status !== 'completed').map(t => (
-            <div key={t.id} style={{ background: '#111', border: '1px solid #333', borderRadius: '8px', padding: '15px', width: '300px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <strong style={{ minWidth: 0 }}>{t.name}</strong>
+          {tournaments.filter(t => t.status !== 'completed').map(trn => (
+            <div key={trn.id} style={{ background: '#111', border: '1px solid #333', borderRadius: '8px', padding: '15px', width: '300px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <strong style={{ minWidth: 0 }}>{trn.name}</strong>
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                <button onClick={() => handleToggleTournamentVisibility(t.id)} title={t.private ? 'Privado — clique para tornar público' : 'Público — clique para tornar privado'} style={{ background: t.private ? '#8a2be2' : '#2a9d8f', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>{t.private ? '🔒 Privado' : '🔓 Público'}</button>
-                <button onClick={() => handleEndTournament(t.id)} style={{ background: '#ff9900', color: 'black', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Encerrar</button>
-                <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar</button>
+                <button onClick={() => handleToggleTournamentVisibility(trn.id)} title={trn.private ? t('admin.privateTitle') : t('admin.publicTitle')} style={{ background: trn.private ? '#8a2be2' : '#2a9d8f', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>{trn.private ? t('admin.privateBadge') : t('admin.publicBadge')}</button>
+                <button onClick={() => handleEndTournament(trn.id)} style={{ background: '#ff9900', color: 'black', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>{t('admin.end')}</button>
+                <button onClick={() => handleAdminDeleteTournament(trn.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>{t('admin.delete')}</button>
               </div>
             </div>
           ))}
           </div>
         </AdminCard>
 
-        <AdminCard title="Mesas Ativas (Liberar Assentos)" color="#4da6ff" open={adminCardOpen('active')} onToggle={() => toggleAdminCard('active')} right={
-          <button onClick={handleCleanOrphans} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold' }}> Limpar Mesas órfãs</button>
+        <AdminCard title={t('admin.activeMatches')} color="#4da6ff" open={adminCardOpen('active')} onToggle={() => toggleAdminCard('active')} right={
+          <button onClick={handleCleanOrphans} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold' }}> {t('admin.cleanOrphans')}</button>
         }>
-          {activeMatches.length === 0 ? <p style={{ color: '#888' }}>Nenhuma mesa ativa.</p> : null}
+          {activeMatches.length === 0 ? <p style={{ color: '#888' }}>{t('admin.noActiveMatches')}</p> : null}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
             {activeMatches.map(m => {
               const isOrphan = !allValidMatchIDs.includes(m.matchID);
               const owningTournament = tournaments.find(t => t.rounds.some(r => r.assignments.some(a => a.matchID === m.matchID)));
-              const tableLabel = owningTournament ? owningTournament.name : `Mesa: ${m.matchID.substring(0,6)}...`;
+              const tableLabel = owningTournament ? owningTournament.name : t('admin.tableLabel', { id: m.matchID.substring(0,6) });
               return (
                 <div key={m.matchID} style={{ background: '#111', border: `1px solid ${isOrphan ? '#ff4d4d' : '#333'}`, borderRadius: '8px', padding: '15px', width: '300px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                    <h4 style={{ margin: 0, color: isOrphan ? '#ff4d4d' : '#ccc' }}>{tableLabel} {isOrphan && '(órfã)'}</h4>
+                    <h4 style={{ margin: 0, color: isOrphan ? '#ff4d4d' : '#ccc' }}>{tableLabel} {isOrphan && t('admin.orphanBadge')}</h4>
                     <button onClick={async () => {
                       await fetch(`${API_ADDRESS}/api/admin/delete-match`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentUser?.token}` }, body: JSON.stringify({ matchID: m.matchID }) });
                       window.location.reload();
-                    }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '3px 8px', fontSize: '0.8em', fontWeight: 'bold', cursor: 'pointer' }}>Apagar</button>
+                    }} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '3px 8px', fontSize: '0.8em', fontWeight: 'bold', cursor: 'pointer' }}>{t('admin.delete')}</button>
                   </div>
                   {m.players.map(p => (
                     <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px dashed #333', paddingBottom: '4px' }}>
-                      <span style={{ fontSize: '0.9em' }}>Assento {p.id}: <strong style={{ color: p.name ? 'white' : '#555' }}>{p.name || 'Vazio'}</strong></span>
+                      <span style={{ fontSize: '0.9em' }}>{t('admin.seat', { id: p.id, name: p.name || t('admin.seatEmpty') })}</span>
                       {p.name && (
-                        <button onClick={() => handleAdminForceKick(m.matchID, p.id)} style={{ background: '#ff9900', color: 'black', border: 'none', borderRadius: '3px', padding: '2px 8px', fontSize: '0.8em', fontWeight: 'bold', cursor: 'pointer' }}>Forçar Saída</button>
+                        <button onClick={() => handleAdminForceKick(m.matchID, p.id)} style={{ background: '#ff9900', color: 'black', border: 'none', borderRadius: '3px', padding: '2px 8px', fontSize: '0.8em', fontWeight: 'bold', cursor: 'pointer' }}>{t('admin.forceKick')}</button>
                       )}
                     </div>
                   ))}
@@ -1502,16 +1527,16 @@ const App = () => {
           </div>
         </AdminCard>
 
-        <AdminCard title="Torneios Finalizados" color="#888" open={adminCardOpen('finished')} onToggle={() => toggleAdminCard('finished')}>
-          {tournaments.filter(t => t.status === 'completed').length === 0 ? <p style={{ color: '#888' }}>Nenhum.</p> : null}
+        <AdminCard title={t('admin.finishedTournaments')} color="#888" open={adminCardOpen('finished')} onToggle={() => toggleAdminCard('finished')}>
+          {tournaments.filter(t => t.status === 'completed').length === 0 ? <p style={{ color: '#888' }}>{t('admin.noFinished')}</p> : null}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
-          {tournaments.filter(t => t.status === 'completed').map(t => (
-            <div key={t.id} style={{ background: '#111', border: '1px solid #333', borderRadius: '8px', padding: '15px', width: '300px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <strong style={{ color: '#888' }}>{t.name}</strong>
+          {tournaments.filter(t => t.status === 'completed').map(trn => (
+            <div key={trn.id} style={{ background: '#111', border: '1px solid #333', borderRadius: '8px', padding: '15px', width: '300px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <strong style={{ color: '#888' }}>{trn.name}</strong>
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                <button onClick={() => handleToggleTournamentVisibility(t.id)} title={t.private ? 'Privado — clique para tornar público' : 'Público — clique para tornar privado'} style={{ background: t.private ? '#8a2be2' : '#2a9d8f', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>{t.private ? '🔒 Privado' : '🔓 Público'}</button>
-                <button onClick={() => handleReactivateTournament(t.id)} style={{ background: '#50fa7b', color: '#000', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Reativar</button>
-                <button onClick={() => handleAdminDeleteTournament(t.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>Apagar</button>
+                <button onClick={() => handleToggleTournamentVisibility(trn.id)} title={trn.private ? t('admin.privateTitle') : t('admin.publicTitle')} style={{ background: trn.private ? '#8a2be2' : '#2a9d8f', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>{trn.private ? t('admin.privateBadge') : t('admin.publicBadge')}</button>
+                <button onClick={() => handleReactivateTournament(trn.id)} style={{ background: '#50fa7b', color: '#000', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>{t('admin.reactivate')}</button>
+                <button onClick={() => handleAdminDeleteTournament(trn.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>{t('admin.delete')}</button>
               </div>
             </div>
           ))}
@@ -1522,10 +1547,10 @@ const App = () => {
         {showTrainBotPopup && (
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', overflowY: 'auto', padding: '20px', boxSizing: 'border-box', zIndex: 1000 }}>
             <div style={{ margin: 'auto', background: '#2b1055', padding: '30px', borderRadius: '15px', border: '2px solid #8a2be2', width: '500px', maxWidth: '100%', boxSizing: 'border-box', color: 'white' }}>
-              <h2 style={{ color: '#b088f9', marginTop: 0 }}> Treinar Nova IA</h2>
+              <h2 style={{ color: '#b088f9', marginTop: 0 }}> {t('train.title')}</h2>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
-                <label>Bot: 
+                <label>{t('train.botLabel')}
                   {!trainBotIsNew ? (
                     <select value={trainBotConfig.name} onChange={e => {
                       if (e.target.value === '__new__') { setTrainBotIsNew(true); setTrainBotConfig({...trainBotConfig, name: ''}); }
@@ -1535,36 +1560,36 @@ const App = () => {
                       }
                     }} style={{ padding: '5px', marginLeft: '10px' }}>
                       {availableBots.map(b => <option key={b} value={b}>{b}</option>)}
-                      <option value="__new__">+ Novo Bot...</option>
+                      <option value="__new__">{t('train.newBot')}</option>
                     </select>
                   ) : (
                     <span>
-                      <input type="text" placeholder="Nome do novo bot" value={trainBotConfig.name} onChange={e => setTrainBotConfig({...trainBotConfig, name: e.target.value})} style={{ padding: '5px', width: '140px', marginLeft: '10px' }} />
+                      <input type="text" placeholder={t('train.newBotPlaceholder')} value={trainBotConfig.name} onChange={e => setTrainBotConfig({...trainBotConfig, name: e.target.value})} style={{ padding: '5px', width: '140px', marginLeft: '10px' }} />
                       <button onClick={() => { setTrainBotIsNew(false); setTrainBotConfig({...trainBotConfig, name: availableBots[0] || ''}); }} style={{ marginLeft: '6px', padding: '4px 8px', cursor: 'pointer', background: '#555', color: 'white', border: 'none', borderRadius: '4px' }}></button>
                     </span>
                   )}
                 </label>
                 
-                <h4 style={{ margin: '10px 0 0 0', color: '#ffb86c' }}>Parâmetros Genéticos</h4>
+                <h4 style={{ margin: '10px 0 0 0', color: '#ffb86c' }}>{t('train.geneticParams')}</h4>
                 <div style={{display: 'flex', gap: '10px'}}>
-                    <label>Bots: <input type="number" value={trainBotConfig.populationSize} onChange={e => setTrainBotConfig({...trainBotConfig, populationSize: parseInt(e.target.value)})} style={{ width: '50px', padding: '5px' }} /></label>
-                    <label>Gerações: <input type="number" value={trainBotConfig.generations} onChange={e => setTrainBotConfig({...trainBotConfig, generations: parseInt(e.target.value)})} style={{ width: '50px', padding: '5px' }} /></label>
-                    <label>Salvar a cada: <input type="number" value={trainBotConfig.saveInterval} onChange={e => setTrainBotConfig({...trainBotConfig, saveInterval: parseInt(e.target.value)})} style={{ width: '50px', padding: '5px' }} /> (Gen)</label>
+                    <label>{t('train.population')} <input type="number" value={trainBotConfig.populationSize} onChange={e => setTrainBotConfig({...trainBotConfig, populationSize: parseInt(e.target.value)})} style={{ width: '50px', padding: '5px' }} /></label>
+                    <label>{t('train.generations')} <input type="number" value={trainBotConfig.generations} onChange={e => setTrainBotConfig({...trainBotConfig, generations: parseInt(e.target.value)})} style={{ width: '50px', padding: '5px' }} /></label>
+                    <label>{t('train.saveEvery')} <input type="number" value={trainBotConfig.saveInterval} onChange={e => setTrainBotConfig({...trainBotConfig, saveInterval: parseInt(e.target.value)})} style={{ width: '50px', padding: '5px' }} />{t('train.genSuffix')}</label>
                 </div>
 
-                <h4 style={{ margin: '10px 0 0 0', color: '#bd93f9' }}>Ilhas & Arena de Campeões</h4>
+                <h4 style={{ margin: '10px 0 0 0', color: '#bd93f9' }}>{t('train.islandsTitle')}</h4>
                 <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '5px'}}>
-                    <label title="Quantos bots avançam após o primeiro round-robin (0 = metade da população)">Avançam (RR#1): <input type="number" min="0" value={trainBotConfig.advanceCount} onChange={e => setTrainBotConfig({...trainBotConfig, advanceCount: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
-                    <label title="Campeões por ilha levados à próxima geração e à arena (2-4)">Campeões: <input type="number" min="2" max="4" value={trainBotConfig.numChampions} onChange={e => setTrainBotConfig({...trainBotConfig, numChampions: parseInt(e.target.value)||4})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
-                    <label title="Quantas vezes o baralho é reembaralhado na batalha real da arena">Embaralhas do Royale: <input type="number" min="1" value={trainBotConfig.battleRoyaleShuffles} onChange={e => setTrainBotConfig({...trainBotConfig, battleRoyaleShuffles: parseInt(e.target.value)||1})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
-                    <label title="Campeões publicados por ilha na arena (0 = automático)">Campeões/ilha: <input type="number" min="0" value={trainBotConfig.championsPerIsland} onChange={e => setTrainBotConfig({...trainBotConfig, championsPerIsland: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /> (0=auto)</label>
-                    <label style={{gridColumn:'1/-1'}} title="Máx. de partidas por bot em cada round-robin das ilhas normais (0 = jogar contra todos)">Partidas/bot (RR): <input type="number" min="0" value={trainBotConfig.roundRobinMatches} onChange={e => setTrainBotConfig({...trainBotConfig, roundRobinMatches: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /> (0=todos)</label>
+                    <label title={t('train.advanceTitle')}>{t('train.advanceCount')} <input type="number" min="0" value={trainBotConfig.advanceCount} onChange={e => setTrainBotConfig({...trainBotConfig, advanceCount: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
+                    <label title={t('train.championsTitle')}>{t('train.champions')} <input type="number" min="2" max="4" value={trainBotConfig.numChampions} onChange={e => setTrainBotConfig({...trainBotConfig, numChampions: parseInt(e.target.value)||4})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
+                    <label title={t('train.royaleShufflesTitle')}>{t('train.royaleShuffles')} <input type="number" min="1" value={trainBotConfig.battleRoyaleShuffles} onChange={e => setTrainBotConfig({...trainBotConfig, battleRoyaleShuffles: parseInt(e.target.value)||1})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
+                    <label title={t('train.championsPerIslandTitle')}>{t('train.championsPerIsland')} <input type="number" min="0" value={trainBotConfig.championsPerIsland} onChange={e => setTrainBotConfig({...trainBotConfig, championsPerIsland: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /> {t('train.autoZero')}</label>
+                    <label style={{gridColumn:'1/-1'}} title={t('train.roundRobinTitle')}>{t('train.matchesPerBot')} <input type="number" min="0" value={trainBotConfig.roundRobinMatches} onChange={e => setTrainBotConfig({...trainBotConfig, roundRobinMatches: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /> {t('train.allZero')}</label>
                 </div>
 
-                <h4 style={{ margin: '10px 0 0 0', color: '#8be9fd' }}>Regras do Ambiente de Treino</h4>
+                <h4 style={{ margin: '10px 0 0 0', color: '#8be9fd' }}>{t('train.envRules')}</h4>
                 <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '5px'}}>
                     <div style={{gridColumn:'1/-1'}}>
-                      <div style={{ fontSize: '0.8em', color: '#aaa', marginBottom: '4px' }}>Trincas:</div>
+                      <div style={{ fontSize: '0.8em', color: '#aaa', marginBottom: '4px' }}>{t('train.runners')}</div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                         {RUNNER_RANKS.map(([rank, label]) => (
                           <label key={rank} style={{ background: trainBotConfig.rules.runners.includes(rank) ? '#4da6ff' : '#444', color: 'white', padding: '2px 6px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8em' }}>
@@ -1573,59 +1598,67 @@ const App = () => {
                         ))}
                       </div>
                     </div>
-                    <label style={{gridColumn:'1/-1'}}><input type="checkbox" checked={trainBotConfig.rules.discard} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, discard: e.target.checked}})} /> Usar carta para pegar descartes</label>
-                    <label><input type="checkbox" checked={trainBotConfig.rules.largeCanasta} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, largeCanasta: e.target.checked}})} /> Bônus 500/1000</label>
-                    <label><input type="checkbox" checked={trainBotConfig.rules.cleanCanastaToWin} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, cleanCanastaToWin: e.target.checked}})} /> Bater Limpo</label>
-                    <label><input type="checkbox" checked={trainBotConfig.rules.noJokers} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, noJokers: e.target.checked}})} /> Sem Curingas</label>
-                    <label><input type="checkbox" checked={trainBotConfig.rules.openDiscardView} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, openDiscardView: e.target.checked}})} /> Lixo Visível</label>
-                    <label><input type="checkbox" checked={trainBotConfig.rules.showKnownCards} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, showKnownCards: e.target.checked}})} /> Memorizadas</label>
-                    <label style={{color: '#ffb86c'}}><input type="checkbox" checked={trainBotConfig.telepathy} onChange={e => setTrainBotConfig({...trainBotConfig, telepathy: e.target.checked})} /> Telepatia Parça</label>
-                    <label style={{color: '#ff5555'}}><input type="checkbox" checked={trainBotConfig.fixedDeck} onChange={e => setTrainBotConfig({...trainBotConfig, fixedDeck: e.target.checked})} /> Baralho Fixo (Teste)</label>
-                    <label style={{color: '#50fa7b', gridColumn:'1/-1'}}><input type="checkbox" checked={trainBotConfig.greedyMode} onChange={e => setTrainBotConfig({...trainBotConfig, greedyMode: e.target.checked})} /> ' Modo Ganancioso (sempre joga a melhor jogada)</label>
+                    <label style={{gridColumn:'1/-1'}}><input type="checkbox" checked={trainBotConfig.rules.discard} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, discard: e.target.checked}})} /> {t('train.useDiscardCard')}</label>
+                    <label><input type="checkbox" checked={trainBotConfig.rules.largeCanasta} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, largeCanasta: e.target.checked}})} /> {t('train.bonus500')}</label>
+                    <label><input type="checkbox" checked={trainBotConfig.rules.cleanCanastaToWin} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, cleanCanastaToWin: e.target.checked}})} /> {t('train.cleanWin')}</label>
+                    <label><input type="checkbox" checked={trainBotConfig.rules.noJokers} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, noJokers: e.target.checked}})} /> {t('train.noJokers')}</label>
+                    <label><input type="checkbox" checked={trainBotConfig.rules.openDiscardView} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, openDiscardView: e.target.checked}})} /> {t('train.openDiscard')}</label>
+                    <label><input type="checkbox" checked={trainBotConfig.rules.showKnownCards} onChange={e => setTrainBotConfig({...trainBotConfig, rules: {...trainBotConfig.rules, showKnownCards: e.target.checked}})} /> {t('train.remembered')}</label>
+                    <label style={{color: '#ffb86c'}}><input type="checkbox" checked={trainBotConfig.telepathy} onChange={e => setTrainBotConfig({...trainBotConfig, telepathy: e.target.checked})} /> {t('train.telepathy')}</label>
+                    <label style={{color: '#ff5555'}}><input type="checkbox" checked={trainBotConfig.fixedDeck} onChange={e => setTrainBotConfig({...trainBotConfig, fixedDeck: e.target.checked})} /> {t('train.fixedDeck')}</label>
+                    <label style={{color: '#50fa7b', gridColumn:'1/-1'}}><input type="checkbox" checked={trainBotConfig.greedyMode} onChange={e => setTrainBotConfig({...trainBotConfig, greedyMode: e.target.checked})} /> {t('train.greedyMode')}</label>
                 </div>
 
-                <h4 style={{ margin: '10px 0 0 0', color: '#ff79c6' }}>Pressão Evolutiva (Pontuação)</h4>
+                <h4 style={{ margin: '10px 0 0 0', color: '#ff79c6' }}>{t('train.evolution')}</h4>
                 <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '5px'}}>
-                    <label><input type="checkbox" checked={trainBotConfig.scoreCardPoints} onChange={e => setTrainBotConfig({...trainBotConfig, scoreCardPoints: e.target.checked})} /> Pontos das cartas na mesa</label>
-                    <label><input type="checkbox" checked={trainBotConfig.scoreHandPenalty} onChange={e => setTrainBotConfig({...trainBotConfig, scoreHandPenalty: e.target.checked})} /> Penalidade por cartas na mão</label>
-                    <label>Canastra Suja: <input type="number" value={trainBotConfig.dirtyCanastraBonus} onChange={e => setTrainBotConfig({...trainBotConfig, dirtyCanastraBonus: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
-                    <label>Canastra Limpa: <input type="number" value={trainBotConfig.cleanCanastraBonus} onChange={e => setTrainBotConfig({...trainBotConfig, cleanCanastraBonus: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
-                    <label>Penalidade Morto: <input type="number" value={trainBotConfig.mortoPenalty} onChange={e => setTrainBotConfig({...trainBotConfig, mortoPenalty: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
-                    <label>Bônus Bater: <input type="number" value={trainBotConfig.endGameBonus} onChange={e => setTrainBotConfig({...trainBotConfig, endGameBonus: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
-                    <label style={{gridColumn:'1/-1'}}><input type="checkbox" checked={trainBotConfig.meldSizeBonus} onChange={e => setTrainBotConfig({...trainBotConfig, meldSizeBonus: e.target.checked})} /> Bônus por tamanho de meld (4=+1, 5=+2, 6=+3, 7+=+4)</label>
+                    <label><input type="checkbox" checked={trainBotConfig.scoreCardPoints} onChange={e => setTrainBotConfig({...trainBotConfig, scoreCardPoints: e.target.checked})} /> {t('train.scoreTableCards')}</label>
+                    <label><input type="checkbox" checked={trainBotConfig.scoreHandPenalty} onChange={e => setTrainBotConfig({...trainBotConfig, scoreHandPenalty: e.target.checked})} /> {t('train.scoreHandPenalty')}</label>
+                    <label>{t('train.dirtyCanastra')} <input type="number" value={trainBotConfig.dirtyCanastraBonus} onChange={e => setTrainBotConfig({...trainBotConfig, dirtyCanastraBonus: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
+                    <label>{t('train.cleanCanastra')} <input type="number" value={trainBotConfig.cleanCanastraBonus} onChange={e => setTrainBotConfig({...trainBotConfig, cleanCanastraBonus: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
+                    <label>{t('train.mortoPenalty')} <input type="number" value={trainBotConfig.mortoPenalty} onChange={e => setTrainBotConfig({...trainBotConfig, mortoPenalty: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
+                    <label>{t('train.endGameBonus')} <input type="number" value={trainBotConfig.endGameBonus} onChange={e => setTrainBotConfig({...trainBotConfig, endGameBonus: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
+                    <label style={{gridColumn:'1/-1'}}><input type="checkbox" checked={trainBotConfig.meldSizeBonus} onChange={e => setTrainBotConfig({...trainBotConfig, meldSizeBonus: e.target.checked})} /> {t('train.meldSizeBonus')}</label>
                     <div style={{gridColumn:'1/-1', marginTop:'6px'}}>
-                      <div style={{fontSize:'0.8em', color:'#aaa', marginBottom:'4px'}}>Valor das cartas:</div>
+                      <div style={{fontSize:'0.8em', color:'#aaa', marginBottom:'4px'}}>{t('train.cardValues')}</div>
                       <div style={{display:'flex', gap:'6px', overflowX:'auto'}}>
-                        {[['joker','Curinga'],['two','2'],['ace','A'],['high','8-K'],['low','3-7']].map(([k,lbl]) => (
+                        {[['joker', t('train.cardJoker')],['two', t('train.cardTwo')],['ace', t('train.cardAce')],['high', t('train.cardHigh')],['low', t('train.cardLow')]].map(([k,lbl]) => (
                           <label key={k} style={{fontSize:'0.8em'}}>{lbl}: <input type="number" value={trainBotConfig.cardPointValues[k]} onChange={e => setTrainBotConfig({...trainBotConfig, cardPointValues: {...trainBotConfig.cardPointValues, [k]: parseInt(e.target.value)||0}})} style={CARD_VALUE_INPUT} /></label>
                         ))}
                       </div>
                     </div>
                 </div>
 
-                <h4 style={{ margin: '10px 0 0 0', color: '#50fa7b' }}>Rede Neural</h4>
+                <h4 style={{ margin: '10px 0 0 0', color: '#50fa7b' }}>{t('train.neuralNet')}</h4>
                 <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '5px'}}>
-                    <label>Camadas Ocultas: <input type="number" min="1" max="8" value={trainBotConfig.netParams.hiddenLayers} onChange={e => setTrainBotConfig({...trainBotConfig, netParams: {...trainBotConfig.netParams, hiddenLayers: Math.max(1, Math.min(8, parseInt(e.target.value)||1))}})} style={{ width: '50px', padding: '5px', marginLeft: '6px' }} /></label>
-                    <label>Largura Oculta: <input type="number" min="16" max="1024" step="16" value={trainBotConfig.netParams.hiddenWidth} onChange={e => setTrainBotConfig({...trainBotConfig, netParams: {...trainBotConfig.netParams, hiddenWidth: Math.max(16, Math.min(1024, parseInt(e.target.value)||16))}})} style={{ width: '70px', padding: '5px', marginLeft: '6px' }} /></label>
-                    <label title="0 = sem limite">Limite de Peso: <input type="number" min="0" step="0.5" value={trainBotConfig.weightClip} onChange={e => setTrainBotConfig({...trainBotConfig, weightClip: parseFloat(e.target.value)||0})} style={{ width: '60px', padding: '5px', marginLeft: '6px' }} /> (0=sem limite)</label>
+                    <label>{t('train.hiddenLayers')} <input type="number" min="1" max="8" value={trainBotConfig.netParams.hiddenLayers} onChange={e => setTrainBotConfig({...trainBotConfig, netParams: {...trainBotConfig.netParams, hiddenLayers: Math.max(1, Math.min(8, parseInt(e.target.value)||1))}})} style={{ width: '50px', padding: '5px', marginLeft: '6px' }} /></label>
+                    <label>{t('train.hiddenWidth')} <input type="number" min="16" max="1024" step="16" value={trainBotConfig.netParams.hiddenWidth} onChange={e => setTrainBotConfig({...trainBotConfig, netParams: {...trainBotConfig.netParams, hiddenWidth: Math.max(16, Math.min(1024, parseInt(e.target.value)||16))}})} style={{ width: '70px', padding: '5px', marginLeft: '6px' }} /></label>
+                    <label title={t('train.noLimit')}>{t('train.weightClip')} <input type="number" min="0" step="0.5" value={trainBotConfig.weightClip} onChange={e => setTrainBotConfig({...trainBotConfig, weightClip: parseFloat(e.target.value)||0})} style={{ width: '60px', padding: '5px', marginLeft: '6px' }} /> {t('train.noLimit')}</label>
                     <div style={{gridColumn:'1/-1', fontSize:'0.75em', color:'#aaa', lineHeight:'1.7'}}>
-                      <div><strong style={{color:'#8be9fd'}}>DNA:</strong> Current <span style={{color:'#50fa7b'}}>{liveNetConfig.DNA_CURRENT.toLocaleString()}</span> · Seq <span style={{color:'#50fa7b'}}>{liveNetConfig.DNA_SEQ.toLocaleString()}</span> · Run <span style={{color:'#50fa7b'}}>{liveNetConfig.DNA_RUN.toLocaleString()}</span> · Discard <span style={{color:'#50fa7b'}}>{liveNetConfig.DNA_DISCARD.toLocaleString()}</span></div>
-                      <div><strong style={{color:'#8be9fd'}}>TOTAL:</strong> <span style={{color:'#50fa7b'}}>{liveNetConfig.TOTAL_DNA_SIZE.toLocaleString()}</span> floats × 2 times = <span style={{color: netOverBudget ? '#ff5555' : '#50fa7b'}}>{(liveNetConfig.TOTAL_DNA_SIZE*2).toLocaleString()}</span> / {MAX_WEIGHTS.toLocaleString()}</div>
-                      <div style={{fontSize:'0.85em'}}>Inputs: Seq={liveNetConfig.NN_SEQ_INPUTS} · Run={liveNetConfig.NN_RUN_INPUTS} · Current={liveNetConfig.NN_CURRENT_INPUTS} · Discard={liveNetConfig.NN_DISCARD_INPUTS}</div>
+                      <div><strong style={{color:'#8be9fd'}}>{t('train.dna')}</strong> Current <span style={{color:'#50fa7b'}}>{liveNetConfig.DNA_CURRENT.toLocaleString()}</span> · Seq <span style={{color:'#50fa7b'}}>{liveNetConfig.DNA_SEQ.toLocaleString()}</span> · Run <span style={{color:'#50fa7b'}}>{liveNetConfig.DNA_RUN.toLocaleString()}</span> · Discard <span style={{color:'#50fa7b'}}>{liveNetConfig.DNA_DISCARD.toLocaleString()}</span></div>
+                      <div><strong style={{color:'#8be9fd'}}>{t('train.total')}</strong> <span style={{color:'#50fa7b'}}>{liveNetConfig.TOTAL_DNA_SIZE.toLocaleString()}</span> {t('train.floatsTimes2', { total: (liveNetConfig.TOTAL_DNA_SIZE*2).toLocaleString(), max: MAX_WEIGHTS.toLocaleString() })}</div>
+                      <div style={{fontSize:'0.85em'}}>{t('train.inputs', { seq: liveNetConfig.NN_SEQ_INPUTS, run: liveNetConfig.NN_RUN_INPUTS, current: liveNetConfig.NN_CURRENT_INPUTS, discard: liveNetConfig.NN_DISCARD_INPUTS })}</div>
                     </div>
                     <div style={{gridColumn:'1/-1', fontSize:'0.72em', color:'#666'}}>
-                      Parâmetros fixos do motor (WASM): Seq slots={trainBotConfig.netParams.NN_CURRENT_SEQ_INPUTS} · Run slots={trainBotConfig.netParams.NN_CURRENT_RUNNER_INPUTS} · Card maps={trainBotConfig.netParams.NN_CURRENT_CARDS_INPUTS} · Saídas={trainBotConfig.netParams.NN_CURRENT_OUTPUTS} · Seq feats={trainBotConfig.netParams.SEQ_FEATURES} · Run feats={trainBotConfig.netParams.RUNNER_FEATURES} · Scalars={trainBotConfig.netParams.SCALARS_FEATURES}
+                      {t('train.engineFixed', {
+                        seqSlots: trainBotConfig.netParams.NN_CURRENT_SEQ_INPUTS,
+                        runSlots: trainBotConfig.netParams.NN_CURRENT_RUNNER_INPUTS,
+                        cardMaps: trainBotConfig.netParams.NN_CURRENT_CARDS_INPUTS,
+                        outputs: trainBotConfig.netParams.NN_CURRENT_OUTPUTS,
+                        seqFeats: trainBotConfig.netParams.SEQ_FEATURES,
+                        runFeats: trainBotConfig.netParams.RUNNER_FEATURES,
+                        scalars: trainBotConfig.netParams.SCALARS_FEATURES
+                      })}
                     </div>
                     {netOverBudget && (
-                      <div style={{gridColumn:'1/-1', color:'#ff5555', fontWeight:'bold', fontSize:'0.85em'}}>⚠ Rede grande demais para o buffer de pesos (MAX_WEIGHTS). Reduza largura/camadas.</div>
+                      <div style={{gridColumn:'1/-1', color:'#ff5555', fontWeight:'bold', fontSize:'0.85em'}}>{t('train.netOverBudget')}</div>
                     )}
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
-                <button onClick={() => setShowTrainBotPopup(false)} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Cancelar</button>
-                <button onClick={handleStartTraining} disabled={netOverBudget} style={{ padding: '10px 20px', background: netOverBudget ? '#666' : '#8a2be2', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: netOverBudget ? 'not-allowed' : 'pointer' }}>Iniciar Mutação</button>
-                <button onClick={() => setShowDebugPanel(true)} style={{ padding: '10px 20px', background: '#333', color: '#50fa7b', border: '1px solid #50fa7b', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer', marginLeft: '8px' }}>🐛 Debug</button>
+                <button onClick={() => setShowTrainBotPopup(false)} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>{t('common.cancel')}</button>
+                <button onClick={handleStartTraining} disabled={netOverBudget} style={{ padding: '10px 20px', background: netOverBudget ? '#666' : '#8a2be2', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: netOverBudget ? 'not-allowed' : 'pointer' }}>{t('train.startMutation')}</button>
+                <button onClick={() => setShowDebugPanel(true)} style={{ padding: '10px 20px', background: '#333', color: '#50fa7b', border: '1px solid #50fa7b', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer', marginLeft: '8px' }}>{t('train.debug')}</button>
                 {showDebugPanel && <BotDebugPanel apiBase={API_ADDRESS} botName={trainBotConfig.name} rules={trainBotConfig.rules} onClose={() => setShowDebugPanel(false)} />}
               </div>
             </div>
@@ -1640,47 +1673,47 @@ const App = () => {
     return (
       <div className="app-view-root" style={{ padding: '50px', overflowX: 'hidden', backgroundColor: '#111', minHeight: '100vh', fontFamily: 'sans-serif', color: 'white' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
-          <h1 style={{ color: '#ffd700', margin: 0 }}> Criador de Torneios</h1>
-          <button onClick={() => setView('lounge')} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Voltar ao Salão</button>
+          <h1 style={{ color: '#ffd700', margin: 0 }}> {t('tourney.title')}</h1>
+          <button onClick={() => setView('lounge')} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>{t('common.backToLounge')}</button>
         </div>
 
         <div style={{ background: '#1b4332', padding: '30px', borderRadius: '15px', border: '2px solid #4da6ff', maxWidth: '800px', margin: '0 auto' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px' }}>
             <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <h3 style={{ margin: 0, color: '#4da6ff' }}>Geral</h3>
-              <input type="text" placeholder="Nome do Torneio" value={newTourney.name} onChange={e => setNewTourney({...newTourney, name: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
+              <h3 style={{ margin: 0, color: '#4da6ff' }}>{t('tourney.general')}</h3>
+              <input type="text" placeholder={t('tourney.namePlaceholder')} value={newTourney.name} onChange={e => setNewTourney({...newTourney, name: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd', fontSize: '0.95em' }}>
                 <input type="checkbox" checked={!!newTourney.private} onChange={e => setNewTourney({...newTourney, private: e.target.checked})} />
-                Torneio Privado (acesso por link)
+                {t('tourney.privateLabel')}
               </label>
-              <label>Formato:</label>
+              <label>{t('tourney.formatLabel')}</label>
               <select value={newTourney.format} onChange={e => setNewTourney({...newTourney, format: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
-                <option value="points">Pontos (Ex: Quem chegar a 3000)</option>
-                <option value="rounds">Rodadas (Pontos Corridos)</option>
-                <option value="playoff">Eliminatória (Mata-Mata)</option>
-                <option value="running">Corrida (Sem Fim)</option>
+                <option value="points">{t('tourney.formatPoints')}</option>
+                <option value="rounds">{t('tourney.formatRounds')}</option>
+                <option value="playoff">{t('tourney.formatPlayoff')}</option>
+                <option value="running">{t('tourney.formatRunning')}</option>
               </select>
-              {newTourney.format === 'running' && <div style={{ color: '#aaa', fontSize: '0.9em' }}>O torneio nunca termina — gera novas rodadas indefinidamente.</div>}
-              {newTourney.format === 'points' && <label>Meta de Pontos: <input type="number" value={newTourney.targetPoints} onChange={e => setNewTourney({...newTourney, targetPoints: parseInt(e.target.value)})} style={{ width: '80px', padding: '5px' }} /></label>}
-              {newTourney.format === 'rounds' && <label>Máximo de Rodadas: <input type="number" value={newTourney.maxRounds} onChange={e => setNewTourney({...newTourney, maxRounds: parseInt(e.target.value)})} style={{ width: '80px', padding: '5px' }} /></label>}
-              <label>Modalidade:</label>
+              {newTourney.format === 'running' && <div style={{ color: '#aaa', fontSize: '0.9em' }}>{t('tourney.runningHint')}</div>}
+              {newTourney.format === 'points' && <label>{t('tourney.targetPoints')} <input type="number" value={newTourney.targetPoints} onChange={e => setNewTourney({...newTourney, targetPoints: parseInt(e.target.value)})} style={{ width: '80px', padding: '5px' }} /></label>}
+              {newTourney.format === 'rounds' && <label>{t('tourney.maxRounds')} <input type="number" value={newTourney.maxRounds} onChange={e => setNewTourney({...newTourney, maxRounds: parseInt(e.target.value)})} style={{ width: '80px', padding: '5px' }} /></label>}
+              <label>{t('tourney.typeLabel')}</label>
               <select value={newTourney.type} onChange={e => setNewTourney({...newTourney, type: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
-                <option value="team">Equipes Fixas</option>
-                <option value="individual">Individual (Sorteio Aleatório)</option>
+                <option value="team">{t('tourney.typeTeam')}</option>
+                <option value="individual">{t('tourney.typeIndividual')}</option>
               </select>
               {(newTourney.type === 'individual' || newTourney.rules.numPlayers === 2) && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label>Embaralhar duplas:</label>
+                  <label>{t('tourney.shufflePairs')}</label>
                   <select value={newTourney.shuffleMode} onChange={e => setNewTourney({...newTourney, shuffleMode: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
-                    <option value="every-round">Toda partida</option>
-                    <option value="rounds">A cada N partidas</option>
-                    <option value="points">Corrida a N pontos</option>
+                    <option value="every-round">{t('tourney.shuffleEveryRound')}</option>
+                    <option value="rounds">{t('tourney.shuffleEveryN')}</option>
+                    <option value="points">{t('tourney.shufflePoints')}</option>
                   </select>
-                  {newTourney.shuffleMode === 'rounds' && <label>Partidas com as mesmas duplas: <input type="number" min="1" value={newTourney.shuffleEvery} onChange={e => setNewTourney({...newTourney, shuffleEvery: parseInt(e.target.value) || 1})} style={{ width: '60px', padding: '5px' }} /></label>}
-                  {newTourney.shuffleMode === 'points' && <label>Pontos para embaralhar: <input type="number" min="1" value={newTourney.shufflePoints} onChange={e => setNewTourney({...newTourney, shufflePoints: parseInt(e.target.value) || 0})} style={{ width: '80px', padding: '5px' }} /></label>}
+                  {newTourney.shuffleMode === 'rounds' && <label>{t('tourney.samePairs')} <input type="number" min="1" value={newTourney.shuffleEvery} onChange={e => setNewTourney({...newTourney, shuffleEvery: parseInt(e.target.value) || 1})} style={{ width: '60px', padding: '5px' }} /></label>}
+                  {newTourney.shuffleMode === 'points' && <label>{t('tourney.pointsToShuffle')} <input type="number" min="1" value={newTourney.shufflePoints} onChange={e => setNewTourney({...newTourney, shufflePoints: parseInt(e.target.value) || 0})} style={{ width: '80px', padding: '5px' }} /></label>}
                 </div>
               )}
-              <label>Jogadores (separados por vírgula):</label>
+              <label>{t('tourney.playersLabel')}</label>
               <textarea rows="3" value={newTourney.players} onChange={e => setNewTourney({...newTourney, players: e.target.value})} onFocus={() => setPlayersFocused(true)} onBlur={() => setPlayersFocused(false)} style={{ padding: '10px', borderRadius: '5px', border: 'none', resize: 'vertical' }} />
               {(() => {
                 if (!playersFocused || !registeredUsers.length) return null;
@@ -1699,10 +1732,10 @@ const App = () => {
             </div>
 
             <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '15px', borderLeft: '1px solid #444', paddingLeft: '20px' }}>
-              <h3 style={{ margin: '0 0 10px 0', color: '#ff4d4d' }}>Regras das Mesas</h3>
-              <label>Jogadores por Mesa: <select value={newTourney.rules.numPlayers} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, numPlayers: parseInt(e.target.value)}})}><option value={2}>2 (Mano a Mano)</option><option value={4}>4 (Duplas)</option></select></label>
+              <h3 style={{ margin: '0 0 10px 0', color: '#ff4d4d' }}>{t('tourney.tableRules')}</h3>
+              <label>{t('tourney.playersPerTable')}<select value={newTourney.rules.numPlayers} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, numPlayers: parseInt(e.target.value)}})}><option value={2}>{t('tourney.manoAMano')}</option><option value={4}>{t('tourney.duplas')}</option></select></label>
               <div>
-                <div style={{ fontSize: '0.85em', color: '#aaa', marginBottom: '4px' }}>Trincas permitidas:</div>
+                <div style={{ fontSize: '0.85em', color: '#aaa', marginBottom: '4px' }}>{t('tourney.runnersAllowed')}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                   {RUNNER_RANKS.map(([rank, label]) => (
                     <label key={rank} style={{ background: newTourney.rules.runners.includes(rank) ? '#4da6ff' : '#333', color: 'white', padding: '3px 7px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85em' }}>
@@ -1711,30 +1744,30 @@ const App = () => {
                   ))}
                 </div>
               </div>
-              <label><input type="checkbox" checked={newTourney.rules.discard} onChange={e => { const r = {...newTourney.rules, discard: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Usar carta para pegar descartes</label>
-              <label>Selecione a IA:
+              <label><input type="checkbox" checked={newTourney.rules.discard} onChange={e => { const r = {...newTourney.rules, discard: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> {t('tourney.useDiscardCard')}</label>
+              <label>{t('tourney.selectAI')}
                 <select value={newTourney.botName || ''} onChange={e => setNewTourney({...newTourney, botName: e.target.value})} style={{ padding: '5px', marginLeft: '10px' }}>
-                  {availableBots.length === 0 && <option value="">(Nenhum Bot Treinado)</option>}
+                  {availableBots.length === 0 && <option value="">{t('tourney.noBotsTrained')}</option>}
                   {availableBots.map(bot => <option key={bot} value={bot}>{bot}</option>)}
                 </select>
               </label>
-              <label><input type="checkbox" checked={newTourney.rules.largeCanasta} onChange={e => { const r = {...newTourney.rules, largeCanasta: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Bônus Canastrão (500/1000)</label>
-              <label><input type="checkbox" checked={newTourney.rules.cleanCanastaToWin} onChange={e => { const r = {...newTourney.rules, cleanCanastaToWin: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Bater exige Canastra Limpa</label>
-              <label><input type="checkbox" checked={newTourney.rules.noJokers} onChange={e => { const r = {...newTourney.rules, noJokers: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Sem Curingas (Jokers)</label>
-              <label><input type="checkbox" checked={newTourney.rules.openDiscardView} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
-              <label><input type="checkbox" checked={newTourney.rules.showKnownCards} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas (Async)</label>
-              <label><input type="checkbox" checked={!!newTourney.rules.allowUndo} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, allowUndo: e.target.checked}})} /> Permitir Desfazer Jogada</label>
+              <label><input type="checkbox" checked={newTourney.rules.largeCanasta} onChange={e => { const r = {...newTourney.rules, largeCanasta: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> {t('tourney.largeCanastaBonus')}</label>
+              <label><input type="checkbox" checked={newTourney.rules.cleanCanastaToWin} onChange={e => { const r = {...newTourney.rules, cleanCanastaToWin: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> {t('tourney.cleanWinRequired')}</label>
+              <label><input type="checkbox" checked={newTourney.rules.noJokers} onChange={e => { const r = {...newTourney.rules, noJokers: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> {t('tourney.noJokers')}</label>
+              <label><input type="checkbox" checked={newTourney.rules.openDiscardView} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, openDiscardView: e.target.checked}})} /> {t('tourney.openDiscardFull')}</label>
+              <label><input type="checkbox" checked={newTourney.rules.showKnownCards} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, showKnownCards: e.target.checked}})} /> {t('tourney.showKnownCards')}</label>
+              <label><input type="checkbox" checked={!!newTourney.rules.allowUndo} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, allowUndo: e.target.checked}})} /> {t('tourney.allowUndo')}</label>
               <div>
-                <div style={{fontSize:'0.85em', color:'#aaa', marginBottom:'4px'}}>Valor das cartas:</div>
+                <div style={{fontSize:'0.85em', color:'#aaa', marginBottom:'4px'}}>{t('tourney.cardValues')}</div>
                 <div style={{display:'flex', gap:'4px', overflowX:'auto'}}>
-                  {[['joker','Curinga'],['two','2'],['ace','A'],['high','8-K'],['low','3-7']].map(([k,lbl]) => (
+                  {[['joker', t('tourney.cardJoker')],['two', t('tourney.cardTwo')],['ace', t('tourney.cardAce')],['high', t('tourney.cardHigh')],['low', t('tourney.cardLow')]].map(([k,lbl]) => (
                     <label key={k} style={{fontSize:'0.85em'}}>{lbl}: <input type="number" value={newTourney.rules.cardPointValues[k]} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, cardPointValues: {...newTourney.rules.cardPointValues, [k]: parseInt(e.target.value)||0}}})} style={CARD_VALUE_INPUT} /></label>
                   ))}
                 </div>
               </div>
             </div>
           </div>
-          <button onClick={handleCreateTournament} style={{ width: '100%', marginTop: '30px', padding: '15px', background: '#ffd700', fontSize: '1.2em', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Iniciar Torneio</button>
+          <button onClick={handleCreateTournament} style={{ width: '100%', marginTop: '30px', padding: '15px', background: '#ffd700', fontSize: '1.2em', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>{t('tourney.startTournament')}</button>
         </div>
       </div>
     );
@@ -1755,14 +1788,19 @@ const App = () => {
     const parts = [];
     const runners = rules?.runners;
     if (Array.isArray(runners)) {
-      parts.push(`Trincas: ${runners.length === 0 ? 'nenhuma' : runners.length >= 13 ? 'todas' : RUNNER_RANKS.filter(([r]) => runners.includes(r)).map(([, l]) => l).join(', ')}`);
+      const runnerList = runners.length === 0
+        ? t('rules.runnersNone')
+        : runners.length >= 13
+          ? t('rules.runnersAll')
+          : RUNNER_RANKS.filter(([r]) => runners.includes(r)).map(([, l]) => l).join(', ');
+      parts.push(t('rules.runners', { list: runnerList }));
     }
-    parts.push(`Lixo ${rules?.discard === false ? 'aberto' : 'fechado'}`);
-    if (rules?.largeCanasta) parts.push('Canastrão');
-    if (rules?.cleanCanastaToWin) parts.push('Bater limpo');
-    if (rules?.noJokers) parts.push('Sem curingas');
-    if (rules?.openDiscardView) parts.push('Cascata');
-    return parts.join(' · ');
+    parts.push(t('rules.discard', { mode: rules?.discard === false ? t('rules.discardOpen') : t('rules.discardClosed') }));
+    if (rules?.largeCanasta) parts.push(t('rules.largeCanasta'));
+    if (rules?.cleanCanastaToWin) parts.push(t('rules.cleanWin'));
+    if (rules?.noJokers) parts.push(t('rules.noJokers'));
+    if (rules?.openDiscardView) parts.push(t('rules.cascade'));
+    return parts.join(t('rules.joinSep'));
   };
 
   const rankBy = (win, metric) => {
@@ -1781,44 +1819,44 @@ const App = () => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '40px', borderBottom: '2px solid #333', paddingBottom: '20px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
           <h1 style={{ color: '#ffd700', margin: 0 }}>
-            <span onClick={() => { if (currentUser?.isAdmin) setView('admin'); }} style={{ cursor: currentUser?.isAdmin ? 'pointer' : 'not-allowed', opacity: currentUser?.isAdmin ? 0.2 : 0.06, marginRight: '15px' }} title={currentUser?.isAdmin ? 'Modo Admin' : 'Acesso restrito a administradores'} >⚙️</span>
-             Salão 
+            <span onClick={() => { if (currentUser?.isAdmin) setView('admin'); }} style={{ cursor: currentUser?.isAdmin ? 'pointer' : 'not-allowed', opacity: currentUser?.isAdmin ? 0.2 : 0.06, marginRight: '15px' }} title={currentUser?.isAdmin ? t('lounge.adminMode') : t('lounge.adminRestricted')} >⚙️</span>
+             {t('lounge.title')}
           </h1>
           {currentUser ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', marginLeft: 'auto' }}>
               <span style={{ color: '#4da6ff', fontWeight: 'bold', fontSize: '0.95em' }}>👤 {currentUser.username}</span>
-              <button onClick={handleLogout} style={{ padding: '6px 12px', background: '#333', color: '#ccc', border: '1px solid #555', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85em' }}>Sair</button>
+              <button onClick={handleLogout} style={{ padding: '6px 12px', background: '#333', color: '#ccc', border: '1px solid #555', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85em' }}>{t('auth.logout')}</button>
             </div>
           ) : (
-            <button onClick={() => { setAuthMode('login'); setAuthError(''); setShowAuthPopup(true); }} style={{ padding: '12px 16px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', marginLeft: 'auto' }}>Entrar / Registrar</button>
+            <button onClick={() => { setAuthMode('login'); setAuthError(''); setShowAuthPopup(true); }} style={{ padding: '12px 16px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', marginLeft: 'auto' }}>{t('auth.enterRegister')}</button>
           )}
+          <LangSwitcher t={t} lang={lang} setLang={setLang} availableLangs={availableLangs} langLabel={langLabel} />
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-          <button onClick={() => setShowQuickGamePopup(true)} style={{ ...PRIMARY_ACTION, background: '#e63946', color: 'white' }}> Jogo Rápido</button>
-          <button onClick={() => setView('tournaments')} style={{ ...PRIMARY_ACTION, background: '#8a2be2', color: 'white' }}>+ Torneio</button>
+          <button onClick={() => setShowQuickGamePopup(true)} style={{ ...PRIMARY_ACTION, background: '#e63946', color: 'white' }}> {t('lounge.quickGame')}</button>
+          <button onClick={() => setView('tournaments')} style={{ ...PRIMARY_ACTION, background: '#8a2be2', color: 'white' }}>{t('lounge.newTournament')}</button>
         </div>
       </div>
-      
       {showQuickGamePopup && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', overflowY: 'auto', padding: '20px', boxSizing: 'border-box', zIndex: 1000 }}>
           <div style={{ margin: 'auto', background: '#1b4332', padding: '30px', borderRadius: '15px', border: '2px solid #e63946', width: '500px', maxWidth: '100%', boxSizing: 'border-box' }}>
-            <h2 style={{ color: '#e63946', marginTop: 0 }}>Configurar Jogo Rápido</h2>
+            <h2 style={{ color: '#e63946', marginTop: 0 }}>{t('lounge.openQuick.configTitle')}</h2>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
-              <label>Nome da mesa: <input type="text" value={quickGameConfig.tableName || ''} placeholder={`Mesa de ${myDisplayName}`} onChange={e => setQuickGameConfig({...quickGameConfig, tableName: e.target.value})} style={{ padding: '5px', marginLeft: '10px', width: '200px', maxWidth: '60%' }} /></label>
+              <label>{t('lounge.openQuick.tableName')}<input type="text" value={quickGameConfig.tableName || ''} placeholder={t('lounge.openQuick.tableNamePlaceholder', { name: myDisplayName })} onChange={e => setQuickGameConfig({...quickGameConfig, tableName: e.target.value})} style={{ padding: '5px', marginLeft: '10px', width: '200px', maxWidth: '60%' }} /></label>
 
-              <label>Robôs: <select value={quickGameConfig.numBots || 3} onChange={e => setQuickGameConfig({...quickGameConfig, numBots: parseInt(e.target.value)})} style={{ padding: '5px', marginLeft: '10px' }}><option value={1}>1 Robô</option><option value={2}>2 Robôs</option><option value={3}>3 Robôs</option></select>
+              <label>{t('lounge.openQuick.robots')}<select value={quickGameConfig.numBots || 3} onChange={e => setQuickGameConfig({...quickGameConfig, numBots: parseInt(e.target.value)})} style={{ padding: '5px', marginLeft: '10px' }}><option value={1}>{t('lounge.openQuick.robot1')}</option><option value={2}>{t('lounge.openQuick.robot2')}</option><option value={3}>{t('lounge.openQuick.robot3')}</option></select>
                 <span style={{ color: '#aaa', fontSize: '0.85em', marginLeft: '10px' }}>
                   {(() => {
                     const nb = quickGameConfig.numBots || 3;
-                    return nb === 3 ? 'você + 3 robôs' : nb === 2 ? 'você + 2 robôs e 1 assento livre' : 'você + 1 robô e 2 assentos livres';
+                    return nb === 3 ? t('lounge.openQuick.youPlus3') : nb === 2 ? t('lounge.openQuick.youPlus2') : t('lounge.openQuick.youPlus1');
                   })()}
                 </span>
               </label>
 
-              <h4 style={{ margin: '10px 0 0 0', color: '#4da6ff' }}>Regras</h4>
+              <h4 style={{ margin: '10px 0 0 0', color: '#4da6ff' }}>{t('lounge.openQuick.rules')}</h4>
               <div>
-                <div style={{ fontSize: '0.85em', color: '#aaa', marginBottom: '4px' }}>Trincas permitidas:</div>
+                <div style={{ fontSize: '0.85em', color: '#aaa', marginBottom: '4px' }}>{t('lounge.openQuick.runnersAllowed')}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                   {RUNNER_RANKS.map(([rank, label]) => (
                     <label key={rank} style={{ background: quickGameConfig.rules.runners.includes(rank) ? '#4da6ff' : '#333', color: 'white', padding: '3px 7px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85em' }}>
@@ -1827,32 +1865,32 @@ const App = () => {
                   ))}
                 </div>
               </div>
-              <label><input type="checkbox" checked={quickGameConfig.rules.discard} onChange={e => { const r = {...quickGameConfig.rules, discard: e.target.checked}; setQuickGameConfig(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Usar carta para pegar descartes</label>
-              <label><input type="checkbox" checked={quickGameConfig.rules.largeCanasta} onChange={e => { const r = {...quickGameConfig.rules, largeCanasta: e.target.checked}; setQuickGameConfig(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Bônus Canastrão (500/1000)</label>
-              <label><input type="checkbox" checked={quickGameConfig.rules.cleanCanastaToWin} onChange={e => { const r = {...quickGameConfig.rules, cleanCanastaToWin: e.target.checked}; setQuickGameConfig(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Bater exige Canastra Limpa</label>
-              <label><input type="checkbox" checked={quickGameConfig.rules.noJokers} onChange={e => { const r = {...quickGameConfig.rules, noJokers: e.target.checked}; setQuickGameConfig(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> Sem Curingas (Jokers)</label>
-              <label><input type="checkbox" checked={quickGameConfig.rules.openDiscardView} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, openDiscardView: e.target.checked}})} /> Ver Lixo Completo (Cascata)</label>
-              <label><input type="checkbox" checked={quickGameConfig.rules.showKnownCards} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, showKnownCards: e.target.checked}})} /> Mostrar Cartas Memorizadas (Para Bot/Async)</label>
-              <label><input type="checkbox" checked={!!quickGameConfig.rules.allowUndo} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, allowUndo: e.target.checked}})} /> Permitir Desfazer Jogada</label>
+              <label><input type="checkbox" checked={quickGameConfig.rules.discard} onChange={e => { const r = {...quickGameConfig.rules, discard: e.target.checked}; setQuickGameConfig(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> {t('lounge.openQuick.useDiscardCard')}</label>
+              <label><input type="checkbox" checked={quickGameConfig.rules.largeCanasta} onChange={e => { const r = {...quickGameConfig.rules, largeCanasta: e.target.checked}; setQuickGameConfig(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> {t('lounge.openQuick.largeCanastaBonus')}</label>
+              <label><input type="checkbox" checked={quickGameConfig.rules.cleanCanastaToWin} onChange={e => { const r = {...quickGameConfig.rules, cleanCanastaToWin: e.target.checked}; setQuickGameConfig(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> {t('lounge.openQuick.cleanWinRequired')}</label>
+              <label><input type="checkbox" checked={quickGameConfig.rules.noJokers} onChange={e => { const r = {...quickGameConfig.rules, noJokers: e.target.checked}; setQuickGameConfig(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> {t('lounge.openQuick.noJokers')}</label>
+              <label><input type="checkbox" checked={quickGameConfig.rules.openDiscardView} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, openDiscardView: e.target.checked}})} /> {t('lounge.openQuick.openDiscardFull')}</label>
+              <label><input type="checkbox" checked={quickGameConfig.rules.showKnownCards} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, showKnownCards: e.target.checked}})} /> {t('lounge.openQuick.showKnownCards')}</label>
+              <label><input type="checkbox" checked={!!quickGameConfig.rules.allowUndo} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, allowUndo: e.target.checked}})} /> {t('lounge.openQuick.allowUndo')}</label>
               <div>
-                <div style={{fontSize:'0.85em', color:'#aaa', marginBottom:'4px'}}>Valor das cartas:</div>
+                <div style={{fontSize:'0.85em', color:'#aaa', marginBottom:'4px'}}>{t('lounge.openQuick.cardValues')}</div>
                 <div style={{display:'flex', gap:'6px', overflowX:'auto'}}>
-                  {[['joker','Curinga'],['two','2'],['ace','A'],['high','8-K'],['low','3-7']].map(([k,lbl]) => (
+                  {[['joker', t('lounge.openQuick.cardJoker')],['two', t('train.cardTwo')],['ace', t('train.cardAce')],['high', t('train.cardHigh')],['low', t('train.cardLow')]].map(([k,lbl]) => (
                     <label key={k} style={{fontSize:'0.85em'}}>{lbl}: <input type="number" value={quickGameConfig.rules.cardPointValues[k]} onChange={e => setQuickGameConfig({...quickGameConfig, rules: {...quickGameConfig.rules, cardPointValues: {...quickGameConfig.rules.cardPointValues, [k]: parseInt(e.target.value)||0}}})} style={CARD_VALUE_INPUT} /></label>
                   ))}
                 </div>
               </div>
-              <label>Selecione a IA:
+              <label>{t('lounge.openQuick.selectAI')}
                 <select value={quickGameConfig.botName || ''} onChange={e => setQuickGameConfig({...quickGameConfig, botName: e.target.value})} style={{ padding: '5px', marginLeft: '10px' }}>
-                  {availableBots.length === 0 && <option value="">(Nenhum Bot Treinado)</option>}
+                  {availableBots.length === 0 && <option value="">{t('lounge.openQuick.noBotsTrained')}</option>}
                   {availableBots.map(bot => <option key={bot} value={bot}>{bot}</option>)}
                 </select>
               </label>
             </div>
 
             <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowQuickGamePopup(false)} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={handleQuickGameSubmit} style={{ padding: '10px 20px', background: '#e63946', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Iniciar Partida</button>
+              <button onClick={() => setShowQuickGamePopup(false)} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>{t('common.cancel')}</button>
+              <button onClick={handleQuickGameSubmit} style={{ padding: '10px 20px', background: '#e63946', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>{t('lounge.openQuick.start')}</button>
             </div>
           </div>
         </div>
@@ -1861,19 +1899,19 @@ const App = () => {
       {showAuthPopup && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', overflowY: 'auto', padding: '20px', boxSizing: 'border-box', zIndex: 1000 }}>
           <div style={{ margin: 'auto', background: '#1b4332', padding: '30px', borderRadius: '15px', border: '2px solid #2a9d8f', width: '400px', maxWidth: '100%', boxSizing: 'border-box' }}>
-            <h2 style={{ color: '#2a9d8f', marginTop: 0 }}>{authMode === 'login' ? 'Entrar' : 'Criar Conta'}</h2>
+            <h2 style={{ color: '#2a9d8f', marginTop: 0 }}>{authMode === 'login' ? t('auth.login') : t('auth.createAccount')}</h2>
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-              <button onClick={() => { setAuthMode('login'); setAuthError(''); }} style={{ flex: 1, padding: '8px', background: authMode === 'login' ? '#2a9d8f' : '#333', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Entrar</button>
-              <button onClick={() => { setAuthMode('register'); setAuthError(''); }} style={{ flex: 1, padding: '8px', background: authMode === 'register' ? '#2a9d8f' : '#333', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Registrar</button>
+              <button onClick={() => { setAuthMode('login'); setAuthError(''); }} style={{ flex: 1, padding: '8px', background: authMode === 'login' ? '#2a9d8f' : '#333', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>{t('auth.login')}</button>
+              <button onClick={() => { setAuthMode('register'); setAuthError(''); }} style={{ flex: 1, padding: '8px', background: authMode === 'register' ? '#2a9d8f' : '#333', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>{t('auth.register')}</button>
             </div>
             <form onSubmit={submitAuth} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <input type="text" placeholder="Nome de usuário" value={authForm.username} onChange={e => setAuthForm({ ...authForm, username: e.target.value })} autoComplete="username" style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
-              <input type="password" placeholder="Senha" value={authForm.password} onChange={e => setAuthForm({ ...authForm, password: e.target.value })} autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
+              <input type="text" placeholder={t('auth.usernamePlaceholder')} value={authForm.username} onChange={e => setAuthForm({ ...authForm, username: e.target.value })} autoComplete="username" style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
+              <input type="password" placeholder={t('auth.passwordPlaceholder')} value={authForm.password} onChange={e => setAuthForm({ ...authForm, password: e.target.value })} autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
               {authError && <div style={{ color: '#ff5555', fontSize: '0.9em' }}>{authError}</div>}
-              {authMode === 'register' && <div style={{ color: '#aaa', fontSize: '0.85em' }}>Mínimo 2 caracteres no nome e 6 na senha. Entrar após criar já conecta automaticamente.</div>}
+              {authMode === 'register' && <div style={{ color: '#aaa', fontSize: '0.85em' }}>{t('auth.registerHint')}</div>}
               <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={() => setShowAuthPopup(false)} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Cancelar</button>
-                <button type="submit" style={{ padding: '10px 20px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>{authMode === 'login' ? 'Entrar' : 'Criar Conta'}</button>
+                <button type="button" onClick={() => setShowAuthPopup(false)} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>{t('common.cancel')}</button>
+                <button type="submit" style={{ padding: '10px 20px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>{authMode === 'login' ? t('auth.login') : t('auth.createAccount')}</button>
               </div>
             </form>
           </div>
@@ -1884,12 +1922,12 @@ const App = () => {
         {currentUser && stats && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px' }}>
             <div style={{ flex: '1 1 380px', background: '#1b4332', borderRadius: '15px', border: '2px solid #40916c', padding: '30px', minWidth: 0 }}>
-              <h2 style={{ margin: '0 0 20px 0', color: '#ffd700', fontSize: '1.6em' }}>Minhas Estatísticas</h2>
+              <h2 style={{ margin: '0 0 20px 0', color: '#ffd700', fontSize: '1.6em' }}>{t('lounge.stats.title')}</h2>
               {myStatsRow ? (
                 <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                  <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Período</th><th>Pts</th><th>V</th><th>D</th><th>Pos.</th></tr></thead>
+                  <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>{t('lounge.stats.period')}</th><th>{t('lounge.stats.pts')}</th><th>{t('lounge.stats.w')}</th><th>{t('lounge.stats.d')}</th><th>{t('lounge.stats.pos')}</th></tr></thead>
                   <tbody>
-                    {[['month', 'Este Mês'], ['year', 'Este Ano'], ['all', 'Total']].map(([win, label]) => {
+                    {[['month', t('lounge.stats.month')], ['year', t('lounge.stats.year')], ['all', t('lounge.stats.all')]].map(([win, label]) => {
                       const w = myStatsRow[win];
                       const pos = rankBy(win, 'points').findIndex(u => u.name.toLowerCase() === currentUser.username.toLowerCase()) + 1;
                       return (
@@ -1904,25 +1942,25 @@ const App = () => {
                   </tbody>
                 </table>
               ) : (
-                <div style={{ color: '#aaa' }}>Sem jogos ainda. Participe de torneios para gerar suas estatísticas.</div>
+                <div style={{ color: '#aaa' }}>{t('lounge.stats.noGames')}</div>
               )}
             </div>
 
             <div style={{ flex: '2 1 520px', background: '#1b4332', borderRadius: '15px', border: '2px solid #40916c', padding: '30px', minWidth: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
-                <h2 style={{ margin: 0, color: '#ffd700', fontSize: '1.6em' }}>Classificação Geral</h2>
+                <h2 style={{ margin: 0, color: '#ffd700', fontSize: '1.6em' }}>{t('lounge.stats.ranking')}</h2>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  {[['month', 'Mês'], ['year', 'Ano'], ['all', 'Todos']].map(([w, l]) => (
+                  {[['month', t('lounge.stats.monthShort')], ['year', t('lounge.stats.yearShort')], ['all', t('lounge.stats.allShort')]].map(([w, l]) => (
                     <button key={w} onClick={() => setStatsWindow(w)} style={{ padding: '6px 12px', background: statsWindow === w ? '#4da6ff' : '#333', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>{l}</button>
                   ))}
                 </div>
               </div>
               <div style={{ marginBottom: '15px' }}>
-                <button onClick={() => setStatsMetric('points')} style={{ padding: '6px 12px', background: statsMetric === 'points' ? '#ffd700' : '#333', color: statsMetric === 'points' ? 'black' : 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold', marginRight: '8px' }}>Por Pontos</button>
-                <button onClick={() => setStatsMetric('wins')} style={{ padding: '6px 12px', background: statsMetric === 'wins' ? '#ffd700' : '#333', color: statsMetric === 'wins' ? 'black' : 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Por Vitórias</button>
+                <button onClick={() => setStatsMetric('points')} style={{ padding: '6px 12px', background: statsMetric === 'points' ? '#ffd700' : '#333', color: statsMetric === 'points' ? 'black' : 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold', marginRight: '8px' }}>{t('lounge.stats.byPoints')}</button>
+                <button onClick={() => setStatsMetric('wins')} style={{ padding: '6px 12px', background: statsMetric === 'wins' ? '#ffd700' : '#333', color: statsMetric === 'wins' ? 'black' : 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>{t('lounge.stats.byWins')}</button>
               </div>
               <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>#</th><th>Jogador</th><th>Pts</th><th>V</th><th>D</th></tr></thead>
+                <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>{t('lounge.stats.hash')}</th><th>{t('lounge.stats.player')}</th><th>{t('lounge.stats.pts')}</th><th>{t('lounge.stats.w')}</th><th>{t('lounge.stats.d')}</th></tr></thead>
                 <tbody>
                   {rankBy(statsWindow, statsMetric).slice(0, 10).map((u, i) => {
                     const w = u[statsWindow];
@@ -1936,7 +1974,7 @@ const App = () => {
                       </tr>
                     );
                   })}
-                  {rankBy(statsWindow, statsMetric).length === 0 && <tr><td colSpan={5} style={{ color: '#aaa', padding: '8px 0' }}>Sem dados neste período.</td></tr>}
+                  {rankBy(statsWindow, statsMetric).length === 0 && <tr><td colSpan={5} style={{ color: '#aaa', padding: '8px 0' }}>{t('lounge.stats.noData')}</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -1945,7 +1983,7 @@ const App = () => {
 
         {openQuickMatches.length > 0 && (
           <div>
-            <h2 style={{ color: '#ffd700', marginBottom: '20px' }}>Jogos Rápidos em Aberto</h2>
+            <h2 style={{ color: '#ffd700', marginBottom: '20px' }}>{t('lounge.openQuick.title')}</h2>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
               {openQuickMatches.map(m => {
                 const numBots = (m.players || []).filter(p => isBotSeat(m, p)).length;
@@ -1953,12 +1991,12 @@ const App = () => {
                 const firstOpen = (m.players || []).find(p => !p.name && !isBotSeat(m, p));
                 return (
                   <div key={m.matchID} style={{ background: '#222', border: '2px solid #40916c', borderRadius: '10px', padding: '20px', width: '320px', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
-                    <h3 style={{ margin: '0 0 10px 0', color: '#ffd700', fontSize: '1.3em' }}>{m.setupData?.name || 'Jogo Rápido'}</h3>
+                    <h3 style={{ margin: '0 0 10px 0', color: '#ffd700', fontSize: '1.3em' }}>{m.setupData?.name || t('lounge.openQuick.defaultTable')}</h3>
                     <div style={{ fontSize: '0.85em', color: '#aaa', marginBottom: '12px', lineHeight: '1.6' }}>
-                      4 jogadores · {numBots} bot(s) · {openSeats} assento(s) livre(s)<br/>
+                      {t('lounge.openQuick.playersLine', { bots: numBots, seats: openSeats })}<br/>
                       {rulesSummary(m.setupData)}
                     </div>
-                    <button onClick={() => { if (firstOpen) handleJoinMatch(m, firstOpen.id.toString()); }} style={{ width: '100%', padding: '10px', background: '#ffd700', color: 'black', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Entrar</button>
+                    <button onClick={() => { if (firstOpen) handleJoinMatch(m, firstOpen.id.toString()); }} style={{ width: '100%', padding: '10px', background: '#ffd700', color: 'black', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>{t('lounge.openQuick.enter')}</button>
                   </div>
                 );
               })}
@@ -1966,45 +2004,45 @@ const App = () => {
           </div>
         )}
 
-        {activeTournaments.length === 0 ? <div style={{ textAlign: 'center', color: '#aaa', fontSize: '1.5em', marginTop: '20px' }}>Nenhum torneio em andamento. Crie um acima!</div> : null}
+        {activeTournaments.length === 0 ? <div style={{ textAlign: 'center', color: '#aaa', fontSize: '1.5em', marginTop: '20px' }}>{t('tourney.activeNone')}</div> : null}
         
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'flex-start' }}>
-        {activeTournaments.map(t => {
-          const { standings, sinceStats, showSince } = getLeaderboard(t);
-          const currentRoundMatches = t.rounds.length > 0 ? t.rounds[t.rounds.length - 1].assignments.map(a => a.matchID) : [];
+        {activeTournaments.map(trn => {
+          const { standings, sinceStats, showSince } = getLeaderboard(trn);
+          const currentRoundMatches = trn.rounds.length > 0 ? trn.rounds[trn.rounds.length - 1].assignments.map(a => a.matchID) : [];
           
           return (
-            <div key={t.id} style={{ background: '#1b4332', borderRadius: '15px', border: `2px solid #40916c`, padding: '30px', minWidth: '320px', flex: '1 1 540px', maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
+            <div key={trn.id} style={{ background: '#1b4332', borderRadius: '15px', border: `2px solid #40916c`, padding: '30px', minWidth: '320px', flex: '1 1 540px', maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
                 <div>
-                  <h2 style={{ margin: 0, color: '#ffd700', fontSize: '2em' }}>{t.name}</h2>
+                  <h2 style={{ margin: 0, color: '#ffd700', fontSize: '2em' }}>{trn.name}</h2>
                   <div style={{ color: '#aaa', marginTop: '5px' }}>
-                    Formato: {tourneyFormatLabel(t)} | {t.rules.numPlayers}P | Rodada Atual: {t.rounds.length}
-                    {t.type === 'individual' && t.shuffleMode && t.shuffleMode !== 'every-round' ? ` | Duplas: ${tourneyShuffleLabel(t)}` : ''}
+                    {t('tourney.formatOf', { fmt: tourneyFormatLabel(trn, t), players: trn.rules.numPlayers, round: trn.rounds.length })}
+                    {trn.type === 'individual' && trn.shuffleMode && trn.shuffleMode !== 'every-round' ? t('tourney.pairsOf', { label: tourneyShuffleLabel(trn, t) }) : ''}
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-                  {t.private && canEndTournament(t) && (
+                  {trn.private && canEndTournament(trn) && (
                     <button onClick={() => {
-                      const link = `${window.location.origin}${window.location.pathname}?tournament=${t.id}`;
+                      const link = `${window.location.origin}${window.location.pathname}?tournament=${trn.id}`;
                       if (navigator.clipboard?.writeText) {
-                        navigator.clipboard.writeText(link).then(() => alert('Link de acesso copiado!')).catch(() => prompt('Copie o link de acesso:', link));
+                        navigator.clipboard.writeText(link).then(() => alert(t('tourney.linkCopied'))).catch(() => prompt(t('tourney.copyLinkPrompt'), link));
                       } else {
-                        prompt('Copie o link de acesso:', link);
+                        prompt(t('tourney.copyLinkPrompt'), link);
                       }
-                    }} style={{ width: '100%', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>🔗 Link</button>
+                    }} style={{ width: '100%', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>{t('tourney.link')}</button>
                   )}
-                  {canEndTournament(t) && (
-                    <button onClick={() => handleEndTournament(t.id)} style={{ width: '100%', background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>Encerrar</button>
+                  {canEndTournament(trn) && (
+                    <button onClick={() => handleEndTournament(trn.id)} style={{ width: '100%', background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>{t('tourney.end')}</button>
                   )}
                 </div>
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px' }}>
                 <div style={{ flex: '1 1 300px', maxWidth: '350px', background: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '10px', minWidth: 0, boxSizing: 'border-box' }}>
-                  <h4 style={{ color: '#4da6ff', margin: '0 0 10px 0' }}>Classificação</h4>
+                  <h4 style={{ color: '#4da6ff', margin: '0 0 10px 0' }}>{t('tourney.standings')}</h4>
                   <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                    <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>Jogador</th><th>Total</th>{showSince && <th title="Pontos desde o último sorteio">Rodada</th>}<th>V</th><th>D</th></tr></thead>
+                    <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>{t('lounge.stats.player')}</th><th>{t('tourney.total')}</th>{showSince && <th title={t('tourney.roundSinceTitle')}>{t('tourney.roundSince')}</th>}<th>{t('lounge.stats.w')}</th><th>{t('lounge.stats.d')}</th></tr></thead>
                     <tbody>
                       {standings.map(([pName, st]) => (
                         <tr key={pName} style={{ borderBottom: '1px solid #222' }}>
@@ -2022,11 +2060,11 @@ const App = () => {
                     const isDone = history.some(h => h.matchID === m.matchID);
                     return (
                       <div key={m.matchID} style={{ background: 'rgba(0,0,0,0.3)', border: `1px solid ${isDone ? '#444' : '#40916c'}`, borderRadius: '10px', padding: '15px', width: '100%', maxWidth: '350px', minWidth: 0, flex: '1 1 280px', overflow: 'hidden', opacity: isDone ? 0.6 : 1, boxSizing: 'border-box' }}>
-                        <h4 style={{ margin: '0 0 10px 0', color: isDone ? '#aaa' : '#4da6ff' }}>{isDone ? 'Mesa Encerrada' : 'Mesa Ativa'}</h4>
+                        <h4 style={{ margin: '0 0 10px 0', color: isDone ? '#aaa' : '#4da6ff' }}>{isDone ? t('tourney.matchDone') : t('tourney.matchActive')}</h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           {m.players.map(p => {
                             const assignedName = m.setupData?.assignments?.[p.id];
-                            const seatName = assignedName || `Assento ${p.id}`;
+                            const seatName = assignedName || t('tourney.seatLabel', { n: p.id });
                             const sessionKey = `${m.matchID}_${p.id}`;
                             const hasLocalCredentials = !!savedSessions[sessionKey];
                             const isTakeover = p.data?.seatStatus === 'available_for_takeover';
@@ -2039,17 +2077,17 @@ const App = () => {
                                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>{seatName}</span>
                                 
                                 {hasLocalCredentials ? (
-                                  <button onClick={() => handleReconnect(m.matchID, p.id.toString())} style={{ background: '#4da6ff', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>Reconectar</button>
+                                  <button onClick={() => handleReconnect(m.matchID, p.id.toString())} style={{ background: '#4da6ff', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>{t('tourney.reconnect')}</button>
                                 ) : isDone ? (
-                                  <span style={{ color: '#aaa', fontSize: '0.8em' }}>Concluído</span>
+                                  <span style={{ color: '#aaa', fontSize: '0.8em' }}>{t('tourney.done')}</span>
                                 ) : seatReservedFor && !isOwner ? (
-                                  <span title={`Assento reservado para ${seatReservedFor}.`} style={{ color: '#888', fontSize: '0.8em', fontWeight: 'bold' }}>Reservado</span>
+                                  <span title={t('tourney.reservedTitle', { name: seatReservedFor })} style={{ color: '#888', fontSize: '0.8em', fontWeight: 'bold' }}>{t('tourney.reserved')}</span>
                                 ) : isOwner ? (
-                                  <button onClick={() => handleJoinMatch(m, p.id.toString())} style={{ background: '#ffd700', color: 'black', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>Entrar</button>
+                                  <button onClick={() => handleJoinMatch(m, p.id.toString())} style={{ background: '#ffd700', color: 'black', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>{t('tourney.enter')}</button>
                                 ) : isOccupiedByOther ? (
-                                  <span title="Assento ocupado por outro jogador. Peça a ele que use o botão 'Remover' na mesa para liberá-lo." style={{ color: '#ff9900', fontSize: '0.8em', fontWeight: 'bold' }}>Ocupado</span>
+                                  <span title={t('tourney.occupiedTitle')} style={{ color: '#ff9900', fontSize: '0.8em', fontWeight: 'bold' }}>{t('tourney.occupied')}</span>
                                 ) : (
-                                  <button onClick={() => handleJoinMatch(m, p.id.toString())} style={{ background: assignedName ? '#ffd700' : '#50fa7b', color: 'black', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>Sentar</button>
+                                  <button onClick={() => handleJoinMatch(m, p.id.toString())} style={{ background: assignedName ? '#ffd700' : '#50fa7b', color: 'black', border: 'none', borderRadius: '3px', cursor: 'pointer', padding: '4px 10px', fontWeight: 'bold' }}>{t('tourney.sit')}</button>
                                 )}
                               </div>
                             );
@@ -2067,25 +2105,23 @@ const App = () => {
 
         {completedTournaments.length > 0 && (
           <div style={{ marginTop: '20px', borderTop: '2px solid #333', paddingTop: '30px' }}>
-            <h2 style={{ color: '#aaa', marginBottom: '20px' }}>Torneios Encerrados</h2>
+            <h2 style={{ color: '#aaa', marginBottom: '20px' }}>{t('tourney.finished')}</h2>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
-              {completedTournaments.map(t => {
-                const { standings } = getLeaderboard(t);
+              {completedTournaments.map(trn => {
+                const { standings } = getLeaderboard(trn);
                 return (
-                  <div key={t.id} style={{ background: '#222', border: '1px solid #444', borderRadius: '10px', padding: '20px', width: '300px' }}>
-                    <h3 style={{ margin: '0 0 10px 0', color: '#888' }}>{t.name}</h3>
+                  <div key={trn.id} style={{ background: '#222', border: '1px solid #444', borderRadius: '10px', padding: '20px', width: '300px' }}>
+                    <h3 style={{ margin: '0 0 10px 0', color: '#888' }}>{trn.name}</h3>
                     <div style={{ fontSize: '1.2em', color: '#ffd700', fontWeight: 'bold', marginBottom: '15px' }}>
                       🏆 {(() => {
                         const topPoints = standings[0]?.[1]?.points;
                         const winners = standings.filter(([, st]) => st.points === topPoints);
                         const names = winners.map(([name]) => name).join(', ');
-                        return winners.length > 1
-                          ? `Vencedores: ${names} (${topPoints} pts)`
-                          : `Vencedor: ${names} (${topPoints} pts)`;
+                        return tN('tourney.winner', winners.length, { names, pts: topPoints });
                       })()}
                     </div>
                     <div style={{ fontSize: '0.9em', color: '#aaa' }}>
-                      Formato: {tourneyFormatLabel(t)} <br/> Rodadas Totais: {t.rounds.length}
+                      {t('tourney.formatOf', { fmt: tourneyFormatLabel(trn, t), players: trn.rules.numPlayers, round: trn.rounds.length })} <br/> {t('tourney.totalRounds', { n: trn.rounds.length })}
                     </div>
                   </div>
                 );
