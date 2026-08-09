@@ -1,16 +1,22 @@
-# React + Vite
+# Buraco Client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Vite frontend for the Buraco card game. It renders the game board,
+lounge, and tournament screens, and talks to the boardgame.io server over
+WebSockets (socket.io). The rules engine lives in `src/game.js`, which is the
+single source of truth shared with the server and the AI bots.
 
-Currently, two official plugins are available:
+See the repository root `README.md` for the full app, deployment, and AI
+bot-training documentation.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Scripts
 
-## React Compiler
+* `npm run dev` — start the Vite dev server (port 5173)
+* `npm run build` — produce a production build in `dist/`
+* `npm run preview` — serve the built `dist/` (port 5173)
+* `npm run lint` — run ESLint
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Deployment
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+In production the client runs inside the `buraco-client` Docker container
+(port 5173), which pulls the code from git and auto-redeploys on push. The
+entrypoint runs `npm run build` and serves `dist/` via `vite preview`.
