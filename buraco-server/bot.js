@@ -93,6 +93,12 @@ const meldToStr = (meld, suit) => {
 };
 
 function makeIface(client, botName, playerID) {
+  // boardgame.io's client.moves dispatchers return undefined; the reducer applies moves
+  // optimistically, so client.getState() right after dispatch tells us whether it applied.
+  const stateOk = (pred) => {
+    const G = client.getState()?.G;
+    return G === undefined ? true : !!pred(G);
+  };
   return {
     getStateId: () => client.getState()?._stateID ?? 0,
     refreshState: (G) => {
@@ -100,17 +106,24 @@ function makeIface(client, botName, playerID) {
         if (state?.G) Object.assign(G, state.G);
     },
     hasDrawn: () => client.getState()?.G?.hasDrawn ?? false,
+    isMyTurn: () => client.getState()?.ctx?.currentPlayer === playerID,
     draw:     () => {
         console.log(`[BOT] ${botName} => drawCard`);
+        const before = client.getState()?.G?.hasDrawn ?? false;
         client.moves.drawCard();
+        return stateOk(G => before === false && G.hasDrawn === true);
     },
     pickup:   (cc, tgt) => {
         console.log(`[BOT] ${botName} => pickUpDiscard cc=${ccStr(cc)} tgt=${JSON.stringify(tgt)}`);
+        const before = client.getState()?.G?.hasDrawn ?? false;
         client.moves.pickUpDiscard(cc, tgt);
+        return stateOk(G => before === false && G.hasDrawn === true);
     },
     meld:     (cc) => {
         console.log(`[BOT] ${botName} => playMeld cc=${ccStr(cc)}`);
+        const before = client.getState()?.G?.handSizes?.[playerID];
         client.moves.playMeld(cc);
+        return stateOk(G => (G.handSizes?.[playerID] ?? 0) < (before ?? Infinity));
     },
     append:   (tgt, cc) => {
         const st = client.getState();
@@ -127,16 +140,25 @@ function makeIface(client, botName, playerID) {
             }
         }
         console.log(`[BOT] ${botName} => appendToMeld target=[${existingStr}] cc=${ccStr(cc)}`);
+        const before = G2?.handSizes?.[playerID];
         client.moves.appendToMeld(tgt, cc);
+        return stateOk(G => (G.handSizes?.[playerID] ?? 0) < (before ?? Infinity));
     },
     discard:  (id) => {
         const cid = id === 54 ? 54 : id;
         //console.log(`[BOT] ${botName} => discardCard id=${id} (${discardStr(cid)})`);
+        const before = client.getState()?.ctx?.currentPlayer;
         client.moves.discardCard(id);
+        const after = client.getState()?.ctx?.currentPlayer;
+        // A successful discard ends the turn, advancing currentPlayer locally; a rejected one
+        // (e.g. we already lost the turn to a racing opponent) leaves it unchanged.
+        return after === undefined || after !== before;
     },
     exhaust:  () => {
         console.log(`[BOT] ${botName} => declareExhausted`);
         client.moves.declareExhausted();
+        const st = client.getState();
+        return !!st?.ctx?.gameover || !!st?.G?.isExhausted;
     },
   };
 }

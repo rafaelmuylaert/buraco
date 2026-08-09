@@ -557,16 +557,22 @@ export async function runTurn(S, playerID, iface) {
     _activeTeam = myTeam === 1 ? 1 : 0;
     runCurrentState(S, playerID, myTeam, oppTeam);
 
+    // Guard against a racing opponent taking over mid-turn (live bot only; the training
+    // worker's iface.isMyTurn() is always true). Stop issuing moves the instant it's no
+    // longer this player's turn.
+    const stillMyTurn = () => !iface.isMyTurn || iface.isMyTurn();
+
     // Phase A: Pickup (try each candidate until hasDrawn)
-    if (!S.hasDrawn) {
+    if (!S.hasDrawn && stillMyTurn()) {
         const td = S.discardPile.length > 0 ? S.discardPile[S.discardPile.length - 1] : null;
         const moves = buildTurnMoveList(S, playerID, myTeam, oppTeam, td) || [];
         for (const m of moves) {
             if (m.phase !== 0 || S.hasDrawn) continue;
+            if (!stillMyTurn()) break;
             _executeTurnMove(m, iface, null);
             iface.refreshState(S);
         }
-        if (!S.hasDrawn) {
+        if (!S.hasDrawn && stillMyTurn()) {
             if (S.deck.length === 0 && S.pots.length === 0) iface.exhaust();
             else iface.draw();
             iface.refreshState(S);
@@ -577,17 +583,20 @@ export async function runTurn(S, playerID, iface) {
     const meldMoves = buildTurnMoveList(S, playerID, myTeam, oppTeam, null) || [];
     for (const m of meldMoves) {
         if (m.score < 0) continue;
+        if (!stillMyTurn()) break;
         _executeTurnMove(m, iface, null);
         iface.refreshState(S);
     }
 
-    // Phase C: Discard — try in score order until discard pile grows
+    // Phase C: Discard — try in score order until one is accepted. A rejected discard
+    // (e.g. invalid, or we already lost the turn to a racing opponent) leaves the state
+    // unchanged, so keep trying the remaining candidates.
     const discardMoves = buildDiscardMoveList(S, playerID) || [];
     for (const m of discardMoves) {
-        const before = S.discardPile.length;
-        _executeTurnMove(m, iface, null);
+        if (!stillMyTurn()) break;
+        const ok = _executeTurnMove(m, iface, null);
         iface.refreshState(S);
-        if (S.discardPile.length > before) break;
+        if (ok) break;
     }
 }
 
@@ -662,29 +671,29 @@ export function buildDiscardMoveList(G, player) {
     return moves;
 }
 
-// Executes a single turn move. Returns true if the move ended the turn.
+// Executes a single turn move. Returns whether the underlying move was accepted (true) or
+// rejected (false). An iface callback that returns undefined is treated as "assumed accepted".
 export function _executeTurnMove(m, iface, log) {
+    const ok = (r) => r === undefined ? true : !!r;
     if (!m) return false;
     if (m.phase === 0) {
-        if (m.moveType === 'declareExhausted') { log?.('declareExhausted'); iface.exhaust(); return true; }
-        else if (m.moveType === 'drawCard') { log?.(`drawCard${m._fallback ? ' [fallback]' : ''}`); iface.draw(); return false; }
-        else if (m.moveType === 'pickUpDiscard') { log?.(`pickUpDiscard ${JSON.stringify(m.cardCounts)}`); iface.pickup(m.cardCounts, m.pickupTarget || { type: 'new' }); return false; }
+        if (m.moveType === 'declareExhausted') { log?.('declareExhausted'); return ok(iface.exhaust()); }
+        else if (m.moveType === 'drawCard') { log?.(`drawCard${m._fallback ? ' [fallback]' : ''}`); return ok(iface.draw()); }
+        else if (m.moveType === 'pickUpDiscard') { log?.(`pickUpDiscard ${JSON.stringify(m.cardCounts)}`); return ok(iface.pickup(m.cardCounts, m.pickupTarget || { type: 'new' })); }
     }
     if (m.phase === 1) {
-        if (m.moveType === 'playMeld' || m.moveType === 'playRunner') { log?.(`${m.moveType} ${JSON.stringify(m.cardCounts)}`); iface.meld(m.cardCounts); }
+        if (m.moveType === 'playMeld' || m.moveType === 'playRunner') { log?.(`${m.moveType} ${JSON.stringify(m.cardCounts)}`); return ok(iface.meld(m.cardCounts)); }
         else if (m.moveType === 'appendToMeld' || m.moveType === 'appendRunner') {
             const tgt = m.moveType === 'appendToMeld'
                 ? { type: 'seq', suit: m.targetSuit, index: m.targetSlot }
                 : { type: 'runner', index: m.targetSlot };
             log?.(`${m.moveType} ${tgt.type}[${tgt.suit || ''}${tgt.index}] ${JSON.stringify(m.cardCounts)}`);
-            iface.append(tgt, m.cardCounts);
+            return ok(iface.append(tgt, m.cardCounts));
         }
-        return false;
     }
     if (m.phase === 2) {
         log?.(`discardCard(${m.discardCard})${m._fallback ? ' [fallback]' : ''}`);
-        iface.discard(m.discardCard);
-        return true;
+        return ok(iface.discard(m.discardCard));
     }
     return false;
 }

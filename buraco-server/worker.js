@@ -65,12 +65,13 @@ function makeIface(S, p) {
         getStateId: () => _workerStateId,
         refreshState: () => {},
         hasDrawn: () => S.hasDrawn,
-        draw:     () => { moveDrawCard(S, p); _workerStateId++; },
-        pickup:   (cc, tgt) => { movePickUpDiscard(S, p, cc, tgt); _workerStateId++; },
-        meld:     (cc) => { moveMeld(S, p, cc); _workerStateId++; },
-        append:   (tgt, cc) => { moveMeld(S, p, cc, tgt); _workerStateId++; },
-        discard:  (id) => { moveDiscardCard(S, p, id); _workerStateId++; },
-        exhaust:  () => { S.isExhausted = true; _workerStateId++; },
+        isMyTurn: () => true,
+        draw:     () => { const ok = moveDrawCard(S, p); if (ok) _workerStateId++; return ok; },
+        pickup:   (cc, tgt) => { const ok = movePickUpDiscard(S, p, cc, tgt); if (ok) _workerStateId++; return ok; },
+        meld:     (cc) => { const ok = moveMeld(S, p, cc); if (ok) _workerStateId++; return ok; },
+        append:   (tgt, cc) => { const ok = moveMeld(S, p, cc, tgt); if (ok) _workerStateId++; return ok; },
+        discard:  (id) => { const ok = moveDiscardCard(S, p, id); if (ok) _workerStateId++; return ok; },
+        exhaust:  () => { S.isExhausted = true; _workerStateId++; return true; },
     };
 }
 
