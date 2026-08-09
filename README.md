@@ -1,4 +1,4 @@
-# ♠️♥ Buraco Tournament Web App ♦️♣️
+# ♠️❤️ Buraco Tournament Web App ♦️♣️
 
 A full-stack, real-time multiplayer digital Buraco card game built specifically for hosting private clubs and tournaments. Powered by React, Vite, Node.js, and Boardgame.io.
 
