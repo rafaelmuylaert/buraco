@@ -165,6 +165,39 @@ function dedupGenomes(arrays) {
     return out;
 }
 
+// Expected number of matches in a (partial) round-robin of n bots where each bot plays at most `max`
+// opponents. 0 / >= n-1 → full round-robin C(n,2).
+function partialRRMatchCount(n, max) {
+    if (max <= 0 || max >= n - 1) return nC2(n);
+    const perRound = n % 2 === 1 ? (n - 1) / 2 : n / 2;
+    return Math.min(perRound * max, nC2(n));
+}
+
+// Builds a partial round-robin schedule as [i, j] pairs (i < j) over n bots such that each bot plays
+// at most `max` matches against distinct opponents. 0 / >= n-1 → full round-robin. Uses the circle
+// method: schedule n-1 rounds where no opponent ever repeats, then take only the first `max` rounds
+// (a -1 "bye" pads odd-sized fields). Even n → every bot plays exactly `max`; odd n → max or max-1.
+function buildPartialRRPairs(n, max) {
+    if (max <= 0 || max >= n - 1) {
+        const pairs = [];
+        for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) pairs.push([i, j]);
+        return pairs;
+    }
+    const order = shuffle(Array.from({ length: n }, (_, i) => i));
+    if (n % 2 === 1) order.push(-1);
+    const m = order.length;
+    const pairs = [];
+    for (let r = 0; r < max && r < n - 1; r++) {
+        for (let i = 0; i < m / 2; i++) {
+            const a = order[i];
+            const b = order[m - 1 - i];
+            if (a !== -1 && b !== -1) pairs.push(a < b ? [a, b] : [b, a]);
+        }
+        order.splice(1, 0, order.pop());
+    }
+    return pairs;
+}
+
 function toBuffer(genome, netConfig) {
     const totalSize = (netConfig || AI_CONFIG).TOTAL_DNA_SIZE;
     const buf = new SharedArrayBuffer(totalSize * 4);
@@ -341,16 +374,21 @@ export const TrainerService = {
         const ADVANCE = Math.max(4, params.advanceCount || Math.floor(POPULATION_SIZE / 2));
         const NUM_CHAMPIONS = Math.min(4, Math.max(2, params.numChampions || 4));
         const BATTLE_ROYALE_SHUFFLES = Math.max(1, params.battleRoyaleShuffles || 3);
+        // 0 = full round-robin (each bot plays every other); otherwise cap matches per bot per RR stage.
+        const ROUND_ROBIN_MATCHES = Math.max(0, params.roundRobinMatches || 0);
 
         // Champion arena sizing: each normal island publishes its top `championsPerIsland` genomes
         // at every milestone. Island 0's battle royale (candidates from all islands + its kept elite
         // + the saved champion) is auto-sized so its per-milestone load lands just below a normal
         // island's (SAVE_EVERY × (RR#1 + RR#2) matches).
-        const normalIslandMilestoneLoad = SAVE_EVERY * (nC2(POPULATION_SIZE) + nC2(ADVANCE));
+        const normalIslandMilestoneLoad = SAVE_EVERY * (
+            partialRRMatchCount(POPULATION_SIZE, ROUND_ROBIN_MATCHES) +
+            partialRRMatchCount(ADVANCE, ROUND_ROBIN_MATCHES)
+        );
         const championIslandBudget = 0.95 * normalIslandMilestoneLoad;
         let maxRoyaleCandidates = 2;
         while (BATTLE_ROYALE_SHUFFLES * nC2(maxRoyaleCandidates + 1) <= championIslandBudget) maxRoyaleCandidates++;
-        const championsPerIsland = params.championsPerIsland != null
+        const championsPerIsland = params.championsPerIsland != null && params.championsPerIsland > 0
             ? Math.max(1, params.championsPerIsland)
             : Math.max(1, Math.min(
                 Math.ceil((maxRoyaleCandidates - (NUM_CHAMPIONS + 1)) / (NUM_ISLANDS - 1)),
@@ -422,11 +460,10 @@ export const TrainerService = {
         // NUM_CHAMPIONS become this island's champions for the next generation and the arena pool.
         const runIslandGeneration = async (pop, weightClip) => {
             const rr1Pairs = [], rr1Meta = [];
-            for (let i = 0; i < pop.length; i++)
-                for (let j = i + 1; j < pop.length; j++) {
-                    rr1Pairs.push({ dnaA: toBuffer(pop[i], netConfig), dnaB: toBuffer(pop[j], netConfig) });
-                    rr1Meta.push([i, j]);
-                }
+            for (const [i, j] of buildPartialRRPairs(pop.length, ROUND_ROBIN_MATCHES)) {
+                rr1Pairs.push({ dnaA: toBuffer(pop[i], netConfig), dnaB: toBuffer(pop[j], netConfig) });
+                rr1Meta.push([i, j]);
+            }
             const allDiffs = [];
             const scores1 = new Array(pop.length).fill(0);
             if (rr1Pairs.length > 0) {
@@ -446,11 +483,10 @@ export const TrainerService = {
             const advanced = ranked1.slice(0, ADVANCE);
 
             const rr2Pairs = [], rr2Meta = [];
-            for (let i = 0; i < advanced.length; i++)
-                for (let j = i + 1; j < advanced.length; j++) {
-                    rr2Pairs.push({ dnaA: toBuffer(advanced[i].genome, netConfig), dnaB: toBuffer(advanced[j].genome, netConfig) });
-                    rr2Meta.push([i, j]);
-                }
+            for (const [i, j] of buildPartialRRPairs(advanced.length, ROUND_ROBIN_MATCHES)) {
+                rr2Pairs.push({ dnaA: toBuffer(advanced[i].genome, netConfig), dnaB: toBuffer(advanced[j].genome, netConfig) });
+                rr2Meta.push([i, j]);
+            }
             const scores2 = new Array(advanced.length).fill(0);
             if (rr2Pairs.length > 0) {
                 const rr2Deck = shuffle([...baseDeck]);
@@ -501,6 +537,7 @@ export const TrainerService = {
                 trainParams: {
                     populationSize: POPULATION_SIZE, generations: GENERATIONS, saveInterval: SAVE_EVERY, weightClip,
                     advanceCount: ADVANCE, numChampions: NUM_CHAMPIONS, battleRoyaleShuffles: BATTLE_ROYALE_SHUFFLES, championsPerIsland,
+                    roundRobinMatches: ROUND_ROBIN_MATCHES,
                     greedyMode: params.greedyMode, telepathy: params.telepathy, fixedDeck: params.fixedDeck,
                     scoreCardPoints: params.scoreCardPoints, scoreHandPenalty: params.scoreHandPenalty,
                     dirtyCanastraBonus: params.dirtyCanastraBonus, cleanCanastraBonus: params.cleanCanastraBonus,

@@ -360,6 +360,11 @@ const App = () => {
     generations: 50000,
     saveInterval: 100,
     weightClip: 5.0,
+    advanceCount: 12,
+    numChampions: 4,
+    battleRoyaleShuffles: 3,
+    championsPerIsland: 0,
+    roundRobinMatches: 0,
     telepathy: true,
     fixedDeck: false,
     greedyMode: false,
@@ -583,6 +588,11 @@ const App = () => {
               generations: trainBotConfig.generations,
               saveInterval: trainBotConfig.saveInterval,
               weightClip: trainBotConfig.weightClip,
+              advanceCount: trainBotConfig.advanceCount,
+              numChampions: trainBotConfig.numChampions,
+              battleRoyaleShuffles: trainBotConfig.battleRoyaleShuffles,
+              championsPerIsland: trainBotConfig.championsPerIsland,
+              roundRobinMatches: trainBotConfig.roundRobinMatches,
               telepathy: trainBotConfig.telepathy,
               fixedDeck: trainBotConfig.fixedDeck,
               greedyMode: trainBotConfig.greedyMode,
@@ -1374,6 +1384,11 @@ const App = () => {
                     generations:         meta.generations         ?? prev.generations,
                     saveInterval:        meta.saveInterval        ?? prev.saveInterval,
                     weightClip:          meta.weightClip          ?? prev.weightClip,
+                    advanceCount:        meta.advanceCount        ?? prev.advanceCount,
+                    numChampions:        meta.numChampions        ?? prev.numChampions,
+                    battleRoyaleShuffles:meta.battleRoyaleShuffles ?? prev.battleRoyaleShuffles,
+                    championsPerIsland:  meta.championsPerIsland  ?? prev.championsPerIsland,
+                    roundRobinMatches:   meta.roundRobinMatches   ?? prev.roundRobinMatches,
                     telepathy:           meta.telepathy           ?? prev.telepathy,
                     fixedDeck:           meta.fixedDeck           ?? prev.fixedDeck,
                     greedyMode:          meta.greedyMode          ?? prev.greedyMode,
@@ -1535,6 +1550,15 @@ const App = () => {
                     <label>Bots: <input type="number" value={trainBotConfig.populationSize} onChange={e => setTrainBotConfig({...trainBotConfig, populationSize: parseInt(e.target.value)})} style={{ width: '50px', padding: '5px' }} /></label>
                     <label>Gerações: <input type="number" value={trainBotConfig.generations} onChange={e => setTrainBotConfig({...trainBotConfig, generations: parseInt(e.target.value)})} style={{ width: '50px', padding: '5px' }} /></label>
                     <label>Salvar a cada: <input type="number" value={trainBotConfig.saveInterval} onChange={e => setTrainBotConfig({...trainBotConfig, saveInterval: parseInt(e.target.value)})} style={{ width: '50px', padding: '5px' }} /> (Gen)</label>
+                </div>
+
+                <h4 style={{ margin: '10px 0 0 0', color: '#bd93f9' }}>Ilhas & Arena de Campeões</h4>
+                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '5px'}}>
+                    <label title="Quantos bots avançam após o primeiro round-robin (0 = metade da população)">Avançam (RR#1): <input type="number" min="0" value={trainBotConfig.advanceCount} onChange={e => setTrainBotConfig({...trainBotConfig, advanceCount: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
+                    <label title="Campeões por ilha levados à próxima geração e à arena (2-4)">Campeões: <input type="number" min="2" max="4" value={trainBotConfig.numChampions} onChange={e => setTrainBotConfig({...trainBotConfig, numChampions: parseInt(e.target.value)||4})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
+                    <label title="Quantas vezes o baralho é reembaralhado na batalha real da arena">Embaralhas do Royale: <input type="number" min="1" value={trainBotConfig.battleRoyaleShuffles} onChange={e => setTrainBotConfig({...trainBotConfig, battleRoyaleShuffles: parseInt(e.target.value)||1})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /></label>
+                    <label title="Campeões publicados por ilha na arena (0 = automático)">Campeões/ilha: <input type="number" min="0" value={trainBotConfig.championsPerIsland} onChange={e => setTrainBotConfig({...trainBotConfig, championsPerIsland: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /> (0=auto)</label>
+                    <label style={{gridColumn:'1/-1'}} title="Máx. de partidas por bot em cada round-robin das ilhas normais (0 = jogar contra todos)">Partidas/bot (RR): <input type="number" min="0" value={trainBotConfig.roundRobinMatches} onChange={e => setTrainBotConfig({...trainBotConfig, roundRobinMatches: parseInt(e.target.value)||0})} style={{ width: '55px', padding: '3px', marginLeft: '6px' }} /> (0=todos)</label>
                 </div>
 
                 <h4 style={{ margin: '10px 0 0 0', color: '#8be9fd' }}>Regras do Ambiente de Treino</h4>
