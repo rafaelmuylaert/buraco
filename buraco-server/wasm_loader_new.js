@@ -569,8 +569,14 @@ export async function runTurn(S, playerID, iface) {
         for (const m of moves) {
             if (m.phase !== 0 || S.hasDrawn) continue;
             if (!stillMyTurn()) break;
-            await _executeTurnMove(m, iface, null);
+            const ok = await _executeTurnMove(m, iface, null);
             iface.refreshState(S);
+            if (!ok) {
+                // Rejected or unconfirmed pickup (live bot: the server said no, or no sync
+                // arrived so the optimistic apply may have left a phantom hasDrawn=true in
+                // the client state). Clear it so the fallback draw stays reachable.
+                S.hasDrawn = false;
+            }
         }
         if (!S.hasDrawn && stillMyTurn()) {
             if (S.deck.length === 0 && S.pots.length === 0) iface.exhaust();

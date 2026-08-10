@@ -40,6 +40,10 @@ let _pollingLobby = false;
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+// How long to wait for a server sync before retrying, and how many retries before giving up.
+const SYNC_TIMEOUT_MS = 4000;
+const MAX_SYNC_ATTEMPTS = 3;
+
 // Resolve the full net config for a bot from its meta.json netParams (defaults otherwise).
 async function resolveBotNetConfig(botName) {
     if (netConfigCache[botName]) return netConfigCache[botName];
@@ -104,18 +108,50 @@ function makeIface(client, botName, playerID) {
     const w = syncWaiters.shift();
     if (w) w();
   });
-  const waitForServer = () => new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      const i = syncWaiters.indexOf(resolve);
-      if (i >= 0) syncWaiters.splice(i, 1);
-      resolve();
-    }, 4000);
-    syncWaiters.push(() => { clearTimeout(timer); resolve(); });
-    client.transport.requestSync();
-  });
+  // Wait for a fresh server sync and report whether one was actually observed. A server sync
+  // REPLACES the whole client state with server truth (the reducer's SYNC action returns
+  // action.state unconditionally), so a confirmed sync both reverts any optimistic divergence
+  // and gives us a trustworthy state to evaluate the move against.
+  //
+  // We never resolve as "confirmed" on a bare timeout: that lets the optimistic state
+  // masquerade as server truth and produce phantom successes (e.g. a pickup the server
+  // actually rejected), which cascades into a permanent client/server divergence. Instead we
+  // retry requestSync() up to a cap and only claim success when a real sync event was seen.
+  const waitForServer = async () => {
+    for (let attempt = 0; attempt < MAX_SYNC_ATTEMPTS; attempt++) {
+      const gotSync = await new Promise((resolve) => {
+        let settled = false;
+        let timer = null;
+        const waiter = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(true);
+        };
+        timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          const i = syncWaiters.indexOf(waiter);
+          if (i >= 0) syncWaiters.splice(i, 1);
+          resolve(false);
+        }, SYNC_TIMEOUT_MS);
+        syncWaiters.push(waiter);
+        client.transport.requestSync();
+      });
+      if (gotSync) return { confirmed: true };
+    }
+    return { confirmed: false };
+  };
   const runMove = async (apply, check) => {
     apply();
-    await waitForServer();
+    const { confirmed } = await waitForServer();
+    if (!confirmed) {
+      // No server sync arrived (unreachable/slow server, or socket down). The optimistic
+      // state is not trustworthy, so treat the move as rejected and force one final sync so
+      // the next iteration can re-align to server truth.
+      try { client.transport.requestSync(); } catch (_) {}
+      return false;
+    }
     const st = client.getState();
     return st === null || st === undefined ? true : !!check(st);
   };
@@ -261,19 +297,37 @@ async function startBotClient(matchID, playerID, credentials, botName, targetBot
   let state;
   while (!(state = client.getState())) await sleep(500);
 
-  let lastTurnStateId = 0;
+  let lastTurnStateId = -1;
+  let stalledIterations = 0;
   while (!state.ctx.gameover) {
     try {
       state = client.getState();
       if (!state || state.ctx.gameover) { shutdown(); return; }
       if (state.ctx.currentPlayer !== playerID) {
+        stalledIterations = 0;
         await sleep(500);
         continue;
+      }
+      if (state._stateID < lastTurnStateId) {
+        // A server sync replaced our optimistic state with an older, server-confirmed
+        // snapshot (backward jump). Lower the watermark so the turn is reprocessed against
+        // server truth instead of stalling forever on a stale watermark.
+        console.log(`[BOT] ${botName} state reverted ${lastTurnStateId} -> ${state._stateID}; reprocessing turn`);
+        lastTurnStateId = state._stateID - 1;
       }
       if (state._stateID <= lastTurnStateId) {
+        stalledIterations++;
+        if (stalledIterations >= 2) {
+          // Safety valve: the turn isn't advancing. A server sync replaces the whole local
+          // state, so force one to re-align with server truth instead of spinning forever.
+          console.log(`[BOT] ${botName} turn state stalled (stateID=${state._stateID}); forcing resync`);
+          try { client.transport.requestSync(); } catch (_) {}
+          stalledIterations = 0;
+        }
         await sleep(500);
         continue;
       }
+      stalledIterations = 0;
       lastTurnStateId = state._stateID;
 
       printState(state.G, botName, playerID);
