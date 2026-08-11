@@ -25,7 +25,7 @@
 // ── Card model ──────────────────────────────────────────────────────────────
 // Card ids 0..51 = suit*13 + (rank-1), rank 1=Ace (high) .. 13=King. Card 52 = Joker.
 // Suits: 0=♠ 1=♥ 2=♣ 3=♦. Trump is a suit id 0..3, or -1 for no trump.
-
+import { TurnOrder } from 'boardgame.io/core';
 export const JOKER = 52;
 export const SUITS = [0, 1, 2, 3];
 export const SUIT_CHARS = ['♠', '♥', '♣', '♦'];
@@ -456,8 +456,7 @@ export const MightyGame = {
       next: 'call',
       turn: {
           order: {
-            first: () => 0,
-            next: ({ ctx }) => (ctx.playOrderPos + 1) % ctx.numPlayers,
+            ...TurnOrder.DEFAULT,
             playOrder: ({ G }) => clockwiseOrder(G.numPlayers, G.dealer),
           },
         },
@@ -474,8 +473,7 @@ export const MightyGame = {
       next: 'play',
       turn: {
           order: {
-            first: () => 0,
-            next: ({ ctx }) => (ctx.playOrderPos + 1) % ctx.numPlayers,
+            ...TurnOrder.DEFAULT,
             playOrder: ({ G }) => [String(G.declarer)],
           },
         },
@@ -492,8 +490,7 @@ export const MightyGame = {
     play: {
       turn: {
           order: {
-            first: () => 0,
-            next: ({ ctx }) => (ctx.playOrderPos + 1) % ctx.numPlayers,
+            ...TurnOrder.DEFAULT,
             playOrder: ({ G }) => clockwiseOrder(G.numPlayers, G.leader || G.declarer),
           },
         },
