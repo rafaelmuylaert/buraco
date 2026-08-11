@@ -25,7 +25,6 @@
 // ── Card model ──────────────────────────────────────────────────────────────
 // Card ids 0..51 = suit*13 + (rank-1), rank 1=Ace (high) .. 13=King. Card 52 = Joker.
 // Suits: 0=♠ 1=♥ 2=♣ 3=♦. Trump is a suit id 0..3, or -1 for no trump.
-import { TurnOrder } from 'boardgame.io/core';
 export const JOKER = 52;
 export const SUITS = [0, 1, 2, 3];
 export const SUIT_CHARS = ['♠', '♥', '♣', '♦'];
@@ -55,6 +54,17 @@ export function cardName(c, trump) {
   if (isRipper(c, trump)) return 'RIPPER';
   return cardFace(c);
 }
+
+// Mimics boardgame.io's TurnOrder.DEFAULT but safely handles 
+// internal probes where playOrderPos might be undefined.
+const SafeTurnOrder = (playOrderFn) => ({
+  first: () => 0,
+  next: ({ ctx }) => {
+    if (ctx.playOrderPos === undefined) return 0;
+    return (ctx.playOrderPos + 1) % ctx.numPlayers;
+  },
+  playOrder: playOrderFn,
+});
 
 // ── Deck & deal ─────────────────────────────────────────────────────────────
 export function createDeck() {
@@ -455,10 +465,7 @@ export const MightyGame = {
       start: true,
       next: 'call',
       turn: {
-          order: {
-            ...TurnOrder.DEFAULT,
-            playOrder: ({ G }) => clockwiseOrder(G.numPlayers, G.dealer),
-          },
+          order: SafeTurnOrder(({ G }) => clockwiseOrder(G.numPlayers, G.dealer)),
         },
       onBegin: ({ G }) => {
         G.bids = [];
@@ -472,10 +479,7 @@ export const MightyGame = {
     call: {
       next: 'play',
       turn: {
-          order: {
-            ...TurnOrder.DEFAULT,
-            playOrder: ({ G }) => [String(G.declarer)],
-          },
+          order: SafeTurnOrder(({ G }) => [String(G.declarer)]),
         },
       onBegin: ({ G }) => {
         // The declarer picks up the kitty, then must discard 3 face-down.
@@ -489,10 +493,7 @@ export const MightyGame = {
 
     play: {
       turn: {
-          order: {
-            ...TurnOrder.DEFAULT,
-            playOrder: ({ G }) => clockwiseOrder(G.numPlayers, G.leader || G.declarer),
-          },
+          order: SafeTurnOrder(({ G }) => clockwiseOrder(G.numPlayers, G.leader || G.declarer)),
         },
       onBegin: ({ G }) => {
         G.trick = [];
