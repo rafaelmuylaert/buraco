@@ -553,7 +553,7 @@ export async function runTurn(S, playerID, iface) {
         S.hasDrawn = false;
         S.lastDrawnCard = null;
     }
-    let log = _diagnosticLog >= 1 ? true : false;
+    let log = _diagnosticLog >= 1 ? console.log : null;
     _activeTeam = myTeam === 1 ? 1 : 0;
     runCurrentState(S, playerID, myTeam, oppTeam);
 
