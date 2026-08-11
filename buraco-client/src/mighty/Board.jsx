@@ -168,6 +168,15 @@ function MightyBoardInner({ ctx, G, moves, playerID }) {
           padding: '10px 22px', borderRadius: '6px', border: '1px solid #8a3a3a', background: '#8a3a3a',
           color: 'white', cursor: 'pointer', fontWeight: 'bold',
         }}>{t('mighty.pass')}</button>
+        {myHand.map((c) => {
+          const isLegal = legal.includes(c);
+          const isSel = selDiscard.includes(c);
+          return (
+            <Card key={c} card={c} trump={trump} legal={isLegal} selected={isSel}
+              onClick={isLegal ? () => playCard(c) : undefined}
+              dim={isMyTurn && !isLegal} />
+          );
+        })}
       </div>
     </div>
   );
