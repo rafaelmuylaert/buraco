@@ -457,8 +457,8 @@ export const MightyGame = {
       turn: {
         order: {
           playOrder: ({ G }) => clockwiseOrder(G.numPlayers, G.dealer),
-          first: () => 0,
-          next: () => undefined, // always advanced explicitly via endTurn({next})
+//          first: () => 0,
+//          next: () => undefined, // always advanced explicitly via endTurn({next})
         },
       },
       onBegin: ({ G }) => {
@@ -475,8 +475,8 @@ export const MightyGame = {
       turn: {
         order: {
           playOrder: ({ G }) => [G.declarer],
-          first: () => 0,
-          next: () => undefined,
+//          first: () => 0,
+//         next: () => undefined,
         },
       },
       onBegin: ({ G }) => {
@@ -493,8 +493,8 @@ export const MightyGame = {
       turn: {
         order: {
           playOrder: ({ G }) => clockwiseOrder(G.numPlayers, G.leader || G.declarer),
-          first: () => 0,
-          next: () => undefined,
+ //         first: () => 0,
+ //         next: () => undefined,
         },
       },
       onBegin: ({ G }) => {
