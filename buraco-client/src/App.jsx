@@ -36,6 +36,8 @@ import { LobbyClient } from 'boardgame.io/client';
 import { io } from 'socket.io-client';
 import { BuracoGame, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS } from './game.js';
 import { BuracoBoard } from './Board.jsx';
+import { MightyGame } from '../../mighty/game.js';
+import { MightyBoard } from '../../mighty/Board.jsx';
 import { useT } from './i18n.jsx';
 
 const { port, hostname, protocol, origin } = window.location;
@@ -122,14 +124,28 @@ const BuracoClient = Client({
   debug: false 
 });
 
-function ReconnectingClient({ matchID, playerID, credentials, tournament, tournamentStandings, apiAddress }) {
+const MightyClient = Client({
+  game: MightyGame,
+  board: MightyBoard,
+  multiplayer: SocketIO({
+    server: SOCKET_SERVER,
+    socketOpts: { path: SOCKET_PATH, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000 }
+  }),
+  debug: false,
+  numPlayers: 5,
+});
+
+const GAME_CLIENTS = { buraco: BuracoClient, mighty: MightyClient };
+
+function ReconnectingClient({ matchID, playerID, credentials, tournament, tournamentStandings, apiAddress, gameName }) {
   const [key, setKey] = React.useState(0);
   React.useEffect(() => {
     const socket = io(SOCKET_SERVER, { path: SOCKET_PATH, autoConnect: true, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000 });
     socket.on('reconnect', () => setKey(k => k + 1));
     return () => socket.close();
   }, []);
-  return <BuracoClient key={key} matchID={matchID} playerID={playerID} credentials={credentials} tournament={tournament} tournamentStandings={tournamentStandings} apiAddress={apiAddress} />;
+  const GameClient = GAME_CLIENTS[gameName || 'buraco'] || BuracoClient;
+  return <GameClient key={key} matchID={matchID} playerID={playerID} credentials={credentials} tournament={tournament} tournamentStandings={tournamentStandings} apiAddress={apiAddress} />;
 }
 
 // ── Tree log parser ───────────────────────────────────────────────────────────
@@ -320,6 +336,9 @@ function LogPanel({ apiBase, collapsed, onToggle }) {
 const App = () => {
   const { t, tN, lang, setLang, availableLangs, langLabel } = useT();
   const [view, setView] = useState('lounge'); 
+  const [gameName, setGameName] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get('game') === 'mighty' ? 'mighty' : 'buraco'; } catch { return 'buraco'; }
+  });
   const [matches, setMatches] = useState([]);
   const [matchID, setMatchID] = useState(null);
   const [playerID, setPlayerID] = useState(null);
@@ -351,6 +370,7 @@ const App = () => {
   const [quickGameConfig, setQuickGameConfig] = useState({
     numPlayers: 4,
     numBots: 3,
+    mightyNumBots: 4,
     tableName: '',
     ...DEFAULT_GAME_CONFIG,
     rules: { ...DEFAULT_RULES, runners: [...DEFAULT_RULES.runners], cardPointValues: { ...DEFAULT_RULES.cardPointValues } }
@@ -648,8 +668,15 @@ const App = () => {
   useEffect(() => {
     if (view === 'lounge' || view === 'tournaments' || view === 'admin') {
       const fetchMatches = async () => {
-        try { const { matches } = await lobbyClient.listMatches('buraco'); setMatches(matches); } 
-        catch (e) { console.error("Sem conexão com o servidor."); }
+        try {
+          const both = await Promise.all(['buraco', 'mighty'].map(async (g) => {
+            try {
+              const r = await lobbyClient.listMatches(g);
+              return (r.matches || []).map(m => ({ ...m, gameName: g }));
+            } catch { return []; }
+          }));
+          setMatches(both.flat());
+        } catch (e) { console.error("Sem conexão com o servidor."); }
         if (view === 'admin') {
           setHistory(await fetch(`${API_ADDRESS}/api/history`).then(r => r.json()).catch(() => []));
         }
@@ -762,6 +789,7 @@ const App = () => {
   }, [tournaments, matches, t]);
 
   const handleJoinMatch = async (match, seatID) => {
+    const gn = match.gameName || 'buraco';
     const assignedName = match.setupData?.assignments?.[seatID];
     const isTourney = match.setupData?.isTournament === true;
     const reserved = isTourney && assignedName && isRegisteredName(assignedName);
@@ -778,7 +806,7 @@ const App = () => {
       const res = await fetch(`${API_ADDRESS}/api/tournaments/claim-seat`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ matchID: match.matchID, playerID: seatID, playerName: pName })
+        body: JSON.stringify({ matchID: match.matchID, playerID: seatID, playerName: pName, gameName: gn })
       });
       const data = await res.json();
       if (!res.ok || !data.playerCredentials) {
@@ -786,7 +814,7 @@ const App = () => {
         return;
       }
       const sessions = getSavedSessions();
-      sessions[`${match.matchID}_${seatID}`] = { matchID: match.matchID, playerID: seatID, credentials: data.playerCredentials };
+      sessions[`${match.matchID}_${seatID}`] = { matchID: match.matchID, playerID: seatID, credentials: data.playerCredentials, gameName: gn };
       localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
       setMatchID(match.matchID); setPlayerID(seatID); setCredentials(data.playerCredentials);
       setView('game');
@@ -803,7 +831,8 @@ const App = () => {
     // owner was away, the saved credentials no longer work — warn instead of
     // leaving the board stuck on "Carregando Mesa...".
     try {
-      const { matches } = await lobbyClient.listMatches('buraco');
+      const gn = session.gameName || 'buraco';
+      const { matches } = await lobbyClient.listMatches(gn);
       const match = matches.find(x => String(x.matchID) === String(mID));
       const seat = match?.players?.find(x => String(x.id) === String(pID));
       if (seat && seat.name && seat.isConnected === true) {
@@ -864,6 +893,7 @@ const App = () => {
   };
 
   const handleQuickGameSubmit = async () => {
+    if (gameName === 'mighty') return handleMightyQuickGameSubmit();
     const myName = myDisplayName;
     const numPlayers = 4;
     const numBots = Math.max(1, Math.min(3, quickGameConfig.numBots || 3));
@@ -905,6 +935,41 @@ const App = () => {
 
     } catch (e) { 
         alert(t('lounge.openQuick.createError', { msg: e.message })); 
+    }
+  };
+
+  const handleMightyQuickGameSubmit = async () => {
+    const myName = myDisplayName;
+    const numPlayers = 5;
+    const numBots = Math.max(0, Math.min(4, quickGameConfig.mightyNumBots ?? 4));
+    const tableName = (quickGameConfig.tableName || '').trim() || t('lounge.openQuick.tableOf', { name: myName });
+
+    const assignmentsMap = { '0': myName };
+    const humanSeats = numPlayers - 1 - numBots;
+    for (let seat = 1; seat < numPlayers; seat++) {
+      assignmentsMap[seat.toString()] = seat <= humanSeats ? t('lounge.openQuick.playerSeat', { n: seat }) : `Bot ${seat}`;
+    }
+
+    try {
+      const { matchID } = await lobbyClient.createMatch('mighty', {
+        numPlayers,
+        setupData: { numPlayers, assignments: assignmentsMap, name: tableName }
+      });
+
+      const { playerCredentials } = await lobbyClient.joinMatch('mighty', matchID, { playerID: '0', playerName: myName });
+
+      const sessions = getSavedSessions();
+      sessions[`${matchID}_0`] = { matchID, playerID: '0', credentials: playerCredentials, gameName: 'mighty' };
+      localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
+
+      setMatchID(matchID);
+      setPlayerID('0');
+      setCredentials(playerCredentials);
+      setShowQuickGamePopup(false);
+
+      setTimeout(() => setView('game'), 500);
+    } catch (e) {
+      alert(t('lounge.openQuick.createError', { msg: e.message }));
     }
   };
 
@@ -1123,7 +1188,7 @@ const App = () => {
     if (!confirm(t('admin.cleanOrphansConfirm'))) return;
     
     const validMatchIDs = tournaments.flatMap(t => t.rounds.flatMap(r => r.assignments.map(a => a.matchID)));
-    const orphanMatches = matches.filter(m => !validMatchIDs.includes(m.matchID));
+    const orphanMatches = matches.filter(m => !validMatchIDs.includes(m.matchID) && m.gameName !== 'mighty');
     
     for (let m of orphanMatches) {
       try {
@@ -1323,6 +1388,7 @@ const App = () => {
       tournament={activeTournament}
       tournamentStandings={tStats}
       apiAddress={API_ADDRESS}
+      gameName={gameName}
     />;
   }
 
@@ -1841,7 +1907,15 @@ const App = () => {
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', overflowY: 'auto', padding: '20px', boxSizing: 'border-box', zIndex: 1000 }}>
           <div style={{ margin: 'auto', background: '#1b4332', padding: '30px', borderRadius: '15px', border: '2px solid #e63946', width: '500px', maxWidth: '100%', boxSizing: 'border-box' }}>
             <h2 style={{ color: '#e63946', marginTop: 0 }}>{t('lounge.openQuick.configTitle')}</h2>
-            
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd', marginBottom: '15px' }}>{t('lounge.game')}
+              <select value={gameName} onChange={e => setGameName(e.target.value)} style={{ padding: '5px', marginLeft: '10px' }}>
+                <option value="buraco">Buraco</option>
+                <option value="mighty">{t('mighty.title')}</option>
+              </select>
+            </label>
+
+            {gameName === 'buraco' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
               <label>{t('lounge.openQuick.tableName')}<input type="text" value={quickGameConfig.tableName || ''} placeholder={t('lounge.openQuick.tableNamePlaceholder', { name: myDisplayName })} onChange={e => setQuickGameConfig({...quickGameConfig, tableName: e.target.value})} style={{ padding: '5px', marginLeft: '10px', width: '200px', maxWidth: '60%' }} /></label>
 
@@ -1887,6 +1961,17 @@ const App = () => {
                 </select>
               </label>
             </div>
+            ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
+              <div style={{ color: '#9fc5b8', fontSize: '0.9em', lineHeight: '1.6' }}>{t('mighty.quickGameHint')}</div>
+              <label>{t('lounge.openQuick.tableName')}<input type="text" value={quickGameConfig.tableName || ''} placeholder={t('lounge.openQuick.tableNamePlaceholder', { name: myDisplayName })} onChange={e => setQuickGameConfig({...quickGameConfig, tableName: e.target.value})} style={{ padding: '5px', marginLeft: '10px', width: '200px', maxWidth: '60%' }} /></label>
+              <label>{t('mighty.bots')}
+                <select value={quickGameConfig.mightyNumBots ?? 4} onChange={e => setQuickGameConfig({...quickGameConfig, mightyNumBots: parseInt(e.target.value)})} style={{ padding: '5px', marginLeft: '10px' }}>
+                  {[0, 1, 2, 3, 4].map(n => <option key={n} value={n}>{n === 4 ? t('mighty.bots4') : n === 3 ? t('mighty.bots3') : n === 2 ? t('mighty.bots2') : n === 1 ? t('mighty.bots1') : t('mighty.bots0')}</option>)}
+                </select>
+              </label>
+            </div>
+            )}
 
             <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
               <button onClick={() => setShowQuickGamePopup(false)} style={{ padding: '10px 20px', background: '#555', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>{t('common.cancel')}</button>
@@ -1991,10 +2076,12 @@ const App = () => {
                 const firstOpen = (m.players || []).find(p => !p.name && !isBotSeat(m, p));
                 return (
                   <div key={m.matchID} style={{ background: '#222', border: '2px solid #40916c', borderRadius: '10px', padding: '20px', width: '320px', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
-                    <h3 style={{ margin: '0 0 10px 0', color: '#ffd700', fontSize: '1.3em' }}>{m.setupData?.name || t('lounge.openQuick.defaultTable')}</h3>
+                    <h3 style={{ margin: '0 0 10px 0', color: '#ffd700', fontSize: '1.3em' }}>{m.setupData?.name || t('lounge.openQuick.defaultTable')}
+                      <span style={{ fontSize: '0.6em', color: '#4da6ff', marginLeft: '8px', border: '1px solid #4da6ff', borderRadius: '4px', padding: '1px 6px', verticalAlign: 'middle' }}>{m.gameName === 'mighty' ? t('mighty.title') : 'Buraco'}</span>
+                    </h3>
                     <div style={{ fontSize: '0.85em', color: '#aaa', marginBottom: '12px', lineHeight: '1.6' }}>
                       {t('lounge.openQuick.playersLine', { bots: numBots, seats: openSeats })}<br/>
-                      {rulesSummary(m.setupData)}
+                      {m.gameName !== 'mighty' && rulesSummary(m.setupData)}
                     </div>
                     <button onClick={() => { if (firstOpen) handleJoinMatch(m, firstOpen.id.toString()); }} style={{ width: '100%', padding: '10px', background: '#ffd700', color: 'black', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>{t('lounge.openQuick.enter')}</button>
                   </div>

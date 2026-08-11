@@ -22,6 +22,7 @@
 
 import { Server, FlatFile } from 'boardgame.io/dist/cjs/server.js'; 
 import { BuracoGame } from './game.js';
+import { MightyGame } from './mighty.js';
 import { TrainerService } from './train.js';
 import fs from 'fs';
 import path from 'path';
@@ -172,7 +173,7 @@ const gameDB = new Proxy(_rawDB, {
 });
 
 const server = Server({
-  games: [BuracoGame],
+  games: [BuracoGame, MightyGame],
   db: gameDB,
   origins: ['https://buraco.rafamano.com', 'http://localhost:5173', 'http://10.0.0.4:5173'],
 });

@@ -27,6 +27,7 @@ import path from 'path';
 import { setDbgLogFn, BuracoGame, AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, getAndResetTimings, getSuitChar } from './game.js';
 import { getLastDbgLog, initWasm, loadMatchDNA, isWasmReady, runTurn,
          setDiagnosticLog, setActiveNetConfig } from './wasm_loader_new.js';
+import { startMightyPolling } from './mighty_bot.js';
 setDbgLogFn(getLastDbgLog);
 await initWasm();
 setDiagnosticLog(1);
@@ -357,3 +358,5 @@ async function startBotClient(matchID, playerID, credentials, botName, targetBot
 console.log('🤖 Buraco Bot Runner online! Polling the lobby every 5 seconds...');
 const poll = () => { pollLobby().then(() => setTimeout(poll, 5000)).catch(() => setTimeout(poll, 5000)); };
 poll();
+
+startMightyPolling();

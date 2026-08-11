@@ -2,6 +2,7 @@ node_modules/
 dist/
 buraco-server/db/
 buraco-server/game.js
+buraco-server/mighty.js
 .DS_Store
 npm-debug.log
 .env

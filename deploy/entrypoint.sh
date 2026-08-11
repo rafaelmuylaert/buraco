@@ -79,6 +79,8 @@ link_data() {
 prepare() {
     # server/bot import './game.js'; it lives in the client tree at build time.
     cp "$APP_CLIENT/src/game.js" "$APP_BIN/game.js"
+    # Mighty rules engine: same pattern — it lives in the top-level mighty/ tree.
+    cp "$APP_DIR/mighty/game.js" "$APP_BIN/mighty.js"
     link_data
 
     case "$ROLE" in
