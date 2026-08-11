@@ -553,7 +553,7 @@ export async function runTurn(S, playerID, iface) {
         S.hasDrawn = false;
         S.lastDrawnCard = null;
     }
-
+    let log = _diagnosticLog >= 1 ? true : false;
     _activeTeam = myTeam === 1 ? 1 : 0;
     runCurrentState(S, playerID, myTeam, oppTeam);
 
@@ -569,7 +569,7 @@ export async function runTurn(S, playerID, iface) {
         for (const m of moves) {
             if (m.phase !== 0 || S.hasDrawn) continue;
             if (!stillMyTurn()) break;
-            const ok = await _executeTurnMove(m, iface, null);
+            const ok = await _executeTurnMove(m, iface, log);
             iface.refreshState(S);
             if (!ok) {
                 // Rejected or unconfirmed pickup (live bot: the server said no, or no sync
@@ -590,7 +590,7 @@ export async function runTurn(S, playerID, iface) {
     for (const m of meldMoves) {
         if (m.score < 0) continue;
         if (!stillMyTurn()) break;
-        await _executeTurnMove(m, iface, null);
+        await _executeTurnMove(m, iface, log);
         iface.refreshState(S);
     }
 
@@ -600,7 +600,7 @@ export async function runTurn(S, playerID, iface) {
     const discardMoves = buildDiscardMoveList(S, playerID) || [];
     for (const m of discardMoves) {
         if (!stillMyTurn()) break;
-        const ok = await _executeTurnMove(m, iface, null);
+        const ok = await _executeTurnMove(m, iface, log);
         iface.refreshState(S);
         if (ok) break;
     }
@@ -683,6 +683,7 @@ export function buildDiscardMoveList(G, player) {
 // confirmation), so each is awaited.
 export async function _executeTurnMove(m, iface, log) {
     const ok = (r) => r === undefined ? true : !!r;
+    
     if (!m) return false;
     if (m.phase === 0) {
         if (m.moveType === 'declareExhausted') { log?.('declareExhausted'); return ok(await iface.exhaust()); }
