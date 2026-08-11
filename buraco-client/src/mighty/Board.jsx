@@ -14,12 +14,12 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 import React, { useState, useMemo } from 'react';
-import { useT } from '../buraco-client/src/i18n.jsx';
+import { useT } from '../i18n.jsx';
 import {
-  JOKER, SUITS, NO_TRUMP, suitOf, rankOf, suitChar, cardFace, cardName,
-  isMighty, isRipper, isJoker, isTrumpCard, getLegalPlays, createDeck,
+  JOKER, SUITS, NO_TRUMP, suitOf, rankOf, suitChar,
+  isMighty, isRipper, getLegalPlays, createDeck,
   SUIT_NAMES,
-} from './game.js';
+} from '../../../mighty/game.js';
 
 const RANK_SHOW = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const SUIT_COLORS = { 0: '#111', 1: '#d03030', 2: '#111', 3: '#d03030' };
@@ -48,7 +48,6 @@ const Card = ({ card, trump, onClick, disabled, selected, legal, dim, badge }) =
   const mighty = isMighty(card, trump);
   const ripper = isRipper(card, trump);
   const joker = card === JOKER;
-  const face = joker ? '★' : cardFace(card);
   return (
     <div onClick={disabled ? undefined : onClick} style={{
       position: 'relative',
@@ -103,7 +102,7 @@ export function MightyBoard(props) {
   return <ErrorBoundary t={t}><MightyBoardInner {...props} /></ErrorBoundary>;
 }
 
-function MightyBoardInner({ ctx, G, moves, playerID, matchID, matchData }) {
+function MightyBoardInner({ ctx, G, moves, playerID }) {
   const { t } = useT();
   const me = String(playerID);
   const isMyTurn = ctx.currentPlayer === me;
@@ -133,8 +132,6 @@ function MightyBoardInner({ ctx, G, moves, playerID, matchID, matchData }) {
   }, [leader, declarer, G.numPlayers]);
 
   // Player positions around the table. `me` is bottom (index 3 of 5).
-  const positions = ['right', 'topRight', 'topLeft', 'left', 'bottom'];
-  const seatIdx = seatOrder.indexOf(me);
 
   const players = G.players || {};
   const playerName = (p) => players[p] || `P${p}`;
@@ -345,8 +342,7 @@ function MightyBoardInner({ ctx, G, moves, playerID, matchID, matchData }) {
 
         {/* Trick area + opponents */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', alignItems: 'flex-start', marginBottom: '10px' }}>
-          {seatOrder.map((p, i) => {
-            const pos = positions[i];
+          {seatOrder.map((p) => {
             const isMe = p === me;
             const handCount = (G.hands[p] || []).length;
             const wonCount = (G.won[p] || []).length;

@@ -37,7 +37,7 @@ import { io } from 'socket.io-client';
 import { BuracoGame, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS } from './game.js';
 import { BuracoBoard } from './Board.jsx';
 import { MightyGame } from '../../mighty/game.js';
-import { MightyBoard } from '../../mighty/Board.jsx';
+import { MightyBoard } from './mighty/Board.jsx';
 import { useT } from './i18n.jsx';
 
 const { port, hostname, protocol, origin } = window.location;
