@@ -455,12 +455,12 @@ export const MightyGame = {
       start: true,
       next: 'call',
       turn: {
-        order: {
-          playOrder: ({ G }) => clockwiseOrder(G.numPlayers, G.dealer),
-//          first: () => 0,
-//          next: () => undefined, // always advanced explicitly via endTurn({next})
+          order: {
+            first: () => 0,
+            next: ({ ctx }) => (ctx.playOrderPos + 1) % ctx.numPlayers,
+            playOrder: ({ G }) => clockwiseOrder(G.numPlayers, G.dealer),
+          },
         },
-      },
       onBegin: ({ G }) => {
         G.bids = [];
         G.activeBid = null;
@@ -473,12 +473,12 @@ export const MightyGame = {
     call: {
       next: 'play',
       turn: {
-        order: {
-          playOrder: ({ G }) => [G.declarer],
-//          first: () => 0,
-//         next: () => undefined,
+          order: {
+            first: () => 0,
+            next: ({ ctx }) => (ctx.playOrderPos + 1) % ctx.numPlayers,
+            playOrder: ({ G }) => [String(G.declarer)],
+          },
         },
-      },
       onBegin: ({ G }) => {
         // The declarer picks up the kitty, then must discard 3 face-down.
         if (G.kitty && G.kitty.every((c) => c != null)) {
@@ -491,12 +491,12 @@ export const MightyGame = {
 
     play: {
       turn: {
-        order: {
-          playOrder: ({ G }) => clockwiseOrder(G.numPlayers, G.leader || G.declarer),
- //         first: () => 0,
- //         next: () => undefined,
+          order: {
+            first: () => 0,
+            next: ({ ctx }) => (ctx.playOrderPos + 1) % ctx.numPlayers,
+            playOrder: ({ G }) => clockwiseOrder(G.numPlayers, G.leader || G.declarer),
+          },
         },
-      },
       onBegin: ({ G }) => {
         G.trick = [];
         G.namedSuit = null;
