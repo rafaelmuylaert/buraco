@@ -388,10 +388,10 @@ function MightyBoardInner({ ctx, G, moves, playerID }) {
           )}
           {trick.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-              {trick.map((t, i) => (
+              {trick.map((tr, i) => (
                 <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                  <span style={{ fontSize: '0.7em', color: '#ffd700' }}>{i === 0 ? t('mighty.lead') : playerName(t.player)}</span>
-                  <Card card={t.card} trump={trump} />
+                  <span style={{ fontSize: '0.7em', color: '#ffd700' }}>{i === 0 ? t('mighty.lead') : playerName(tr.player)}</span>
+                  <Card card={tr.card} trump={trump} />
                 </div>
               ))}
             </div>
