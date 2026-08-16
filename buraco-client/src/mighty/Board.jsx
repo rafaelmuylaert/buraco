@@ -10,7 +10,7 @@
 //
 // The board reads playerView-filtered G from the framework: the caller's own
 // hand is visible, other hands and the kitty stay hidden (except for the
-// declarer during the call phase).
+// declarer during the call phase). 
 // ──────────────────────────────────────────────────────────────────────────────
 
 import React, { useState, useMemo } from 'react';
