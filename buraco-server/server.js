@@ -1284,14 +1284,14 @@ setInterval(async () => {
 
 // ── LIFECHECK ─────────────────────────────────────────────────────────────
 // Marks the seat of any human player whose connection has been down for more
-// than LIFECHECK_GRACE_SECS (default 10s) as "available for takeover": the
+// than LIFECHECK_GRACE_SECS (default 30s) as "available for takeover": the
 // seat keeps its name and credentials so the original player's session can
 // reclaim it automatically on reconnect, while data.seatStatus tells the UI
 // (and any other player) the seat is open to be taken over. The seat is NOT
 // auto-converted to a bot: another human can sit from the lobby, or a player
 // already in the game can replace them with a bot via the seat popup. Applies
 // to quick games AND tournaments. Still-connected humans are never touched here.
-const LIFECHECK_GRACE_MS = (Number(process.env.LIFECHECK_GRACE_SECS) || 10) * 1000;
+const LIFECHECK_GRACE_MS = (Number(process.env.LIFECHECK_GRACE_SECS) || 30) * 1000;
 const lifecheckSince = new Map();
 
 // boardgame.io persists `isConnected` into metadata, so after a server restart
