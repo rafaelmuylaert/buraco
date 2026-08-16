@@ -280,6 +280,11 @@ export function playerView({ G, ctx, playerID }) {
   for (const p in G.won) {
     view.won[p] = (p !== String(declarer) || gameOver) ? G.won[p] : G.won[p].map(() => -1);
   }
+  // Per-player point count from the REAL pile (computed before masking). A bare
+  // integer never reveals which card a player captured, so it can't leak the
+  // partner (still only discoverable via the specific called card in `won`).
+  view.wonPoints = {};
+  for (const p in G.won) view.wonPoints[p] = G.won[p].filter(isPointCard).length;
   view.kitty = String(declarer) === playerID && ctx.phase === 'call' ? G.kitty : [null, null, null];
   return view;
 }

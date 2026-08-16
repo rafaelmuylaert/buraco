@@ -57,8 +57,8 @@ const Card = ({ card, trump, onClick, disabled, selected, legal, dim, badge }) =
       cursor: disabled ? 'default' : 'pointer',
       borderRadius: '6px', width: `${CARD_W}px`, height: `${CARD_H}px`, minWidth: `${CARD_W}px`,
       display: 'inline-flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', margin: '2px',
-      backgroundColor: joker ? '#8e44ad' : (ripper ? '#1a5276' : 'white'),
-      color: joker ? 'white' : (ripper ? '#ffd700' : SUIT_COLORS[suitOf(card)]),
+      backgroundColor: joker ? '#8e44ad' : (mighty ? '#d4af37' : (ripper ? '#1a5276' : 'white')),
+      color: joker ? 'white' : (mighty ? '#1a1a1a' : (ripper ? '#ffd700' : SUIT_COLORS[suitOf(card)])),
       opacity: dim ? 0.35 : 1,
       boxShadow: '2px 2px 4px rgba(0,0,0,0.5)',
       ...(badge ? { border: badge === 'M' ? '2px solid #ffd700' : badge === 'R' ? '2px solid #ffd700' : {} } : {}),
@@ -70,7 +70,7 @@ const Card = ({ card, trump, onClick, disabled, selected, legal, dim, badge }) =
       <div style={{ fontSize: '30px', opacity: 0.5, textAlign: 'center', lineHeight: '1' }}>
         {joker ? '🤡' : suitChar(suitOf(card))}
       </div>
-      <div style={{ position: 'absolute', bottom: '2px', right: '4px', fontSize: '11px', fontWeight: 'bold', color: mighty ? '#c99800' : ripper ? '#ffd700' : '#888' }}>
+      <div style={{ position: 'absolute', bottom: '2px', right: '4px', fontSize: '11px', fontWeight: 'bold', color: mighty ? '#1a1a1a' : ripper ? '#ffd700' : '#888' }}>
         {mighty ? 'M' : ripper ? 'R' : ''}
       </div>
     </div>
@@ -154,6 +154,14 @@ function MightyBoardInner({ ctx, G, moves, playerID }) {
   const roleOf = (p) => {
     if (p === declarer) return 'declarer';
     if (partner != null && p === partner && p !== declarer) return 'partner';
+    // Self-knowledge: holding the called card (in hand, or already played this
+    // trick) tells me I'm the partner even before it's captured/revealed. This
+    // applies to my own seat only — other clients still read me as a defender,
+    // so nothing leaks.
+    if (p === me && G.calledCard != null &&
+      (myHand.includes(G.calledCard) || trick.some((tr) => tr.player === p && tr.card === G.calledCard))) {
+      return 'partner';
+    }
     return 'defender';
   };
   const ROLE_EMOJI = { declarer: '👑', partner: '🤝', defender: '🛡️' };
@@ -230,16 +238,13 @@ function MightyBoardInner({ ctx, G, moves, playerID }) {
         <>
           <div style={{ color: 'white', maxWidth: '600px', textAlign: 'center' }}>{t('mighty.callHint')}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '640px' }}>
-            {createDeck().map((c) => {
-              const inHand = myHand.includes(c);
-              return (
-                <div key={c} style={{ transform: 'scale(0.55)', margin: '-8px' }}>
-                  <Card card={c} trump={trump} disabled={inHand}
-                    selected={selCall === c}
-                    onClick={inHand ? undefined : () => setSelCall(c)} />
-                </div>
-              );
-            })}
+{createDeck().filter((c) => !myHand.includes(c)).map((c) => (
+              <div key={c} style={{ transform: 'scale(0.55)', margin: '-8px' }}>
+                <Card card={c} trump={trump}
+                  selected={selCall === c}
+                  onClick={() => setSelCall(c)} />
+              </div>
+            ))}
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button disabled={selCall == null} onClick={() => moves.callPartner(selCall)} style={{
@@ -402,8 +407,7 @@ function MightyBoardInner({ ctx, G, moves, playerID }) {
         <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', alignItems: 'flex-start', marginBottom: '10px' }}>
           {seatOrder.map((p) => {
             const isMe = p === me;
-            const handCount = (G.hands[p] || []).length;
-            const wonCount = (G.won[p] || []).length;
+            const pts = (G.wonPoints && G.wonPoints[p]) ?? 0;
             const active = ctx.currentPlayer === p && !go;
             return (
               <div key={p} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', width: '110px' }}>
@@ -415,8 +419,7 @@ function MightyBoardInner({ ctx, G, moves, playerID }) {
                   ? (isMe ? null : <RoleBadge placeholder key="ph" />)
                   : <RoleBadge emoji={ROLE_EMOJI[roleOf(p)]} key={`role-${p}`} />}
                 <div style={{ color: '#aaa', fontSize: '0.75em' }}>
-                  {t('mighty.won', { n: wonCount })}
-                  {isMe && <span> · {t('mighty.hand', { n: handCount })}</span>}
+                  {t('mighty.won', { n: pts })}
                 </div>
               </div>
             );
