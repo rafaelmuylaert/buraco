@@ -17,7 +17,7 @@ import React, { useState, useMemo } from 'react';
 import { useT } from '../i18n.jsx';
 import {
   JOKER, SUITS, NO_TRUMP, suitOf, rankOf, suitChar,
-  isMighty, isRipper, getLegalPlays, createDeck,
+  isMighty, isRipper, getLegalPlays, createDeck, computePartner,
   SUIT_NAMES,
 } from '../../../mighty/game.js';
 
@@ -91,6 +91,18 @@ const CardBack = ({ label, count }) => (
   </div>
 );
 
+const RoleBadge = ({ emoji, placeholder }) => (
+  <div style={{
+    width: '46px', height: '64px', margin: '2px', borderRadius: '8px',
+    border: placeholder ? '2px dashed #444' : '2px solid #555',
+    backgroundColor: placeholder ? 'transparent' : 'rgba(0,0,0,0.25)',
+    display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+    color: 'white',
+  }}>
+    {!placeholder && <span style={{ fontSize: '1.8em' }}>{emoji}</span>}
+  </div>
+);
+
 const bidText = (bid, t) => {
   if (!bid) return '';
   const suit = bid.suit === NO_TRUMP ? t('mighty.noTrump') : t(`mighty.suit.${SUIT_NAMES[bid.suit]}`);
@@ -135,6 +147,16 @@ function MightyBoardInner({ ctx, G, moves, playerID }) {
 
   const players = G.players || {};
   const playerName = (p) => players[p] || `P${p}`;
+
+  // Partner is secret until the called card is played/captured — computePartner
+  // resolves it only then, so early in play every non-declarer reads as a defender.
+  const partner = G.declarer != null ? computePartner(G, G.numPlayers) : null;
+  const roleOf = (p) => {
+    if (p === declarer) return 'declarer';
+    if (partner != null && p === partner && p !== declarer) return 'partner';
+    return 'defender';
+  };
+  const ROLE_EMOJI = { declarer: '👑', partner: '🤝', defender: '🛡️' };
 
   // ── bidding ────────────────────────────────────────────────────────────────
   const [bidPoints, setBidPoints] = useState(13);
@@ -332,6 +354,29 @@ function MightyBoardInner({ ctx, G, moves, playerID }) {
 
   const bidHistory = (G.bids || []).map((b) => `${playerName(b.player)}: ${bidText(b, t)}`).join(' · ');
 
+  // Post-bidding contract summary: the winning bid value + the called partner
+  // card (or the "alone" announcement). The running bids list is dropped here.
+  const bidValueEl = G.activeBid
+    ? <span style={{ color: '#ccc', fontSize: '0.9em' }}>{t('mighty.bidValue', { pts: G.activeBid.points })}</span>
+    : null;
+  const calledCardEl = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <span style={{ color: 'white', fontSize: '0.9em' }}>{t('mighty.calledLabel')}:</span>
+      {G.openAlone
+        ? <span style={{ color: '#ffd700', fontSize: '1em', fontWeight: 'bold' }}>{t('mighty.alone')}</span>
+        : G.calledCard != null
+          ? <div style={{ transform: 'scale(0.7)', margin: '-6px' }}><Card card={G.calledCard} trump={trump} /></div>
+          : <span style={{ color: '#888', fontSize: '0.9em' }}>{t('mighty.calledPending')}</span>}
+    </div>
+  );
+  const contractSummary = (
+    <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+      {trumpEl}
+      {bidValueEl}
+      {calledCardEl}
+    </div>
+  );
+
   return (
     <div style={{
       minHeight: '100vh', background: 'radial-gradient(ellipse at center, #1b4332 0%, #0d2a1d 70%)',
@@ -342,11 +387,17 @@ function MightyBoardInner({ ctx, G, moves, playerID }) {
       <div style={{ width: '100%', maxWidth: '1000px' }}>
         {/* Top bar */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
-          <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
-            {trumpEl}
-            {G.activeBid && <span style={{ color: '#ccc', fontSize: '0.9em' }}>{t('mighty.currentBid', { bid: bidText(G.activeBid, t) })}</span>}
-          </div>
-          <div style={{ color: '#ccc', fontSize: '0.85em', maxWidth: '60%', textAlign: 'right' }}>{bidHistory}</div>
+          {phase === 'bidding' ? (
+            <>
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {trumpEl}
+                {G.activeBid && <span style={{ color: '#ccc', fontSize: '0.9em' }}>{t('mighty.currentBid', { bid: bidText(G.activeBid, t) })}</span>}
+              </div>
+              <div style={{ color: '#ccc', fontSize: '0.85em', maxWidth: '60%', textAlign: 'right' }}>{bidHistory}</div>
+            </>
+          ) : (
+            contractSummary
+          )}
         </div>
 
         {/* Trick area + opponents */}
@@ -362,11 +413,9 @@ function MightyBoardInner({ ctx, G, moves, playerID }) {
                   color: active ? '#ffd700' : isMe ? '#7CFC00' : 'white',
                   fontWeight: active ? 'bold' : 'normal', fontSize: '0.85em', textAlign: 'center',
                 }}>{playerName(p)}{isMe ? ' (you)' : ''}</div>
-                {isMe
-                  ? null
-                  : <div style={{ display: 'flex', gap: '4px' }}>
-                      <CardBack label={t('mighty.cards')} count={handCount} />
-                    </div>}
+                {declarer == null
+                  ? (isMe ? null : <RoleBadge placeholder key="ph" />)
+                  : <RoleBadge emoji={ROLE_EMOJI[roleOf(p)]} key={`role-${p}`} />}
                 <div style={{ color: '#aaa', fontSize: '0.75em' }}>
                   {t('mighty.won', { n: wonCount })}
                   {isMe && <span> · {t('mighty.hand', { n: handCount })}</span>}
