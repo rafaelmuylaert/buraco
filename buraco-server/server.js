@@ -21,8 +21,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 import { Server, FlatFile } from 'boardgame.io/dist/cjs/server.js'; 
-import { BuracoGame } from './game.js';
-import { MightyGame } from './mighty.js';
+import { BuracoGame } from '../burao-client/src/game.js';
+import { MightyGame } from '..mighty/game.js';
 import { TrainerService } from './train.js';
 import fs from 'fs';
 import path from 'path';
