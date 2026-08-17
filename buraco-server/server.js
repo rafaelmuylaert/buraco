@@ -1092,9 +1092,21 @@ server.router.get('/api/stats', (ctx) => {
   const toTotal = (s) => (typeof s === 'number' ? s : (s?.total || 0));
 
   for (const entry of history) {
+    const ts = entry.ts || new Date(String(entry.date || '')).getTime() || 0;
+
+    // Mighty: the poll stored a normalized per-player result (own settlement +
+    // side-won). Credit it directly — no team pairing for a 5-player individual
+    // game. The side flag decides W/L (±Infinity makes credit's > / < compare
+    // land on the right bucket); points recorded are the player's own.
+    if (entry.gameName === 'mighty' && entry.results) {
+      for (const [name, r] of Object.entries(entry.results)) {
+        credit(name, r.points || 0, r.win ? -Infinity : Infinity, ts);
+      }
+      continue;
+    }
+
     const teams = matchTeams[entry.matchID];
     if (!teams) continue;
-    const ts = entry.ts || new Date(String(entry.date || '')).getTime() || 0;
     const s0 = toTotal(entry.scores?.[0]);
     const s1 = toTotal(entry.scores?.[1]);
     for (const name of teams.team0) credit(name, s0, s1, ts);
@@ -1229,50 +1241,83 @@ server.run({ port: 8000, host: '0.0.0.0' }, () => {
 // viewing the game-over screen never hits a "match not found" sync error.
 const finishedQuickSeen = new Set();
 
+// Every hosted game is polled for finished matches (previously only 'buraco',
+// so Mighty results were never saved and their rounds never advanced).
+const HISTORY_GAMES = ['buraco', 'mighty'];
+
+// The tournament flag is read from metadata.setupData (the source of truth, and
+// the only place that exists for Mighty — G.rules is absent there) with a
+// fallback to G.rules so legacy Buraco matches keep working.
+const matchIsTournament = (data) =>
+  (data?.metadata?.setupData?.isTournament === true) ||
+  (data?.state?.G?.rules?.isTournament === true);
+
+// Mighty settlement is a zero-sum per-player map keyed by seat. Map seats to
+// names via the tournament's seat assignments so the leaderboard / global stats
+// can credit each player with their OWN result (points + which side won).
+const mightyResults = (gameover, assignments) => {
+  const results = {};
+  const winners = gameover.winnerPlayers || [];
+  for (const seat of Object.keys(assignments || {})) {
+    const name = assignments[seat];
+    if (!name) continue;
+    results[name] = { points: gameover.scores[seat] || 0, win: winners.includes(seat) };
+  }
+  return results;
+};
+
 setInterval(async () => {
     try {
-        const result = await gameDB.listMatches('buraco');
-        const matchList = Array.isArray(result) ? result : (result?.matches || []);
-        if (matchList.length === 0) return;
-        
         const history = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
         const savedIDs = new Set(history.map(h => h.matchID));
         let changed = false;
 
-        for (const match of matchList) {
-            const matchID = typeof match === 'string' ? match : (match.id || match.matchID);
-            if (!matchID) continue;
-            const data = await gameDB.fetch(matchID, { state: true });
-            if (!data?.state?.ctx?.gameover) continue;
-            const gameover = data.state.ctx.gameover;
+        for (const gameName of HISTORY_GAMES) {
+            const result = await gameDB.listMatches(gameName);
+            const matchList = Array.isArray(result) ? result : (result?.matches || []);
+            if (matchList.length === 0) continue;
 
-            if (!savedIDs.has(matchID) && gameover?.scores) {
-                history.unshift({
-                    matchID,
-                    date: new Date().toLocaleString(),
-                    ts: Date.now(),
-                    isTournament: data.state?.G?.rules?.isTournament === true,
-                    scores: gameover.scores
-                });
-                savedIDs.add(matchID);
-                changed = true;
-                console.log(`[HISTORY] Auto-saved result for match ${matchID}`);
-            }
+            for (const match of matchList) {
+                const matchID = typeof match === 'string' ? match : (match.id || match.matchID);
+                if (!matchID) continue;
+                const data = await gameDB.fetch(matchID, { state: true, metadata: true });
+                if (!data?.state?.ctx?.gameover) continue;
+                const gameover = data.state.ctx.gameover;
+                const isTournament = matchIsTournament(data);
 
-            // Auto-cleanup: finished QUICK games (isTournament !== true) are
-            // orphaned tables once over, so wipe them. Tournament matches are
-            // kept (reconnects, standings, admin seat management).
-            if (data.state.G?.rules?.isTournament !== true) {
-                if (finishedQuickSeen.has(matchID)) {
-                    finishedQuickSeen.delete(matchID);
-                    try {
-                        await deleteMatchFiles(matchID);
-                        console.log(`[CLEANUP] Removed finished quick match ${matchID}`);
-                    } catch (e) {
-                        console.error('[CLEANUP] Failed to remove match:', e.message);
+                if (!savedIDs.has(matchID) && gameover?.scores) {
+                    const entry = {
+                        matchID,
+                        date: new Date().toLocaleString(),
+                        ts: Date.now(),
+                        gameName,
+                        isTournament,
+                        scores: gameover.scores
+                    };
+                    if (gameName === 'mighty') {
+                        entry.results = mightyResults(gameover, data?.metadata?.setupData?.assignments || {});
                     }
-                } else {
-                    finishedQuickSeen.add(matchID);
+                    history.unshift(entry);
+                    savedIDs.add(matchID);
+                    changed = true;
+                    console.log(`[HISTORY] Auto-saved ${gameName} result for match ${matchID}`);
+                }
+
+                // Auto-cleanup: finished QUICK matches (both games) are orphaned
+                // tables once over, so wipe them. Tournament matches are kept
+                // (reconnects, standings, admin seat management).
+                if (!isTournament) {
+                    if (finishedQuickSeen.has(matchID)) {
+                        finishedQuickSeen.delete(matchID);
+                        try {
+                            await deleteMatchFiles(matchID);
+                            console.log(`[CLEANUP] Removed finished quick ${gameName} match ${matchID}`);
+                        } catch (e) {
+                            console.error('[CLEANUP] Failed to remove match:', e.message);
+                        }
+                    } else {
+                        finishedQuickSeen.add(matchID);
+                    }
                 }
             }
         }

@@ -114,7 +114,7 @@ export function MightyBoard(props) {
   return <ErrorBoundary t={t}><MightyBoardInner {...props} /></ErrorBoundary>;
 }
 
-function MightyBoardInner({ ctx, G, moves, playerID }) {
+function MightyBoardInner({ ctx, G, moves, playerID, tournament = null, tournamentStandings = null }) {
   const { t } = useT();
   const me = String(playerID);
   const isMyTurn = ctx.currentPlayer === me;
@@ -301,9 +301,48 @@ function MightyBoardInner({ ctx, G, moves, playerID }) {
 
   // ── game over ──────────────────────────────────────────────────────────────
   const go = ctx.gameover;
+  const isTournament = !!tournament;
+  const isTournamentComplete = tournament && tournament.status === 'completed';
+  const showNextButton = !isTournament || (isTournament && !isTournamentComplete);
+  const myName = players[me] || `P${me}`;
+
+  const settle = (p) => go.scores[p] || 0;
+  const wonBy = (p) => (go.winnerPlayers || []).includes(p);
+
+  // Apply this match's per-player result to the pre-game standings so the board
+  // shows the updated tournament table. (Per-player: own settlement + W/L.)
+  const updatedStandings = (() => {
+    if (!isTournament || !tournamentStandings) return null;
+    const map = {};
+    for (const [name, st] of tournamentStandings) map[name] = { ...st };
+    Object.keys(go.scores).forEach((p) => {
+      const name = players[p];
+      if (name && map[name]) {
+        map[name].points += settle(p);
+        if (wonBy(p)) map[name].v += 1;
+        else if (settle(p) === 0) map[name].e += 1;
+        else map[name].d += 1;
+      }
+    });
+    return Object.entries(map).sort((a, b) => b[1].points - a[1].points);
+  })();
+
+  const handleReturnLobby = () => {
+    sessionStorage.removeItem('auto_join_tournament');
+    sessionStorage.removeItem('quick_game_rematch');
+    window.location.reload();
+  };
+  const handleNextMatch = () => {
+    if (isTournament) {
+      sessionStorage.removeItem('quick_game_rematch');
+      sessionStorage.setItem('auto_join_tournament', JSON.stringify({ tournamentId: tournament.id, playerName: myName }));
+    }
+    window.location.reload();
+  };
+
   const gameOverUI = go && (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: '#0d1f2d', border: '2px solid #ffd700', borderRadius: '12px', padding: '24px 32px', color: 'white', maxWidth: '420px', textAlign: 'center' }}>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <div style={{ background: '#0d1f2d', border: '2px solid #ffd700', borderRadius: '12px', padding: '24px 32px', color: 'white', maxWidth: isTournament ? '720px' : '420px', width: '100%', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <h2 style={{ color: '#ffd700', marginTop: 0 }}>
           {go.success ? t('mighty.gameOver.winner') : t('mighty.gameOver.loser')}
         </h2>
@@ -314,19 +353,54 @@ function MightyBoardInner({ ctx, G, moves, playerID }) {
         <div style={{ fontSize: '1.2em', margin: '10px 0' }}>
           {t('mighty.gameOver.teamPoints', { pts: go.teamPoints })} / {t('mighty.gameOver.bid', { bid: go.bid })}
         </div>
-        <table style={{ width: '100%', margin: '8px 0', borderCollapse: 'collapse' }}>
-          <tbody>
-            {Object.entries(go.scores).map(([p, s]) => (
-              <tr key={p}>
-                <td style={{ border: '1px solid #444', padding: '4px 8px', textAlign: 'left' }}>{playerName(p)}</td>
-                <td style={{ border: '1px solid #444', padding: '4px 8px', textAlign: 'right', color: s >= 0 ? '#7CFC00' : '#ff6666' }}>{s > 0 ? '+' : ''}{s}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <button onClick={() => window.location.reload()} style={{ padding: '10px 22px', background: '#2a7a4a', color: 'white', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
-          {t('mighty.gameOver.back')}
-        </button>
+
+        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', width: '100%', marginBottom: '8px' }}>
+          <div style={{ flex: '1 1 220px', maxWidth: '320px', background: 'rgba(0,0,0,0.5)', borderRadius: '10px', padding: '12px' }}>
+            <h4 style={{ color: '#4da6ff', margin: '0 0 8px 0', fontSize: '0.9em' }}>{t('mighty.gameOver.matchScore')}</h4>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9em' }}>
+              <tbody>
+                {Object.entries(go.scores).map(([p, s]) => (
+                  <tr key={p} style={{ background: p === me ? 'rgba(255,215,0,0.18)' : 'transparent' }}>
+                    <td style={{ border: '1px solid #333', padding: '4px 8px', textAlign: 'left' }}>{playerName(p)}{p === me ? ' (you)' : ''}</td>
+                    <td style={{ border: '1px solid #333', padding: '4px 8px', textAlign: 'right', color: s >= 0 ? '#7CFC00' : '#ff6666' }}>{s > 0 ? '+' : ''}{s}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {updatedStandings && (
+            <div style={{ flex: '1 1 260px', maxWidth: '360px', background: '#12233a', borderRadius: '10px', padding: '12px', border: '2px solid #ffd700' }}>
+              <h4 style={{ color: '#ffd700', margin: '0 0 8px 0', fontSize: '0.9em' }}>{t('mighty.gameOver.standings')}</h4>
+              <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '0.85em' }}>
+                <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>{t('mighty.gameOver.player')}</th><th>{t('mighty.gameOver.pts')}</th><th>{t('mighty.gameOver.wld')}</th></tr></thead>
+                <tbody>
+                  {updatedStandings.map(([name, st]) => {
+                    const isMe = name === myName;
+                    return (
+                      <tr key={name} style={{ borderBottom: '1px solid #333', background: isMe ? 'rgba(255,215,0,0.18)' : 'transparent' }}>
+                        <td style={{ padding: '5px 0', fontWeight: isMe ? 'bold' : 'normal' }}>{name}{isMe ? ' (you)' : ''}</td>
+                        <td style={{ fontWeight: 'bold', color: '#ffd700' }}>{st.points}</td>
+                        <td>{st.v}-{st.e}-{st.d}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button onClick={handleReturnLobby} style={{ padding: '10px 22px', background: '#555', color: 'white', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
+            {t('common.backToLounge')}
+          </button>
+          {showNextButton && (
+            <button onClick={handleNextMatch} style={{ padding: '10px 22px', background: '#4da6ff', color: 'white', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 0 12px rgba(77,166,255,0.5)' }}>
+              {isTournament ? t('board.nextMatch') : t('board.playAgain')}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

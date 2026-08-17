@@ -376,8 +376,9 @@ const App = () => {
     rules: { ...DEFAULT_RULES, runners: [...DEFAULT_RULES.runners], cardPointValues: { ...DEFAULT_RULES.cardPointValues } }
   });
 
-  const [newTourney, setNewTourney] = useState({ 
+  const [newTourney, setNewTourney] = useState({
     name: '', type: 'team', private: false,
+    game: 'buraco',
     ...DEFAULT_GAME_CONFIG,
     shuffleMode: 'every-round', shuffleEvery: 2, shufflePoints: 1000,
     players: 'Diana, Marcia, Rafa, Monica',
@@ -746,10 +747,17 @@ const App = () => {
       const t = tournaments.find(t => t.id === tournamentId);
       if (t && t.rounds && t.rounds.length > 0) {
           const lastRound = t.rounds[t.rounds.length - 1];
-          const myAssignment = lastRound.assignments.find(a => a.team0.includes(playerName) || a.team1.includes(playerName));
+          // Buraco assignments carry team0/team1; Mighty carries a players[]
+          // roster. Match on either.
+          const inAssign = (a) =>
+            (a.team0 && a.team0.includes(playerName)) ||
+            (a.team1 && a.team1.includes(playerName)) ||
+            (a.players && a.players.includes(playerName));
+          const myAssignment = lastRound.assignments.find(a => inAssign(a));
           if (myAssignment) {
               const targetMatch = matches.find(m => m.matchID === myAssignment.matchID);
               if (targetMatch) {
+                  const targetGame = targetMatch.gameName || t.game || 'buraco';
                   sessionStorage.removeItem('auto_join_tournament');
                   let targetSeatID = null;
                   const assignments = targetMatch.setupData?.assignments || {};
@@ -768,14 +776,15 @@ const App = () => {
                             if (savedAuth?.token) headers['Authorization'] = `Bearer ${savedAuth.token}`;
                             const res = await fetch(`${API_ADDRESS}/api/tournaments/claim-seat`, {
                               method: 'POST', headers,
-                              body: JSON.stringify({ matchID: targetMatch.matchID, playerID: targetSeatID, playerName })
+                              body: JSON.stringify({ matchID: targetMatch.matchID, playerID: targetSeatID, playerName, gameName: targetGame })
                             });
                             const data = await res.json();
                             if (!res.ok || !data.playerCredentials) { console.error('Auto-join falhou:', data.error); return; }
                             const sessions = getSavedSessions();
-                            sessions[`${targetMatch.matchID}_${targetSeatID}`] = { matchID: targetMatch.matchID, playerID: targetSeatID, credentials: data.playerCredentials };
+                            sessions[`${targetMatch.matchID}_${targetSeatID}`] = { matchID: targetMatch.matchID, playerID: targetSeatID, credentials: data.playerCredentials, gameName: targetGame };
                             localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
                             setMatchID(targetMatch.matchID); setPlayerID(targetSeatID); setCredentials(data.playerCredentials);
+                            setGameName(targetGame);
                             setView('game');
                           } catch (e) {
                             console.error("Auto-join falhou:", e);
@@ -817,6 +826,7 @@ const App = () => {
       sessions[`${match.matchID}_${seatID}`] = { matchID: match.matchID, playerID: seatID, credentials: data.playerCredentials, gameName: gn };
       localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
       setMatchID(match.matchID); setPlayerID(seatID); setCredentials(data.playerCredentials);
+      setGameName(gn);
       setView('game');
     } catch (e) {
       alert(t('lounge.join.joinError'));
@@ -846,18 +856,34 @@ const App = () => {
     setView('game');
   };
 
+  const handleTourneyGameChange = (game) => {
+    setNewTourney(prev => {
+      if (game === 'mighty') {
+        // 5-player individual game: drop Buraco-only fields and fixed teams.
+        return { ...prev, game, type: 'individual', rules: { ...prev.rules, numPlayers: 5 } };
+      }
+      return { ...prev, game, type: prev.type === 'individual' ? 'team' : prev.type, rules: { ...prev.rules, numPlayers: 4 } };
+    });
+  };
+
   const handleCreateTournament = async () => {
     let playerList = newTourney.players.split(',').map(p => p.trim()).filter(p => p);
-    
-    const remainder = playerList.length % newTourney.rules.numPlayers;
+    const isMighty = newTourney.game === 'mighty';
+    const tableSize = isMighty ? 5 : newTourney.rules.numPlayers;
+
+    const remainder = playerList.length % tableSize;
     if (remainder !== 0) {
-      const botsNeeded = newTourney.rules.numPlayers - remainder;
+      const botsNeeded = tableSize - remainder;
       for (let i = 0; i < botsNeeded; i++) {
         playerList.push(t('tourney.botPlayer', { n: i + 1 }));
       }
     }
-    
-    let tourneyType = newTourney.rules.numPlayers === 2 ? 'individual' : newTourney.type;
+
+    // Buraco keeps its team/individual distinction; Mighty is always individual
+    // (a 5-player table with a secret partner — no preset teams).
+    let tourneyType = isMighty
+      ? 'individual'
+      : (newTourney.rules.numPlayers === 2 ? 'individual' : newTourney.type);
     let fTeams = [];
     if (tourneyType === 'team') {
       for(let i=0; i<playerList.length; i+=2) fTeams.push([playerList[i], playerList[i+1]]);
@@ -868,6 +894,7 @@ const App = () => {
     const newT = {
       id: Date.now().toString(),
       name: newTourney.name || t('tourney.defaultName', { n: tournaments.length + 1 }),
+      game: newTourney.game || 'buraco',
       type: tourneyType,
       private: !!newTourney.private,
       createdBy: currentUser?.username || null,
@@ -879,17 +906,20 @@ const App = () => {
       shufflePoints: newTourney.shufflePoints || 0,
       players: playerList,
       fixedTeams: fTeams.length > 0 ? fTeams : null,
-      rules: { ...newTourney.rules, targetBotName }, 
+      // Mighty has no Buraco table rules — just the player count.
+      rules: isMighty
+        ? { numPlayers: 5 }
+        : { ...newTourney.rules, targetBotName },
       status: 'active',
       isGeneratingNext: true,
       rounds: []
     };
-    
+
     const updated = [...tournaments, newT];
     setTournaments(updated);
     setNewTourney({ ...newTourney, name: '', players: '' });
     await executePhaseGeneration(newT.id, updated);
-    setView('lounge'); 
+    setView('lounge');
   };
 
   const handleQuickGameSubmit = async () => {
@@ -977,12 +1007,16 @@ const App = () => {
     const tIndex = currentTournaments.findIndex(x => x.id === tID);
     if (tIndex === -1) return;
     const trn = currentTournaments[tIndex];
+    const game = trn.game || 'buraco';
+    const isMighty = game === 'mighty';
 
     let matchPromises = [];
     let assignmentsInfo = [];
     let eligiblePlayers = [...trn.players];
 
-    if (trn.format === 'playoff' && trn.rounds.length > 0) {
+    // Playoff (winner-continuation of two teams) is a Buraco-only format —
+    // Mighty tournaments use rounds / points / running.
+    if (!isMighty && trn.format === 'playoff' && trn.rounds.length > 0) {
       const lastRound = trn.rounds[trn.rounds.length - 1];
       eligiblePlayers = [];
       lastRound.assignments.forEach(a => {
@@ -1002,7 +1036,51 @@ const App = () => {
       }
     }
 
-    if (trn.type === 'team' && trn.format !== 'playoff') {
+    if (isMighty) {
+      // Mighty: build whole 5-player tables (no preset teams — the partner is
+      // secret and resolved in play). Each table is one match with a seat→name
+      // assignment map.
+      const shuffleMode = trn.shuffleMode || 'every-round';
+      let shouldShuffle = true;
+      if (trn.rounds.length > 0) {
+        if (shuffleMode === 'rounds') {
+          shouldShuffle = (trn.rounds.length % Math.max(1, trn.shuffleEvery || 1)) === 0;
+        } else if (shuffleMode === 'points') {
+          const since = trn.lastShuffleRound || 0;
+          let pts = {};
+          trn.players.forEach(p => pts[p] = 0);
+          trn.rounds.forEach((r, idx) => {
+            const roundNum = idx + 1;
+            if (roundNum < since) return;
+            r.assignments.forEach(a => {
+              const rec = history.find(h => h.matchID === a.matchID);
+              if (!rec || !rec.results) return;
+              (a.players || []).forEach(p => { if (rec.results[p]) pts[p] = (pts[p] || 0) + rec.results[p].points; });
+            });
+          });
+          shouldShuffle = Math.max(0, ...Object.values(pts)) >= Math.max(0, trn.shufflePoints || 0);
+        }
+      }
+
+      if (shouldShuffle) {
+        let shuffled = [...eligiblePlayers].sort(() => Math.random() - 0.5);
+        for (let i = 0; i < shuffled.length; i += 5) {
+          const table = shuffled.slice(i, i + 5);
+          const map = {};
+          table.forEach((name, seat) => { map[String(seat)] = name; });
+          assignmentsInfo.push({ players: table, map });
+        }
+        trn.lastShuffleRound = trn.rounds.length + 1;
+      } else {
+        const prevRound = trn.rounds[trn.rounds.length - 1];
+        assignmentsInfo = prevRound.assignments.map(a => {
+          const table = a.players || [];
+          const map = {};
+          table.forEach((name, seat) => { map[String(seat)] = name; });
+          return { players: table, map };
+        });
+      }
+    } else if (trn.type === 'team' && trn.format !== 'playoff') {
       let shuffledTeams = [...trn.fixedTeams].sort(() => Math.random() - 0.5);
       for (let i = 0; i < shuffledTeams.length; i += 2) {
         const t0 = shuffledTeams[i]; const t1 = shuffledTeams[i+1];
@@ -1059,18 +1137,32 @@ const App = () => {
       }
     }
 
+    const tableSize = isMighty ? 5 : trn.rules.numPlayers;
     for (let info of assignmentsInfo) {
-      matchPromises.push(lobbyClient.createMatch('buraco', {
-         numPlayers: trn.rules.numPlayers,
-         setupData: { ...trn.rules, isTournament: true, tournamentID: trn.id, assignments: info.map }
-      }));
+      if (isMighty) {
+        matchPromises.push(lobbyClient.createMatch('mighty', {
+          numPlayers: 5,
+          setupData: { numPlayers: 5, isTournament: true, tournamentID: trn.id, assignments: info.map }
+        }));
+      } else {
+        matchPromises.push(lobbyClient.createMatch('buraco', {
+          numPlayers: tableSize,
+          setupData: { ...trn.rules, isTournament: true, tournamentID: trn.id, assignments: info.map }
+        }));
+      }
     }
 
     try {
       const createdMatches = await Promise.all(matchPromises);
       const newRound = { roundNum: trn.rounds.length + 1, assignments: [] };
       for (let i = 0; i < createdMatches.length; i++) {
-        newRound.assignments.push({ matchID: createdMatches[i].matchID, team0: assignmentsInfo[i].team0, team1: assignmentsInfo[i].team1 });
+        if (isMighty) {
+          // 5-player tables carry no teams — store the seat→name roster so the
+          // per-player leaderboard can attribute each result.
+          newRound.assignments.push({ matchID: createdMatches[i].matchID, players: assignmentsInfo[i].players });
+        } else {
+          newRound.assignments.push({ matchID: createdMatches[i].matchID, team0: assignmentsInfo[i].team0, team1: assignmentsInfo[i].team1 });
+        }
       }
       trn.rounds.push(newRound);
       trn.isGeneratingNext = false;
@@ -1082,7 +1174,7 @@ const App = () => {
     typeof teamScore === 'number' ? teamScore : (teamScore?.total || 0);
 
   const getLeaderboard = (t) => {
-    
+
     let stats = {};
     t.players.forEach(p => stats[p] = { points: 0, v: 0, e: 0, d: 0 });
     const since = t.lastShuffleRound || 0;
@@ -1090,31 +1182,50 @@ const App = () => {
     let sinceStats = {};
     t.players.forEach(p => sinceStats[p] = 0);
 
-    t.rounds.forEach((r, idx) => {
-      const roundNum = idx + 1;
-      r.assignments.forEach(a => {
-        const matchRecord = history.find(h => h.matchID === a.matchID);
-        if (matchRecord) {
-          console.log('[LEADERBOARD]', matchRecord.matchID, matchRecord.scores);
-          const s0 = getScoreTotal(matchRecord.scores[0]);
-          const s1 = getScoreTotal(matchRecord.scores[1]);
-          a.team0.forEach(p => {
-            if(stats[p]) {
-              stats[p].points += s0;
-              if(s0 > s1) stats[p].v += 1; else if(s0 === s1) stats[p].e += 1; else stats[p].d += 1;
-            }
-            if (showSince && roundNum >= since && sinceStats[p] !== undefined) sinceStats[p] += s0;
+    if (t.game === 'mighty') {
+      // Per-player: each assignment carries the seat roster; the history entry
+      // carries a normalized result map {name: {points, win}}. Points are that
+      // player's own settlement (may be negative); W/L from the side flag.
+      t.rounds.forEach((r, idx) => {
+        const roundNum = idx + 1;
+        r.assignments.forEach(a => {
+          const matchRecord = history.find(h => h.matchID === a.matchID);
+          if (!matchRecord || !matchRecord.results) return;
+          (a.players || []).forEach(p => {
+            const res = matchRecord.results[p];
+            if (!res || !stats[p]) return;
+            stats[p].points += res.points;
+            if (res.win) stats[p].v += 1; else if (res.points === 0) stats[p].e += 1; else stats[p].d += 1;
+            if (showSince && roundNum >= since && sinceStats[p] !== undefined) sinceStats[p] += res.points;
           });
-          a.team1.forEach(p => {
-            if(stats[p]) {
-              stats[p].points += s1;
-              if(s1 > s0) stats[p].v += 1; else if(s1 === s0) stats[p].e += 1; else stats[p].d += 1;
-            }
-            if (showSince && roundNum >= since && sinceStats[p] !== undefined) sinceStats[p] += s1;
-          });
-        }
+        });
       });
-    });
+    } else {
+      t.rounds.forEach((r, idx) => {
+        const roundNum = idx + 1;
+        r.assignments.forEach(a => {
+          const matchRecord = history.find(h => h.matchID === a.matchID);
+          if (matchRecord) {
+            const s0 = getScoreTotal(matchRecord.scores?.[0]);
+            const s1 = getScoreTotal(matchRecord.scores?.[1]);
+            a.team0.forEach(p => {
+              if(stats[p]) {
+                stats[p].points += s0;
+                if(s0 > s1) stats[p].v += 1; else if(s0 === s1) stats[p].e += 1; else stats[p].d += 1;
+              }
+              if (showSince && roundNum >= since && sinceStats[p] !== undefined) sinceStats[p] += s0;
+            });
+            a.team1.forEach(p => {
+              if(stats[p]) {
+                stats[p].points += s1;
+                if(s1 > s0) stats[p].v += 1; else if(s1 === s0) stats[p].e += 1; else stats[p].d += 1;
+              }
+              if (showSince && roundNum >= since && sinceStats[p] !== undefined) sinceStats[p] += s1;
+            });
+          }
+        });
+      });
+    }
 
     let isFinished = false;
     const sorted = Object.entries(stats).sort((a, b) => b[1].points - a[1].points);
@@ -1747,6 +1858,12 @@ const App = () => {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px' }}>
             <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <h3 style={{ margin: 0, color: '#4da6ff' }}>{t('tourney.general')}</h3>
+              <label>{t('tourney.gameLabel')}
+                <select value={newTourney.game} onChange={e => handleTourneyGameChange(e.target.value)} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
+                  <option value="buraco">Buraco</option>
+                  <option value="mighty">{t('mighty.title')}</option>
+                </select>
+              </label>
               <input type="text" placeholder={t('tourney.namePlaceholder')} value={newTourney.name} onChange={e => setNewTourney({...newTourney, name: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd', fontSize: '0.95em' }}>
                 <input type="checkbox" checked={!!newTourney.private} onChange={e => setNewTourney({...newTourney, private: e.target.checked})} />
@@ -1756,18 +1873,32 @@ const App = () => {
               <select value={newTourney.format} onChange={e => setNewTourney({...newTourney, format: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
                 <option value="points">{t('tourney.formatPoints')}</option>
                 <option value="rounds">{t('tourney.formatRounds')}</option>
-                <option value="playoff">{t('tourney.formatPlayoff')}</option>
+                {newTourney.game !== 'mighty' && <option value="playoff">{t('tourney.formatPlayoff')}</option>}
                 <option value="running">{t('tourney.formatRunning')}</option>
               </select>
               {newTourney.format === 'running' && <div style={{ color: '#aaa', fontSize: '0.9em' }}>{t('tourney.runningHint')}</div>}
               {newTourney.format === 'points' && <label>{t('tourney.targetPoints')} <input type="number" value={newTourney.targetPoints} onChange={e => setNewTourney({...newTourney, targetPoints: parseInt(e.target.value)})} style={{ width: '80px', padding: '5px' }} /></label>}
               {newTourney.format === 'rounds' && <label>{t('tourney.maxRounds')} <input type="number" value={newTourney.maxRounds} onChange={e => setNewTourney({...newTourney, maxRounds: parseInt(e.target.value)})} style={{ width: '80px', padding: '5px' }} /></label>}
-              <label>{t('tourney.typeLabel')}</label>
-              <select value={newTourney.type} onChange={e => setNewTourney({...newTourney, type: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
-                <option value="team">{t('tourney.typeTeam')}</option>
-                <option value="individual">{t('tourney.typeIndividual')}</option>
-              </select>
-              {(newTourney.type === 'individual' || newTourney.rules.numPlayers === 2) && (
+              {newTourney.game !== 'mighty' && (
+                <>
+                  <label>{t('tourney.typeLabel')}</label>
+                  <select value={newTourney.type} onChange={e => setNewTourney({...newTourney, type: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
+                    <option value="team">{t('tourney.typeTeam')}</option>
+                    <option value="individual">{t('tourney.typeIndividual')}</option>
+                  </select>
+                </>
+              )}
+              {newTourney.game === 'mighty' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ color: '#9fc5b8', fontSize: '0.85em' }}>{t('tourney.mightyHint')}</div>
+                  <label>{t('tourney.shuffleTables')}</label>
+                  <select value={newTourney.shuffleMode} onChange={e => setNewTourney({...newTourney, shuffleMode: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
+                    <option value="every-round">{t('tourney.shuffleEveryRound')}</option>
+                    <option value="rounds">{t('tourney.shuffleEveryN')}</option>
+                  </select>
+                  {newTourney.shuffleMode === 'rounds' && <label>{t('tourney.samePairs')} <input type="number" min="1" value={newTourney.shuffleEvery} onChange={e => setNewTourney({...newTourney, shuffleEvery: parseInt(e.target.value) || 1})} style={{ width: '60px', padding: '5px' }} /></label>}
+                </div>
+              ) : (newTourney.type === 'individual' || newTourney.rules.numPlayers === 2) && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label>{t('tourney.shufflePairs')}</label>
                   <select value={newTourney.shuffleMode} onChange={e => setNewTourney({...newTourney, shuffleMode: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
@@ -1799,38 +1930,46 @@ const App = () => {
 
             <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '15px', borderLeft: '1px solid #444', paddingLeft: '20px' }}>
               <h3 style={{ margin: '0 0 10px 0', color: '#ff4d4d' }}>{t('tourney.tableRules')}</h3>
-              <label>{t('tourney.playersPerTable')}<select value={newTourney.rules.numPlayers} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, numPlayers: parseInt(e.target.value)}})}><option value={2}>{t('tourney.manoAMano')}</option><option value={4}>{t('tourney.duplas')}</option></select></label>
-              <div>
-                <div style={{ fontSize: '0.85em', color: '#aaa', marginBottom: '4px' }}>{t('tourney.runnersAllowed')}</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                  {RUNNER_RANKS.map(([rank, label]) => (
-                    <label key={rank} style={{ background: newTourney.rules.runners.includes(rank) ? '#4da6ff' : '#333', color: 'white', padding: '3px 7px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85em' }}>
-                      <input type="checkbox" checked={newTourney.rules.runners.includes(rank)} onChange={() => { const r = {...newTourney.rules, runners: toggleRunner(newTourney.rules.runners, rank)}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} style={{ display: 'none' }} />{label}
-                    </label>
-                  ))}
+              {newTourney.game === 'mighty' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ color: '#9fc5b8', fontSize: '0.9em', lineHeight: '1.6' }}>{t('tourney.mightyTableNote')}</div>
                 </div>
-              </div>
-              <label><input type="checkbox" checked={newTourney.rules.discard} onChange={e => { const r = {...newTourney.rules, discard: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> {t('tourney.useDiscardCard')}</label>
-              <label>{t('tourney.selectAI')}
-                <select value={newTourney.botName || ''} onChange={e => setNewTourney({...newTourney, botName: e.target.value})} style={{ padding: '5px', marginLeft: '10px' }}>
-                  {availableBots.length === 0 && <option value="">{t('tourney.noBotsTrained')}</option>}
-                  {availableBots.map(bot => <option key={bot} value={bot}>{bot}</option>)}
-                </select>
-              </label>
-              <label><input type="checkbox" checked={newTourney.rules.largeCanasta} onChange={e => { const r = {...newTourney.rules, largeCanasta: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> {t('tourney.largeCanastaBonus')}</label>
-              <label><input type="checkbox" checked={newTourney.rules.cleanCanastaToWin} onChange={e => { const r = {...newTourney.rules, cleanCanastaToWin: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> {t('tourney.cleanWinRequired')}</label>
-              <label><input type="checkbox" checked={newTourney.rules.noJokers} onChange={e => { const r = {...newTourney.rules, noJokers: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> {t('tourney.noJokers')}</label>
-              <label><input type="checkbox" checked={newTourney.rules.openDiscardView} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, openDiscardView: e.target.checked}})} /> {t('tourney.openDiscardFull')}</label>
-              <label><input type="checkbox" checked={newTourney.rules.showKnownCards} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, showKnownCards: e.target.checked}})} /> {t('tourney.showKnownCards')}</label>
-              <label><input type="checkbox" checked={!!newTourney.rules.allowUndo} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, allowUndo: e.target.checked}})} /> {t('tourney.allowUndo')}</label>
-              <div>
-                <div style={{fontSize:'0.85em', color:'#aaa', marginBottom:'4px'}}>{t('tourney.cardValues')}</div>
-                <div style={{display:'flex', gap:'4px', overflowX:'auto'}}>
-                  {[['joker', t('tourney.cardJoker')],['two', t('tourney.cardTwo')],['ace', t('tourney.cardAce')],['high', t('tourney.cardHigh')],['low', t('tourney.cardLow')]].map(([k,lbl]) => (
-                    <label key={k} style={{fontSize:'0.85em'}}>{lbl}: <input type="number" value={newTourney.rules.cardPointValues[k]} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, cardPointValues: {...newTourney.rules.cardPointValues, [k]: parseInt(e.target.value)||0}}})} style={CARD_VALUE_INPUT} /></label>
-                  ))}
-                </div>
-              </div>
+              ) : (
+                <>
+                  <label>{t('tourney.playersPerTable')}<select value={newTourney.rules.numPlayers} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, numPlayers: parseInt(e.target.value)}})}><option value={2}>{t('tourney.manoAMano')}</option><option value={4}>{t('tourney.duplas')}</option></select></label>
+                  <div>
+                    <div style={{ fontSize: '0.85em', color: '#aaa', marginBottom: '4px' }}>{t('tourney.runnersAllowed')}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                      {RUNNER_RANKS.map(([rank, label]) => (
+                        <label key={rank} style={{ background: newTourney.rules.runners.includes(rank) ? '#4da6ff' : '#333', color: 'white', padding: '3px 7px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85em' }}>
+                          <input type="checkbox" checked={newTourney.rules.runners.includes(rank)} onChange={() => { const r = {...newTourney.rules, runners: toggleRunner(newTourney.rules.runners, rank)}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} style={{ display: 'none' }} />{label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <label><input type="checkbox" checked={newTourney.rules.discard} onChange={e => { const r = {...newTourney.rules, discard: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> {t('tourney.useDiscardCard')}</label>
+                  <label>{t('tourney.selectAI')}
+                    <select value={newTourney.botName || ''} onChange={e => setNewTourney({...newTourney, botName: e.target.value})} style={{ padding: '5px', marginLeft: '10px' }}>
+                      {availableBots.length === 0 && <option value="">{t('tourney.noBotsTrained')}</option>}
+                      {availableBots.map(bot => <option key={bot} value={bot}>{bot}</option>)}
+                    </select>
+                  </label>
+                  <label><input type="checkbox" checked={newTourney.rules.largeCanasta} onChange={e => { const r = {...newTourney.rules, largeCanasta: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> {t('tourney.largeCanastaBonus')}</label>
+                  <label><input type="checkbox" checked={newTourney.rules.cleanCanastaToWin} onChange={e => { const r = {...newTourney.rules, cleanCanastaToWin: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> {t('tourney.cleanWinRequired')}</label>
+                  <label><input type="checkbox" checked={newTourney.rules.noJokers} onChange={e => { const r = {...newTourney.rules, noJokers: e.target.checked}; setNewTourney(prev => ({ ...prev, rules: r, botName: bestBotFor(r) })); }} /> {t('tourney.noJokers')}</label>
+                  <label><input type="checkbox" checked={newTourney.rules.openDiscardView} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, openDiscardView: e.target.checked}})} /> {t('tourney.openDiscardFull')}</label>
+                  <label><input type="checkbox" checked={newTourney.rules.showKnownCards} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, showKnownCards: e.target.checked}})} /> {t('tourney.showKnownCards')}</label>
+                  <label><input type="checkbox" checked={!!newTourney.rules.allowUndo} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, allowUndo: e.target.checked}})} /> {t('tourney.allowUndo')}</label>
+                  <div>
+                    <div style={{fontSize:'0.85em', color:'#aaa', marginBottom:'4px'}}>{t('tourney.cardValues')}</div>
+                    <div style={{display:'flex', gap:'4px', overflowX:'auto'}}>
+                      {[['joker', t('tourney.cardJoker')],['two', t('tourney.cardTwo')],['ace', t('tourney.cardAce')],['high', t('tourney.cardHigh')],['low', t('tourney.cardLow')]].map(([k,lbl]) => (
+                        <label key={k} style={{fontSize:'0.85em'}}>{lbl}: <input type="number" value={newTourney.rules.cardPointValues[k]} onChange={e => setNewTourney({...newTourney, rules: {...newTourney.rules, cardPointValues: {...newTourney.rules.cardPointValues, [k]: parseInt(e.target.value)||0}}})} style={CARD_VALUE_INPUT} /></label>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
           <button onClick={handleCreateTournament} style={{ width: '100%', marginTop: '30px', padding: '15px', background: '#ffd700', fontSize: '1.2em', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>{t('tourney.startTournament')}</button>
@@ -2105,7 +2244,9 @@ const App = () => {
                   <h2 style={{ margin: 0, color: '#ffd700', fontSize: '2em' }}>{trn.name}</h2>
                   <div style={{ color: '#aaa', marginTop: '5px' }}>
                     {t('tourney.formatOf', { fmt: tourneyFormatLabel(trn, t), players: trn.rules.numPlayers, round: trn.rounds.length })}
-                    {trn.type === 'individual' && trn.shuffleMode && trn.shuffleMode !== 'every-round' ? t('tourney.pairsOf', { label: tourneyShuffleLabel(trn, t) }) : ''}
+                    {trn.game === 'mighty' && trn.shuffleMode && trn.shuffleMode !== 'every-round'
+                      ? t('tourney.tablesOf', { label: tourneyShuffleLabel(trn, t) })
+                      : (trn.type === 'individual' && trn.shuffleMode && trn.shuffleMode !== 'every-round' ? t('tourney.pairsOf', { label: tourneyShuffleLabel(trn, t) }) : '')}
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
