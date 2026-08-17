@@ -840,8 +840,8 @@ const App = () => {
     // Probe the current seat state: if a live human took over the seat while the
     // owner was away, the saved credentials no longer work — warn instead of
     // leaving the board stuck on "Carregando Mesa...".
+    const gn = session.gameName || 'buraco';
     try {
-      const gn = session.gameName || 'buraco';
       const { matches } = await lobbyClient.listMatches(gn);
       const match = matches.find(x => String(x.matchID) === String(mID));
       const seat = match?.players?.find(x => String(x.id) === String(pID));
@@ -853,6 +853,7 @@ const App = () => {
       console.error("Falha ao verificar o assento.", e);
     }
     setMatchID(session.matchID); setPlayerID(session.playerID); setCredentials(session.credentials);
+    setGameName(gn);
     setView('game');
   };
 
