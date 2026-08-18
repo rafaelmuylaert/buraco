@@ -312,7 +312,7 @@ function MightyBoardInner({ ctx, G, moves, playerID, tournament = null, tourname
   // Apply this match's per-player result to the pre-game standings so the board
   // shows the updated tournament table. (Per-player: own settlement + W/L.)
   const updatedStandings = (() => {
-    if (!isTournament || !tournamentStandings) return null;
+    if (!go || !isTournament || !tournamentStandings) return null;
     const map = {};
     for (const [name, st] of tournamentStandings) map[name] = { ...st };
     Object.keys(go.scores).forEach((p) => {
