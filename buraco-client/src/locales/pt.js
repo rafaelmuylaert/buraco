@@ -502,6 +502,8 @@ export const messages = {
     suit: { spades: 'Espadas', hearts: 'Copas', clubs: 'Paus', diamonds: 'Ouros' },
     bid: 'Licitar',
     pass: 'Passar',
+    passed: 'Passou',
+    openingBid: 'Sem licitações',
     discardHint: 'Escolha 3 cartas para descartar no monte de 3.',
     confirmDiscard: 'Confirmar descarte',
     callHint: 'Chame uma carta do baralho (fora da sua mão) para definir seu parceiro secreto — ou jogue sozinho.',

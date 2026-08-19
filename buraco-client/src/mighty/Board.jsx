@@ -103,6 +103,32 @@ const RoleBadge = ({ emoji, placeholder }) => (
   </div>
 );
 
+// A seat's bid during the bidding phase: the points + trump suit chosen (or a
+// pass / "waiting" marker). Stacked in the same box shape as RoleBadge so the
+// seats stay visually aligned across phases.
+const BidBox = ({ points, suit, passed, waiting, active, t }) => {
+  const suitColor = suit === NO_TRUMP ? 'white' : SUIT_COLORS[suit];
+  return (
+    <div style={{
+      width: '46px', height: '64px', margin: '2px', borderRadius: '8px',
+      border: active ? '2px solid #ffd700' : (passed ? '1px solid #666' : '2px solid #555'),
+      backgroundColor: waiting ? 'transparent' : 'rgba(0,0,0,0.25)',
+      borderStyle: waiting ? 'dashed' : 'solid',
+      display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+      color: passed ? '#999' : 'white', opacity: waiting ? 0.45 : 1, gap: '2px',
+    }}>
+      {waiting
+        ? <span style={{ fontSize: '1.4em' }}>…</span>
+        : passed
+          ? <span style={{ fontSize: '0.75em' }}>{t('mighty.passed')}</span>
+          : <>
+              <span style={{ fontSize: '1.5em', fontWeight: 'bold', lineHeight: '1' }}>{points}</span>
+              <span style={{ fontSize: '1.3em', color: suitColor, lineHeight: '1' }}>{suit === NO_TRUMP ? 'NT' : suitChar(suit)}</span>
+            </>}
+    </div>
+  );
+};
+
 const bidText = (bid, t) => {
   if (!bid) return '';
   const suit = bid.suit === NO_TRUMP ? t('mighty.noTrump') : t(`mighty.suit.${SUIT_NAMES[bid.suit]}`);
@@ -114,7 +140,7 @@ export function MightyBoard(props) {
   return <ErrorBoundary t={t}><MightyBoardInner {...props} /></ErrorBoundary>;
 }
 
-function MightyBoardInner({ ctx, G, moves, playerID, tournament = null, tournamentStandings = null }) {
+function MightyBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress = null, tournament = null, tournamentStandings = null }) {
   const { t } = useT();
   const me = String(playerID);
   const isMyTurn = ctx.currentPlayer === me;
@@ -149,22 +175,33 @@ function MightyBoardInner({ ctx, G, moves, playerID, tournament = null, tourname
   const playerName = (p) => players[p] || `P${p}`;
 
   // Partner is secret until the called card is played/captured — computePartner
-  // resolves it only then, so early in play every non-declarer reads as a defender.
+  // resolves it only then. A seat is a *confirmed* defender once we know it's
+  // not the secret partner: the partner has been revealed, the declarer plays
+  // openly alone, or it's my own seat and I don't hold the called card. While a
+  // partner was called but not yet revealed, the other seats stay a mystery (❓)
+  // rather than assuming defender (🛡️). Holding the called card tells me I'm the
+  // partner even before it's captured — that self-knowledge is per-seat (my own
+  // hand only), so nothing leaks to other clients.
   const partner = G.declarer != null ? computePartner(G, G.numPlayers) : null;
-  const roleOf = (p) => {
-    if (p === declarer) return 'declarer';
-    if (partner != null && p === partner && p !== declarer) return 'partner';
-    // Self-knowledge: holding the called card (in hand, or already played this
-    // trick) tells me I'm the partner even before it's captured/revealed. This
-    // applies to my own seat only — other clients still read me as a defender,
-    // so nothing leaks.
-    if (p === me && G.calledCard != null &&
-      (myHand.includes(G.calledCard) || trick.some((tr) => tr.player === p && tr.card === G.calledCard))) {
-      return 'partner';
-    }
-    return 'defender';
+  const roleBadgeOf = (p) => {
+    if (p === declarer) return '👑';
+    if (partner != null && p === partner) return '🤝';
+    const iAmPartner = p === me && G.calledCard != null &&
+      (myHand.includes(G.calledCard) || trick.some((tr) => tr.player === p && tr.card === G.calledCard));
+    if (iAmPartner) return '🤝';
+    const confirmedDefender = partner != null ? p !== partner : (G.openAlone || p === me);
+    return confirmedDefender ? '🛡️' : '❓';
   };
-  const ROLE_EMOJI = { declarer: '👑', partner: '🤝', defender: '🛡️' };
+
+  // This seat's latest bid this round. On the second bidding round G.bids is
+  // cleared, so a fresh pass reads as "waiting" rather than a stale pass.
+  const latestBid = (p) => {
+    let entry = null;
+    for (const b of (G.bids || [])) if (b.player === p) entry = b;
+    if (entry) return { passed: false, points: entry.points, suit: entry.suit };
+    const passed = !!(G.passed && G.passed[p]);
+    return passed ? { passed: true } : { passed: false, waiting: true };
+  };
 
   // ── bidding ────────────────────────────────────────────────────────────────
   const [bidPoints, setBidPoints] = useState(13);
@@ -340,6 +377,27 @@ function MightyBoardInner({ ctx, G, moves, playerID, tournament = null, tourname
     window.location.reload();
   };
 
+  // Release my seat (so a human/bot can take it) and return to the lounge —
+  // mirrors the Buraco board's persistent "Lounge" button.
+  const handleLeaveSeat = async () => {
+    if (!window.confirm(t('board.leaveSeatConfirm'))) return;
+    try {
+      const savedAuth = (() => { try { return JSON.parse(localStorage.getItem('buraco_auth') || 'null'); } catch { return null; } })();
+      if (apiAddress && matchID) {
+        const res = await fetch(`${apiAddress}/api/quick/release-seat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(savedAuth?.token ? { 'Authorization': `Bearer ${savedAuth.token}` } : {}) },
+          body: JSON.stringify({ matchID, playerID: String(playerID) }),
+        });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || t('board.leaveSeatError')); return; }
+      }
+      const sessions = (() => { try { return JSON.parse(localStorage.getItem('buraco_sessions') || '{}'); } catch { return {}; } })();
+      delete sessions[`${matchID}_${playerID}`];
+      localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
+      window.location.reload();
+    } catch { alert(t('board.leaveSeatFail')); }
+  };
+
   const gameOverUI = go && (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
       <div style={{ background: '#0d1f2d', border: '2px solid #ffd700', borderRadius: '12px', padding: '24px 32px', color: 'white', maxWidth: isTournament ? '720px' : '420px', width: '100%', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -429,8 +487,6 @@ function MightyBoardInner({ ctx, G, moves, playerID, tournament = null, tourname
     </div>
   );
 
-  const bidHistory = (G.bids || []).map((b) => `${playerName(b.player)}: ${bidText(b, t)}`).join(' · ');
-
   // Post-bidding contract summary: the winning bid value + the called partner
   // card (or the "alone" announcement). The running bids list is dropped here.
   const bidValueEl = G.activeBid
@@ -465,15 +521,16 @@ function MightyBoardInner({ ctx, G, moves, playerID, tournament = null, tourname
         {/* Top bar */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
           {phase === 'bidding' ? (
-            <>
-              <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
-                {trumpEl}
-                {G.activeBid && <span style={{ color: '#ccc', fontSize: '0.9em' }}>{t('mighty.currentBid', { bid: bidText(G.activeBid, t) })}</span>}
-              </div>
-              <div style={{ color: '#ccc', fontSize: '0.85em', maxWidth: '60%', textAlign: 'right' }}>{bidHistory}</div>
-            </>
+            <div style={{ color: '#ccc', fontSize: '0.9em' }}>
+              {G.activeBid ? t('mighty.currentBid', { bid: bidText(G.activeBid, t) }) : t('mighty.openingBid')}
+            </div>
           ) : (
             contractSummary
+          )}
+          {!go && (
+            <button onClick={handleLeaveSeat} style={{ background: '#4da6ff', color: 'white', border: 'none', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.8em', flexShrink: 0 }}>
+              {t('common.lounge')}
+            </button>
           )}
         </div>
 
@@ -489,9 +546,9 @@ function MightyBoardInner({ ctx, G, moves, playerID, tournament = null, tourname
                   color: active ? '#ffd700' : isMe ? '#7CFC00' : 'white',
                   fontWeight: active ? 'bold' : 'normal', fontSize: '0.85em', textAlign: 'center',
                 }}>{playerName(p)}{isMe ? ' (you)' : ''}</div>
-                {declarer == null
-                  ? (isMe ? null : <RoleBadge placeholder key="ph" />)
-                  : <RoleBadge emoji={ROLE_EMOJI[roleOf(p)]} key={`role-${p}`} />}
+                {phase === 'bidding'
+                  ? <BidBox key={`bid-${p}`} {...latestBid(p)} active={active} t={t} />
+                  : <RoleBadge key={`role-${p}`} emoji={roleBadgeOf(p)} />}
                 <div style={{ color: '#aaa', fontSize: '0.75em' }}>
                   {t('mighty.won', { n: pts })}
                 </div>

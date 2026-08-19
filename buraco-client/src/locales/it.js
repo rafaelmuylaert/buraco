@@ -500,6 +500,8 @@ export const messages = {
     suit: { spades: 'Picche', hearts: 'Cuori', clubs: 'Fiori', diamonds: 'Quadri' },
     bid: 'Dichiara',
     pass: 'Passa',
+    passed: 'Passato',
+    openingBid: 'Nessuna dichiarazione',
     discardHint: 'Scegli 3 carte da scartare nel kitty da 3 carte.',
     confirmDiscard: 'Conferma scarto',
     callHint: 'Chiama una carta del mazzo (non nella tua mano) per impostare il tuo partner segreto — oppure gioca da solo.',

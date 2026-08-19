@@ -500,6 +500,8 @@ export const messages = {
     suit: { spades: 'Spades', hearts: 'Hearts', clubs: 'Clubs', diamonds: 'Diamonds' },
     bid: 'Bid',
     pass: 'Pass',
+    passed: 'Passed',
+    openingBid: 'No bids yet',
     discardHint: 'Choose 3 cards to discard to the 3-card kitty.',
     confirmDiscard: 'Confirm discard',
     callHint: 'Call a card from the deck (not in your hand) to set your secret partner — or play alone.',
