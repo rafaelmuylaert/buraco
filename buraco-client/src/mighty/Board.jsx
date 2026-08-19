@@ -412,6 +412,18 @@ function MightyBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
           {t('mighty.gameOver.teamPoints', { pts: go.teamPoints })} / {t('mighty.gameOver.bid', { bid: go.bid })}
         </div>
 
+        <div style={{ color: '#ffd700', fontSize: '1em', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <span>{t('mighty.gameOver.score', { n: go.score })}</span>
+          {(go.doubledBy || []).length > 0 && (
+            <>
+              <span style={{ color: '#8899aa', fontSize: '0.8em' }}>×{2 ** go.doubledBy.length} {t('mighty.gameOver.doubled')}</span>
+              {go.doubledBy.map((k) => (
+                <span key={k} style={{ background: 'rgba(255,215,0,0.18)', border: '1px solid #ffd700', borderRadius: '8px', padding: '1px 8px', fontSize: '0.75em', color: '#ffd700' }}>{t(`mighty.gameOver.${k}`)}</span>
+              ))}
+            </>
+          )}
+        </div>
+
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', width: '100%', marginBottom: '8px' }}>
           <div style={{ flex: '1 1 220px', maxWidth: '320px', background: 'rgba(0,0,0,0.5)', borderRadius: '10px', padding: '12px' }}>
             <h4 style={{ color: '#4da6ff', margin: '0 0 8px 0', fontSize: '0.9em' }}>{t('mighty.gameOver.matchScore')}</h4>

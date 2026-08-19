@@ -97,10 +97,13 @@ export function clockwiseOrder(numPlayers, start) {
 // ── Bidding helpers ─────────────────────────────────────────────────────────
 // A bid must be 13..20 points. A higher bid is strictly more points, or the same
 // points with no trump (no trump outranks a suit bid of the same value).
+export const MIN_BID = 13;
+export const MAX_BID = 20;
+
 export function bidBeats(points, suit, prev) {
   const pts = Number(points);
   const st = Number(suit);
-  if (!Number.isFinite(pts) || pts < 13 || pts > 20) return false;
+  if (!Number.isFinite(pts) || pts < MIN_BID || pts > MAX_BID) return false;
   if (![NO_TRUMP, 0, 1, 2, 3].includes(st)) return false;
   if (!prev) return true;
   if (pts > Number(prev.points)) return true;
@@ -208,6 +211,19 @@ export function getLegalPlays(G, playerID) {
 // Partner is whoever played the called card. If nobody played it (it sat in the
 // kitty) or it was never announced ("no friend"), the declarer plays alone. All
 // inputs are public, so game-over computes identically on every client.
+//
+// The final score S (always a sum that nets to zero across the table):
+//   success (P >= B): S = 2*(B-M) + (P-B)   — M = MIN_BID, P = team points taken
+//   failure (P < B) : S = B - P
+// then S is doubled once per condition that applies (stacking: ×4, ×8, …):
+//   • run       — the declarers take all 20 points
+//   • back-run  — the defenders take 11+ points (only reachable on failure)
+//   • no-trump  — the contract was bid in no-trump
+//   • no friend — the declarer openly announced playing alone ("no friend").
+//     A *secret* solo (called card sits in declarer's own hand/kitty) is NOT
+//     doubled; openAlone is only set on the explicit open declaration.
+// Payments: success → each defender pays S, partner gets S, declarer 2S
+// (solo: declarer gets S from each defender, i.e. 4S); failure reverses signs.
 export function computePartner(G, numPlayers) {
   if (G.calledCard == null) return null;
   for (let i = 0; i < numPlayers; i++) {
@@ -230,18 +246,26 @@ export function computeGameOver(G, ctx) {
   }
   const teamPoints = team.reduce(
     (sum, p) => sum + (G.won[p] || []).filter(isPointCard).length, 0);
-  const bid = G.activeBid ? Number(G.activeBid.points) : 13;
+  const bid = G.activeBid ? Number(G.activeBid.points) : MIN_BID;
+  const defenderPoints = 20 - teamPoints;
   const success = teamPoints >= bid;
-  const pot = bid * defenders.length;
 
+  let S = success ? 2 * (bid - MIN_BID) + (teamPoints - bid) : (bid - teamPoints);
+  const doubledBy = [];
+  if (teamPoints >= 20) doubledBy.push('run');
+  if (defenderPoints >= 11) doubledBy.push('backrun');
+  if (G.trump === NO_TRUMP) doubledBy.push('notrump');
+  if (G.openAlone) doubledBy.push('nofriend');
+  S *= 2 ** doubledBy.length;
+
+  const alone = team.length === 1; // covers open-alone (no partner) AND secret solo (partner === declarer)
   const scores = {};
-  for (const d of defenders) scores[d] = success ? -bid : bid;
-  if (team.length === 1) {
-    scores[declarer] = success ? pot : -pot;
+  for (const d of defenders) scores[d] = success ? -S : S;
+  if (alone) {
+    scores[declarer] = success ? S * defenders.length : -S * defenders.length;
   } else {
-    const decl = Math.round((pot * 2) / 3); // declarer pays/earns twice the partner
-    scores[declarer] = success ? decl : -decl;
-    scores[partner] = success ? pot - decl : -(pot - decl);
+    scores[declarer] = success ? 2 * S : -2 * S;
+    scores[partner] = success ? S : -S;
   }
   const sum = Object.values(scores).reduce((a, b) => a + b, 0);
   if (sum !== 0) scores[declarer] += -sum;
@@ -252,12 +276,16 @@ export function computeGameOver(G, ctx) {
     loserPlayers: success ? defenders : team,
     scores,
     teamPoints,
+    defenderPoints,
     bid,
+    score: S,
+    doubledBy,
     totalPoints: 20,
     success,
     declarer,
     partner,
-    alone: team.length === 1,
+    alone,
+    secretSolo: alone && !G.openAlone && G.calledCard != null,
     calledCard: G.calledCard,
     trump: G.trump,
   };
