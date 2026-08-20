@@ -38,6 +38,8 @@ import { BuracoGame, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS } from '.
 import { BuracoBoard } from './Board.jsx';
 import { MightyGame } from '../../mighty/game.js';
 import { MightyBoard } from './mighty/Board.jsx';
+import { createEuchreGame } from '../../mighty/euchre.js';
+import { EuchreBoard } from '../../mighty/euchre/Board.jsx';
 import { useT } from './i18n.jsx';
 
 const { port, hostname, protocol, origin } = window.location;
@@ -135,7 +137,18 @@ const MightyClient = Client({
   numPlayers: 5,
 });
 
-const GAME_CLIENTS = { buraco: BuracoClient, mighty: MightyClient };
+const GAME_CLIENTS = { buraco: BuracoClient, mighty: MightyClient, euchre: null };
+const EucharGameConfig = createEuchreGame({ deckSize: 24, winPoints: 5 });
+GAME_CLIENTS.euchre = Client({
+  game: EucharGameConfig,
+  board: EuchreBoard,
+  multiplayer: SocketIO({
+    server: SOCKET_SERVER,
+    socketOpts: { path: SOCKET_PATH, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000 }
+  }),
+  debug: false,
+  numPlayers: 4,
+});
 
 function ReconnectingClient({ matchID, playerID, credentials, tournament, tournamentStandings, apiAddress, gameName }) {
   const [key, setKey] = React.useState(0);
@@ -859,9 +872,9 @@ const App = () => {
 
   const handleTourneyGameChange = (game) => {
     setNewTourney(prev => {
-      if (game === 'mighty') {
-        // 5-player individual game: drop Buraco-only fields and fixed teams.
-        return { ...prev, game, type: 'individual', rules: { ...prev.rules, numPlayers: 5 } };
+      if (game === 'mighty' || game === 'euchre') {
+        // 4-player team trick-taking: drop Buraco-only fields and fixed teams.
+        return { ...prev, game, type: 'team', rules: { ...prev.rules, numPlayers: 4 } };
       }
       return { ...prev, game, type: prev.type === 'individual' ? 'team' : prev.type, rules: { ...prev.rules, numPlayers: 4 } };
     });
@@ -870,7 +883,8 @@ const App = () => {
   const handleCreateTournament = async () => {
     let playerList = newTourney.players.split(',').map(p => p.trim()).filter(p => p);
     const isMighty = newTourney.game === 'mighty';
-    const tableSize = isMighty ? 5 : newTourney.rules.numPlayers;
+    const isEuchre = newTourney.game === 'euchre';
+    const tableSize = (isMighty || isEuchre) ? 4 : newTourney.rules.numPlayers;
 
     const remainder = playerList.length % tableSize;
     if (remainder !== 0) {
@@ -880,9 +894,9 @@ const App = () => {
       }
     }
 
-    // Buraco keeps its team/individual distinction; Mighty is always individual
-    // (a 5-player table with a secret partner — no preset teams).
-    let tourneyType = isMighty
+    // Buraco keeps its team/individual distinction; Mighty and Euchre are always individual
+    // (they track individual scores, not preset teams).
+    let tourneyType = isMighty || newTourney.game === 'euchre'
       ? 'individual'
       : (newTourney.rules.numPlayers === 2 ? 'individual' : newTourney.type);
     let fTeams = [];
@@ -907,9 +921,9 @@ const App = () => {
       shufflePoints: newTourney.shufflePoints || 0,
       players: playerList,
       fixedTeams: fTeams.length > 0 ? fTeams : null,
-      // Mighty has no Buraco table rules — just the player count.
-      rules: isMighty
-        ? { numPlayers: 5 }
+      // Mighty and Euchre have no Buraco table rules — just the player count.
+      rules: (isMighty || isEuchre)
+        ? { numPlayers: 4 }
         : { ...newTourney.rules, targetBotName },
       status: 'active',
       isGeneratingNext: true,
@@ -925,6 +939,7 @@ const App = () => {
 
   const handleQuickGameSubmit = async () => {
     if (gameName === 'mighty') return handleMightyQuickGameSubmit();
+    if (gameName === 'euchre') return handleEuchreQuickGameSubmit();
     const myName = myDisplayName;
     const numPlayers = 4;
     const numBots = Math.max(1, Math.min(3, quickGameConfig.numBots || 3));
@@ -1004,20 +1019,56 @@ const App = () => {
     }
   };
 
+  const handleEuchreQuickGameSubmit = async () => {
+    const myName = myDisplayName;
+    const numPlayers = 4;
+    const numBots = Math.max(0, Math.min(3, quickGameConfig.euchreNumBots ?? 3));
+    const tableName = (quickGameConfig.tableName || '').trim() || t('lounge.openQuick.tableOf', { name: myName });
+
+    const assignmentsMap = { '0': myName };
+    const humanSeats = numPlayers - 1 - numBots;
+    for (let seat = 1; seat < numPlayers; seat++) {
+      assignmentsMap[seat.toString()] = seat <= humanSeats ? t('lounge.openQuick.playerSeat', { n: seat }) : `Bot ${seat}`;
+    }
+
+    try {
+      const { matchID } = await lobbyClient.createMatch('euchre', {
+        numPlayers,
+        setupData: { numPlayers, assignments: assignmentsMap, name: tableName, deckSize: 24 }
+      });
+
+      const { playerCredentials } = await lobbyClient.joinMatch('euchre', matchID, { playerID: '0', playerName: myName });
+
+      const sessions = getSavedSessions();
+      sessions[`${matchID}_0`] = { matchID, playerID: '0', credentials: playerCredentials, gameName: 'euchre' };
+      localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
+
+      setMatchID(matchID);
+      setPlayerID('0');
+      setCredentials(playerCredentials);
+      setShowQuickGamePopup(false);
+
+      setTimeout(() => setView('game'), 500);
+    } catch (e) {
+      alert(t('lounge.openQuick.createError', { msg: e.message }));
+    }
+  };
+
   const executePhaseGeneration = async (tID, currentTournaments) => {
     const tIndex = currentTournaments.findIndex(x => x.id === tID);
     if (tIndex === -1) return;
     const trn = currentTournaments[tIndex];
     const game = trn.game || 'buraco';
     const isMighty = game === 'mighty';
+    const isEuchre = game === 'euchre';
 
     let matchPromises = [];
     let assignmentsInfo = [];
     let eligiblePlayers = [...trn.players];
 
     // Playoff (winner-continuation of two teams) is a Buraco-only format —
-    // Mighty tournaments use rounds / points / running.
-    if (!isMighty && trn.format === 'playoff' && trn.rounds.length > 0) {
+    // Mighty and Euchre tournaments use rounds / points / running.
+    if (!isMighty && !isEuchre && trn.format === 'playoff' && trn.rounds.length > 0) {
       const lastRound = trn.rounds[trn.rounds.length - 1];
       eligiblePlayers = [];
       lastRound.assignments.forEach(a => {
@@ -1138,12 +1189,17 @@ const App = () => {
       }
     }
 
-    const tableSize = isMighty ? 5 : trn.rules.numPlayers;
+    const tableSize = (isMighty || isEuchre) ? 4 : trn.rules.numPlayers;
     for (let info of assignmentsInfo) {
       if (isMighty) {
         matchPromises.push(lobbyClient.createMatch('mighty', {
           numPlayers: 5,
           setupData: { numPlayers: 5, isTournament: true, tournamentID: trn.id, assignments: info.map }
+        }));
+      } else if (isEuchre) {
+        matchPromises.push(lobbyClient.createMatch('euchre', {
+          numPlayers: 4,
+          setupData: { numPlayers: 4, isTournament: true, tournamentID: trn.id, assignments: info.map }
         }));
       } else {
         matchPromises.push(lobbyClient.createMatch('buraco', {
@@ -1157,8 +1213,8 @@ const App = () => {
       const createdMatches = await Promise.all(matchPromises);
       const newRound = { roundNum: trn.rounds.length + 1, assignments: [] };
       for (let i = 0; i < createdMatches.length; i++) {
-        if (isMighty) {
-          // 5-player tables carry no teams — store the seat→name roster so the
+        if (isMighty || isEuchre) {
+          // Mighty/Euchre tables carry no teams — store the seat→name roster so the
           // per-player leaderboard can attribute each result.
           newRound.assignments.push({ matchID: createdMatches[i].matchID, players: assignmentsInfo[i].players });
         } else {
@@ -1183,7 +1239,7 @@ const App = () => {
     let sinceStats = {};
     t.players.forEach(p => sinceStats[p] = 0);
 
-    if (t.game === 'mighty') {
+    if (t.game === 'mighty' || t.game === 'euchre') {
       // Per-player: each assignment carries the seat roster; the history entry
       // carries a normalized result map {name: {points, win}}. Points are that
       // player's own settlement (may be negative); W/L from the side flag.
@@ -1300,7 +1356,7 @@ const App = () => {
     if (!confirm(t('admin.cleanOrphansConfirm'))) return;
     
     const validMatchIDs = tournaments.flatMap(t => t.rounds.flatMap(r => r.assignments.map(a => a.matchID)));
-    const orphanMatches = matches.filter(m => !validMatchIDs.includes(m.matchID) && m.gameName !== 'mighty');
+    const orphanMatches = matches.filter(m => !validMatchIDs.includes(m.matchID) && m.gameName !== 'mighty' && m.gameName !== 'euchre');
     
     for (let m of orphanMatches) {
       try {
@@ -1428,6 +1484,8 @@ const App = () => {
     [1,'A'],[2,'2'],[3,'3'],[4,'4'],[5,'5'],[6,'6'],[7,'7'],
     [8,'8'],[9,'9'],[10,'10'],[11,'J'],[12,'Q'],[13,'K']
   ];
+  const euchreBotOptions = [0, 1, 2, 3];
+  const getEuchreBotLabel = (n, t) => n === 0 ? t('euchre.bots0') : n === 3 ? t('euchre.bots3') : n === 2 ? t('euchre.bots2') : t('euchre.bots1');
   const toggleRunner = (runners, rank) =>
     runners.includes(rank) ? runners.filter(r => r !== rank) : [...runners, rank];
 
@@ -1863,6 +1921,7 @@ const App = () => {
                 <select value={newTourney.game} onChange={e => handleTourneyGameChange(e.target.value)} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
                   <option value="buraco">Buraco</option>
                   <option value="mighty">{t('mighty.title')}</option>
+                  <option value="euchre">{t('euchre.title')}</option>
                 </select>
               </label>
               <input type="text" placeholder={t('tourney.namePlaceholder')} value={newTourney.name} onChange={e => setNewTourney({...newTourney, name: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
@@ -1874,13 +1933,13 @@ const App = () => {
               <select value={newTourney.format} onChange={e => setNewTourney({...newTourney, format: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
                 <option value="points">{t('tourney.formatPoints')}</option>
                 <option value="rounds">{t('tourney.formatRounds')}</option>
-                {newTourney.game !== 'mighty' && <option value="playoff">{t('tourney.formatPlayoff')}</option>}
+                {newTourney.game !== 'mighty' && newTourney.game !== 'euchre' && <option value="playoff">{t('tourney.formatPlayoff')}</option>}
                 <option value="running">{t('tourney.formatRunning')}</option>
               </select>
               {newTourney.format === 'running' && <div style={{ color: '#aaa', fontSize: '0.9em' }}>{t('tourney.runningHint')}</div>}
               {newTourney.format === 'points' && <label>{t('tourney.targetPoints')} <input type="number" value={newTourney.targetPoints} onChange={e => setNewTourney({...newTourney, targetPoints: parseInt(e.target.value)})} style={{ width: '80px', padding: '5px' }} /></label>}
               {newTourney.format === 'rounds' && <label>{t('tourney.maxRounds')} <input type="number" value={newTourney.maxRounds} onChange={e => setNewTourney({...newTourney, maxRounds: parseInt(e.target.value)})} style={{ width: '80px', padding: '5px' }} /></label>}
-              {newTourney.game !== 'mighty' && (
+              {newTourney.game !== 'mighty' && newTourney.game !== 'euchre' && (
                 <>
                   <label>{t('tourney.typeLabel')}</label>
                   <select value={newTourney.type} onChange={e => setNewTourney({...newTourney, type: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
@@ -1889,9 +1948,11 @@ const App = () => {
                   </select>
                 </>
               )}
-              {newTourney.game === 'mighty' ? (
+              {(newTourney.game === 'mighty' || newTourney.game === 'euchre') ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ color: '#9fc5b8', fontSize: '0.85em' }}>{t('tourney.mightyHint')}</div>
+                  <div style={{ color: '#9fc5b8', fontSize: '0.85em' }}>
+                    {newTourney.game === 'euchre' ? t('tourney.euchreHint') : t('tourney.mightyHint')}
+                  </div>
                   <label>{t('tourney.shuffleTables')}</label>
                   <select value={newTourney.shuffleMode} onChange={e => setNewTourney({...newTourney, shuffleMode: e.target.value})} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
                     <option value="every-round">{t('tourney.shuffleEveryRound')}</option>
@@ -1931,9 +1992,11 @@ const App = () => {
 
             <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '15px', borderLeft: '1px solid #444', paddingLeft: '20px' }}>
               <h3 style={{ margin: '0 0 10px 0', color: '#ff4d4d' }}>{t('tourney.tableRules')}</h3>
-              {newTourney.game === 'mighty' ? (
+              {newTourney.game === 'mighty' || newTourney.game === 'euchre' ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ color: '#9fc5b8', fontSize: '0.9em', lineHeight: '1.6' }}>{t('tourney.mightyTableNote')}</div>
+                  <div style={{ color: '#9fc5b8', fontSize: '0.9em', lineHeight: '1.6' }}>
+                    {newTourney.game === 'euchre' ? t('tourney.euchreTableNote') : t('tourney.mightyTableNote')}
+                  </div>
                 </div>
               ) : (
                 <>
@@ -2052,6 +2115,7 @@ const App = () => {
               <select value={gameName} onChange={e => setGameName(e.target.value)} style={{ padding: '5px', marginLeft: '10px' }}>
                 <option value="buraco">Buraco</option>
                 <option value="mighty">{t('mighty.title')}</option>
+                <option value="euchre">{t('euchre.title')}</option>
               </select>
             </label>
 
@@ -2098,6 +2162,16 @@ const App = () => {
                 <select value={quickGameConfig.botName || ''} onChange={e => setQuickGameConfig({...quickGameConfig, botName: e.target.value})} style={{ padding: '5px', marginLeft: '10px' }}>
                   {availableBots.length === 0 && <option value="">{t('lounge.openQuick.noBotsTrained')}</option>}
                   {availableBots.map(bot => <option key={bot} value={bot}>{bot}</option>)}
+                </select>
+              </label>
+            </div>
+            ) : gameName === 'euchre' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
+              <div style={{ color: '#9fc5b8', fontSize: '0.9em', lineHeight: '1.6' }}>{t('euchre.quickGameHint')}</div>
+              <label>{t('lounge.openQuick.tableName')}<input type="text" value={quickGameConfig.tableName || ''} placeholder={t('lounge.openQuick.tableNamePlaceholder', { name: myDisplayName })} onChange={e => setQuickGameConfig({...quickGameConfig, tableName: e.target.value})} style={{ padding: '5px', marginLeft: '10px', width: '200px', maxWidth: '60%' }} /></label>
+              <label>{t('euchre.bots')}
+                <select value={quickGameConfig.euchreNumBots ?? 3} onChange={e => setQuickGameConfig({...quickGameConfig, euchreNumBots: parseInt(e.target.value)})} style={{ padding: '5px', marginLeft: '10px' }}>
+                  {euchreBotOptions.map(n => <option key={n} value={n}>{getEuchreBotLabel(n, t)}</option>)}
                 </select>
               </label>
             </div>
@@ -2245,9 +2319,9 @@ const App = () => {
                   <h2 style={{ margin: 0, color: '#ffd700', fontSize: '2em' }}>{trn.name}</h2>
                   <div style={{ color: '#aaa', marginTop: '5px' }}>
                     {t('tourney.formatOf', { fmt: tourneyFormatLabel(trn, t), players: trn.rules.numPlayers, round: trn.rounds.length })}
-                    {trn.game === 'mighty' && trn.shuffleMode && trn.shuffleMode !== 'every-round'
-                      ? t('tourney.tablesOf', { label: tourneyShuffleLabel(trn, t) })
-                      : (trn.type === 'individual' && trn.shuffleMode && trn.shuffleMode !== 'every-round' ? t('tourney.pairsOf', { label: tourneyShuffleLabel(trn, t) }) : '')}
+{trn.game === 'mighty' || trn.game === 'euchre' ? (trn.shuffleMode && trn.shuffleMode !== 'every-round'
+                       ? t('tourney.tablesOf', { label: tourneyShuffleLabel(trn, t) })
+                       : '') : (trn.type === 'individual' && trn.shuffleMode && trn.shuffleMode !== 'every-round' ? t('tourney.pairsOf', { label: tourneyShuffleLabel(trn, t) }) : '')}
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
