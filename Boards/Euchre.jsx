@@ -6,12 +6,12 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 import React, { useState, useMemo } from 'react';
-import { useT } from '../../i18n.jsx';
+import { useT } from '../../buraco-client/src/i18n.jsx';
 import {
   NO_TRUMP, suitChar, cardFace, rankDisplay, getSuit,
   getRank, isRightBowler, isLeftBowler, isBowler,
   isPointCard, getLegalPlays, createEuchreDeck, DECK_SIZES, getDeckWidth,
-} from '../../@might/euchre.js';
+} from '../euchre.js';
 
 const CARD_W = 46, CARD_H = 64;
 
