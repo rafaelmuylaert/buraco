@@ -39,7 +39,7 @@ import { fileURLToPath } from 'url';
 import {
     AI_CONFIG, seqSuit, addPlanTurnTime, setScoreFunctions,
     computeNetConfig, generateAllValidMelds, intToCardObj, meldToCards
-} from '../buraco-client/src/game.js';
+} from '../GameEngines/Buraco.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

@@ -24,17 +24,16 @@ import { workerData, parentPort } from 'worker_threads';
 import {
     BuracoGame, AI_CONFIG,
     moveDrawCard, moveDiscardCard, moveMeld, movePickUpDiscard,
-    checkGameOver, getAndResetTimings
-} from './game.js';
+    checkGameOver, getAndResetTimings, setDbgLogFn
+} from '../GameEngines/Buraco.js';
 import { initWasm, loadMatchDNA, isWasmReady,
          setActiveNetConfig, runTurn,
-         setDiagnosticLog, isDiagnosticLog } from './wasm_loader_new.js';
+         setDiagnosticLog, isDiagnosticLog } from './wasm_loader.js';
 
 
 await initWasm();
 
-import { setDbgLogFn } from './game.js';
-import { getLastDbgLog } from './wasm_loader_new.js';
+import { getLastDbgLog } from './wasm_loader.js';
 
 setDbgLogFn(getLastDbgLog);
 
