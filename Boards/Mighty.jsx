@@ -19,7 +19,7 @@ import {
   JOKER, SUITS, NO_TRUMP, suitOf, rankOf, suitChar,
   isMighty, isRipper, getLegalPlays, createDeck, computePartner,
   SUIT_NAMES,
-} from '../../../mighty/game.js';
+} from '../GameEngines/Mighty.js';
 
 const RANK_SHOW = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const SUIT_COLORS = { 0: '#111', 1: '#d03030', 2: '#111', 3: '#d03030' };

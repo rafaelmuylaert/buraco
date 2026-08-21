@@ -11,11 +11,11 @@ import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import {
   NO_TRUMP, suitOf, rankOf, rankVal,
   isTrumpCard, isPointCard, createDeck, getLegalPlays, computeTrickWinner,
-} from '../mighty/game.js';
+} from '../GameEngines/Mighty.js';
 import {
   isRightBowler, isLeftBowler, isBowler, getSuit, getRank,
   cardValue, isPointCard as isPointCardEuchre, getDeckWidth,
-} from '../euchre.js';
+} from '../GameEngines/euchre.js';
 
 const SERVER_URL = process.env.EUCHRE_SERVER_URL || 'http://buraco-server:8000';
 const activeBots = {};

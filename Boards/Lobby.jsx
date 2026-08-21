@@ -34,12 +34,10 @@ import { Client } from 'boardgame.io/react';
 import { SocketIO } from 'boardgame.io/multiplayer';
 import { LobbyClient } from 'boardgame.io/client';
 import { io } from 'socket.io-client';
-import { BuracoGame, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS } from './game.js';
-import { BuracoBoard } from './Board.jsx';
-import { MightyGame } from '../../mighty/game.js';
-import { MightyBoard } from './mighty/Board.jsx';
-import { createEuchreGame } from '../../mighty/euchre.js';
-import { EuchreBoard } from './mighty/euchre/Board.jsx';
+import { BuracoGame, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS } from '../GameEngines/Buraco.js';
+import { BuracoBoard } from './Buraco.jsx';
+import { MightyGame, MightyBoard } from '../GameEngines/Mighty.js';
+import { createEuchreGame, EuchreBoard } from '../GameEngines/euchre.js';
 import { useT } from './i18n.jsx';
 
 const { port, hostname, protocol, origin } = window.location;

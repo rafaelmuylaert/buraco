@@ -25,7 +25,7 @@
 import {
   createEngine, SafeTurnOrder, playerView, computeTrickWinner,
   dealFromShuffled, clockwiseOrder, createDeck, shuffleDeck,
-} from './engine.js';
+} from './TrickGames.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 export const NO_TRUMP = -1;
