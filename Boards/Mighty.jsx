@@ -14,7 +14,7 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 import React, { useState, useMemo } from 'react';
-import { useT } from '../i18n.jsx';
+import { useT } from './i18n.jsx';
 import {
   JOKER, SUITS, NO_TRUMP, suitOf, rankOf, suitChar,
   isMighty, isRipper, getLegalPlays, createDeck, computePartner,
