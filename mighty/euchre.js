@@ -109,9 +109,23 @@ export function getRank(c) {
  */
 export function rankDisplay(c) {
   const rankIdx = c % NUM_RANKS_24;
-  const displayRanks = ['8', '9', '10', 'J', 'Q', 'K', 'A']; // for 8 ranks
-  if (rankIdx < displayRanks.length) return displayRanks[rankIdx];
-  return String(rankIdx + 8);
+  const dw = NUM_RANKS_24;
+  if (dw === 6) {
+    // 24-card: 9,10,J,Q,K,A
+    const ranks24 = ['9', '10', 'J', 'Q', 'K', 'A'];
+    if (rankIdx < ranks24.length) return ranks24[rankIdx];
+    return String(rankIdx);
+  }
+  if (dw === 8) {
+    // 32-card: 8,9,10,J,Q,K,A plus one more
+    const ranks32 = ['8', '9', '10', 'J', 'Q', 'K', 'A', '?'];
+    if (rankIdx < ranks32.length) return ranks32[rankIdx];
+    return String(rankIdx);
+  }
+  // 7-rank (28 cards)
+  const ranks28 = ['7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+  if (rankIdx < ranks28.length) return ranks28[rankIdx];
+  return String(rankIdx);
 }
 
 /**
@@ -237,9 +251,9 @@ export function getLegalPlays(G, playerID) {
   return hand.filter((c) => {
     const cSuit = getSuit(c);
     const isTrump = isTrumpCard(c, trump);
-    const isBowler = isBowler(c, trump);
+    const bwl = isBowler(c, trump);
 
-    if (isBowler) return true; // bowlers can be played anywhere
+    if (bwl) return true; // bowlers can be played anywhere
     if (cSuit === ledSuit) return true;
     if (isTrump) return true; // may overtrump
     return false;
@@ -381,8 +395,10 @@ export function computeGameOver(G, ctx) {
  */
 export function computePartner(G, numPlayers) {
   if (G.calledCard == null) return null;
+  const declarer = String(G.declarer);
   for (let i = 0; i < numPlayers; i++) {
     const p = String(i);
+    if (p === declarer) continue;
     if (G.won[p] && G.won[p].includes(G.calledCard)) return p;
   }
   return null;
