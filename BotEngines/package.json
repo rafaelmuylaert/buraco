@@ -5,6 +5,7 @@
   "main": "train.js",
   "exports": {
     ".": "./train.js",
+    "./train.js": "./train.js",
     "./wasm_loader.js": "./wasm_loader.js",
     "./worker.js": "./worker.js"
   }
