@@ -81,6 +81,8 @@ prepare() {
     cp "$APP_DIR/GameEngines/Buraco.js" "$APP_BIN/game.js"
     # Mighty rules engine: now lives in GameEngines/.
     cp "$APP_DIR/GameEngines/Mighty.js" "$APP_BIN/mighty.js"
+    # AI training service
+    cp "$APP_DIR/BotEngines/train.js" "$APP_BIN/train.js"
     link_data
 
     case "$ROLE" in
