@@ -2,5 +2,5 @@
 import '@buraco/bot-players/Buraco.js';
 
 // Keep the process alive indefinitely
-const keepAlive = () => setTimeout(keepAlive, Infinity);
+const keepAlive = () => setTimeout(keepAlive, Number.MAX_SAFE_INTEGER);
 keepAlive();
