@@ -1072,13 +1072,17 @@ server.router.get('/api/stats', (ctx) => {
   const credit = (name, teamScore, oppScore, ts) => {
     const clean = String(name || '').trim();
     if (!clean || /^bot\b/i.test(clean)) return;
+    const tsNum = Number(teamScore);
+    if (!isFinite(tsNum)) return;
+    const oppNum = Number(oppScore);
+    if (!isFinite(oppNum)) return;
     const key = clean.toLowerCase();
     if (!stats[key]) stats[key] = { name: clean, month: zero(), year: zero(), all: zero() };
     const st = stats[key];
-    const wins = teamScore > oppScore;
-    const draws = teamScore === oppScore;
+    const wins = tsNum > oppNum;
+    const draws = tsNum === oppNum;
     const apply = (w) => {
-      w.points += teamScore;
+      w.points += tsNum;
       w.games += 1;
       if (wins) w.v += 1; else if (draws) w.e += 1; else w.d += 1;
     };
@@ -1109,7 +1113,7 @@ server.router.get('/api/stats', (ctx) => {
     }
 
     const teams = matchTeams[entry.matchID];
-    if (!teams) continue;
+    if (!entry.gameName || !teams) continue;
     const s0 = toTotal(entry.scores?.[0]);
     const s1 = toTotal(entry.scores?.[1]);
     for (const name of teams.team0) credit(name, s0, s1, ts);
