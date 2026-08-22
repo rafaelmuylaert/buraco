@@ -1,16 +1,17 @@
 {
-  "name": "buraco-server",
+  "name": "@buraco/server",
   "version": "1.0.0",
   "type": "module",
-  "description": "",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js",
+    "train": "node train.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
+    "@buraco/game": "file:../GameEngines",
+    "@buraco/bot-engine": "file:../BotEngines",
+    "@buraco/bot-players": "file:../BotPlayers",
     "boardgame.io": "^0.50.2",
     "node-persist": "^4.0.4"
   }

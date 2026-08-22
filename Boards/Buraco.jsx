@@ -25,7 +25,7 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 import React, { useState, useEffect } from 'react';
-import {isMeldClean, getMeldLength, calculateMeldPoints, meldToCards, handToCards, intToCardObj} from '../GameEngines/Buraco.js';
+import {isMeldClean, getMeldLength, calculateMeldPoints, meldToCards, handToCards, intToCardObj} from '@buraco/game/Buraco.js';
 import { useT } from './i18n.jsx';
 
 

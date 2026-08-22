@@ -22,7 +22,7 @@ import {
   MightyGame, JOKER, NO_TRUMP, SUITS, suitOf, rankOf, rankVal,
   isJoker, isMighty, isRipper, isTrumpCard, isPointCard, mightyCardFor,
   ripperCardFor, cardOf, createDeck, getLegalPlays, computeTrickWinner,
-} from '../GameEngines/Mighty.js';
+} from '@buraco/game/Mighty.js';
 
 const SERVER_URL = process.env.MIGHTY_SERVER_URL || 'http://buraco-server:8000';
 const activeBots = {};

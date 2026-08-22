@@ -25,15 +25,15 @@ import {
     BuracoGame, AI_CONFIG,
     moveDrawCard, moveDiscardCard, moveMeld, movePickUpDiscard,
     checkGameOver, getAndResetTimings, setDbgLogFn
-} from '../GameEngines/Buraco.js';
+} from '@buraco/game/Buraco.js';
 import { initWasm, loadMatchDNA, isWasmReady,
          setActiveNetConfig, runTurn,
-         setDiagnosticLog, isDiagnosticLog } from './wasm_loader.js';
+         setDiagnosticLog, isDiagnosticLog } from '@buraco/bot-engine/wasm_loader.js';
 
 
 await initWasm();
 
-import { getLastDbgLog } from './wasm_loader.js';
+import { getLastDbgLog } from '@buraco/bot-engine/wasm_loader.js';
 
 setDbgLogFn(getLastDbgLog);
 

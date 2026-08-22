@@ -28,13 +28,13 @@ log() { echo "[git-entrypoint] $*"; }
 
 # Keep the token out of the stored remote URL: use GIT_ASKPASS instead.
 if [ -n "${GIT_TOKEN:-}" ]; then
-    cat > /tmp/git-askpass.sh <<'EOF'
+    cat > /tmp/git-askpass.sh <<'ASKPASS'
 #!/bin/sh
 case "$1" in
   *Username*) echo "oauth2" ;;
   *Password*) echo "${GIT_TOKEN}" ;;
 esac
-EOF
+ASKPASS
     chmod +x /tmp/git-askpass.sh
     export GIT_ASKPASS=/tmp/git-askpass.sh
     export GIT_TERMINAL_PROMPT=0
@@ -55,10 +55,7 @@ fetch_or_clone() {
 
 link_data() {
     # Persistent data is mounted at /data/{db,bots} (outside the repo). The app
-    # resolves process.cwd()/db and /bots, so symlink them into the clone. The
-    # repo now ships pre-trained bots under buraco-server/bots/; on first run
-    # they seed the (empty) volume, then git reset --hard would keep restoring
-    # the tracked dir on every pull, so always re-link bots to the volume.
+    # resolves process.cwd()/db and /bots, so symlink them into buraco-server/.
     for d in db bots; do
         if [ -d "$GIT_DATA_DIR/$d" ]; then
             if [ "$d" = bots ] && [ -z "$(ls -A "$GIT_DATA_DIR/bots")" ]; then
@@ -77,17 +74,12 @@ link_data() {
 }
 
 prepare() {
-    # server/bot import './game.js'; it lives in GameEngines/.
-    cp "$APP_DIR/GameEngines/Buraco.js" "$APP_BIN/game.js"
-    # Mighty rules engine: now lives in GameEngines/.
-    cp "$APP_DIR/GameEngines/Mighty.js" "$APP_BIN/mighty.js"
-    # AI training service
-    cp "$APP_DIR/BotEngines/train.js" "$APP_BIN/train.js"
+    # npm workspaces: all @buraco/* packages resolve automatically from repo root
     link_data
 
     case "$ROLE" in
         server|bot)
-            npm --prefix "$APP_BIN" ci --no-audit --no-fund
+            npm --prefix "$APP_DIR" ci --no-audit --no-fund
             ;;
         client)
             npm --prefix "$APP_CLIENT" ci --no-audit --no-fund

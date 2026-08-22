@@ -21,10 +21,10 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 import { Server, FlatFile } from 'boardgame.io/dist/cjs/server.js'; 
-import { BuracoGame } from '../GameEngines/Buraco.js';
-import { MightyGame } from '../GameEngines/Mighty.js';
-import { createEuchreGame } from '../GameEngines/euchre.js';
-import { TrainerService } from './train.js';
+import { BuracoGame } from '@buraco/game/Buraco.js';
+import { MightyGame } from '@buraco/game/Mighty.js';
+import { createEuchreGame } from '@buraco/game/euchre.js';
+import { TrainerService } from '@buraco/bot-engine/train.js';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';

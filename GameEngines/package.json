@@ -1,0 +1,11 @@
+{
+  "name": "@buraco/game",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    "./Buraco.js": "./Buraco.js",
+    "./Mighty.js": "./Mighty.js",
+    "./euchre.js": "./euchre.js",
+    "./TrickGames.js": "./TrickGames.js"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "buraco-monorepo",
+  "private": true,
+  "workspaces": [
+    "GameEngines",
+    "BotEngines",
+    "BotPlayers",
+    "buraco-server",
+    "buraco-client"
+  ]
+}

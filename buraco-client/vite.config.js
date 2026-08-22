@@ -23,6 +23,9 @@ export default defineConfig({
       'react': path.resolve(__dirname, 'node_modules/react'),
       'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
       'react-dom/': path.resolve(__dirname, 'node_modules/react-dom/') + '',
+      '@buraco/game/Buraco.js': path.resolve(__dirname, '..', 'GameEngines', 'Buraco.js'),
+      '@buraco/game/Mighty.js': path.resolve(__dirname, '..', 'GameEngines', 'Mighty.js'),
+      '@buraco/game/euchre.js': path.resolve(__dirname, '..', 'GameEngines', 'euchre.js'),
     },
     modules: [path.resolve(__dirname, 'node_modules'), 'node_modules']
   },

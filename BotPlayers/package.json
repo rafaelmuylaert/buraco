@@ -1,0 +1,14 @@
+{
+  "name": "@buraco/bot-players",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "Buraco.js",
+  "exports": {
+    "./Buraco.js": "./Buraco.js",
+    "./mighty.js": "./mighty.js",
+    "./euchre.js": "./euchre.js"
+  },
+  "dependencies": {
+    "boardgame.io": "^0.50.2"
+  }
+}

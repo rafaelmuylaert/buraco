@@ -38,7 +38,7 @@ import fs from 'fs';
 import path from 'path';
 import { Worker } from 'worker_threads';
 import { cpus } from 'os';
-import { AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS } from './game.js';
+import { AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS } from '@buraco/game/Buraco.js';
 
 const NUM_WORKERS = Math.max(1, cpus().length - 1); 
 const WORKER_PATH = new URL('./worker.js', import.meta.url).pathname; 

@@ -11,7 +11,7 @@ import {
   NO_TRUMP, suitChar, cardFace, rankDisplay, getSuit,
   getRank, isRightBowler, isLeftBowler, isBowler,
   isPointCard, getLegalPlays, createEuchreDeck, DECK_SIZES, getDeckWidth,
-} from '../GameEngines/euchre.js';
+} from '@buraco/game/euchre.js';
 
 const CARD_W = 46, CARD_H = 64;
 

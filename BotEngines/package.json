@@ -1,0 +1,11 @@
+{
+  "name": "@buraco/bot-engine",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "train.js",
+  "exports": {
+    ".": "./train.js",
+    "./wasm_loader.js": "./wasm_loader.js",
+    "./worker.js": "./worker.js"
+  }
+}

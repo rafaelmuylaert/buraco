@@ -24,10 +24,10 @@ import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import fs from 'fs';
 import path from 'path';
-import { setDbgLogFn, BuracoGame, AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, getAndResetTimings, getSuitChar } from '../GameEngines/Buraco.js';
+import { setDbgLogFn, BuracoGame, AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, getAndResetTimings, getSuitChar } from '@buraco/game/Buraco.js';
 import { getLastDbgLog, initWasm, loadMatchDNA, isWasmReady, runTurn,
          setDiagnosticLog, setActiveNetConfig } from '../BotEngines/wasm_loader.js';
-import { startMightyPolling } from './mighty.js';
+import { startMightyPolling } from '@buraco/bot-players/mighty.js';
 setDbgLogFn(getLastDbgLog);
 await initWasm();
 setDiagnosticLog(1);
