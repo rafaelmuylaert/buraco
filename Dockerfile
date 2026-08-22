@@ -1,21 +1,15 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
-# Set the main working directory
+# npm workspaces: install ALL deps from root, then build client
+# All 3 services (server, client, bot) share this single built image.
 WORKDIR /app
 
-# Copy the entire repository into the container
 COPY . .
 
-# Install dependencies for the server
-WORKDIR /app/buraco-server
-RUN npm ci --no-audit --no-fund
+RUN npm ci --no-audit --no-fund && \
+    npm --prefix buraco-client run build
 
-# Install dependencies and build the client
-WORKDIR /app/buraco-client
-RUN npm ci --no-audit --no-fund && npm run build
-
-# Reset the default working directory back to the server
+# Server/bot run from here by default
 WORKDIR /app/buraco-server
 
-# Default command (will be overridden by Compose for the client and bot)
 CMD ["node", "server.js"]

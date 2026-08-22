@@ -6,6 +6,10 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// With npm workspaces, dependencies are hoisted to the root node_modules
+const workspaceRoot = path.resolve(__dirname, '..')
+const nodeModules = path.resolve(workspaceRoot, 'node_modules')
+
 export default defineConfig({
   root: path.resolve(__dirname, '..', 'Boards'),
   plugins: [react()],
@@ -15,25 +19,25 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      'boardgame.io': path.resolve(__dirname, 'node_modules/boardgame.io'),
-      'boardgame.io/react': path.resolve(__dirname, 'node_modules/boardgame.io/dist/cjs/react.js'),
-      'boardgame.io/multiplayer': path.resolve(__dirname, 'node_modules/boardgame.io/dist/cjs/multiplayer.js'),
-      'boardgame.io/client': path.resolve(__dirname, 'node_modules/boardgame.io/dist/cjs/client.js'),
-      'socket.io-client': path.resolve(__dirname, 'node_modules/socket.io-client'),
-      'react': path.resolve(__dirname, 'node_modules/react'),
-      'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
-      'react-dom/': path.resolve(__dirname, 'node_modules/react-dom/') + '',
-      '@buraco/game/Buraco.js': path.resolve(__dirname, '..', 'GameEngines', 'Buraco.js'),
-      '@buraco/game/Mighty.js': path.resolve(__dirname, '..', 'GameEngines', 'Mighty.js'),
-      '@buraco/game/euchre.js': path.resolve(__dirname, '..', 'GameEngines', 'euchre.js'),
+      'boardgame.io': path.resolve(nodeModules, 'boardgame.io'),
+      'boardgame.io/react': path.resolve(nodeModules, 'boardgame.io/dist/cjs/react.js'),
+      'boardgame.io/multiplayer': path.resolve(nodeModules, 'boardgame.io/dist/cjs/multiplayer.js'),
+      'boardgame.io/client': path.resolve(nodeModules, 'boardgame.io/dist/cjs/client.js'),
+      'socket.io-client': path.resolve(nodeModules, 'socket.io-client'),
+      'react': path.resolve(nodeModules, 'react'),
+      'react-dom': path.resolve(nodeModules, 'react-dom'),
+      'react-dom/': path.resolve(nodeModules, 'react-dom/') + '',
+      '@buraco/game/Buraco.js': path.resolve(workspaceRoot, 'GameEngines', 'Buraco.js'),
+      '@buraco/game/Mighty.js': path.resolve(workspaceRoot, 'GameEngines', 'Mighty.js'),
+      '@buraco/game/euchre.js': path.resolve(workspaceRoot, 'GameEngines', 'euchre.js'),
     },
-    modules: [path.resolve(__dirname, 'node_modules'), 'node_modules']
+    modules: [nodeModules, 'node_modules']
   },
   server: {
     allowedHosts: true,
     port: 5173,
     host: true,
-    fs: { allow: [path.resolve(__dirname, '..')] }
+    fs: { allow: [workspaceRoot] }
   },
   preview: {
     allowedHosts: true,
