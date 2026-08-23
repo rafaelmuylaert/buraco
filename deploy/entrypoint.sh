@@ -133,7 +133,9 @@ start_app
 
 while :; do
     sleep "$GIT_POLL_SECS"
+    log "Checking for updates..."
     git -C "$APP_DIR" fetch origin "$GIT_REF" >/dev/null 2>&1 || continue
+    log "local Head=$(head_of HEAD) remote=$(head_of "origin/$GIT_REF")"
     if [ "$(head_of HEAD)" != "$(head_of "origin/$GIT_REF")" ]; then
         log "update detected, redeploying"
         stop_app
