@@ -34,44 +34,19 @@ export const SUIT_CHARS = ['♠', '♥', '♣', '♦'];
 export const SUIT_NAMES = ['spades', 'hearts', 'clubs', 'diamonds'];
 export const SUIT_COLORS = ['#111', '#d03030', '#111', '#d03030']; // spades=black, hearts=red, clubs=black, diamonds=red
 
-export const RANKS = ['8', '9', '10', 'J', 'Q', 'K', 'A']; // index = rank in card encoding
-
-// Card encoding: suit * 10 + (rankIndex + 1)
-// rankIndex: 0=8, 1=9, 2=10, 3=J, 4=Q, 5=K, 6=A
+// Card encoding: card = suit * deckWidth + rankIdx
 // suit: 0=spades, 1=hearts, 2=clubs, 3=diamonds
-// Card 0 doesn't exist; ranks 1..70
-// Actually let's use: card = suit * deckWidth + rankIdx, where deckWidth = numRanks
-// For 24-card deck: 6 ranks × 4 suits = 24 cards, cardId 0..23
-// For 32-card deck: 8 ranks × 4 suits = 32 cards, cardId 0..31
+// Standard 24-card deck: deckWidth 6, rankIdx 0=9, 1=10, 2=J, 3=Q, 4=K, 5=A
 
 // ── Deck helpers ─────────────────────────────────────────────────────────────
 
 const NUM_RANKS_24 = 6; // 9, 10, J, Q, K, A
-const NUM_RANKS_32 = 8; // 8, 9, 10, J, Q, K, A (wait, 8 and A gives 8 ranks)
-// Actually: 8, 9, 10, J, Q, K, A = 7 ranks for 28 cards... let me reconsider.
-// Standard 32-card Euchre: 7, 8, 9, 10, J, Q, K, A? No.
-// Let me check: standard Euchre uses 9-A (6 ranks) for 24 cards.
-// Extended Euchre sometimes uses 8-A (7 ranks) for 28 cards, or includes all 8s for 32.
-// For simplicity: 24 cards (9-A, 6 ranks) and 32 cards (use 4 copies of 8 ranks = 8,9,10,J,Q,K,A,? )
-// Actually 32 = 8 × 4, so 8 ranks. Let's do: 7,8,9,10,J,Q,K,A for 32-card deck.
-// But standard is usually 9-A. Let's keep 24-card (9-A) and 32-card (use both 8 and some other rank).
-// Actually let me just do: 24 cards (ranks 0-5: 9-A), 32 cards (ranks 0-7: add 8 and Jokers? no).
-// Standard: 9-A = 6 ranks × 4 = 24. Some variants use A-K-Q-J-10-9-8 = 7 ranks × 4 = 28. 
-// For 32: just use 8 ranks. We'll call it "extended" deck: 8,9,10,J,Q,K,A,? Let me just do two options clearly.
-
-// Let's simplify: deckWidth is the number of ranks, cards = deckWidth × 4
-// deckWidth 6 = standard Euchre (9-A)
-// deckWidth 8 = extended (add 8 and one more rank, e.g. using 7 and 8)
 
 export function getDeckWidth(deckSize) {
   if (deckSize === 32) return 8;
   if (deckSize === 28) return 7;
   return 6; // default: 24-card deck
 }
-
-export const RANK_SHOW = {
-  6: 'A', 5: 'K', 4: 'Q', 3: 'J', 2: '10', 1: '9', 0: '8', // rank indices for display
-};
 
 /**
  * Create a Euchre deck.
