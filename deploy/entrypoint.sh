@@ -132,7 +132,6 @@ if [ "$GIT_POLL_SECS" -le 0 ]; then
     prepare
     run_foreground
 fi
-
 fetch_or_clone
 prepare
 start_app
