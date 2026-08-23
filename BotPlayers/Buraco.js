@@ -333,7 +333,7 @@ async function startBotClient(matchID, playerID, credentials, botName, targetBot
       printState(state.G, botName, playerID);
 
       const G = JSON.parse(JSON.stringify(state.G));
-      await s = runTurn(G, playerID, iface);
+      s = await runTurn(G, playerID, iface);
       //await sleep(2000);
       // Wait for our turn to fully end (server processes all queued moves).
       // Moves are sent async; the server may respond with intermediate states
