@@ -9,12 +9,9 @@
 import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import {
-  NO_TRUMP, suitOf, rankOf, rankVal,
-  isTrumpCard, isPointCard, createDeck, getLegalPlays, computeTrickWinner,
-} from '@buraco/game/Mighty.js';
-import {
-  isRightBowler, isLeftBowler, isBowler, getSuit, getRank,
-  cardValue, isPointCard as isPointCardEuchre, getDeckWidth, createEuchreGame,
+  NO_TRUMP, isTrumpCard, getLegalPlays, computeTrickWinner,
+  isRightBowler, isLeftBowler, getSuit, getRank,
+  cardValue, isPointCard as isPointCardEuchre, createEuchreGame,
 } from '@buraco/game/euchre.js';
 
 const SERVER_URL = process.env.EUCHRE_SERVER_URL || 'http://buraco-server:8000';
