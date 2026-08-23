@@ -10,8 +10,8 @@
 // the other two players. First team to reach `winPoints` wins.
 //
 // Special cards (bowlers):
-//   Right Bowler = J of trump suit (rank 6, highest card)
-//   Left Bowler  = J of same colour as trump (rank 5)
+//   Right Bowler = J of trump suit (highest card)
+//   Left Bowler  = J of same colour as trump (second-highest card)
 //
 // Scoring per hand:
 //   Make contract    : +1 point
@@ -143,13 +143,13 @@ export const suitColor = (s) => SUIT_COLORS[s] || '#111';
 
 /**
  * Is this the Right Bowler (J of trump suit)?
- * Rank index 3 = J in our encoding.
+ * Rank index 2 = J in our encoding (0=9, 1=10, 2=J, 3=Q, 4=K, 5=A).
  */
 export function isRightBowler(card, trump) {
   if (trump === NO_TRUMP) return false;
   const suit = getSuit(card);
   const rankIdx = card % NUM_RANKS_24;
-  return rankIdx === 3 && suit === trump; // J of trump suit
+  return rankIdx === 2 && suit === trump; // J of trump suit
 }
 
 /**
@@ -160,7 +160,7 @@ export function isLeftBowler(card, trump) {
   if (trump === NO_TRUMP) return false;
   const suit = getSuit(card);
   const rankIdx = card % NUM_RANKS_24;
-  if (rankIdx !== 3) return false; // must be J
+  if (rankIdx !== 2) return false; // must be J
   // Same colour: spades(0)/clubs(2) are black, hearts(1)/diamonds(3) are red
   const spadesClubs = [0, 2];
   const isSameColour = (trump >= 0 && spadesClubs.includes(trump) && spadesClubs.includes(suit)) ||

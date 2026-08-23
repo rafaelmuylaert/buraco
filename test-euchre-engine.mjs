@@ -6,14 +6,14 @@ import {
   SafeTurnOrder, createDeck, shuffleDeck, dealFromShuffled,
   clockwiseOrder, playersNotPassed, nextUnpassed, computeTrickWinner, playerView,
   createEngine,
-} from './mighty/engine.js';
+} from './GameEngines/TrickGames.js';
 import {
   NO_TRUMP, createEuchreDeck, getDeckWidth,
   getSuit, getRank, rankDisplay, cardFace, suitChar, suitColor,
   isRightBowler, isLeftBowler, isBowler, isPointCard, cardValue,
   isTrumpCard, getLegalPlays, bidBeats, computeGameOver, computePartner,
   pickUpMove, passBidMove, createEuchreGame, DECK_SIZES,
-} from './mighty/euchre.js';
+} from './GameEngines/euchre.js';
 
 let pass = 0, fail = 0, total = 0;
 
@@ -157,53 +157,27 @@ assert(suitChar(99)==='★', 'suitChar fallback');
 console.log('--- Bowler Detection ---\n');
 
 // Right Bowler: J of trump suit. Card encoding: suit * 6 + rankIdx
-// J is rank index 2 in 24-card deck (9=0, 10=1, J=2)
-// Wait - let me check: isRightBowler checks rankIdx === 3 (J)
-// Card 3: suit(3/6=0)=spades, rank(3%6=3)=Q
-// Actually the card encoding has rank 3 = Q, not J. J is rank 2.
-// But isRightBowler checks rankIdx === 3 which would be Q, not J.
-// This is a code bug. Let me verify...
+// 24-card deck ranks: 0=9, 1=10, 2=J, 3=Q, 4=K, 5=A
+// J♠ = 2, J♥ = 8, J♣ = 14, J♦ = 20
 
-// In the code: isRightBowler checks `rankIdx === 3`. With rank 2=J, this means
-// it's checking for Q, not J. The Right Bowler IS the J of trump, which is rankIdx 2.
-// Let's check what the tests expect...
-
-// Actually, let me verify the actual card mapping in the code:
-// RANKS = ['8', '9', '10', 'J', 'Q', 'K', 'A'] // index = rank in card encoding
-// But in 24-card deck: indices 0-5 map to 9,10,J,Q,K,A
-// So rank 0=9, 1=10, 2=J, 3=Q, 4=K, 5=A
-
-// isRightBowler checks rankIdx === 3 (Q), but Right Bowler should be J (rank 2)
-// This is a bug in the code. But for testing, let me verify what the code actually does.
-
-const testCard = createEuchreDeck(4, 24)[3]; // card with rankIdx 3
-const testSuit = getSuit(testCard);
-const testRank = testRankIdx(testCard);
-// testRank should be 3 which is Q
-// isRightBowler(3, 0) checks card 3: suit(3/6=0)=spades, rank(3%6=3)=Q
-// isRightBowler expects rankIdx === 3 (Q), so it considers Q♠ as right bowler
-
-// This is wrong: Right Bowler should be J (rankIdx 2), not Q (rankIdx 3)
-// Let's verify with rank 2 (J):
 const jCard = 2; // J♠
 assert(getSuit(jCard) === 0, 'card 2 is spades');
 assert(getRank(jCard) === 2, 'card 2 has rank 2 (J)');
 
-// The code defines Right Bowler as rank 3 = Q (wrong!)
-// But this is in the existing codebase, so let's test what the code actually does
-assert(isRightBowler(3, 0) === true, 'Right Bowler: rank 3 (Q) of trump suit');
-assert(isRightBowler(9, 1) === true, 'Right Bowler: rank 3 of hearts');
-assert(isRightBowler(2, 0) === false, 'J (rank 2) is NOT right bowler (code bug)');
-assert(isRightBowler(3, -1) === false, 'No trump');
+assert(isRightBowler(2, 0) === true, 'Right Bowler: J♠ with spades trump');
+assert(isRightBowler(8, 1) === true, 'Right Bowler: J♥ with hearts trump');
+assert(isRightBowler(3, 0) === false, 'Q♠ is NOT right bowler');
+assert(isRightBowler(2, -1) === false, 'No trump');
 
-// Left Bowler: J of same colour (also checks rank 3 = Q)
-assert(isLeftBowler(15, 0) === true, 'Left Bowler: rank 3 clubs with spades trump');
-assert(isLeftBowler(21, 1) === true, 'Left Bowler: rank 3 diamonds with hearts trump');
-assert(isLeftBowler(3, 0) === false, 'Right bowler not left');
+// Left Bowler: J of same colour as trump
+assert(isLeftBowler(14, 0) === true, 'Left Bowler: J♣ with spades trump');
+assert(isLeftBowler(20, 1) === true, 'Left Bowler: J♦ with hearts trump');
+assert(isLeftBowler(2, 0) === false, 'Right bowler not left');
 assert(isLeftBowler(5, 0) === false, 'Rank 5 (A) is not bowler');
-assert(isBowler(3, 0) === true, 'isBowler detects rank 3 as bowler');
-assert(isBowler(15, 0) === true, 'isBowler detects left bowler');
-assert(isBowler(15, -1) === false, 'No trump');
+assert(isBowler(2, 0) === true, 'isBowler detects right bowler');
+assert(isBowler(14, 0) === true, 'isBowler detects left bowler');
+assert(isBowler(3, 0) === false, 'Q is not bowler');
+assert(isBowler(14, -1) === false, 'No trump');
 
 // ═══════════════════════════════════════════
 // 7. Trump detection & cardValue
@@ -215,9 +189,9 @@ assert(isTrumpCard(9, 0)===false, 'isTrumpCard: card 9 is hearts (not spades tru
 assert(isTrumpCard(10, 1)===true, 'isTrumpCard: card 10 is hearts (hearts trump)');
 assert(isTrumpCard(3, -1)===false, 'isTrumpCard: no trump');
 
-// cardValue: Right Bowler (rank 3) = 100, Left Bowler (rank 3) = 90
-assert(cardValue(3, 0)===100, 'cardValue: Right Bowler = 100');
-assert(cardValue(15, 0)===90, 'cardValue: Left Bowler = 90');
+// cardValue: Right Bowler (J of trump) = 100, Left Bowler (J of same colour) = 90
+assert(cardValue(2, 0)===100, 'cardValue: Right Bowler = 100');
+assert(cardValue(14, 0)===90, 'cardValue: Left Bowler = 90');
 // Rank 5 (A) in trump: 5+1 = 6
 assert(cardValue(5, 0)===6, 'cardValue: A♠ in trump suit = 6');
 // Rank 5 (A) off-suit: 5+1 = 6

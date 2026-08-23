@@ -5,10 +5,10 @@ import {
   createEuchreGame, createEuchreDeck, cardValue, cardFace, rankDisplay,
   isRightBowler, isLeftBowler, isBowler, isPointCard, isTrumpCard,
   getSuit, getRank, getLegalPlays, NO_TRUMP, SUIT_CHARS, computeGameOver,
-} from './mighty/euchre.js';
+} from './GameEngines/euchre.js';
 import {
   computeTrickWinner, createEngine, clockwiseOrder,
-} from './mighty/engine.js';
+} from './GameEngines/TrickGames.js';
 
 let pass = 0, fail = 0, total = 0;
 
@@ -78,13 +78,13 @@ const diamondsCards = [18,19,20,21,22,23]; // 9♦, ...
 
 // With spades trump:
 const spadesTrump = 0;
-assert(CARD_STRENGTH(3, spadesTrump) === 6, 'cardStrength: Right Bowler (Q♠) = 6');
-assert(CARD_STRENGTH(15, spadesTrump) === 5, 'cardStrength: Left Bowler (Q♣) = 5');
+assert(CARD_STRENGTH(2, spadesTrump) === 6, 'cardStrength: Right Bowler (J♠) = 6');
+assert(CARD_STRENGTH(14, spadesTrump) === 5, 'cardStrength: Left Bowler (J♣) = 5');
 assert(CARD_STRENGTH(5, spadesTrump) === 8, 'cardStrength: A♠ trump = 5+2+1=8');
 assert(CARD_STRENGTH(0, spadesTrump) === 3, 'cardStrength: 9♠ trump = 0+2+1=3');
 
 // Hand with bowlers should be strong
-const strongHand = [3, 5, 15, 0, 6]; // Q♠(RB), A♠, Q♣(LB), 9♠, 9♥
+const strongHand = [2, 5, 14, 0, 6]; // J♠(RB), A♠, J♣(LB), 9♠, 9♥
 const hs = handStrength(strongHand, spadesTrump);
 assert(hs > 10, 'handStrength: strong hand with bowlers > 10');
 
@@ -186,14 +186,14 @@ console.log('--- Board.jsx Structure ---\n');
 import * as fs from 'fs';
 import * as path from 'path';
 
-const boardPath = path.join(process.cwd(), 'mighty/euchre/Board.jsx');
+const boardPath = path.join(process.cwd(), 'Boards/Euchre.jsx');
 const boardContent = fs.readFileSync(boardPath, 'utf8');
 
 // Verify it exports EuchreBoard
 assert(boardContent.includes('export function EuchreBoard'), 'Board: exports EuchreBoard');
 
 // Verify it imports from euchre.js
-assert(boardContent.includes("from '../euchre.js'"), 'Board: imports from euchre.js');
+assert(boardContent.includes("from '@buraco/game/euchre.js'"), 'Board: imports from euchre.js');
 
 // Verify it uses key components
 assert(boardContent.includes('const Card'), 'Board: has Card component');
@@ -219,7 +219,7 @@ console.log('--- Locale Validation ---\n');
 
 const locales = ['en', 'pt', 'it'];
 for (const lang of locales) {
-  const localePath = path.join(process.cwd(), `buraco-client/src/locales/${lang}.js`);
+  const localePath = path.join(process.cwd(), `Boards/locales/${lang}.js`);
   const localeContent = fs.readFileSync(localePath, 'utf8');
   assert(localeContent.includes('euchre:'), `${lang}: has euchre section`);
   assert(localeContent.includes("pickUp:"), `${lang}: has pickUp translation`);
@@ -318,7 +318,7 @@ const pointG = {
 pointG.partner = null; // no partner identified
 const score2 = computeGameOver(pointG, { numPlayers: 4 });
 assert(score2 !== undefined, 'Scoring: full game returns result');
-assert(score2.teamPoints > 0, 'Scoring: team with many cards has points');
+assert(score2.teamTricks > 0, 'Scoring: team with many cards has points');
 
 // ═══════════════════════════════════════════
 // Summary
