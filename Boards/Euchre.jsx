@@ -284,9 +284,7 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
           {go.alone && <span style={{ color: '#ffd700' }}> — {t('euchre.alone')}</span>}
         </div>
 
-        {go.schneiderBonus > 0 && (
-          <div style={{ color: '#ffd700', fontSize: '0.9em' }}>+{go.schneiderBonus} {t('euchre.schneider')}</div>
-        )}
+        {go.march && <div style={{ color: '#ffd700', fontSize: '0.9em' }}>🏆 {t('euchre.march')}</div>}
 
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', width: '100%', marginBottom: '8px' }}>
           <div style={{ flex: '1 1 220px', maxWidth: '320px', background: 'rgba(0,0,0,0.5)', borderRadius: '10px', padding: '12px' }}>

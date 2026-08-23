@@ -308,67 +308,50 @@ export function computeGameOver(G, ctx) {
     }
   }
 
-  // Count team points from cards captured
-  const teamCards = team.reduce((sum, p) => {
-    return sum + (G.won[p] || []).filter(isPointCard).length;
-  }, 0);
+  // Count tricks per side (each trick = 1 point toward making contract)
+  const teamTricks = team.reduce((sum, p) => sum + (G.won[p] || []).length, 0);
+  const defenderTricks = defenders.reduce((sum, p) => sum + (G.won[p] || []).length, 0);
+  const totalTricks = teamTricks + defenderTricks; // should equal numPlayers
 
-  const defenderCards = defenders.reduce((sum, p) => {
-    return sum + (G.won[p] || []).filter(isPointCard).length;
-  }, 0);
+  // Partnership scoring (pure trick-based, no point-cards)
+  // Make: 3+ tricks = +1, March (5 tricks) = +2
+  // Euchred: <3 tricks, opponent scores +2
+  const isSolo = team.length === 1;
+  let baseScore, euchredScore;
+  if (isSolo) {
+    baseScore = teamTricks >= 5 ? 4 : (teamTricks >= 3 ? 1 : 0);
+    euchredScore = 2; // solo euchred is -2 for lone player
+  } else {
+    baseScore = teamTricks === 5 ? 2 : (teamTricks >= 3 ? 1 : 0);
+    euchredScore = 2;
+  }
 
-  // Euchre scoring (traditional):
-  // Make contract: declarer's team gets +1 point
-  // Schneider: defenders captured < 4 points => +2 for declarer's team
-  // Schwarz: defenders captured 0 points => +3 for declarer's team
-  // Overtricks: traditionally don't score in standard Euchre
+  const contractMade = baseScore > 0;
+  const march = teamTricks === 5;
 
-  // Calculate points more accurately:
-  // Each card's point value: A=4, 10=3, K=2, Q=1, J(trump)=1, J(off)=0
-  const pointValue = (card) => {
-    const rankIdx = card % NUM_RANKS_24;
-    if (rankIdx === 6) return 4; // A
-    if (rankIdx === 2) return 3; // 10
-    if (rankIdx === 5) return 2; // K
-    if (rankIdx === 4) return 1; // Q
-    if (rankIdx === 3) { // J
-      return isTrumpCard(card, G.trump) ? 1 : 0; // trump J = 1 point
-    }
-    return 0;
-  };
-
-  const teamPoints = team.reduce((sum, p) => {
-    return sum + (G.won[p] || []).reduce((s, c) => s + pointValue(c), 0);
-  }, 0);
-
-  const defenderPoints = defenders.reduce((sum, p) => {
-    return sum + (G.won[p] || []).reduce((s, c) => s + pointValue(c), 0);
-  }, 0);
-
-  // Determine outcome
-  const contractMade = teamPoints >= 10; // traditional: need 10+ points for contract
-  const schneider = defenderPoints === 0;
-  const schwarz = defenderPoints === 0 && teamCards === 0; // all tricks taken
-
-  const basePoints = contractMade ? 1 : -1; // +1 if made, -1 if Euchred
-  const schneiderBonus = schneider && contractMade ? 2 : 0;
-  const schwarzBonus = schwarz && contractMade ? 3 : 0;
-
-  const totalPoints = basePoints + schneiderBonus + schwarzBonus;
-
-  // Build scores
+  // Build scores: declarer's team vs defenders, zero-sum
   const scores = {};
-  for (const p of team) {
-    scores[p] = contractMade ? totalPoints : -totalPoints;
-  }
-  for (const p of defenders) {
-    scores[p] = contractMade ? -totalPoints : totalPoints;
-  }
-
-  // Normalize: net to zero
-  const sum = Object.values(scores).reduce((a, b) => a + b, 0);
-  if (sum !== 0) {
-    scores[declarer] -= sum;
+  if (contractMade) {
+    const s = isSolo ? baseScore : Math.floor(baseScore / 2); // each team member gets half
+    for (const p of team) scores[p] = s;
+    const oppTotal = -s * team.length;
+    for (const p of defenders) scores[p] = Math.floor(oppTotal / defenders.length);
+    // Normalize rounding: give the remainder to the first defender
+    const sum = Object.values(scores).reduce((a, b) => a + b, 0);
+    scores[defenders[0]] = (scores[defenders[0]] || 0) + (-sum);
+  } else {
+    // Euchred: defenders score +2 each, lone player scores -2
+    if (isSolo) {
+      scores[declarer] = -euchredScore;
+    } else {
+      for (const p of defenders) scores[p] = Math.floor(euchredScore / defenders.length);
+      const oppTotal = -euchredScore;
+      for (const p of team) scores[p] = Math.floor(oppTotal / team.length);
+    }
+    // Normalize rounding
+    const sum = Object.values(scores).reduce((a, b) => a + b, 0);
+    const first = Object.keys(scores)[0];
+    scores[first] += (-sum);
   }
 
   return {
@@ -376,16 +359,14 @@ export function computeGameOver(G, ctx) {
     winnerPlayers: contractMade ? team : defenders,
     loserPlayers: contractMade ? defenders : team,
     scores,
-    teamPoints,
-    defenderPoints,
-    totalCards: teamCards,
-    basePoints,
-    schneiderBonus,
-    schwarzBonus,
+    teamTricks,
+    defenderTricks,
+    baseScore,
     contractMade,
+    march,
+    alone: isSolo,
     declarer,
     partner,
-    alone: team.length === 1,
     trump: G.trump,
   };
 }

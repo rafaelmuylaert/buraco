@@ -1,17 +1,15 @@
 # Bid Euchre — Rules Reference
 
-This is the exact ruleset implemented by `euchre.js`. Bid Euchre is a classic 4-player
-trick-taking card game (typically played in two partnerships). The rules below follow
-the traditional Eastern North American rules, as implemented in the engine.
+This is the ruleset for Bid Euchre, a 4-player partnership trick-taking card game.
+The rules follow traditional Eastern North American Euchre, as implemented in the engine.
 
 ## Overview
 
-- **Players:** 2–4 (standard is 4, playing two partnerships of 2).
+- **Players:** 4 (two partnerships of 2).
 - **Cards:** 24-card deck — 9, 10, J, Q, K, A of each suit (4 suits × 6 ranks).
-  An extended 32-card variant adds an 8th rank (8 and one additional card).
-- **Rank (high → low):** A K Q J 10 9 (8, in the extended variant).
-- **Type:** partnership trick-taking game with upcard bidding and special "bowler"
-  cards (jacks).
+  Extended variants add an 8th rank for a 32-card deck.
+- **Rank (high → low):** A K Q J 10 9 (8 in the 32-card variant).
+- **Type:** partnership trick-taking game with upcard bidding and special bowler cards.
 
 ## Card composition
 
@@ -71,8 +69,7 @@ becomes trump for the round **if** someone picks it up during bidding.
 
 ## Bidding (upcard selection)
 
-Bidding is simplified compared to the traditional four-suit version: players
-decide whether to pick up the upcard, play alone, or pass.
+Bidding determines the trump suit. Players decide clockwise whether to pick up the upcard, play alone, or pass.
 
 ### Pick up (accept trump)
 - A player says **"pick up"** (or "play the upcard"), accepting the upcard's suit
@@ -92,8 +89,7 @@ decide whether to pick up the upcard, play alone, or pass.
 
 ### Pass
 - A player may **pass** during bidding, declining to pick up the upcard.
-- Bidding proceeds clockwise until all remaining players have passed or someone
-  picks up the upcard.
+- Bidding proceeds clockwise until someone picks up the upcard.
 
 ### All pass → redeal
 - If all four players pass, the hand is **redone**: cards are re-shuffled and
@@ -137,50 +133,32 @@ When the declarer picks up the upcard:
 
 ## Scoring
 
-Scoring is zero-sum, per-hand. The declarer's team (declarer + partner) tries to
-win the contract; the defenders try to prevent it.
+Scoring is zero-sum, per-hand. It is purely based on tricks won, **not** on point-cards.
 
-### Traditional Euchre scoring
+### Partnership scoring
 
-| Outcome | Declarer's team score | Defenders' score |
-|---------|----------------------|------------------|
-| Make contract (win 10+ point-cards) | +1 | -1 |
-| Make + Schneider (defenders get < 40pts) | +2 | -2 |
-| Make + Schwarz (defenders get 0pts) | +3 | -3 |
-| Euchred (fail contract) | -1 | +1 |
-| Alone + made | +2 | -2 |
-| Alone + Schneider | +4 | -4 |
-| Alone + Schwarz | +6 | -6 |
-| Alone + Euchred | -2 | +2 |
+| Outcome | Declarer's team | Defenders |
+|---------|----------------|-----------|
+| Make contract (win 3 or 4 tricks) | +1 | -1 |
+| March (win all 5 tricks) | +2 | -2 |
+| Euchred (win fewer than 3 tricks) | -2 | +2 |
 
-### Point-cards
+### Lone hand scoring
 
-Each card has a point value:
-| Card | Points |
-|------|--------|
-| A | 4 |
-| 10 | 3 |
-| K | 2 |
-| Q | 1 |
-| J of trump | 1 |
-| J of non-trump | 0 |
-| All other cards | 0 |
+When the declarer plays alone:
 
-A contract requires the declarer's team to win at least **10 points** total from
-the 5 tricks taken.
+| Outcome | Declarer's score | Each defender |
+|---------|-----------------|---------------|
+| Win 3 or 4 tricks | +1 | -1 |
+| March (win all 5 tricks) | +4 | -4 |
+| Euchred (win fewer than 3 tricks) | -2 | +2 |
 
 ### Match play
 
 - The game is played as **best-of matches** up to `winPoints` (default 5).
-- Each hand awards points as described above.
 - First team to reach `winPoints` wins the match.
-
-### Solo scoring
-
-When the declarer plays alone:
-- All points are doubled.
-- Even when alone, a partner may be "called" (secret or open).
-- If no partner exists (true solo), defenders are all other players.
+- In the 5-point game, a side is said to be "at the bridge" when it has scored 4
+  and the opponents have scored 2 or less.
 
 ## Variant: Bid Euchre
 
