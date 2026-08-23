@@ -1403,7 +1403,7 @@ setInterval(async () => {
           continue;
         }
         const since = lifecheckSince.get(key) ?? Date.now();
-        if (Date.now() - since >= LIFECHECK_GRACE_MS) {
+        if (metadata.players[p].isConnected && Date.now() - since >= LIFECHECK_GRACE_MS) {
           // Keep name + credentials so the owner's saved session can reclaim the
           // seat automatically on re-sync; data.seatStatus flags it as up for grabs.
           metadata.players[p] = {
@@ -1428,7 +1428,7 @@ setInterval(async () => {
   } catch (e) {
     console.error('[LIFECHECK] Poll error:', e.message);
   }
-}, 10000);
+}, LIFECHECK_GRACE_MS);
 
 resetConnectionsOnBoot();
 
