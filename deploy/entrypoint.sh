@@ -48,6 +48,7 @@ fetch_or_clone() {
         git clone --depth 1 --branch "$GIT_REF" "$GIT_URL" "$APP_DIR"
     else
         log "pulling $GIT_REF"
+        git remote set-url origin $GIT_URL
         git -C "$APP_DIR" fetch origin "$GIT_REF" >/dev/null
         git -C "$APP_DIR" reset --hard "origin/$GIT_REF" >/dev/null
     fi
@@ -139,7 +140,7 @@ while :; do
     sleep "$GIT_POLL_SECS"
     log "Checking for updates..."
     git -C "$APP_DIR" fetch origin "$GIT_REF" >/dev/null 2>&1 || continue
-#    log "local Head=$(head_of HEAD) remote=$(head_of origin/${$GIT_REF})"
+#    log "local Head=$(head_of HEAD) remote=$(head_of origin/$GIT_REF)"
     if [ "$(head_of HEAD)" != "$(head_of "origin/$GIT_REF")" ]; then
         log "update detected, redeploying"
         stop_app
