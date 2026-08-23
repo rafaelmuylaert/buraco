@@ -43,6 +43,7 @@ fi
 head_of() { git -C "$APP_DIR" rev-parse "$1" 2>/dev/null || echo ""; }
 
 fetch_or_clone() {
+    log "Fetching git data from ${$GIT_URL} to ${$APP_DIR}.."
     if [ ! -d "$APP_DIR/.git" ]; then
         log "cloning $GIT_URL ($GIT_REF)"
         git clone --depth 1 --branch "$GIT_REF" "$GIT_URL" "$APP_DIR"
@@ -54,6 +55,7 @@ fetch_or_clone() {
 }
 
 link_data() {
+    log "Linking data..."
     # Persistent data is mounted at /data/{db,bots} (outside the repo). The app
     # resolves process.cwd()/db and /bots, so symlink them into buraco-server/.
     for d in db bots; do
@@ -75,6 +77,7 @@ link_data() {
 
 prepare() {
     # npm workspaces: all @buraco/* packages resolve automatically from repo root
+    log "Preparing ${$ROLE}..."
     link_data
 
     case "$ROLE" in
@@ -90,6 +93,7 @@ prepare() {
 }
 
 start_app() {
+    log "Starting ${$ROLE}"
     # The app resolves db/ and bots/ from process.cwd(), so server/bot must run
     # with cwd inside buraco-server (where link_data placed the symlinks).
     case "$ROLE" in
@@ -106,6 +110,7 @@ case "$ROLE" in
 }
 
 stop_app() {
+    log "Stopping ${$ROLE}..."
     if [ -n "${APP_PID:-}" ]; then
         kill "$APP_PID" 2>/dev/null || true
         wait "$APP_PID" 2>/dev/null || true
@@ -113,6 +118,7 @@ stop_app() {
 }
 
 run_foreground() {
+    log "Running ${$ROLE} in foreground..."
     case "$ROLE" in
         client) cd "$APP_CLIENT" && exec npm run preview -- --host ;;
         *)      cd "$APP_BIN" && exec node "$ROLE.js" ;;
