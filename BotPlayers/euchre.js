@@ -14,7 +14,7 @@ import {
 } from '@buraco/game/Mighty.js';
 import {
   isRightBowler, isLeftBowler, isBowler, getSuit, getRank,
-  cardValue, isPointCard as isPointCardEuchre, getDeckWidth,
+  cardValue, isPointCard as isPointCardEuchre, getDeckWidth, createEuchreGame,
 } from '@buraco/game/euchre.js';
 
 const SERVER_URL = process.env.EUCHRE_SERVER_URL || 'http://buraco-server:8000';
