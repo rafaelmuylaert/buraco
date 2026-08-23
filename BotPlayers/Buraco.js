@@ -29,7 +29,7 @@ import { getLastDbgLog, initWasm, loadMatchDNA, isWasmReady, runTurn,
          setDiagnosticLog, setActiveNetConfig } from '../BotEngines/wasm_loader.js';
 setDbgLogFn(getLastDbgLog);
 await initWasm();
-setDiagnosticLog(1);
+setDiagnosticLog(2);
 
 const SERVER_URL = 'http://buraco-server:8000';
 const BOTS_DIR = path.join(process.cwd(), 'bots');
@@ -320,11 +320,11 @@ async function startBotClient(matchID, playerID, credentials, botName, targetBot
         //if (stalledIterations >= 2) {
           // Safety valve: the turn isn't advancing. A server sync replaces the whole local
           // state, so force one to re-align with server truth instead of spinning forever.
-        console.log(`[BOT] ${botName} turn state stalled (stateID=${state._stateID}, lastTurnStateId-${lastTurnStateId}); forcing resync`);
+        console.log(`[BOT] ${botName} turn state stalled (stateID=${state._stateID}, lastTurnStateId=${lastTurnStateId}); forcing resync`);
         try { client.transport.requestSync(); } catch (_) {}
           //stalledIterations = 0;
         //}
-        await sleep(500);
+        await sleep(1000);
         //continue;
       }
       //stalledIterations = 0;
