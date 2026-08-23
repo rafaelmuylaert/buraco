@@ -76,16 +76,14 @@ link_data() {
 }
 
 prepare() {
-    # npm workspaces: all @buraco/* packages resolve automatically from repo root
+    # npm workspaces: all @buraco/* packages resolve from root; always ci from root
     log "Preparing $ROLE..."
     link_data
 
+    npm --prefix "$APP_DIR" ci --no-audit --no-fund
+
     case "$ROLE" in
-        server|bot)
-            npm --prefix "$APP_DIR" ci --no-audit --no-fund
-            ;;
         client)
-            npm --prefix "$APP_CLIENT" ci --no-audit --no-fund
             log "building client"
             npm --prefix "$APP_CLIENT" run build
             ;;
