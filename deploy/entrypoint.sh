@@ -12,7 +12,6 @@
 #   GIT_POLL_SECS  poll interval in seconds; 0 = pull once then run (default: 60)
 
 set -eu
-
 ROLE="${1:-server}"
 : "${GIT_REF:=main}"
 : "${GIT_POLL_SECS:=60}"
