@@ -1,7 +1,7 @@
 // ─── Overview ──────────────────────────────────────────────────────────────────
-// wasm_loader_new.js — WebAssembly Neural Network Engine Interface (generic)
+// wasm_loader.js — WebAssembly Neural Network Engine Interface (generic)
 //
-// Loads nn_engine_new.wasm (the generic data-driven engine) and provides the
+// Loads nn_engine.wasm (the generic data-driven engine) and provides the
 // full AI decision pipeline on top of a single primitive:
 //
 //   forwardpass(NNidx, parents)   — run NN slot `NNidx`, feeding its input
@@ -21,7 +21,7 @@
 //   slot 3 DISCARD : parents=[0], state only              -> 54 logits
 //
 // Main functions:
-//   initWasm()              — Loads nn_engine_new.wasm, validates exports
+//   initWasm()              — Loads nn_engine.wasm, validates exports
 //   initweights(weights, cfg) — Writes one bot (weights + 16-NN config) to a
 //                               free team slot, returns a {team} handle
 //   getscores(team, NNidx, parentNNidxs, inputs) — Runs one forward pass
@@ -88,7 +88,7 @@ function _refreshViews() {
 }
 
 export async function initWasm() {
-    const wasmPath = path.join(__dirname, 'nn_engine_new.wasm');
+    const wasmPath = path.join(__dirname, 'nn_engine.wasm');
     if (!fs.existsSync(wasmPath)) return false;
     try {
         const buf = fs.readFileSync(wasmPath);
