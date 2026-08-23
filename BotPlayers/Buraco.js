@@ -298,36 +298,36 @@ async function startBotClient(matchID, playerID, credentials, botName, targetBot
   while (!(state = client.getState())) await sleep(500);
 
   let lastTurnStateId = -1;
-  let stalledIterations = 0;
+  //let stalledIterations = 0;
   while (!state.ctx.gameover) {
     try {
       state = client.getState();
       if (!state || state.ctx.gameover) { shutdown(); return; }
       if (state.ctx.currentPlayer !== playerID) {
-        stalledIterations = 0;
+        //stalledIterations = 0;
         await sleep(500);
         continue;
       }
-      if (state._stateID < lastTurnStateId) {
+      //if (state._stateID < lastTurnStateId) {
         // A server sync replaced our optimistic state with an older, server-confirmed
         // snapshot (backward jump). Lower the watermark so the turn is reprocessed against
         // server truth instead of stalling forever on a stale watermark.
-        console.log(`[BOT] ${botName} state reverted ${lastTurnStateId} -> ${state._stateID}; reprocessing turn`);
-        lastTurnStateId = state._stateID - 1;
-      }
+     //   console.log(`[BOT] ${botName} state reverted ${lastTurnStateId} -> ${state._stateID}; reprocessing turn`);
+      //  lastTurnStateId = state._stateID - 1;
+      //}
       if (state._stateID <= lastTurnStateId) {
-        stalledIterations++;
-        if (stalledIterations >= 2) {
+        //stalledIterations++;
+        //if (stalledIterations >= 2) {
           // Safety valve: the turn isn't advancing. A server sync replaces the whole local
           // state, so force one to re-align with server truth instead of spinning forever.
-          console.log(`[BOT] ${botName} turn state stalled (stateID=${state._stateID}); forcing resync`);
+          console.log(`[BOT] ${botName} turn state stalled (stateID=${state._stateID}, lastTurnStateId-${lastTurnStateId}); forcing resync`);
           try { client.transport.requestSync(); } catch (_) {}
           stalledIterations = 0;
-        }
+        //}
         await sleep(500);
-        continue;
+        //continue;
       }
-      stalledIterations = 0;
+      //stalledIterations = 0;
       lastTurnStateId = state._stateID;
 
       printState(state.G, botName, playerID);
