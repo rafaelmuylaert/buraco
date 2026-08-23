@@ -320,9 +320,9 @@ async function startBotClient(matchID, playerID, credentials, botName, targetBot
         //if (stalledIterations >= 2) {
           // Safety valve: the turn isn't advancing. A server sync replaces the whole local
           // state, so force one to re-align with server truth instead of spinning forever.
-          console.log(`[BOT] ${botName} turn state stalled (stateID=${state._stateID}, lastTurnStateId-${lastTurnStateId}); forcing resync`);
-          try { client.transport.requestSync(); } catch (_) {}
-          stalledIterations = 0;
+        console.log(`[BOT] ${botName} turn state stalled (stateID=${state._stateID}, lastTurnStateId-${lastTurnStateId}); forcing resync`);
+        try { client.transport.requestSync(); } catch (_) {}
+          //stalledIterations = 0;
         //}
         await sleep(500);
         //continue;
