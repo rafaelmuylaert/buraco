@@ -604,6 +604,7 @@ export async function runTurn(S, playerID, iface) {
         iface.refreshState(S);
         if (ok) break;
     }
+  return iface.getStateId();
 }
 
 export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null) {
