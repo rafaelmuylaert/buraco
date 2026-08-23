@@ -2,13 +2,65 @@
 
 Buraco card-game app: React/Vite client + Node.js/boardgame.io server + a genetic-training bot driven by a hand-written WASM neural engine. **There is no test framework** (`npm test` is a stub) — verify by `node --check` and ad-hoc node harnesses.
 
-## Single source of truth: `buraco-client/src/game.js`
-- Rules engine, moves, meld parsing (`parseMeld`, `generateAllValidMelds`), and net config (`DEFAULT_NET_PARAMS` → `computeNetConfig()` → `AI_CONFIG`) all live here.
-- `buraco-server/*.js` import `'./game.js'` — **but there is no `game.js` in `buraco-server/`.** In production the deploy entrypoint (`deploy/entrypoint.sh`) copies it from the clone into `buraco-server/game.js` at runtime; running server code locally requires that same copy. Always edit the client file.
+## Project structure: npm workspaces
+
+```
+├── package.json              # root: defines workspaces, hoists all deps
+├── GameEngines/              # @buraco/game — rules engines (Buraco, Mighty, Euchre, TrickGames)
+│   ├── package.json          # "name": "@buraco/game", sub-path exports
+│   ├── Buraco.js             # Buraco rules engine (main)
+│   ├── Mighty.js             # Mighty rules engine
+│   ├── euchre.js             # Euchre rules engine
+│   └── TrickGames.js         # Euchre + other trick games
+├── BotEngines/               # @buraco/bot-engine — training & WASM loading
+│   ├── package.json          # "name": "@buraco/bot-engine", exports
+│   ├── train.js              # Genetic algorithm trainer
+│   ├── wasm_loader.js        # WASM nn_engine_new wrapper
+│   └── worker.js             # Training worker
+├── BotPlayers/               # @buraco/bot-players — bot gameplay for each game
+│   ├── package.json          # "name": "@buraco/bot-players", exports
+│   ├── Buraco.js             # Buraco bot (auto-starts)
+│   ├── mighty.js             # Mighty bot (startMightyPolling)
+│   └── euchre.js             # Euchre bot (startEuchrePolling)
+├── buraco-server/            # @buraco/server — server entry point
+│   ├── package.json          # depends: @buraco/* workspace packages
+│   ├── server.js             # HTTP game lobby server
+│   ├── bot.js                # Bot entry point (runs Buraco + Mighty + Euchre bots)
+│   ├── game.js               # symlinked/copied from @buraco/game/Buraco.js at runtime
+│   ├── db/                   # volume-mounted: game data
+│   └── bots/                 # volume-mounted: trained bot weights
+├── buraco-client/            # Vite/React client
+│   ├── package.json          # depends: @buraco/game (file:../GameEngines)
+│   ├── vite.config.js        # aliases resolve @buraco/* → ../GameEngines/
+│   ├── dist/                 # built output (served by Vite preview)
+│   └── src/                  # (empty — source moved to repo root Boards/)
+├── Boards/                   # Client source (moved from buraco-client/src/)
+│   ├── main.jsx              # Vite root entry
+│   ├── App.jsx               # React app root
+│   ├── i18n.jsx              # i18n setup
+│   ├── Lobby.jsx             # Game lobby
+│   ├── Buraco.jsx            # Buraco board
+│   ├── Mighty.jsx            # Mighty board
+│   ├── Euchre.jsx            # Euchre board
+│   ├── index.css             # Global styles
+│   ├── Lobby.css             # Lobby styles
+│   ├── locales/              # en.js, it.js, pt.js
+│   └── assets/               # React SVG favicon
+├── deploy/entrypoint.sh      # Git-driven container entrypoint
+└── Dockerfile                # Single image for all 3 services
+```
+
+**Dependencies**: Hoisted to root `node_modules/`. `npm install` from repo root, `npm ci` from repo root. Vite aliases resolve `@buraco/*` to `../GameEngines/`.
+
+## Single source of truth: `GameEngines/Buraco.js`
+
+- Rules engine, moves, meld parsing (`parseMeld`, `generateAllValidMelds`), and net config (`DEFAULT_NET_PARAMS` → `computeNetConfig()` → `AI_CONFIG`) all live in `@buraco/game/Buraco.js`.
+- `buraco-server/*.js` import `'@buraco/game/Buraco.js'` (or `'./game.js'` which is the copy placed there by `deploy/entrypoint.sh` at runtime). **Always edit `GameEngines/Buraco.js`**.
+- The server entrypoint (`deploy/entrypoint.sh`) copies `GameEngines/Buraco.js` → `buraco-server/game.js` at container start so the server can import `'./game.js'`. Running server code locally requires that same copy.
 
 ## Card/meld encoding (easy to get wrong)
 - Cards are flat indices: 0–51 (two physical copies each), 52 unused, 53 = Joker (two copies). Hands/table/discard are 54-wide bitmaps (`Uint8Array[54]`).
-- Suits: `1=♠ 2=♥ 3=♣ 4=♦ 5=★`. Use exported `getSuitChar`/`getSuit`/`getRank` from game.js; never hardcode suit chars.
+- Suits: `1=♠ 2=♥ 3=♣ 4=♦ 5=★`. Use exported `getSuitChar`/`getSuit`/`getRank` from `@buraco/game/Buraco.js`; never hardcode suit chars.
 - Seq meld = 16 elems `[A-low, A-high, nat2, 3..K, foreignWildSuit, nat2-wild-count]`. A is both low (slot 0) and high (slot 1). Runner meld = 6 elems `[rank, ♠/2,♥/2,♦/2,♣/2, wildSuit]`.
 
 ## Game mechanics (rule semantics the encoding encodes)
@@ -29,7 +81,15 @@ Buraco card-game app: React/Vite client + Node.js/boardgame.io server + a geneti
 - `initWasm()` silently disables the engine (`_ex = null`) if any required export is missing or the wasm file is absent → scoring returns `null`/`[]` and bots play degenerate moves. If you see that, the deployed `nn_engine_new.wasm` predates the current `nn_engine_new.cpp` — rebuild it.
 
 ## Deployment: git-driven containers (docker-compose.yml)
-- **Images carry no app code.** Both Dockerfiles are `node:20-alpine + git` with `ENTRYPOINT ["/usr/local/bin/git-entrypoint.sh"]`. The entrypoint clones/pulls the repo from `GIT_URL` (default `https://github.com/rafaelmuylaert/buraco.git` — a **public GitHub mirror** of the private Gitea `Rafael/buraco`; `git push` still targets the Gitea origin, which mirrors to GitHub), copies `buraco-client/src/game.js` → `buraco-server/game.js`, symlinks mounted `db`/`bots` from `/data/{db,bots}` into the clone, runs `npm ci`, and launches the role passed as the compose `command` (`server`/`bot`/`client`). Client role also runs `npm run build` (preview serves `dist/`).
+
+- **Single image:** `docker compose build buraco-server` builds one image (`localhost/buraco-local:latest`) used by all 3 services (server, client, bot). The Dockerfile:
+  - `FROM node:20-alpine`
+  - Installs `git` for the entrypoint
+  - Copies `deploy/entrypoint.sh` → `/usr/local/bin/git-entrypoint.sh` (sets `ENTRYPOINT`)
+  - `WORKDIR /app`, copies repo, runs `npm ci` from root, then `npm --prefix buraco-client run build`
+  - `WORKDIR /app/buraco-server`, `CMD ["server"]` (entrypoint overwrites with role from compose)
+  - **`ENV PATH="/app/node_modules/.bin:${PATH}"`** for hoisted workspace binaries (vite, etc.)
+- **Entrypoint:** `git-entrypoint.sh` clones/pulls the repo from `GIT_URL`, symlinks `/data/{db,bots}` into `buraco-server/`, runs `npm ci` from root (once), then dispatches to `node server.js`, `node bot.js`, or `npm run preview -- --host` based on `$1` (`server`|`bot`|`client`).
 - **Auto-update:** each container polls git every `GIT_POLL_SECS` (default 60) and kills/re-pulls/restarts itself when `origin/$GIT_REF` moves. Pushing to git deploys — the host only needs the compose file + Dockerfiles (+ optional `.env`). `GIT_POLL_SECS=0` disables polling (pull once at start). The public GitHub mirror needs no credentials; if you point `GIT_URL` back at the private Gitea instead, set `GIT_TOKEN` (read via `GIT_ASKPASS` as `oauth2:<token>`, never stored in the remote URL). Rebuild images only when a Dockerfile or `deploy/entrypoint.sh` changes (`docker compose up -d --build`); app updates need no rebuild.
 - **Persistent data:** host dirs `./buraco-server/db` and `./buraco-server/bots` mount at `/data/db` and `/data/bots` inside every container. The repo ships pre-trained bots under `buraco-server/bots/` (tracked, so installs come standard); on first run the entrypoint seeds an empty `/data/bots` volume from them, then re-links `buraco-server/bots` → `/data/bots` (git `reset --hard` restores the tracked dir on every pull, so the entrypoint re-links after each update — never clobbering trained weights in the volume).
 
@@ -45,6 +105,7 @@ Buraco card-game app: React/Vite client + Node.js/boardgame.io server + a geneti
 - Morto must only trigger when the hand is truly empty after a discard pickup: `moveMeld`/`cardsRemoveCards` take a `suppressMorto` flag and `movePickUpDiscard` passes `true`, relying on the post-pickup check. Preserve in any refactor.
 
 ## Commands
-- Syntax check: `node --check <file>` (all files are ESM). Lint: `cd buraco-client && npx eslint src/game.js`.
-- Rule changes: harness the pure exports directly, e.g. `import { moveMeld, movePickUpDiscard, generateAllValidMelds } from 'buraco-client/src/game.js'` and call `setScoreFunctions(null,null,null,()=>{},()=>{})` to neutralize the wasm meld-sync hook.
+- Syntax check: `node --check <file>` (all files are ESM). Lint: `cd buraco-client && npx eslint src/game.js` (legacy — eslint still targets `src/game.js` path but real file is `GameEngines/Buraco.js`).
+- Rule changes: harness the pure exports directly, e.g. `import { moveMeld, movePickUpDiscard, generateAllValidMelds } from '@buraco/game/Buraco.js'` and call `setScoreFunctions(null,null,null,()=>{},()=>{})` to neutralize the wasm meld-sync hook.
+- Client source: `Boards/` directory at repo root. Vite root: `Boards/` (see `buraco-client/vite.config.js` → `root: path.resolve(__dirname, '..', 'Boards')`). Build output: `buraco-client/dist/`.
 - Ports: server 8000, client 5173 (vite dev/preview). Compose runs `buraco-server`, `buraco-client`, `buraco-bot`.
