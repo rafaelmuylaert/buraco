@@ -96,7 +96,7 @@ start_app() {
         client) cd "$APP_CLIENT" ;;
         *)      cd "$APP_BIN" ;;
     esac
-    case "$ROLE" in
+case "$ROLE" in
         server) node server.js & ;;
         bot)    node bot.js & ;;
         client) npm run preview -- --host & ;;
