@@ -389,14 +389,16 @@ export function computePartner(G, numPlayers) {
 
 /**
  * Pick up the upcard (accept it as trump).
- * @param {Object} rules - boardgame.io rules
+ * In Euchre, anyone can pick up - they become the declarer by doing so.
  */
 export function pickUpMove({ G, ctx, events }) {
   const p = ctx.currentPlayer;
-  if (p !== G.declarer) return 'INVALID_MOVE';
+  // Use strict null/undefined check (0 is a valid trump suit index for spades)
+  if (G.upcardSuit == null) return 'INVALID_MOVE';
 
+  G.declarer = p;
   G.trump = G.upcardSuit;
-  G.calledCard = G.upcard; // the upcard
+  G.calledCard = G.upcard;
   events.endPhase('play');
 }
 
@@ -409,14 +411,29 @@ export function passBidMove({ G, ctx, events }) {
   if (G.passed[p]) return 'INVALID_MOVE';
   G.passed[p] = true;
 
-  // In Euchre, we need a different bidding flow than Mighty
-  // For now, all-pass triggers redeal (handled in onBegin of play phase)
-  if (Object.keys(G.passed).length >= ctx.numPlayers - 1) {
-    // All except last player passed - last player must pick up or it's a redeal
-    // This is simplified; full Euchre has more complex bidding
+  // Count remaining active players
+  const activePlayers = [];
+  for (let i = 0; i < ctx.numPlayers; i++) {
+    if (!G.passed[String(i)]) activePlayers.push(String(i));
+  }
+
+  // If only one player hasn't passed, they become declarer
+  if (activePlayers.length === 1) {
+    G.declarer = activePlayers[0];
+    G.trump = G.upcardSuit;
+    G.calledCard = G.upcard;
     events.endPhase('play');
     return;
   }
+
+  // All players passed — misdeal (redeal)
+  if (activePlayers.length === 0) {
+    // The engine handles redeal in the shared passMove, but since we're
+    // using custom passBid, we need to trigger a redeal here
+    events.endTurn();
+    return;
+  }
+
   events.endTurn();
 }
 
@@ -487,12 +504,21 @@ export function createEuchreGame(options = {}) {
       },
     },
 
-    // Additional setup: upcard
+    // Bidding phase: Euchre uses pickUp/passBid during bidding
+    biddingPhase: {
+      moves: {
+        pickUp: pickUpMove,
+        passBid: passBidMove,
+      },
+    },
+
+    // Additional setup: upcard (last card dealt becomes the upcard)
     setup: ({ ctx, random, hands, kitty, deckSize: dSize }, setupData = {}) => {
-      const extra = {};
-      // In Euchre, the last card dealt becomes the upcard
-      // We'll handle this in the call phase onBegin
-      return extra;
+      // kitty has exactly 1 card for Euchre
+      const upcard = kitty && kitty.length > 0 ? kitty[0] : 0;
+      const upcardSuit = getSuit(upcard);
+      // Remove upcard from kitty
+      return { upcard, upcardSuit };
     },
   });
 }

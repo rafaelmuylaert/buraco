@@ -243,6 +243,7 @@ export function createEngine(config) {
     computeGameOver: ruleComputeGameOver,
     computePartner: ruleComputePartner,
     callPhase = {},
+    biddingPhase: ruleBiddingPhase,
     setup: ruleSetup,
     playerView: rulePlayerView,
   } = config;
@@ -480,7 +481,7 @@ export function createEngine(config) {
           G.passed = {};
           G.bidRound = 1;
         },
-        moves: { bid: bidMove, pass: passMove },
+        moves: { bid: bidMove, pass: passMove, ...(ruleBiddingPhase?.moves || {}) },
       },
 
       call: {
