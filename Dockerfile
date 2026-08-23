@@ -7,6 +7,9 @@ ENV PATH="/app/node_modules/.bin:${PATH}"
 
 WORKDIR /app
 
+# git-entrypoint.sh needs git for clone/pull/poll
+RUN apk add --no-cache git
+
 # Copy the git-driven entrypoint (auto-pulls on update, installs deps, starts service)
 COPY deploy/entrypoint.sh /usr/local/bin/git-entrypoint.sh
 RUN chmod +x /usr/local/bin/git-entrypoint.sh
