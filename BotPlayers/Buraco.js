@@ -159,6 +159,7 @@ function makeIface(client, botName, playerID) {
     getStateId: () => client.getState()?._stateID ?? 0,
     refreshState: (G) => {
         const state = client.getState();
+        await sleep(1000);
         if (state?.G) Object.assign(G, state.G);
     },
     hasDrawn: () => client.getState()?.G?.hasDrawn ?? false,
