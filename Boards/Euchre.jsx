@@ -467,6 +467,11 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
               {myHand.map((c) => <Card key={c} card={c} trump={trump} disabled />)}
             </div>
           )}
+          {(phase === 'bidding' || phase === 'call') && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px', marginTop: '8px' }}>
+              {myHand.map((c) => <Card key={c} card={c} trump={trump} disabled />)}
+            </div>
+          )}
         </div>
       </div>
     </div>
