@@ -149,14 +149,11 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
   const players = G.players || {};
   const playerName = (p) => players[p] || `P${p}`;
 
-  // Role badges
-  const roleBadgeOf = (p) => {
-    if (p === declarer) return '👑';
-    if (G.partner && p === G.partner) return '🤝';
-    if (p === me && G.calledCard != null) return '🤝'; // holding called card = partner
-    const confirmedDefender = G.partner != null ? p !== G.partner : (G.openAlone || p === me);
-    return confirmedDefender ? '🛡️' : '❓';
-  };
+  // Role badges: exactly two teams — making team (declarer + positional partner)
+  // gets a sword, defending team gets a shield.
+  const partner = declarer != null ? String((Number(declarer) + 2) % G.numPlayers) : null;
+  const roleBadgeOf = (p) =>
+    partner != null && (p === declarer || p === partner) ? '⚔️' : '🛡️';
 
   // ── Bidding UI (upcard selection) ───────────────────────────────────────
 

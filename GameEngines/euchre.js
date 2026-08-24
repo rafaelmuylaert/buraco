@@ -288,45 +288,24 @@ export function computeGameOver(G, ctx) {
   const defenderTricks = defenders.reduce((sum, p) => sum + (G.won[p] || []).length, 0);
   const totalTricks = teamTricks + defenderTricks; // should equal numPlayers
 
-  // Partnership scoring (pure trick-based, no point-cards)
-  // Make: 3+ tricks = +1, March (5 tricks) = +2
-  // Euchred: <3 tricks, opponent scores +2
+  // Partnership scoring (pure trick-based, no point-cards).
+  // Each seat on a side gets the full side amount (not zero-sum):
+  //   Make (3-4 tricks):  declarer + partner each +1, defenders 0
+  //   March (5 tricks):   declarer + partner each +2, defenders 0
+  //   Euchred (<3):       defenders each +2, team 0
   const isSolo = team.length === 1;
-  let baseScore, euchredScore;
-  if (isSolo) {
-    baseScore = teamTricks >= 5 ? 4 : (teamTricks >= 3 ? 1 : 0);
-    euchredScore = 2; // solo euchred is -2 for lone player
-  } else {
-    baseScore = teamTricks === 5 ? 2 : (teamTricks >= 3 ? 1 : 0);
-    euchredScore = 2;
-  }
+  const baseScore = teamTricks === 5 ? 2 : (teamTricks >= 3 ? 1 : 0);
 
   const contractMade = baseScore > 0;
   const march = teamTricks === 5;
 
-  // Build scores: declarer's team vs defenders, zero-sum
   const scores = {};
   if (contractMade) {
-    const s = isSolo ? baseScore : Math.floor(baseScore / 2); // each team member gets half
-    for (const p of team) scores[p] = s;
-    const oppTotal = -s * team.length;
-    for (const p of defenders) scores[p] = Math.floor(oppTotal / defenders.length);
-    // Normalize rounding: give the remainder to the first defender
-    const sum = Object.values(scores).reduce((a, b) => a + b, 0);
-    scores[defenders[0]] = (scores[defenders[0]] || 0) + (-sum);
+    for (const p of team) scores[p] = baseScore;
+    for (const p of defenders) scores[p] = 0;
   } else {
-    // Euchred: defenders score +2 each, lone player scores -2
-    if (isSolo) {
-      scores[declarer] = -euchredScore;
-    } else {
-      for (const p of defenders) scores[p] = Math.floor(euchredScore / defenders.length);
-      const oppTotal = -euchredScore;
-      for (const p of team) scores[p] = Math.floor(oppTotal / team.length);
-    }
-    // Normalize rounding
-    const sum = Object.values(scores).reduce((a, b) => a + b, 0);
-    const first = Object.keys(scores)[0];
-    scores[first] += (-sum);
+    for (const p of team) scores[p] = 0;
+    for (const p of defenders) scores[p] = 2;
   }
 
   return {
@@ -347,17 +326,12 @@ export function computeGameOver(G, ctx) {
 }
 
 /**
- * Compute the declarer's partner from the called card.
+ * Compute the declarer's partner from seat position: player 0 ↔ player 2,
+ * player 1 ↔ player 3 (0-indexed `(declarer + 2) % numPlayers`).
  */
 export function computePartner(G, numPlayers) {
-  if (G.calledCard == null) return null;
-  const declarer = String(G.declarer);
-  for (let i = 0; i < numPlayers; i++) {
-    const p = String(i);
-    if (p === declarer) continue;
-    if (G.won[p] && G.won[p].includes(G.calledCard)) return p;
-  }
-  return null;
+  if (G.declarer == null) return null;
+  return String((Number(G.declarer) + 2) % numPlayers);
 }
 
 // ── Call phase moves ────────────────────────────────────────────────────────

@@ -264,19 +264,34 @@ const r1 = computeGameOver(g1, mockCtx);
 assert(r1 !== undefined, 'computeGameOver returns result');
 assert(r1.declarer === '0', 'computeGameOver: declarer = 0');
 
+// Scoring table: each seat on a side gets the full side amount (not zero-sum)
+const mk = (t0, t1, t2, t3) => ({
+  declarer: '0', trump: 0,
+  won: { '0': new Array(t0).fill(0), '1': new Array(t1).fill(0), '2': new Array(t2).fill(0), '3': new Array(t3).fill(0) },
+});
+const makeR = computeGameOver(mk(2, 2, 1, 0), mockCtx); // team 4, defenders 1
+assert(makeR.contractMade === true, 'scoring: make (3+ tricks)');
+assert(makeR.scores['0'] === 1 && makeR.scores['2'] === 1, 'scoring: make => declarer +1, partner +1');
+assert(makeR.scores['1'] === 0 && makeR.scores['3'] === 0, 'scoring: make => defenders 0');
+const marchR = computeGameOver(mk(5, 0, 0, 0), mockCtx); // team 5
+assert(marchR.march === true, 'scoring: march (5 tricks)');
+assert(marchR.scores['0'] === 2 && marchR.scores['2'] === 2, 'scoring: march => team each +2');
+assert(marchR.scores['1'] === 0 && marchR.scores['3'] === 0, 'scoring: march => defenders 0');
+const euchredR = computeGameOver(mk(1, 2, 0, 2), mockCtx); // team 1, defenders 4
+assert(euchredR.contractMade === false, 'scoring: euchred (<3 tricks)');
+assert(euchredR.scores['0'] === 0 && euchredR.scores['2'] === 0, 'scoring: euchred => team 0');
+assert(euchredR.scores['1'] === 2 && euchredR.scores['3'] === 2, 'scoring: euchred => defenders each +2');
+assert(euchredR.winner === 'defenders' && euchredR.winnerPlayers.length === 2, 'scoring: euchred => defenders win');
+
 // ═══════════════════════════════════════════
 // 12. computePartner
 // ═══════════════════════════════════════════
 console.log('--- Partner Detection ---\n');
 
-const cpG1 = { calledCard: 3, declarer: '0', won: { '0': [3], '1': [], '2': [], '3': [] } };
-assert(computePartner(cpG1, 4) === null, 'partner: declarer has card => null');
-
-const cpG2 = { calledCard: 3, won: { '0': [], '1': [3], '2': [], '3': [] } };
-assert(computePartner(cpG2, 4) === '1', 'partner: P1 has card => P1');
-
-const cpG3 = { calledCard: 99, won: { '0': [], '1': [], '2': [], '3': [] } };
-assert(computePartner(cpG3, 4) === null, 'partner: no one has card => null');
+assert(computePartner({ declarer: '0' }, 4) === '2', 'partner: declarer 0 => positional 2');
+assert(computePartner({ declarer: '3' }, 4) === '1', 'partner: declarer 3 => positional 1');
+assert(computePartner({ declarer: '1' }, 4) === '3', 'partner: declarer 1 => positional 3');
+assert(computePartner({}, 4) === null, 'partner: no declarer => null');
 
 // ═══════════════════════════════════════════
 // 13. createEuchreGame

@@ -7,8 +7,9 @@ import {
   getSuit, getRank, getLegalPlays, NO_TRUMP, SUIT_CHARS, computeGameOver,
 } from './GameEngines/euchre.js';
 import {
-  computeTrickWinner, createEngine, clockwiseOrder,
+  computeTrickWinner, createEngine, clockwiseOrder, shuffleDeck,
 } from './GameEngines/TrickGames.js';
+import { choosePlay } from './BotPlayers/euchre.js';
 
 let pass = 0, fail = 0, total = 0;
 
@@ -315,10 +316,55 @@ const pointG = {
     '3': [0, 6, 12, 18],  // 9♠, 9♥, 9♣, 9♦
   }
 };
-pointG.partner = null; // no partner identified
 const score2 = computeGameOver(pointG, { numPlayers: 4 });
 assert(score2 !== undefined, 'Scoring: full game returns result');
 assert(score2.teamTricks > 0, 'Scoring: team with many cards has points');
+assert(score2.partner === '2', 'Scoring: partner is positional (declarer 0 => 2)');
+
+// ═══════════════════════════════════════════
+// Bot vs server legality fuzz (regression: bot must never propose an invalid playCard)
+// ═══════════════════════════════════════════
+console.log('\n--- Bot Legality Fuzz ---\n');
+
+let illegalFuzz = 0;
+const FUUZ_HANDS = 400;
+
+for (let h = 0; h < FUUZ_HANDS; h++) {
+  const shuffled = shuffleDeck(createEuchreDeck(4, 24));
+  const hands = {};
+  for (let p = 0; p < 4; p++) hands[String(p)] = shuffled.slice(p * 5, p * 5 + 5);
+  const upcard = shuffled[20];
+  const trump = getSuit(upcard);
+  const G = {
+    trump, trick: [], trickNumber: 1, namedSuit: null, leader: '0',
+    hands,
+    won: { '0': [], '1': [], '2': [], '3': [] },
+  };
+  const engine = createEuchreGame({ deckSize: 24, winPoints: 5 });
+  const playCard = engine.phases.play.moves.playCard;
+  const ctx = { numPlayers: 4 };
+  const events = { endTurn: () => {}, endPhase: () => {} };
+
+  for (let t = 0; t < 5; t++) {
+    const order = clockwiseOrder(4, G.leader);
+    for (const p of order) {
+      const legal = getLegalPlays(G, p);
+      assert(legal.length > 0, `fuzz[${h}] trick ${t}: non-empty legal for ${p}`);
+      const { card } = choosePlay(G, p);
+      const res = playCard({ G, ctx: { ...ctx, currentPlayer: p }, events }, card, undefined);
+      if (res !== undefined) {
+        illegalFuzz++;
+        console.error(`FAIL: fuzz[${h}] trick ${t}: bot playCard(${card}) for ${p} rejected; legal=[${legal}] hand=${JSON.stringify(G.hands[p])} trick=${JSON.stringify(G.trick)} trump=${trump}`);
+      }
+      assert(!G.hands[p].includes(card), `fuzz[${h}] trick ${t}: card ${card} actually played for ${p}`);
+    }
+  }
+
+  const totalWon = Object.values(G.won).reduce((s, a) => s + a.length, 0);
+  assert(totalWon === 20, `fuzz[${h}]: all 20 cards in won piles (got ${totalWon})`);
+  assert(G.trickNumber === 6, `fuzz[${h}]: 5 tricks completed (trickNumber=6, got ${G.trickNumber})`);
+}
+assert(illegalFuzz === 0, `fuzz: zero illegal bot plays across ${FUUZ_HANDS} hands (got ${illegalFuzz})`);
 
 // ═══════════════════════════════════════════
 // Summary

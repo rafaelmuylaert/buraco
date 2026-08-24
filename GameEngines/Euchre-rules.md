@@ -67,9 +67,10 @@ becomes trump for the round **if** someone picks it up during bidding.
   as the upcard (with 23 remaining in the stock).
 - The dealer is chosen at random and rotates clockwise each hand.
 
-## Bidding (upcard selection)
+## Bidding 
 
-Bidding determines the trump suit. Players decide clockwise whether to pick up the upcard, play alone, or pass.
+Bidding determines the trump suit. Players decide clockwise whether to pick up the upcard, or pass.
+The first to bid is the player after the dealer.
 
 ### Pick up (accept trump)
 - A player says **"pick up"** (or "play the upcard"), accepting the upcard's suit
@@ -77,49 +78,51 @@ Bidding determines the trump suit. Players decide clockwise whether to pick up t
 - The picker becomes the **declarer** and picks up the upcard.
 - The picker's team then plays to win the hand.
 
-### Beauty 10 (bid 10)
-- If the upcard is a **10**, a player may say **"Beauty 10"** (bid 10 points),
-  which is the highest possible bid. The beauty 10 accepts the upcard as trump
-  and guarantees the contract.
-
-### Play alone
-- A player may declare **"alone"** (playing solo), declaring that they will win
-  the hand without any partner. This doubles the stakes.
-- In the engine, alone is announced during the call phase.
-
 ### Pass
 - A player may **pass** during bidding, declining to pick up the upcard.
 - Bidding proceeds clockwise until someone picks up the upcard.
 
 ### All pass → redeal
-- If all four players pass, the hand is **redone**: cards are re-shuffled and
-  re-dealt by the same dealer.
-- This repeats until someone picks up the upcard (or bids beauty 10).
+- If all four players pass, the upcard is hidden, and a second bidding round happens where each player can choose a suit to become trump (except for the suit of the upcard).
+- The player that chooses a suit becomes the **declarer**, no card is picked up or discarded.
+- If all players pass, the last player to bid must choose a trump and become the **declarer**.
+
+### Play alone
+- The **declarer** may declare **"alone"** (playing solo), declaring that they will win
+  the hand without any partner. This doubles the stakes if the player gets all tricks.
+- In the engine, alone is announced during the call phase. With the current
+  positional partnership (see below) it can never actually become true: the
+  `alone`/`openAlone` state is kept for compatibility but is always false.
+
 
 ## Call phase (declarer's actions)
 
 After the bidding ends, the declarer (who picked up or was the last to act) has
 the option to:
 
-1. **Pick up** — take the upcard into their hand and discard one card, accepting
-   the upcard's suit as trump.
-2. **Call a partner** — the declarer calls a card not in their hand, and the
-   player holding it becomes their partner (the "called card" mechanic).
+1. **Pick up** — If the bidding ended in the first card (when there was an upcard), the upcard is added to the **declarer** hand and they must choose one card to discard.
+   
 3. **Play alone** — announce solo play. In the engine, alone is tracked via the
-   `openAlone` flag and the `calledCard` field.
+   `openAlone` flag (always false under the current positional partnership).
 
 When the declarer picks up the upcard:
 - The upcard's suit becomes trump.
-- The upcard is stored as `G.calledCard` (used for partner assignment).
+- The upcard is stored as `G.calledCard` (informational only).
 - One card from the declarer's hand is discarded.
+
+### Positional partnership
+
+The declarer's partner is fixed by seat, not by card holding: seat 0 ↔ seat 2
+and seat 1 ↔ seat 3 (0-indexed, i.e. player 1↔player 3, player 2↔player 4).
+`computePartner` returns `(declarer + 2) % numPlayers`. Even when the declarer
+plays alone, points are still applied to both that player and the positional
+partner.
 
 ## Play
 
-- The **declarer leads the first trick**.
+- The player after the dealer leads the first trick.
 - Players must **follow suit** if possible.
-- **Bowler exception:** the Right and Left Bowlers (trump Jacks) may be played
-  at any time, even when the player can follow the led suit or has no trumps.
-  This lets bowlers "cross-trump" — beating any other trump regardless of rank.
+- **Bowler exception:** For all purposes, the Left Bowler is considered to be of trump suit.
 - If a player cannot follow suit, they may:
   - Play a trump (overtrump)
   - Play a bowler
@@ -133,25 +136,19 @@ When the declarer picks up the upcard:
 
 ## Scoring
 
-Scoring is zero-sum, per-hand. It is purely based on tricks won, **not** on point-cards.
+Scoring is per-hand and **not** zero-sum. It is purely based on tricks won,
+**not** on point-cards. Each seat on a side gets the full side amount (the
+declarer and their positional partner both score the same amount; the same
+applies to the two defenders).
 
 ### Partnership scoring
 
-| Outcome | Declarer's team | Defenders |
+| Outcome | Declarer's team (each seat) | Defenders (each seat) |
 |---------|----------------|-----------|
-| Make contract (win 3 or 4 tricks) | +1 | -1 |
-| March (win all 5 tricks) | +2 | -2 |
-| Euchred (win fewer than 3 tricks) | -2 | +2 |
-
-### Lone hand scoring
-
-When the declarer plays alone:
-
-| Outcome | Declarer's score | Each defender |
-|---------|-----------------|---------------|
-| Win 3 or 4 tricks | +1 | -1 |
-| March (win all 5 tricks) | +4 | -4 |
-| Euchred (win fewer than 3 tricks) | -2 | +2 |
+| Make contract (win 3 or 4 tricks) | +1 | 0 |
+| March (win all 5 tricks) | +2 | 0 |
+| Euchred (win fewer than 3 tricks) | 0 | +2 |
+| March (when playing alone) | +4 | 0 |
 
 ### Match play
 
@@ -186,9 +183,9 @@ contribute or decline based on their confidence.
   3-card kitty.
 - **Bowler free-play.** Right and Left Bowlers can be played at any time
   (even when able to follow suit), per traditional rules.
-- **Partner derived from called card.** The partner is never stored in `G`;
-  it is determined dynamically by which player holds the `calledCard` when
-  that card is eventually played. This ensures no secret state leaks.
+- **Positional partner.** The partner is fixed by seat: `(declarer + 2) %
+  numPlayers`. It is never stored in `G` and needs no card holding — a seat
+  opposite the declarer is always the partner.
 - **No-trump handling.** When `G.trump === NO_TRUMP` (no trump chosen),
   bowlers have no special power. In practice this means the upcard was
   passed by all players and the hand is redone.
@@ -197,5 +194,6 @@ contribute or decline based on their confidence.
   lobby/controller.
 - **euchre.js** uses the shared engine (`TrickGames.js`) with game-specific
   overrides for card value, bowler detection, and scoring.
-- **Scoring normalization.** The final score delta is normalized so that the
-  sum of all player scores is always zero (zero-sum game).
+- **Non-zero-sum scoring.** Points are not normalized to a zero sum; the two
+  seats of the winning side each get the full side amount and the losing side
+  gets 0 (see the scoring table above).
