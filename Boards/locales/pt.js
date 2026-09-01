@@ -333,6 +333,7 @@ export const messages = {
     adminRestricted: 'Acesso restrito a administradores',
     quickGame: 'Jogo Rápido',
     newTournament: '+ Torneio',
+    preferredGame: 'Jogo padrão:',
     game: 'Jogo: ',
     stats: {
       title: 'Minhas Estatísticas',

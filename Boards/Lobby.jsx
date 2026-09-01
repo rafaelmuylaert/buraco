@@ -65,6 +65,16 @@ const lobbyClient = new LobbyClient({ server: API_ADDRESS });
 const AUTH_KEY = 'buraco_auth';
 const getSavedAuth = () => { try { return JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch { return null; } };
 
+const PREFERRED_GAME_KEY = 'buraco_preferred_game';
+const VALID_GAMES = ['buraco', 'mighty', 'euchre'];
+const getPreferredGame = () => {
+  try {
+    const v = localStorage.getItem(PREFERRED_GAME_KEY);
+    if (VALID_GAMES.includes(v)) return v;
+  } catch { /* storage unavailable */ }
+  return 'buraco';
+};
+
 const PRIMARY_ACTION = { padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '1em', border: 'none' };
 const CARD_VALUE_INPUT = { width: '30px', padding: '1px', fontSize: '0.9em' };
 
@@ -112,6 +122,21 @@ const LangSwitcher = ({ t, lang, setLang, availableLangs, langLabel }) => (
       style={{ background: '#222', color: 'white', border: '1px solid #444', borderRadius: '5px', padding: '4px 6px', cursor: 'pointer' }}
     >
       {availableLangs.map(l => <option key={l} value={l}>{langLabel(l)}</option>)}
+    </select>
+  </div>
+);
+
+const GameSwitcher = ({ t, preferredGame, onChange }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#aaa', fontSize: '0.85em' }}>
+    <span>🎯 {t('lounge.preferredGame')}</span>
+    <select
+      value={preferredGame}
+      onChange={e => onChange(e.target.value)}
+      style={{ background: '#222', color: 'white', border: '1px solid #444', borderRadius: '5px', padding: '4px 6px', cursor: 'pointer' }}
+    >
+      <option value="buraco">Buraco</option>
+      <option value="mighty">{t('mighty.title')}</option>
+      <option value="euchre">{t('euchre.title')}</option>
     </select>
   </div>
 );
@@ -349,8 +374,20 @@ function LogPanel({ apiBase, collapsed, onToggle }) {
 const App = () => {
   const { t, tN, lang, setLang, availableLangs, langLabel } = useT();
   const [view, setView] = useState('lounge'); 
+  const [preferredGame, setPreferredGame] = useState(getPreferredGame);
+  const persistPreferredGame = (game) => {
+    const g = VALID_GAMES.includes(game) ? game : 'buraco';
+    setPreferredGame(g);
+    setGameName(g);
+    try { localStorage.setItem(PREFERRED_GAME_KEY, g); } catch { /* storage unavailable */ }
+  };
   const [gameName, setGameName] = useState(() => {
-    try { return new URLSearchParams(window.location.search).get('game') === 'mighty' ? 'mighty' : 'buraco'; } catch { return 'buraco'; }
+    try {
+      const q = new URLSearchParams(window.location.search).get('game');
+      if (q === 'mighty') return 'mighty';
+      if (q === 'euchre') return 'euchre';
+    } catch { /* ignore */ }
+    return getPreferredGame();
   });
   const [matches, setMatches] = useState([]);
   const [matchID, setMatchID] = useState(null);
@@ -391,7 +428,7 @@ const App = () => {
 
   const [newTourney, setNewTourney] = useState({
     name: '', type: 'team', private: false,
-    game: 'buraco',
+    game: getPreferredGame(),
     ...DEFAULT_GAME_CONFIG,
     shuffleMode: 'every-round', shuffleEvery: 2, shufflePoints: 1000,
     players: 'Diana, Marcia, Rafa, Monica',
@@ -1918,7 +1955,7 @@ const App = () => {
             <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <h3 style={{ margin: 0, color: '#4da6ff' }}>{t('tourney.general')}</h3>
               <label>{t('tourney.gameLabel')}
-                <select value={newTourney.game} onChange={e => handleTourneyGameChange(e.target.value)} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
+                <select value={newTourney.game} onChange={e => { handleTourneyGameChange(e.target.value); persistPreferredGame(e.target.value); }} style={{ padding: '10px', borderRadius: '5px', border: 'none' }}>
                   <option value="buraco">Buraco</option>
                   <option value="mighty">{t('mighty.title')}</option>
                   <option value="euchre">{t('euchre.title')}</option>
@@ -2101,9 +2138,10 @@ const App = () => {
           )}
           <LangSwitcher t={t} lang={lang} setLang={setLang} availableLangs={availableLangs} langLabel={langLabel} />
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-          <button onClick={() => setShowQuickGamePopup(true)} style={{ ...PRIMARY_ACTION, background: '#e63946', color: 'white' }}> {t('lounge.quickGame')}</button>
-          <button onClick={() => setView('tournaments')} style={{ ...PRIMARY_ACTION, background: '#8a2be2', color: 'white' }}>{t('lounge.newTournament')}</button>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
+          <button onClick={() => { setGameName(preferredGame); setShowQuickGamePopup(true); }} style={{ ...PRIMARY_ACTION, background: '#e63946', color: 'white' }}> {t('lounge.quickGame')}</button>
+          <button onClick={() => { handleTourneyGameChange(preferredGame); setView('tournaments'); }} style={{ ...PRIMARY_ACTION, background: '#8a2be2', color: 'white' }}>{t('lounge.newTournament')}</button>
+          <GameSwitcher t={t} preferredGame={preferredGame} onChange={persistPreferredGame} />
         </div>
       </div>
       {showQuickGamePopup && (
@@ -2112,7 +2150,7 @@ const App = () => {
             <h2 style={{ color: '#e63946', marginTop: 0 }}>{t('lounge.openQuick.configTitle')}</h2>
 
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ddd', marginBottom: '15px' }}>{t('lounge.game')}
-              <select value={gameName} onChange={e => setGameName(e.target.value)} style={{ padding: '5px', marginLeft: '10px' }}>
+              <select value={gameName} onChange={e => persistPreferredGame(e.target.value)} style={{ padding: '5px', marginLeft: '10px' }}>
                 <option value="buraco">Buraco</option>
                 <option value="mighty">{t('mighty.title')}</option>
                 <option value="euchre">{t('euchre.title')}</option>
