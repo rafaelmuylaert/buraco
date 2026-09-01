@@ -201,7 +201,7 @@ export function isTrumpCard(card, trump) {
 
 /**
  * Compute legal plays for a player.
- * Must follow suit if possible; bowlers can be played freely.
+ * Must follow suit if possible; bowlers are treated as trump for following-suit.
  */
 export function getLegalPlays(G, playerID) {
   const hand = G.hands && G.hands[playerID];
@@ -216,25 +216,19 @@ export function getLegalPlays(G, playerID) {
   }
 
   const leadCard = trick[0].card;
-  const ledSuit = getSuit(leadCard);
 
-  const canFollow = hand.some((c) => getSuit(c) === ledSuit);
+  // When a bowler is led, players must follow trump (bowlers = trump for suit purposes)
+  const leadIsBowler = isBowler(leadCard, trump);
+  const followSuit = leadIsBowler ? trump : getSuit(leadCard);
+
+  const canFollow = hand.some((c) => getSuit(c) === followSuit);
   if (!canFollow) {
-    // Can play anything (bowl anything, trump anything, off-suit anything)
+    // Void in led suit — can play anything (trump, bowlers, off-suit)
     return [...hand];
   }
 
-  // Must follow suit, but can overtrump with trump or bowler
-  return hand.filter((c) => {
-    const cSuit = getSuit(c);
-    const isTrump = isTrumpCard(c, trump);
-    const bwl = isBowler(c, trump);
-
-    if (bwl) return true; // bowlers can be played anywhere
-    if (cSuit === ledSuit) return true;
-    if (isTrump) return true; // may overtrump
-    return false;
-  });
+  // Must follow suit — only cards of the led suit are legal
+  return hand.filter((c) => getSuit(c) === followSuit);
 }
 
 // ── Bidding helpers ─────────────────────────────────────────────────────────

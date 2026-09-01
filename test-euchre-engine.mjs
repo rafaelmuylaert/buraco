@@ -239,6 +239,53 @@ const lpL3 = getLegalPlays(lpG3, '0');
 // Can play: spade(0=led suit) or trump(0=trump). 7,8 are hearts (neither led suit nor trump).
 assert(lpL3.length === 1, 'follow with mixed: only 1 legal (led suit)');
 
+// Bug fix: Left Bowler led → players must follow trump (not Left Bowler's actual suit)
+// J♣ (card 14) is Left Bowler when spades trump. Led suit should be spades (trump).
+const lpG4 = { trump: 0, trick: [{ player: '0', card: 14 }], hands: { '0': [2, 5, 6, 7, 12] } };
+// Hand: 2=J♠(Right Bowler), 5=A♠, 6=9♥, 7=10♥, 12=9♣
+// Led J♣ (Left Bowler, spades trump) → follow trump (spades)
+// Can play: 2(J♠=trump), 5(A♠=trump). Cannot play: 6,7♥(not trump), 12♣(not trump)
+const lpL4 = getLegalPlays(lpG4, '0');
+assert(lpL4.length === 2, 'Left Bowler led: follow trump — 2 cards legal');
+assert(lpL4.includes(2) && lpL4.includes(5), 'Left Bowler led: only spades (trump) legal');
+
+// Bug fix: bowlers cannot be played when you have the led suit
+// Spades trump, diamonds led (card 18=9♦). Hand has 9♦, J♠(Right Bowler), 10♦
+const lpG5 = { trump: 0, trick: [{ player: '0', card: 18 }], hands: { '0': [18, 19, 2, 20] } };
+// Hand: 18=9♦(led), 19=10♦, 2=J♠(Right Bowler), 20=J♦(Left Bowler)
+// Led diamond → must follow diamonds. Cannot play J♠(spades/trump) or J♦(diamonds=bowler but has led suit)
+const lpL5 = getLegalPlays(lpG5, '0');
+assert(lpL5.length === 3, 'have led suit: only diamonds legal, not bowlers or trump');
+assert(lpL5.includes(18) && lpL5.includes(19) && lpL5.includes(20), 'diamonds (18,19,20) legal');
+assert(!lpL5.includes(2), 'Right Bowler not legal when have led suit');
+
+// Bug fix: void in led suit → can play anything (trump, bowlers, off-suit)
+// Spades trump, hearts led (card 6=9♥). Hand has 9♦, J♠(Right Bowler), A♠
+const lpG6 = { trump: 0, trick: [{ player: '0', card: 6 }], hands: { '0': [18, 2, 5, 12] } };
+// Hand: 18=9♦, 2=J♠(Right Bowler), 5=A♠, 12=9♣
+// Led heart → void in hearts → can play anything
+const lpL6 = getLegalPlays(lpG6, '0');
+assert(lpL6.length === 4, 'void in led suit: all cards legal');
+assert(lpL6.length === lpG6.hands['0'].length, 'void: no restrictions');
+
+// Bug fix: Right Bowler led → follow trump
+// J♠ (card 2) is Right Bowler when spades trump
+const lpG7 = { trump: 0, trick: [{ player: '0', card: 2 }], hands: { '0': [5, 6, 7, 8, 9] } };
+// Hand: 5=A♠(trump), 6=9♥, 7=10♥, 8=J♥, 9=Q♥
+// Led J♠ (Right Bowler, spades trump) → follow trump (spades)
+// Can play: 5(A♠). Cannot play: 6,7,8,9♥(not trump)
+const lpL7 = getLegalPlays(lpG7, '0');
+assert(lpL7.length === 1, 'Right Bowler led: follow trump — 1 card legal');
+assert(lpL7.includes(5), 'Right Bowler led: A♠ (trump) legal');
+
+// Bug fix: bowler not in hand, can't follow suit → play anything
+// Spades trump, diamonds led (card 18=9♦). Hand has A♥, K♥, A♠
+const lpG8 = { trump: 0, trick: [{ player: '0', card: 18 }], hands: { '0': [11, 10, 5] } };
+// Hand: 11=A♥, 10=K♥, 5=A♠(trump)
+// Led diamond → no diamonds → can play anything
+const lpL8 = getLegalPlays(lpG8, '0');
+assert(lpL8.length === 3, 'void in led: all cards legal including trump');
+
 // ═══════════════════════════════════════════
 // 10. Bid beating
 // ═══════════════════════════════════════════
