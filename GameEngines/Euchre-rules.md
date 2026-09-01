@@ -67,48 +67,52 @@ becomes trump for the round **if** someone picks it up during bidding.
   as the upcard (with 23 remaining in the stock).
 - The dealer is chosen at random and rotates clockwise each hand.
 
-## Bidding 
+## Bidding
 
 Bidding determines the trump suit. Players decide clockwise whether to pick up the upcard, or pass.
 The first to bid is the player after the dealer.
 
-### Pick up (accept trump)
-- A player says **"pick up"** (or "play the upcard"), accepting the upcard's suit
-  as trump.
-- The picker becomes the **declarer** and picks up the upcard.
-- The picker's team then plays to win the hand.
+### Round 1: Pick up or pass
 
-### Pass
+- A player may say **"pick up"** (or "play the upcard"), accepting the upcard's suit as trump.
+  The picker becomes the **declarer** and the game proceeds to the call phase.
 - A player may **pass** during bidding, declining to pick up the upcard.
 - Bidding proceeds clockwise until someone picks up the upcard.
 
-### All pass → redeal
-- If all four players pass, the upcard is hidden, and a second bidding round happens where each player can choose a suit to become trump (except for the suit of the upcard).
-- The player that chooses a suit becomes the **declarer**, no card is picked up or discarded.
-- If all players pass, the last player to bid must choose a trump and become the **declarer**.
+### All pass → Round 2: Name trump
 
-### Play alone
-- The **declarer** may declare **"alone"** (playing solo), declaring that they will win
-  the hand without any partner. This doubles the stakes if the player gets all tricks.
-- In the engine, alone is announced during the call phase. With the current
-  positional partnership (see below) it can never actually become true: the
-  `alone`/`openAlone` state is kept for compatibility but is always false.
+- If all four players pass in Round 1, the game enters **bidRound2**.
+- Players bid clockwise from dealer+1. Any player may **name a suit** as trump (except the upcard's suit).
+  The first to name a suit becomes the **declarer**.
+- If all players pass until it reaches the dealer (the last to act), the dealer is **forced** to become
+  the declarer and must name a trump suit.
 
+### Play alone (open)
+
+- After becoming declarer (by picking up or naming trump), the declarer may declare **"alone"** (open solo).
+- This is announced during the **call phase** via `declareSoloMove`.
+- The positional partner's hand is emptied — they play no cards but still receive points.
+- Scoring: solo make = +1 each, solo march = +4 each, solo euchred = defenders +2 each.
 
 ## Call phase (declarer's actions)
 
-After the bidding ends, the declarer (who picked up or was the last to act) has
-the option to:
+After the bidding ends, the declarer has the following options:
 
-1. **Pick up** — If the bidding ended in the first card (when there was an upcard), the upcard is added to the **declarer** hand and they must choose one card to discard.
-   
-3. **Play alone** — announce solo play. In the engine, alone is tracked via the
-   `openAlone` flag (always false under the current positional partnership).
+1. **Declare alone** — The declarer may announce solo play at any point before play begins.
+   This is done via `declareSoloMove`. The partner's hand is emptied.
+
+2. **Pick up the upcard** (Round 1 only) — If the upcard was picked up during bidding,
+   the upcard is added to the declarer's hand and they **must choose one card to discard**
+   via `chooseDiscardMove`. The discarded card goes to the kitty.
+
+3. **Continue to play** (Round 2 only) — If no upcard was picked up (Round 2 bidding),
+   the declarer skips the discard step via `continueCallMove` and play begins immediately.
 
 When the declarer picks up the upcard:
 - The upcard's suit becomes trump.
 - The upcard is stored as `G.calledCard` (informational only).
 - One card from the declarer's hand is discarded.
+- The game then transitions to the play phase.
 
 ### Positional partnership
 

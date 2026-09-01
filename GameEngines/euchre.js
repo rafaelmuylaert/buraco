@@ -25,6 +25,7 @@
 import {
   createEngine, SafeTurnOrder, playerView, computeTrickWinner,
   dealFromShuffled, clockwiseOrder, createDeck, shuffleDeck,
+  playersNotPassed, nextUnpassed,
 } from './TrickGames.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -154,7 +155,8 @@ export function isBowler(card, trump) {
 
 /**
  * Card value for trick resolution. Higher wins.
- * Order (high to low): Right Bowler > Left Bowler > A > 10 > K > Q > 9 > 8
+ * Order (high to low): Right Bowler > Left Bowler > A > K > Q > J > 10 > 9
+ * (24-card deck ranks 9,10,J,Q,K,A; rankIdx 0=9 … 5=A)
  */
 export function cardValue(card, trump) {
   if (isRightBowler(card, trump)) return 100;
@@ -262,42 +264,34 @@ export function computeGameOver(G, ctx) {
   if (!G) return undefined;
   const numPlayers = ctx.numPlayers;
   const declarer = G.declarer;
-  const partner = computePartner(G, numPlayers);
+  const isSolo = !!G.openAlone;
+  const partner = computePartner(G, numPlayers); // positional partner (opposite seat)
 
-  // Determine teams
-  let team;
-  let defenders;
-  if (partner == null || partner === declarer) {
-    // Solo (open alone or secret solo)
-    team = [declarer];
-    defenders = [];
-    for (let i = 0; i < numPlayers; i++) {
-      if (String(i) !== declarer) defenders.push(String(i));
-    }
-  } else {
-    team = [declarer, partner];
-    defenders = [];
-    for (let i = 0; i < numPlayers; i++) {
-      const p = String(i);
-      if (p !== declarer && p !== partner) defenders.push(p);
-    }
+  // Scoring team is always declarer + positional partner.
+  // Defenders are the two players who are neither (in solo the partner plays
+  // no cards but still banks the declarer's points; the two *adjacent* seats
+  // defend).
+  const team = [declarer, partner];
+  const defenders = [];
+  for (let i = 0; i < numPlayers; i++) {
+    const p = String(i);
+    if (p !== declarer && p !== partner) defenders.push(p);
   }
 
-  // Count tricks per side (each trick = 1 point toward making contract)
-  const teamTricks = team.reduce((sum, p) => sum + (G.won[p] || []).length, 0);
+  // Tricks won: solo counts only the declarer (partner was skipped);
+  // partnership counts declarer + partner.
+  const teamTricks = isSolo
+    ? (G.won[declarer] || []).length
+    : (G.won[declarer] || []).length + (G.won[partner] || []).length;
   const defenderTricks = defenders.reduce((sum, p) => sum + (G.won[p] || []).length, 0);
-  const totalTricks = teamTricks + defenderTricks; // should equal numPlayers
 
-  // Partnership scoring (pure trick-based, no point-cards).
-  // Each seat on a side gets the full side amount (not zero-sum):
-  //   Make (3-4 tricks):  declarer + partner each +1, defenders 0
-  //   March (5 tricks):   declarer + partner each +2, defenders 0
-  //   Euchred (<3):       defenders each +2, team 0
-  const isSolo = team.length === 1;
-  const baseScore = teamTricks === 5 ? 2 : (teamTricks >= 3 ? 1 : 0);
-
-  const contractMade = baseScore > 0;
+  // Same thresholds both ways: make = 3+, march = all 5.
+  //   Non-solo : make +1, march +2 (each of declarer & partner)
+  //   Solo     : make +1, march +4 (each of declarer & partner)
+  //   Euchred  : defenders +2 each
+  const contractMade = teamTricks >= 3;
   const march = teamTricks === 5;
+  const baseScore = march ? (isSolo ? 4 : 2) : (contractMade ? 1 : 0);
 
   const scores = {};
   if (contractMade) {
@@ -337,22 +331,48 @@ export function computePartner(G, numPlayers) {
 // ── Call phase moves ────────────────────────────────────────────────────────
 
 /**
- * Pick up the upcard (accept it as trump).
- * In Euchre, anyone can pick up - they become the declarer by doing so.
+ * Pick up the upcard (round 1 only). The picker becomes declarer; the upcard
+ * suit is trump and the full kitty joins their hand (one discard owed).
  */
 export function pickUpMove({ G, ctx, events }) {
   const p = ctx.currentPlayer;
   // Use strict null/undefined check (0 is a valid trump suit index for spades)
   if (G.upcardSuit == null) return 'INVALID_MOVE';
+  if (G.upcardPicked) return 'INVALID_MOVE';
+  if (G.bidRound && G.bidRound >= 2) return 'INVALID_MOVE';
 
   G.declarer = p;
   G.trump = G.upcardSuit;
   G.calledCard = G.upcard;
-  events.endPhase('play');
+  G.upcardPicked = true;
+  events.endPhase('call');
 }
 
 /**
- * Pass on the upcard (don't pick it up).
+ * Name a suit as trump in round 2 (any suit except the upcard's). The caller
+ * becomes declarer, takes the upcard suit *not*, and no kitty discard is owed.
+ */
+export function nameTrumpMove({ G, ctx, events }, suit) {
+  const p = ctx.currentPlayer;
+  const s = Number(suit);
+  if (!Number.isInteger(s) || s < 0 || s >= 4) return 'INVALID_MOVE';
+  if (s === G.upcardSuit) return 'INVALID_MOVE';
+  if (G.bidRound != null && G.bidRound < 2) return 'INVALID_MOVE';
+
+  G.declarer = p;
+  G.trump = s;
+  G.calledCard = null;
+  G.upcardPicked = false;
+  events.endPhase('call');
+}
+
+/**
+ * Pass in a bidding round.
+ *  - Round 1: a player who has not passed can pass. If all have passed the
+ *    game goes to round 2 (no redeal). Passing cannot win the contract, so a
+ *    player with 0 passed would be declared declarer immediately.
+ *  - Round 2: passing players until the dealer (4th action) — the dealer is
+ *    then the forced declarer and must nameTrump (stays in bidRound2).
  */
 export function passBidMove({ G, ctx, events }) {
   const p = ctx.currentPlayer;
@@ -360,30 +380,84 @@ export function passBidMove({ G, ctx, events }) {
   if (G.passed[p]) return 'INVALID_MOVE';
   G.passed[p] = true;
 
-  // Count remaining active players
-  const activePlayers = [];
-  for (let i = 0; i < ctx.numPlayers; i++) {
-    if (!G.passed[String(i)]) activePlayers.push(String(i));
+  const n = ctx.numPlayers;
+  const unpassed = playersNotPassed(G, n);
+  const dealer = G.dealer != null ? G.dealer : String(0);
+
+  if (G.bidRound === 2) {
+    // The last one left is the dealer → forced declarer; must nameTrump.
+    if (unpassed.length === 1 && unpassed[0] === dealer) {
+      G.declarer = dealer;
+      // stay in bidRound2 — declarer calls nameTrump
+      return;
+    }
+    const next = nextUnpassed(G, n, p);
+    if (next == null || next === p) return; // safety: nothing left
+    events.endTurn({ next });
+    return;
   }
 
-  // If only one player hasn't passed, they become declarer
-  if (activePlayers.length === 1) {
-    G.declarer = activePlayers[0];
+  // Round 1
+  if (unpassed.length === 0) {
+    // All passed — go to round 2, do not redeal
+    events.endPhase('bidRound2');
+    return;
+  }
+  if (unpassed.length === 1) {
+    // Only one left → they become declarer (auto-pickup)
+    G.declarer = unpassed[0];
     G.trump = G.upcardSuit;
     G.calledCard = G.upcard;
-    events.endPhase('play');
+    G.upcardPicked = true;
+    events.endPhase('call');
     return;
   }
+  const next = nextUnpassed(G, n, p);
+  if (next == null) return;
+  events.endTurn({ next });
+}
 
-  // All players passed — misdeal (redeal)
-  if (activePlayers.length === 0) {
-    // The engine handles redeal in the shared passMove, but since we're
-    // using custom passBid, we need to trigger a redeal here
-    events.endTurn();
-    return;
-  }
+/**
+ * Declare alone (open) during the call phase. Only for the declarer, before
+ * play begins. The partner's hand is emptied here.
+ */
+export function declareSoloMove({ G, ctx, events }) {
+  const p = ctx.currentPlayer;
+  if (p !== G.declarer) return 'INVALID_MOVE';
+  if (G.openAlone) return 'INVALID_MOVE';
+  G.openAlone = true;
+  // Empty the positional partner's hand so they play nothing in the play phase
+  const partner = computePartner(G, G.numPlayers || 4);
+  if (partner) G.hands[partner] = [];
+}
 
-  events.endTurn();
+/**
+ * Discard a card from the declarer's hand (mandatory when the upcard was
+ * picked). The card goes to the kitty. Advances to play.
+ */
+export function chooseDiscardMove({ G, ctx, events }, card) {
+  const p = ctx.currentPlayer;
+  if (p !== G.declarer) return 'INVALID_MOVE';
+  const c = Number(card);
+  const hand = G.hands[p] || [];
+  if (!Number.isInteger(c) || !hand.includes(c)) return 'INVALID_MOVE';
+  if (!G.upcardPicked) return 'INVALID_MOVE';
+
+  hand.splice(hand.indexOf(c), 1);
+  G.kitty = [c];
+  G.upcardDiscarded = true;
+  events.endPhase('play');
+}
+
+/**
+ * Skip the discard step (only when no discard is owed, i.e. round 2 / no
+ * upcard pickup). Advances to play.
+ */
+export function continueCallMove({ G, ctx, events }) {
+  const p = ctx.currentPlayer;
+  if (p !== G.declarer) return 'INVALID_MOVE';
+  if (G.upcardPicked) return 'INVALID_MOVE';
+  events.endPhase('play');
 }
 
 // ── Deck sizing ─────────────────────────────────────────────────────────────
@@ -407,19 +481,19 @@ export function createEuchreGame(options = {}) {
     winPoints = 5,
   } = options;
 
-  // Card width depends on deck size
-  const cardWidth = getDeckWidth(deckSize);
+  // Solo-partner skip: the positional partner plays no cards when alone.
+  const soloPartner = (G, ctx) =>
+    G.openAlone ? computePartner(G, ctx.numPlayers) : null;
 
-  return createEngine({
+  const game = createEngine({
     name: 'euchre',
     minPlayers: 2,
     maxPlayers: 4,
     deckSize,
     cardsPerHand: 5,
-    kittySize: 1, // In Euchre, only 1 upcard
-    numTricks: 5, // 5 tricks per hand (one per card)
+    kittySize: 1,
+    numTricks: 5,
 
-    // Core card functions
     createDeck: createEuchreDeck,
     getSuit,
     getRank,
@@ -428,32 +502,31 @@ export function createEuchreGame(options = {}) {
     isPointCard,
     getLegalPlays,
 
-    // No joker/mighty/ripper in Euchre (bowlers are different)
     mightyCardFor: null,
     isMighty: null,
     ripperCardFor: null,
     isRipper: null,
 
-    // Bidding
     bidding: {
       minBid: 1,
-      maxBid: 10, // "Beauty 10"
+      maxBid: 10,
       bidBeats,
     },
 
-    // Scoring
     computeGameOver,
     computePartner,
 
-    // Call phase: declarer picks up the upcard or passes
     callPhase: {
       moves: {
         pickUp: pickUpMove,
         passBid: passBidMove,
+        nameTrump: nameTrumpMove,
+        declareSolo: declareSoloMove,
+        chooseDiscard: chooseDiscardMove,
+        continueCall: continueCallMove,
       },
     },
 
-    // Bidding phase: Euchre uses pickUp/passBid during bidding
     biddingPhase: {
       moves: {
         pickUp: pickUpMove,
@@ -461,15 +534,142 @@ export function createEuchreGame(options = {}) {
       },
     },
 
-    // Additional setup: upcard (last card dealt becomes the upcard)
-    setup: ({ ctx, random, hands, kitty, deckSize: dSize }, setupData = {}) => {
-      // kitty has exactly 1 card for Euchre
+    // New: round-2 bidding phase (clockwise from dealer+1)
+    playPhase: {
+      skipPlayer: soloPartner,
+    },
+
+    setup: ({ ctx, random, hands, kitty }, setupData = {}) => {
       const upcard = kitty && kitty.length > 0 ? kitty[0] : 0;
       const upcardSuit = getSuit(upcard);
-      // Remove upcard from kitty
       return { upcard, upcardSuit };
     },
   });
+
+  // ── Post-process: add bidRound2 phase, override call and play ────────────
+
+  const dealerPlus1 = (G) => {
+    const n = G.numPlayers || 4;
+    return String((Number(G.dealer) + 1) % n);
+  };
+
+  // bidRound2: turn order = clockwise from dealer+1; reset G.passed on begin
+  game.phases.bidRound2 = {
+    start: false,
+    next: 'call',
+    turn: {
+      order: SafeTurnOrder(({ G }) => clockwiseOrder(G.numPlayers || 4, dealerPlus1(G))),
+    },
+    onBegin: ({ G }) => {
+      G.passed = {};
+      G.bidRound = 2;
+      // Dealer bids first (last to act), so dealer+1 leads the round
+      // Reset declarer to null so nameTrump is required
+      G.declarer = null;
+    },
+    moves: {
+      nameTrump: nameTrumpMove,
+      passBid: passBidMove,
+    },
+  };
+
+  // Override call phase: handle solo partner emptying + kitty only when picked
+  game.phases.call = {
+    next: 'play',
+    turn: {
+      order: SafeTurnOrder(({ G }) => {
+        if (G.openAlone) {
+          const partner = computePartner(G, G.numPlayers || 4);
+          return partner ? [String(G.declarer), partner] : [String(G.declarer)];
+        }
+        return [String(G.declarer)];
+      }),
+    },
+    onBegin: ({ G }) => {
+      // Kitty goes to declarer only when the upcard was picked
+      if (G.upcardPicked && G.kitty && G.kitty.every((c) => c != null)) {
+        G.hands[G.declarer] = [...G.hands[G.declarer], ...G.kitty];
+        G.kitty = Array(1).fill(null);
+      }
+    },
+    moves: {
+      declareSolo: declareSoloMove,
+      chooseDiscard: chooseDiscardMove,
+      continueCall: continueCallMove,
+    },
+  };
+
+  // Override play phase: leader = dealer+1 (per rules doc)
+  game.phases.play = {
+    turn: {
+      order: SafeTurnOrder(({ G }) =>
+        clockwiseOrder(G.numPlayers || 4, G.leader || G.declarer || '0')),
+    },
+    onBegin: ({ G }) => {
+      G.trick = [];
+      G.namedSuit = null;
+      G.trickNumber = 1;
+      // Per rules: the player after the dealer leads, not the declarer
+      G.leader = dealerPlus1(G);
+      for (let i = 0; i < (G.numPlayers || 4); i++) G.won[String(i)] = [];
+    },
+    moves: { playCard: (args, card) => playCardMoveOverride(args, card) },
+  };
+
+  return game;
+}
+
+/**
+ * The playCard move with solo-partner skip support.
+ * When G.openAlone, the positional partner's turn is skipped entirely.
+ */
+function playCardMoveOverride({ G, ctx, events }, card) {
+  const p = ctx.currentPlayer;
+  const n = ctx.numPlayers;
+
+  // Solo: skip the partner's turn (partner has empty hand, plays nothing)
+  if (G.openAlone && p === computePartner(G, n)) {
+    const order = clockwiseOrder(n, G.leader).filter((pl) => pl !== computePartner(G, n));
+    const idx = order.indexOf(p);
+    events.endTurn({ next: order[(idx + 1) % order.length] });
+    return;
+  }
+
+  const hand = G.hands[p];
+  if (!hand || !hand.includes(card)) return 'INVALID_MOVE';
+
+  const legal = getLegalPlays(G, p);
+  if (!legal.includes(card)) return 'INVALID_MOVE';
+
+  hand.splice(hand.indexOf(card), 1);
+  G.trick.push({ player: p, card });
+
+  const order = G.openAlone
+    ? clockwiseOrder(n, G.leader).filter((pl) => pl !== computePartner(G, n))
+    : clockwiseOrder(n, G.leader);
+
+  if (G.trick.length === order.length) {
+    const trickR = {
+      isTrumpCard: (c, t) => isTrumpCard(c, t),
+      cardValue,
+      getSuit,
+      isMighty: null, isJoker: null, isRipper: null,
+      mightyCardId: null, jokerCardId: null, ripperCardId: null,
+    };
+    const winner = computeTrickWinner(G.trick, G.trump, G.trickNumber, G.namedSuit, trickR);
+    if (!G.won[winner]) G.won[winner] = [];
+    for (const t of G.trick) G.won[winner].push(t.card);
+
+    G.trick = [];
+    G.namedSuit = null;
+    G.trickNumber += 1;
+    G.leader = winner;
+    events.endTurn({ next: winner });
+    return;
+  }
+
+  const idx = order.indexOf(p);
+  events.endTurn({ next: order[(idx + 1) % order.length] });
 }
 
 // ── Re-exports ──────────────────────────────────────────────────────────────

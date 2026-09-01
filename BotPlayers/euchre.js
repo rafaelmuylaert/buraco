@@ -71,6 +71,26 @@ function makeIface(client, botName, playerID) {
       return runMove(() => client.moves.passBid(),
         (st) => st.ctx.phase !== 'call');
     },
+    nameTrump: (suit) => {
+      console.log(`[EUCHRE] ${botName} => nameTrump suit=${suit}`);
+      return runMove(() => client.moves.nameTrump(suit),
+        (st) => st.ctx.phase === 'call');
+    },
+    declareSolo: () => {
+      console.log(`[EUCHRE] ${botName} => declareSolo`);
+      return runMove(() => client.moves.declareSolo(),
+        (st) => st.G.openAlone === true);
+    },
+    chooseDiscard: (card) => {
+      console.log(`[EUCHRE] ${botName} => chooseDiscard ${card}`);
+      return runMove(() => client.moves.chooseDiscard(card),
+        (st) => st.ctx.phase === 'play');
+    },
+    continueCall: () => {
+      console.log(`[EUCHRE] ${botName} => continueCall`);
+      return runMove(() => client.moves.continueCall(),
+        (st) => st.ctx.phase === 'play');
+    },
     playCard: (card) => {
       console.log(`[EUCHRE] ${botName} => playCard ${card}`);
       return runMove(() => client.moves.playCard(card),
@@ -142,6 +162,67 @@ export function decideBid(hand, upcardSuit, upcard) {
   if (suitCards.length >= 3) return { pickUp: true }; // decent length
 
   return { pickUp: false };
+}
+
+export function decideNameTrump(hand, upcardSuit) {
+  // In round 2, pick the best suit that's NOT the upcardSuit
+  // Score each suit by hand strength in that suit
+  const scores = [];
+  for (let s = 0; s < 4; s++) {
+    if (s === upcardSuit) continue; // can't name upcard suit
+    let score = 0;
+    for (const c of hand) {
+      if (getSuit(c) === s) {
+        score += CARD_STRENGTH(c, s);
+      }
+    }
+    scores[s] = score;
+  }
+
+  // Also consider bowlers in non-upcard suits
+  for (const c of hand) {
+    const suit = getSuit(c);
+    if (suit !== upcardSuit) {
+      if (isRightBowler(c, suit)) scores[suit] += 6;
+      if (isLeftBowler(c, suit)) scores[suit] += 5;
+    }
+  }
+
+  let bestSuit = -1, bestScore = -1;
+  for (let s = 0; s < 4; s++) {
+    if (scores[s] > bestScore) {
+      bestScore = scores[s];
+      bestSuit = s;
+    }
+  }
+
+  // Only name trump if we have some strength
+  return bestSuit >= 0 && bestScore >= 8 ? bestSuit : -1;
+}
+
+export function decideDeclareSolo(hand, upcardSuit) {
+  // Declare solo if hand is very strong (can win all 5 tricks alone)
+  const strength = handStrength(hand, upcardSuit);
+  const bowlers = hand.filter((c) => isBowler(c, upcardSuit)).length;
+  // Solo if: very strong hand or has both bowlers
+  return strength >= 30 || bowlers >= 2;
+}
+
+export function decideChooseDiscard(hand, upcardSuit) {
+  // Discard the weakest non-trump card, or weakest card overall if no trumps
+  const trumpCards = hand.filter((c) => isTrumpCard(c, upcardSuit));
+  const offSuitCards = hand.filter((c) => !isTrumpCard(c, upcardSuit));
+
+  if (offSuitCards.length > 0) {
+    // Discard lowest value off-suit
+    return offSuitCards.sort((a, b) => cardValue(a, upcardSuit) - cardValue(b, upcardSuit))[0];
+  }
+  // No off-suit cards, discard lowest trump
+  if (trumpCards.length > 0) {
+    return trumpCards.sort((a, b) => cardValue(a, upcardSuit) - cardValue(b, upcardSuit))[0];
+  }
+  // Fallback: return first card
+  return hand[0];
 }
 
 function chooseLead(G, playerID, legal) {
@@ -282,7 +363,7 @@ async function startBotClient(matchID, playerID, credentials, botName) {
       const me = String(playerID);
       const hand = G.hands[me] || [];
 
-      if (phase === 'bidding' || phase === 'call') {
+      if (phase === 'bidding') {
         const upcard = G.upcard;
         if (upcard != null) {
           const decision = decideBid(hand, G.upcardSuit || getSuit(upcard), upcard);
@@ -292,6 +373,53 @@ async function startBotClient(matchID, playerID, credentials, botName) {
           // No upcard yet, skip
           await sleep(1000);
         }
+      } else if (phase === 'bidRound2') {
+        // Round 2: name a suit or pass
+        if (G.declarer === me) {
+          // I'm the declarer, need to nameTrump
+          const trump = decideNameTrump(hand, G.upcardSuit || 0);
+          if (trump >= 0) {
+            await iface.nameTrump(trump);
+          } else {
+            // No good suit, pass (will force declarer status)
+            await iface.passBid();
+          }
+        } else {
+          // Not declarer yet, pass
+          await iface.passBid();
+        }
+      } else if (phase === 'call') {
+        // Check if I'm the declarer
+        if (G.declarer === me) {
+          // Declarer's turn in call phase
+          if (G.openAlone === true) {
+            // Already declared solo, need to discard
+            if (G.upcardPicked && G.kitty && G.kitty.length > 0) {
+              const discard = decideChooseDiscard(hand, G.trump);
+              await iface.chooseDiscard(discard);
+            } else if (!G.upcardPicked) {
+              // No discard owed, continue to play
+              await iface.continueCall();
+            }
+          } else if (!G.openAlone && !G.upcardPicked && G.calledCard != null) {
+            // Can declare solo
+            if (decideDeclareSolo(hand, G.upcardSuit || 0)) {
+              await iface.declareSolo();
+            } else if (!G.upcardPicked) {
+              // No discard owed, continue to play
+              await iface.continueCall();
+            }
+          } else if (G.upcardPicked) {
+            // Upcard was picked, need to discard
+            const discard = decideChooseDiscard(hand, G.trump);
+            await iface.chooseDiscard(discard);
+          }
+        } else if (!G.openAlone) {
+          // Not declarer and not solo — this shouldn't happen normally
+          // But if it does, pass
+          await iface.passBid();
+        }
+        // If openAlone and I'm not the declarer, I'm the solo partner — do nothing
       } else if (phase === 'play') {
         const { card } = choosePlay(G, me);
         if (card !== undefined) await iface.playCard(card);

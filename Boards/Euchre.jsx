@@ -176,22 +176,87 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
     </div>
   );
 
-  // ── Call phase (declarer picks up or passes) ────────────────────────────
+  // ── Round 2 bidding UI (name trump) ────────────────────────────────────
+
+  const suitNames = [t('euchre.suit.spades'), t('euchre.suit.hearts'), t('euchre.suit.clubs'), t('euchre.suit.diamonds')];
+  const suitColors = ['#111', '#d03030', '#111', '#d03030'];
+  const suitSymbols = ['♠', '♥', '♣', '♦'];
+
+  const bidRound2UI = (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+      <div style={{ color: 'white', fontSize: '0.9em' }}>
+        {isMyTurn ? t('euchre.status.yourNameTrump') : t('euchre.status.nameTrump', { name: playerName(ctx.currentPlayer) })}
+      </div>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+        {suitNames.map((name, s) => {
+          const disabled = s === G.upcardSuit || !isMyTurn || G.declarer !== me;
+          return (
+            <button key={s} onClick={() => moves.nameTrump(s)} disabled={disabled} style={{
+              padding: '8px 16px', borderRadius: '6px',
+              border: `2px solid ${suitColors[s]}`,
+              background: s === G.upcardSuit ? '#666' : (disabled ? '#444' : '#1a3a28'),
+              color: s === G.upcardSuit ? '#999' : (s === 1 || s === 3 ? '#d03030' : '#fff'),
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              fontWeight: 'bold', fontSize: '1em', opacity: s === G.upcardSuit ? 0.5 : 1,
+            }}>
+              {suitSymbols[s]} {name}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ color: '#999', fontSize: '0.8em' }}>
+        {t('euchre.upcardSuit', { suit: suitSymbols[G.upcardSuit] || '' })}
+      </div>
+    </div>
+  );
+
+  // ── Call phase (declarer picks up, declares solo, or discards) ─────────
 
   const callUI = (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-      <div style={{ color: 'white' }}>{t('euchre.callHint')}</div>
+      {G.openAlone && (
+        <div style={{ color: '#ffd700', fontWeight: 'bold', fontSize: '1em' }}>
+          {t('euchre.alone')}
+        </div>
+      )}
       {G.upcard != null && <Card card={G.upcard} trump={trump} />}
-      <div style={{ display: 'flex', gap: '10px' }}>
-        <button onClick={() => moves.pickUp()} style={{
-          padding: '10px 22px', borderRadius: '6px', border: '1px solid #2a7a4a', background: '#2a7a4a',
-          color: 'white', cursor: 'pointer', fontWeight: 'bold',
-        }}>{t('euchre.pickUp')}</button>
-        <button onClick={() => moves.passBid()} style={{
-          padding: '10px 22px', borderRadius: '6px', border: '1px solid #8a3a3a', background: '#8a3a3a',
-          color: 'white', cursor: 'pointer', fontWeight: 'bold',
-        }}>{t('euchre.pass')}</button>
+      {G.declarer === me && G.upcardPicked && !G.openAlone && (
+        <div style={{ color: 'white', fontSize: '0.9em' }}>{t('euchre.chooseDiscard')}</div>
+      )}
+      {G.declarer === me && !G.upcardPicked && !G.openAlone && (
+        <div style={{ color: 'white', fontSize: '0.9em' }}>{t('euchre.continueCall')}</div>
+      )}
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+        {G.declarer === me && G.upcardPicked && !G.openAlone && (
+          <>
+            <button onClick={() => moves.chooseDiscard(myHand[0])} style={{
+              padding: '10px 22px', borderRadius: '6px', border: '1px solid #2a7a4a', background: '#2a7a4a',
+              color: 'white', cursor: 'pointer', fontWeight: 'bold',
+            }}>{t('euchre.discard')}</button>
+          </>
+        )}
+        {G.declarer === me && !G.upcardPicked && !G.openAlone && (
+          <button onClick={() => moves.continueCall()} style={{
+            padding: '10px 22px', borderRadius: '6px', border: '1px solid #4a6a8a', background: '#4a6a8a',
+            color: 'white', cursor: 'pointer', fontWeight: 'bold',
+          }}>{t('euchre.continueCall')}</button>
+        )}
+        {!G.openAlone && G.declarer === me && (
+          <button onClick={() => moves.declareSolo()} style={{
+            padding: '10px 22px', borderRadius: '6px', border: '1px solid #8a6a2a', background: '#8a6a2a',
+            color: 'white', cursor: 'pointer', fontWeight: 'bold',
+          }}>{t('euchre.declareSolo')}</button>
+        )}
+        {G.declarer === me && !G.openAlone && !G.upcardPicked && G.calledCard != null && (
+          <button onClick={() => moves.continueCall()} style={{
+            padding: '10px 22px', borderRadius: '6px', border: '1px solid #4a6a8a', background: '#4a6a8a',
+            color: 'white', cursor: 'pointer', fontWeight: 'bold',
+          }}>{t('euchre.continueCall')}</button>
+        )}
       </div>
+      {G.declarer !== me && (
+        <div style={{ color: '#999', fontSize: '0.9em' }}>{t('euchre.waitingCall')}</div>
+      )}
     </div>
   );
 
@@ -340,8 +405,16 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
   if (go) status = '';
   else if (phase === 'bidding') {
     status = isMyTurn ? t('euchre.status.yourBid') : t('euchre.status.bidding', { name: playerName(ctx.currentPlayer) });
+  } else if (phase === 'bidRound2') {
+    status = isMyTurn ? (G.declarer === me ? t('euchre.status.yourNameTrump') : t('euchre.status.nameTrump', { name: playerName(ctx.currentPlayer) }))
+      : t('euchre.status.bidding', { name: playerName(ctx.currentPlayer) });
   } else if (phase === 'call') {
-    status = isMyTurn ? t('euchre.status.yourCall') : t('euchre.status.calling', { name: playerName(declarer) });
+    if (G.openAlone) {
+      status = isMyTurn ? (G.declarer === me ? t('euchre.status.yourDiscard') : t('euchre.alone'))
+        : t('euchre.status.calling', { name: playerName(declarer) });
+    } else {
+      status = isMyTurn ? t('euchre.status.yourCall') : t('euchre.status.calling', { name: playerName(declarer) });
+    }
   } else {
     status = isMyTurn
       ? (trick.length === 0 ? t('euchre.status.yourLead') : t('euchre.status.yourPlay'))
@@ -455,14 +528,36 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
         <div style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px', padding: '12px' }}>
           <div style={{ color: '#ddd', fontSize: '0.9em', textAlign: 'center', marginBottom: '10px' }}>{status}</div>
           {phase === 'bidding' && isMyTurn && biddingUI}
+          {phase === 'bidRound2' && bidRound2UI}
           {phase === 'call' && isMyTurn && callUI}
+          {phase === 'call' && !isMyTurn && (
+            <div style={{ color: '#999', fontSize: '0.9em' }}>{t('euchre.waitingCall')}</div>
+          )}
           {phase === 'play' && isMyTurn && playUI}
           {phase === 'play' && !isMyTurn && (
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px', opacity: 0.5 }}>
               {myHand.map((c) => <Card key={c} card={c} trump={trump} disabled />)}
             </div>
           )}
-          {(phase === 'bidding' || phase === 'call') && (
+          {(phase === 'bidding' || phase === 'bidRound2') && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px', marginTop: '8px' }}>
+              {myHand.map((c) => <Card key={c} card={c} trump={trump} disabled />)}
+            </div>
+          )}
+          {(phase === 'call' && G.declarer === me && G.upcardPicked && !G.openAlone) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px', marginTop: '8px' }}>
+              {myHand.map((c) => (
+                <Card key={c} card={c} trump={trump} legal={isMyTurn}
+                  onClick={() => moves.chooseDiscard(c)} />
+              ))}
+            </div>
+          )}
+          {(phase === 'call' && !G.upcardPicked && G.declarer === me && !G.openAlone) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px', marginTop: '8px' }}>
+              {myHand.map((c) => <Card key={c} card={c} trump={trump} disabled />)}
+            </div>
+          )}
+          {(phase === 'call' && G.declarer !== me && !G.openAlone) && (
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px', marginTop: '8px' }}>
               {myHand.map((c) => <Card key={c} card={c} trump={trump} disabled />)}
             </div>

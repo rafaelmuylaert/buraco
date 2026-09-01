@@ -12,7 +12,8 @@ import {
   getSuit, getRank, rankDisplay, cardFace, suitChar, suitColor,
   isRightBowler, isLeftBowler, isBowler, isPointCard, cardValue,
   isTrumpCard, getLegalPlays, bidBeats, computeGameOver, computePartner,
-  pickUpMove, passBidMove, createEuchreGame, DECK_SIZES,
+  pickUpMove, passBidMove, nameTrumpMove, declareSoloMove, chooseDiscardMove,
+  continueCallMove, createEuchreGame, DECK_SIZES,
 } from './GameEngines/euchre.js';
 
 let pass = 0, fail = 0, total = 0;
@@ -373,11 +374,158 @@ assert(createEuchreDeck(4, 32).length === 32, '32-card deck');
 assert(DECK_SIZES.standard === 24 && DECK_SIZES.extended === 32, 'DECK_SIZES');
 
 // ═══════════════════════════════════════════
-// Helper: get rank index from card
+// 18. nameTrumpMove (round 2 bidding)
 // ═══════════════════════════════════════════
-function testRankIdx(c) {
-  return c % 6; // NUM_RANKS_24 = 6
-}
+console.log('--- nameTrumpMove ---\n');
+
+// nameTrumpMove: declarer names a suit as trump (not the upcardSuit)
+const ntG1 = { declarer: null, trump: null, upcardSuit: 2, calledCard: null, passed: {}, bidRound: 2 };
+const ntCtx1 = { currentPlayer: '2' };
+let _ended1 = false;
+const ntEvents1 = { endPhase: (p) => { _ended1 = p; } };
+nameTrumpMove({ G: ntG1, ctx: ntCtx1, events: ntEvents1 }, 0); // name spades (not upcardSuit=clubs)
+assert(ntG1.declarer === '2', 'nameTrump: sets declarer to current player');
+assert(ntG1.trump === 0, 'nameTrump: sets trump to chosen suit');
+assert(ntG1.calledCard === null, 'nameTrump: calledCard=null (no upcard pickup)');
+assert(_ended1 === 'call', 'nameTrump: ends bidRound2, goes to call');
+
+// Can't name the upcard suit
+const ntG2 = { declarer: null, trump: null, upcardSuit: 2, calledCard: null, passed: {}, bidRound: 2 };
+const ntCtx2 = { currentPlayer: '2' };
+const ntEvents2 = { endPhase: () => {} };
+const ntResult2 = nameTrumpMove({ G: ntG2, ctx: ntCtx2, events: ntEvents2 }, 2); // upcardSuit
+assert(ntResult2 === 'INVALID_MOVE', 'nameTrump: cannot name upcard suit');
+
+// Non-declarer in bidRound2 becomes declarer
+const ntG3 = { declarer: null, trump: null, upcardSuit: 1, calledCard: null, passed: {}, bidRound: 2 };
+const ntCtx3 = { currentPlayer: '1' };
+const ntEvents3 = { endPhase: () => {} };
+nameTrumpMove({ G: ntG3, ctx: ntCtx3, events: ntEvents3 }, 0);
+assert(ntG3.declarer === '1', 'nameTrump: first caller becomes declarer');
+
+// ═══════════════════════════════════════════
+// 19. declareSoloMove
+// ═══════════════════════════════════════════
+console.log('--- declareSoloMove ---\n');
+
+const dsG1 = { declarer: '1', openAlone: false, hands: { '0': [0,1], '1': [2,3], '2': [4,5], '3': [6,7] }, numPlayers: 4 };
+const dsCtx1 = { currentPlayer: '1' };
+const dsEvents1 = { endTurn: () => {} };
+declareSoloMove({ G: dsG1, ctx: dsCtx1, events: dsEvents1 });
+assert(dsG1.openAlone === true, 'declareSolo: sets openAlone=true');
+assert(dsG1.hands['3'].length === 0, 'declareSolo: partner (2) hand emptied');
+assert(dsG1.hands['1'].length === 2, 'declareSolo: declarer hand unchanged');
+
+const dsG2 = { declarer: '0', openAlone: true, hands: {}, numPlayers: 4 };
+const dsCtx2 = { currentPlayer: '0' };
+const dsEvents2 = { endTurn: () => {} };
+assert(declareSoloMove({ G: dsG2, ctx: dsCtx2, events: dsEvents2 }) === 'INVALID_MOVE', 'declareSolo: already alone => INVALID_MOVE');
+
+const dsG3 = { declarer: '0', openAlone: false, hands: {}, numPlayers: 4 };
+const dsCtx3 = { currentPlayer: '1' };
+const dsEvents3 = { endTurn: () => {} };
+assert(declareSoloMove({ G: dsG3, ctx: dsCtx3, events: dsEvents3 }) === 'INVALID_MOVE', 'declareSolo: non-declarer => INVALID_MOVE');
+
+const dsG4 = { declarer: '3', openAlone: false, hands: { '0': [1], '1': [2], '2': [3], '3': [4] }, numPlayers: 4 };
+const dsCtx4 = { currentPlayer: '3' };
+const dsEvents4 = { endTurn: () => {} };
+declareSoloMove({ G: dsG4, ctx: dsCtx4, events: dsEvents4 });
+assert(dsG4.hands['1'].length === 0, 'declareSolo: declarer 3 => partner 1 (positional)');
+
+// ═══════════════════════════════════════════
+// 20. chooseDiscardMove
+// ═══════════════════════════════════════════
+console.log('--- chooseDiscardMove ---\n');
+
+const cdG1 = { declarer: '2', upcardPicked: true, hands: { '2': [5, 10, 15, 20] }, kitty: [] };
+const cdCtx1 = { currentPlayer: '2' };
+let _cdEnded = false;
+const cdEvents1 = { endPhase: (p) => { _cdEnded = p; } };
+chooseDiscardMove({ G: cdG1, ctx: cdCtx1, events: cdEvents1 }, 15);
+assert(cdG1.hands['2'].includes(15) === false, 'chooseDiscard: card removed from hand');
+assert(cdG1.kitty.length === 1, 'chooseDiscard: discarded card goes to kitty');
+assert(_cdEnded === 'play', 'chooseDiscard: ends call phase');
+
+const cdG2 = { declarer: '0', upcardPicked: true, hands: { '1': [5, 10] }, kitty: [] };
+const cdCtx2 = { currentPlayer: '1' };
+const cdEvents2 = { endPhase: () => {} };
+assert(chooseDiscardMove({ G: cdG2, ctx: cdCtx2, events: cdEvents2 }, 5) === 'INVALID_MOVE', 'chooseDiscard: non-declarer');
+
+const cdG3 = { declarer: '0', upcardPicked: false, hands: { '0': [5, 10] }, kitty: [] };
+const cdCtx3 = { currentPlayer: '0' };
+const cdEvents3 = { endPhase: () => {} };
+assert(chooseDiscardMove({ G: cdG3, ctx: cdCtx3, events: cdEvents3 }, 5) === 'INVALID_MOVE', 'chooseDiscard: upcardPicked=false');
+
+// ═══════════════════════════════════════════
+// 21. continueCallMove (skip discard)
+// ═══════════════════════════════════════════
+console.log('--- continueCallMove ---\n');
+
+let _ccEnded = false;
+const ccG1 = { declarer: '1', upcardPicked: false, hands: {} };
+const ccCtx1 = { currentPlayer: '1' };
+const ccEvents1 = { endPhase: (p) => { _ccEnded = p; } };
+continueCallMove({ G: ccG1, ctx: ccCtx1, events: ccEvents1 });
+assert(_ccEnded === 'play', 'continueCall: ends call phase');
+
+const ccG2 = { declarer: '0', upcardPicked: true, hands: {} };
+const ccCtx2 = { currentPlayer: '0' };
+const ccEvents2 = { endPhase: () => {} };
+assert(continueCallMove({ G: ccG2, ctx: ccCtx2, events: ccEvents2 }) === 'INVALID_MOVE', 'continueCall: upcardPicked=true');
+
+// ═══════════════════════════════════════════
+// 22. createEuchreGame phases
+// ═══════════════════════════════════════════
+console.log('--- createEuchreGame phases ---\n');
+
+const eg2 = createEuchreGame({ deckSize: 24, winPoints: 5 });
+assert(eg2.phases.bidRound2 !== undefined, 'bidRound2 phase exists');
+assert(eg2.phases.call !== undefined, 'call phase exists');
+assert(eg2.phases.play !== undefined, 'play phase exists');
+
+const callMoves = Object.keys(eg2.phases.call.moves);
+assert(callMoves.includes('declareSolo'), 'call has declareSolo');
+assert(callMoves.includes('chooseDiscard'), 'call has chooseDiscard');
+assert(callMoves.includes('continueCall'), 'call has continueCall');
+
+const br2Moves = Object.keys(eg2.phases.bidRound2.moves);
+assert(br2Moves.includes('nameTrump'), 'bidRound2 has nameTrump');
+assert(br2Moves.includes('passBid'), 'bidRound2 has passBid');
+
+// ═══════════════════════════════════════════
+// 23. Solo scoring in computeGameOver
+// ═══════════════════════════════════════════
+console.log('--- Solo Scoring ---\n');
+
+// Solo make: team (declarer) wins 3 tricks, partner doesn't play
+const soloG1 = {
+  declarer: '0', trump: 0, openAlone: true,
+  won: { '0': [1,2,3], '1': [], '2': [], '3': [4,5] },
+};
+const soloMake = computeGameOver(soloG1, mockCtx);
+assert(soloMake.contractMade === true, 'solo: make (3+ tricks)');
+assert(soloMake.scores['0'] === 1, 'solo: declarer +1 on make');
+assert(soloMake.scores['2'] === 1, 'solo: partner +1 on make (even though not playing)');
+assert(soloMake.scores['1'] === 0 && soloMake.scores['3'] === 0, 'solo: defenders 0');
+
+// Solo march: declarer wins all 5 tricks
+const soloMarch = computeGameOver({
+  declarer: '0', trump: 0, openAlone: true,
+  won: { '0': [1,2,3,4,5], '1': [], '2': [], '3': [] },
+}, mockCtx);
+assert(soloMarch.march === true, 'solo: march (5 tricks)');
+assert(soloMarch.scores['0'] === 4, 'solo: declarer +4 on march');
+assert(soloMarch.scores['2'] === 4, 'solo: partner +4 on march');
+
+// Solo euchred: team wins 1 trick, defenders win 4
+const soloEuchred = computeGameOver({
+  declarer: '0', trump: 0, openAlone: true,
+  won: { '0': [1], '1': [2,3], '2': [], '3': [4,5] },
+}, mockCtx);
+assert(soloEuchred.contractMade === false, 'solo: euchred (<3 tricks)');
+assert(soloEuchred.scores['0'] === 0, 'solo: declarer gets 0 on euchred');
+assert(soloEuchred.scores['1'] === 2 && soloEuchred.scores['3'] === 2, 'solo: defenders each +2');
+assert(soloEuchred.winner === 'defenders', 'solo: defenders win');
 
 // ═══════════════════════════════════════════
 // Summary
