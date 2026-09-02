@@ -454,6 +454,90 @@ export function continueCallMove({ G, ctx, events }) {
   events.endPhase('play');
 }
 
+// ── Multi-hand helpers ──────────────────────────────────────────────────────
+
+// Tricks played per hand (5-card hands, 4 players → 5 tricks).
+export const EUCRE_TRICKS = 5;
+// Default points a team needs to win a full game (match).
+export const EUCRE_WIN_POINTS = 12;
+
+/**
+ * Seats belonging to a team, identified by seat parity (0 = {0,2}, 1 = {1,3}).
+ */
+export function teamSeats(parity, numPlayers) {
+  const out = [];
+  for (let i = 0; i < numPlayers; i++) if (i % 2 === parity) out.push(String(i));
+  return out;
+}
+
+/**
+ * Deal a fresh hand into G (shuffles, deals 5 + kitty, sets the upcard) and
+ * resets all per-hand fields. Cumulative fields (playerScores, hand, winPoints,
+ * handResult) are left untouched. `shuffle` is boardgame.io's `random.Shuffle`.
+ */
+export function dealHand(G, shuffle) {
+  const numPlayers = G.numPlayers;
+  const dSize = G.deckSize || DECK_SIZES.standard;
+  const deck = (shuffle || ((d) => d))(createEuchreDeck(numPlayers, dSize));
+
+  const hands = {};
+  for (let p = 0; p < numPlayers; p++) {
+    hands[String(p)] = deck.slice(p * 5, p * 5 + 5);
+  }
+  const kittyCard = deck.slice(numPlayers * 5, numPlayers * 5 + 1)[0];
+
+  G.hands = hands;
+  G.kitty = [kittyCard];
+  G.upcard = kittyCard;
+  G.upcardSuit = getSuit(kittyCard);
+  G.trump = null;
+  G.declarer = null;
+  G.calledCard = null;
+  G.openAlone = false;
+  G.namedSuit = null;
+  G.trick = [];
+  G.trickNumber = 0;
+  G.leader = null;
+  G.passed = {};
+  G.bidRound = 1;
+  G.upcardPicked = false;
+  G.upcardDiscarded = false;
+  G.won = {};
+  for (let i = 0; i < numPlayers; i++) G.won[String(i)] = [];
+}
+
+/**
+ * Accumulate a finished hand's per-player points into the running team totals
+ * (parity teams) and report whether a team has reached the win threshold.
+ */
+export function applyHandResult(G, hand) {
+  if (!hand || !hand.scores) return;
+  for (const p in hand.scores) {
+    G.playerScores[p] = (G.playerScores[p] || 0) + hand.scores[p];
+  }
+}
+
+/**
+ * Current cumulative team totals: even = seats {0,2}, odd = seats {1,3}.
+ */
+export function teamTotals(G) {
+  const n = G.numPlayers || 4;
+  const even = G.playerScores['0'] || 0;
+  const odd = G.numPlayers > 1 ? (G.playerScores['1'] || 0) : 0;
+  return { even, odd, numPlayers: n };
+}
+
+/**
+ * Advance from a hand-over interstitial to the next hand. Only the active
+ * player (the upcoming dealer, set in handOver.onBegin) may trigger it.
+ */
+export function nextHandMove({ G, ctx, random, events }) {
+  if (G.matchOver) return 'INVALID_MOVE';
+  dealHand(G, random.Shuffle);
+  G.hand += 1;
+  events.setPhase('bidding');
+}
+
 // ── Deck sizing ─────────────────────────────────────────────────────────────
 
 export const DECK_SIZES = {
@@ -472,7 +556,7 @@ export const DECK_SIZES = {
 export function createEuchreGame(options = {}) {
   const {
     deckSize = DECK_SIZES.standard,
-    winPoints = 5,
+    winPoints = EUCRE_WIN_POINTS,
   } = options;
 
   // Solo-partner skip: the positional partner plays no cards when alone.
@@ -593,8 +677,9 @@ export function createEuchreGame(options = {}) {
     },
   };
 
-  // Override play phase: leader = dealer+1 (per rules doc)
+  // Override play phase: leader = dealer+1 (per rules doc); hand ends → handOver
   game.phases.play = {
+    next: 'handOver',
     turn: {
       order: SafeTurnOrder(({ G }) =>
         clockwiseOrder(G.numPlayers || 4, G.leader || G.declarer || '0')),
@@ -609,6 +694,87 @@ export function createEuchreGame(options = {}) {
     },
     moves: { playCard: (args, card) => playCardMoveOverride(args, card) },
   };
+
+  // handOver: interstitial between hands. Scores the finished hand into the
+  // running team totals, rotates the dealer, ends the match on a win, otherwise
+  // waits for the (new) dealer to play `nextHand`.
+  game.phases.handOver = {
+    next: 'handOver',
+    turn: {
+      order: SafeTurnOrder(({ G }) =>
+        clockwiseOrder(G.numPlayers || 4, G.dealer || '0')),
+    },
+    onBegin: ({ G, ctx, events }) => {
+      const hand = computeGameOver(G, ctx);
+      if (hand) {
+        G.handResult = { ...hand, handNumber: G.hand };
+        applyHandResult(G, hand);
+      }
+
+      // Rotate the dealer clockwise for the next hand.
+      const n = G.numPlayers || 4;
+      G.dealer = String((Number(G.dealer) + 1) % n);
+
+      // Match end check on cumulative team totals.
+      const { even, odd } = teamTotals(G);
+      const evenWins = even >= G.winPoints;
+      const oddWins = odd >= G.winPoints;
+      if (evenWins || oddWins) {
+        G.matchOver = true;
+        const winnerPlayers = evenWins ? teamSeats(0, n) : teamSeats(1, n);
+        const loserPlayers = evenWins ? teamSeats(1, n) : teamSeats(0, n);
+        events.endGame({
+          winner: evenWins ? 'team0' : 'team1',
+          winnerPlayers,
+          loserPlayers,
+          scores: { ...G.playerScores },
+          teamScores: { even, odd },
+          handsPlayed: G.hand,
+          final: true,
+        });
+      }
+    },
+    moves: { nextHand: nextHandMove },
+  };
+
+  // Only end the match via the explicit endGame above (never mid-hand).
+  game.endIf = () => undefined;
+
+  // Full setup: build the player map and deal the first hand.
+  game.setup = ({ ctx, random }, setupData = {}) => {
+    const numPlayers = ctx.numPlayers || 4;
+    const dSize = (setupData && setupData.deckSize) || deckSize || DECK_SIZES.standard;
+    const players = {};
+    const assignments = (setupData && setupData.assignments) || {};
+    for (let i = 0; i < numPlayers; i++) players[String(i)] = assignments[String(i)] || `P${i}`;
+
+    const dealer = (setupData && setupData.dealer != null)
+      ? String(Number(setupData.dealer) % numPlayers)
+      : String(random.Die(numPlayers) - 1);
+
+    const G = {
+      numPlayers,
+      players,
+      dealer,
+      deckSize: dSize,
+      cardsPerHand: 5,
+      kittySize: 1,
+      bids: [],
+      activeBid: null,
+      playerScores: {},
+      hand: 1,
+      winPoints,
+      handResult: null,
+      matchOver: false,
+    };
+    for (let i = 0; i < numPlayers; i++) G.playerScores[String(i)] = 0;
+
+    dealHand(G, random.Shuffle);
+    return G;
+  };
+
+  // Hand-over state must not leak hidden info restrictions; keep hands hidden.
+  game.playerView = playerView;
 
   return game;
 }
@@ -658,6 +824,13 @@ function playCardMoveOverride({ G, ctx, events }, card) {
     G.namedSuit = null;
     G.trickNumber += 1;
     G.leader = winner;
+
+    // Last trick of the hand → move to the hand-over interstitial.
+    if (G.trickNumber > EUCRE_TRICKS) {
+      events.endPhase();
+      return;
+    }
+
     events.endTurn({ next: winner });
     return;
   }

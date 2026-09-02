@@ -335,28 +335,87 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
     } catch { alert(t('board.leaveSeatFail')); }
   };
 
+  // ── Running team totals (parity teams: {0,2} vs {1,3}) ──────────────────
+  const evenTotal = (G.playerScores && G.playerScores['0']) || 0;
+  const oddTotal = (G.playerScores && G.playerScores['1']) || 0;
+  const winTarget = G.winPoints || 12;
+  const teamNames = { 0: playerName('0'), 1: playerName('1') };
+
+  const handRes = G.handResult;
+  const isMyTurnToContinue = ctx.currentPlayer === me;
+
+  // ── Hand-over interstitial (between hands) ──────────────────────────────
+  const handOverUI = (phase === 'handOver' && !go) && (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.78)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <div style={{ background: '#0d1f2d', border: '2px solid #4da6ff', borderRadius: '12px', padding: '24px 32px', color: 'white', maxWidth: '460px', width: '100%', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <h2 style={{ color: '#4da6ff', marginTop: 0 }}>{t('euchre.handOver.title', { n: (handRes && handRes.handNumber) || G.hand })}</h2>
+
+        {handRes && (
+          <div style={{ marginBottom: '10px' }}>
+            <div style={{ fontSize: '1.05em', color: handRes.contractMade ? '#7CFC00' : '#ff8888' }}>
+              {handRes.contractMade
+                ? t('euchre.handOver.made', { name: playerName(handRes.declarer) })
+                : t('euchre.handOver.euchred', { name: playerName(handRes.declarer) })}
+            </div>
+            <div style={{ color: '#ccc', fontSize: '0.85em' }}>
+              {t('euchre.handOver.tricks', { n: handRes.teamTricks })}
+              {handRes.march && <span style={{ color: '#ffd700' }}> — 🏆 {t('euchre.march')}</span>}
+              {handRes.alone && <span style={{ color: '#ffd700' }}> — {t('euchre.alone')}</span>}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '16px', margin: '8px 0 16px' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ color: '#4da6ff', fontSize: '0.8em' }}>{teamNames[0]}</div>
+            <div style={{ fontSize: '1.8em', fontWeight: 'bold' }}>{evenTotal}</div>
+          </div>
+          <div style={{ color: '#555', fontSize: '1.6em', alignSelf: 'center' }}>–</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ color: '#ffd700', fontSize: '0.8em' }}>{teamNames[1]}</div>
+            <div style={{ fontSize: '1.8em', fontWeight: 'bold' }}>{oddTotal}</div>
+          </div>
+        </div>
+        <div style={{ color: '#888', fontSize: '0.8em', marginBottom: '14px' }}>{t('euchre.handOver.playTo', { n: winTarget })}</div>
+
+        {isMyTurnToContinue ? (
+          <button onClick={() => moves.nextHand()} style={{ padding: '12px 28px', background: '#4da6ff', color: 'white', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.05em', boxShadow: '0 0 12px rgba(77,166,255,0.5)' }}>
+            {t('euchre.nextHand')}
+          </button>
+        ) : (
+          <div style={{ color: '#999' }}>{t('euchre.handOver.waiting', { name: playerName(ctx.currentPlayer) })}</div>
+        )}
+      </div>
+    </div>
+  );
+
+  // ── Match over (a team reached the target) ──────────────────────────────
   const gameOverUI = go && (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
       <div style={{ background: '#0d1f2d', border: '2px solid #ffd700', borderRadius: '12px', padding: '24px 32px', color: 'white', maxWidth: isTournament ? '720px' : '420px', width: '100%', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <h2 style={{ color: '#ffd700', marginTop: 0 }}>
-          {go.contractMade ? t('euchre.gameOver.winner') : t('euchre.gameOver.loser')}
-        </h2>
-        <div style={{ margin: '8px 0' }}>
-          {go.winnerPlayers.map((p) => playerName(p)).join(', ')}
-          {go.alone && <span style={{ color: '#ffd700' }}> — {t('euchre.alone')}</span>}
+        <h2 style={{ color: '#ffd700', marginTop: 0 }}>{t('euchre.matchOver.title')}</h2>
+        <div style={{ margin: '8px 0', fontSize: '1.1em' }}>
+          {(go.winnerPlayers || []).map((p) => playerName(p)).join(' & ')}
         </div>
 
-        {go.march && <div style={{ color: '#ffd700', fontSize: '0.9em' }}>🏆 {t('euchre.march')}</div>}
+        <div style={{ display: 'flex', gap: '16px', margin: '4px 0 8px', alignItems: 'center' }}>
+          <span style={{ fontSize: '1.8em', fontWeight: 'bold', color: '#4da6ff' }}>{go.teamScores ? go.teamScores.even : evenTotal}</span>
+          <span style={{ color: '#555' }}>–</span>
+          <span style={{ fontSize: '1.8em', fontWeight: 'bold', color: '#ffd700' }}>{go.teamScores ? go.teamScores.odd : oddTotal}</span>
+        </div>
+        <div style={{ color: '#888', fontSize: '0.85em', marginBottom: '10px' }}>
+          {t('euchre.matchOver.hands', { n: go.handsPlayed || G.hand })}
+        </div>
 
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', width: '100%', marginBottom: '8px' }}>
           <div style={{ flex: '1 1 220px', maxWidth: '320px', background: 'rgba(0,0,0,0.5)', borderRadius: '10px', padding: '12px' }}>
             <h4 style={{ color: '#4da6ff', margin: '0 0 8px 0', fontSize: '0.9em' }}>{t('euchre.gameOver.matchScore')}</h4>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9em' }}>
               <tbody>
-                {Object.entries(go.scores).map(([p, s]) => (
+                {Object.entries(go.scores || {}).map(([p, s]) => (
                   <tr key={p} style={{ background: p === me ? 'rgba(255,215,0,0.18)' : 'transparent' }}>
                     <td style={{ border: '1px solid #333', padding: '4px 8px', textAlign: 'left' }}>{playerName(p)}{p === me ? ' (you)' : ''}</td>
-                    <td style={{ border: '1px solid #333', padding: '4px 8px', textAlign: 'right', color: s >= 0 ? '#7CFC00' : '#ff6666' }}>{s > 0 ? '+' : ''}{s}</td>
+                    <td style={{ border: '1px solid #333', padding: '4px 8px', textAlign: 'right', color: (go.winnerPlayers || []).includes(p) ? '#7CFC00' : '#ff6666' }}>{s}</td>
                   </tr>
                 ))}
               </tbody>
@@ -415,6 +474,9 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
     } else {
       status = isMyTurn ? t('euchre.status.yourCall') : t('euchre.status.calling', { name: playerName(declarer) });
     }
+  } else if (phase === 'handOver') {
+    status = isMyTurnToContinue ? t('euchre.nextHand')
+      : t('euchre.handOver.waiting', { name: playerName(ctx.currentPlayer) });
   } else {
     status = isMyTurn
       ? (trick.length === 0 ? t('euchre.status.yourLead') : t('euchre.status.yourPlay'))
@@ -450,18 +512,30 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
     </div>
   );
 
+  const scoreChip = (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#eee', background: 'rgba(0,0,0,0.35)', border: '1px solid #444', borderRadius: '6px', padding: '3px 10px', fontSize: '0.9em' }}>
+      <span style={{ color: '#4da6ff', fontWeight: 'bold' }}>{evenTotal}</span>
+      <span style={{ color: '#666' }}>–</span>
+      <span style={{ color: '#ffd700', fontWeight: 'bold' }}>{oddTotal}</span>
+      <span style={{ color: '#888', fontSize: '0.85em' }}>/ {winTarget}</span>
+    </span>
+  );
+
   return (
     <div style={{
       minHeight: '100vh', background: 'radial-gradient(ellipse at center, #1b4332 0%, #0d2a1d 70%)',
       color: 'white', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '12px',
     }}>
       {gameOverUI}
+      {handOverUI}
 
       <div style={{ width: '100%', maxWidth: '1000px' }}>
         {/* Top bar */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
-          <div style={{ color: '#ccc', fontSize: '0.9em' }}>
-            {phase === 'play' ? contractSummary : `${t('euchre.round')} ${G.round || 1} — ${t('euchre.dealer')}: ${declarer != null ? playerName(declarer) : '—'}`}
+          <div style={{ color: '#ccc', fontSize: '0.9em', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+            {phase === 'play' && contractSummary}
+            <span>{t('euchre.handNumber', { n: G.hand || 1 })} · {t('euchre.dealer')}: {playerName(G.dealer)}</span>
+            {scoreChip}
           </div>
           {!go && (
             <button onClick={handleLeaveSeat} style={{ background: '#4da6ff', color: 'white', border: 'none', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.8em', flexShrink: 0 }}>

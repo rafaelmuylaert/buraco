@@ -615,5 +615,19 @@ export const messages = {
     lead: 'Apre',
     namedSuit: 'Il Bowler dichiara: {suit}',
     trickNum: 'Presa {n}/{total}',
+    handNumber: 'Mano {n}',
+    nextHand: 'Prossima Mano',
+    matchOver: {
+      title: 'Partita Vinta!',
+      hands: '{n} mani giocate',
+    },
+    handOver: {
+      title: 'Mano {n} completata',
+      made: '{name} ha mantenuto il contratto',
+      euchred: '{name} non ha mantenuto il contratto',
+      tricks: '{n} prese vinte',
+      playTo: 'Il primo a {n} punti vince la partita',
+      waiting: 'In attesa che {name} distribuisca la prossima mano...',
+    },
   },
 };

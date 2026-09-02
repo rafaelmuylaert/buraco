@@ -615,5 +615,19 @@ export const messages = {
     lead: 'Lead',
     namedSuit: 'Bowler names: {suit}',
     trickNum: 'Trick {n}/{total}',
+    handNumber: 'Hand {n}',
+    nextHand: 'Next Hand',
+    matchOver: {
+      title: 'Match Won!',
+      hands: '{n} hands played',
+    },
+    handOver: {
+      title: 'Hand {n} complete',
+      made: '{name} made the contract',
+      euchred: '{name} was euchred',
+      tricks: '{n} tricks won',
+      playTo: 'First to {n} points wins the match',
+      waiting: 'Waiting for {name} to deal the next hand...',
+    },
   },
 };

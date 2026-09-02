@@ -617,5 +617,19 @@ export const messages = {
     lead: 'Abre',
     namedSuit: 'Bowler nomeia: {suit}',
     trickNum: 'Vaza {n}/{total}',
+    handNumber: 'Mão {n}',
+    nextHand: 'Próxima Mão',
+    matchOver: {
+      title: 'Partida Vencida!',
+      hands: '{n} mãos jogadas',
+    },
+    handOver: {
+      title: 'Mão {n} concluída',
+      made: '{name} cumpriu o contrato',
+      euchred: '{name} não cumpriu o contrato',
+      tricks: '{n} vazas vencidas',
+      playTo: 'O primeiro a {n} pontos vence a partida',
+      waiting: 'Aguardando {name} distribuir a próxima mão...',
+    },
   },
 };

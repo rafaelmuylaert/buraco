@@ -96,6 +96,11 @@ function makeIface(client, botName, playerID) {
       return runMove(() => client.moves.playCard(card),
         (st) => !(st.G.hands[playerID] || []).includes(card));
     },
+    nextHand: () => {
+      console.log(`[EUCHRE] ${botName} => nextHand`);
+      return runMove(() => client.moves.nextHand(),
+        (st) => st.ctx.phase === 'bidding' || !!st.ctx.gameover);
+    },
   };
 }
 
@@ -423,6 +428,9 @@ async function startBotClient(matchID, playerID, credentials, botName) {
       } else if (phase === 'play') {
         const { card } = choosePlay(G, me);
         if (card !== undefined) await iface.playCard(card);
+      } else if (phase === 'handOver') {
+        // Top-of-loop guard already ensures it's our turn (the new dealer) here.
+        await iface.nextHand();
       } else {
         await sleep(500);
         continue;
