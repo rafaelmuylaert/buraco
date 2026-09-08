@@ -4,3 +4,5 @@ dist/
 buraco-server/db/
 buraco-server/bots/
 .env
+.omo
+

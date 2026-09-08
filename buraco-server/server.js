@@ -1068,17 +1068,23 @@ server.router.get('/api/stats', (ctx) => {
   const curMonth = now.getMonth();
   const zero = () => ({ points: 0, v: 0, e: 0, d: 0, games: 0 });
   const stats = {};
+  const gameStats = {};
+  const mapsFor = (gameName) => {
+    const game = gameName || 'buraco';
+    if (!gameStats[game]) gameStats[game] = {};
+    return [stats, gameStats[game]];
+  };
 
-  const credit = (name, teamScore, oppScore, ts) => {
+  const credit = (name, teamScore, oppScore, ts, maps) => {
     const clean = String(name || '').trim();
     if (!clean || /^bot\b/i.test(clean)) return;
     const tsNum = Number(teamScore);
     if (!isFinite(tsNum)) return;
     const oppNum = Number(oppScore);
-    if (!isFinite(oppNum)) return;
+    // NaN is rejected, but ±Infinity sentinels (the results-map path uses them
+    // to force the win bucket) must survive to the > / < compares below.
+    if (Number.isNaN(oppNum)) return;
     const key = clean.toLowerCase();
-    if (!stats[key]) stats[key] = { name: clean, month: zero(), year: zero(), all: zero() };
-    const st = stats[key];
     const wins = tsNum > oppNum;
     const draws = tsNum === oppNum;
     const apply = (w) => {
@@ -1086,12 +1092,16 @@ server.router.get('/api/stats', (ctx) => {
       w.games += 1;
       if (wins) w.v += 1; else if (draws) w.e += 1; else w.d += 1;
     };
-    apply(st.all);
-    if (ts > 0) {
-      const d = new Date(ts);
-      if (d.getFullYear() === curYear) {
-        apply(st.year);
-        if (d.getMonth() === curMonth) apply(st.month);
+    for (const map of maps) {
+      if (!map[key]) map[key] = { name: clean, month: zero(), year: zero(), all: zero() };
+      const st = map[key];
+      apply(st.all);
+      if (ts > 0) {
+        const d = new Date(ts);
+        if (d.getFullYear() === curYear) {
+          apply(st.year);
+          if (d.getMonth() === curMonth) apply(st.month);
+        }
       }
     }
   };
@@ -1101,26 +1111,30 @@ server.router.get('/api/stats', (ctx) => {
   for (const entry of history) {
     const ts = entry.ts || new Date(String(entry.date || '')).getTime() || 0;
 
-    // Mighty: the poll stored a normalized per-player result (own settlement +
-    // side-won). Credit it directly — no team pairing for a 5-player individual
-    // game. The side flag decides W/L (±Infinity makes credit's > / < compare
-    // land on the right bucket); points recorded are the player's own.
-    if (entry.gameName === 'mighty' && entry.results) {
+    // Mighty/Euchre: the poll stored a normalized per-player result (own
+    // settlement + side-won). Credit it directly — no team pairing. The side
+    // flag decides W/L (±Infinity makes credit's > / < compare land on the
+    // right bucket); points recorded are the player's own.
+    if (entry.results) {
+      const maps = mapsFor(entry.gameName);
       for (const [name, r] of Object.entries(entry.results)) {
-        credit(name, r.points || 0, r.win ? -Infinity : Infinity, ts);
+        credit(name, r.points || 0, r.win ? -Infinity : Infinity, ts, maps);
       }
       continue;
     }
 
     const teams = matchTeams[entry.matchID];
     if (!entry.gameName || !teams) continue;
+    const maps = mapsFor(entry.gameName);
     const s0 = toTotal(entry.scores?.[0]);
     const s1 = toTotal(entry.scores?.[1]);
-    for (const name of teams.team0) credit(name, s0, s1, ts);
-    for (const name of teams.team1) credit(name, s1, s0, ts);
+    for (const name of teams.team0) credit(name, s0, s1, ts, maps);
+    for (const name of teams.team1) credit(name, s1, s0, ts, maps);
   }
 
-  ctx.body = { users: Object.values(stats) };
+  const byGame = {};
+  for (const g of ['buraco', 'mighty', 'euchre']) byGame[g] = Object.values(gameStats[g] || {});
+  ctx.body = { users: Object.values(stats), byGame };
 });
 
 server.router.post('/api/auth/logout', async (ctx) => {
@@ -1250,7 +1264,7 @@ const finishedQuickSeen = new Set();
 
 // Every hosted game is polled for finished matches (previously only 'buraco',
 // so Mighty results were never saved and their rounds never advanced).
-const HISTORY_GAMES = ['buraco', 'mighty'];
+const HISTORY_GAMES = ['buraco', 'mighty', 'euchre'];
 
 // The tournament flag is read from metadata.setupData (the source of truth, and
 // the only place that exists for Mighty — G.rules is absent there) with a
@@ -1259,10 +1273,11 @@ const matchIsTournament = (data) =>
   (data?.metadata?.setupData?.isTournament === true) ||
   (data?.state?.G?.rules?.isTournament === true);
 
-// Mighty settlement is a zero-sum per-player map keyed by seat. Map seats to
-// names via the tournament's seat assignments so the leaderboard / global stats
-// can credit each player with their OWN result (points + which side won).
-const mightyResults = (gameover, assignments) => {
+// Mighty and Euchre settlements carry a per-seat `scores` map plus a
+// `winnerPlayers` seat list. Map seats to names via the tournament's seat
+// assignments so the leaderboard / global stats can credit each player with
+// their OWN result (points + which side won).
+const perPlayerResults = (gameover, assignments) => {
   const results = {};
   const winners = gameover.winnerPlayers || [];
   for (const seat of Object.keys(assignments || {})) {
@@ -1301,8 +1316,8 @@ setInterval(async () => {
                         isTournament,
                         scores: gameover.scores
                     };
-                    if (gameName === 'mighty') {
-                        entry.results = mightyResults(gameover, data?.metadata?.setupData?.assignments || {});
+                    if (gameName === 'mighty' || gameName === 'euchre') {
+                        entry.results = perPlayerResults(gameover, data?.metadata?.setupData?.assignments || {});
                     }
                     history.unshift(entry);
                     savedIDs.add(matchID);

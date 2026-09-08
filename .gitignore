@@ -6,3 +6,4 @@ buraco-server/mighty.js
 .DS_Store
 npm-debug.log
 .env
+.omo

@@ -1,6 +1,8 @@
 # AGENTS.md
 
-Buraco card-game app: React/Vite client + Node.js/boardgame.io server + a genetic-training bot driven by a hand-written WASM neural engine. **There is no test framework** (`npm test` is a stub) — verify by `node --check` and ad-hoc node harnesses.
+Buraco card-game app: React/Vite client + Node.js/boardgame.io server + a genetic-training bot driven by a hand-written WASM neural engine. **There is no test framework** (`npm test` is a stub) — verify by `node --check` and ad-hoc node harnesses (root `test-euchre-engine.mjs` / `test-euchre-match.mjs` / `test-euchre-bot.mjs`, `.harness.mjs`, `.probe.mjs` — run directly with `node <file>`).
+
+Hierarchical docs: this root file + `GameEngines/AGENTS.md` (engine topology). Sub-dir files exist for `BotEngines/`, `BotPlayers/`, `buraco-server/`, `Boards/`.
 
 ## Project structure: npm workspaces
 
@@ -8,15 +10,19 @@ Buraco card-game app: React/Vite client + Node.js/boardgame.io server + a geneti
 ├── package.json              # root: defines workspaces, hoists all deps
 ├── GameEngines/              # @buraco/game — rules engines (Buraco, Mighty, Euchre, TrickGames)
 │   ├── package.json          # "name": "@buraco/game", sub-path exports
+│   ├── AGENTS.md             # engine topology + per-engine gotchas
 │   ├── Buraco.js             # Buraco rules engine (main)
 │   ├── Mighty.js             # Mighty rules engine
 │   ├── euchre.js             # Euchre rules engine
-│   └── TrickGames.js         # Euchre + other trick games
+│   ├── TrickGames.js         # Euchre + other trick games
+│   └── {Euchre,Mighty}-rules.md  # human-readable rule specs
 ├── BotEngines/               # @buraco/bot-engine — training & WASM loading
 │   ├── package.json          # "name": "@buraco/bot-engine", exports
-│   ├── train.js              # Genetic algorithm trainer
-│   ├── wasm_loader.js        # WASM nn_engine wrapper
-│   └── worker.js             # Training worker
+│   ├── train.js              # Genetic algorithm trainer (TrainerService used by server)
+│   ├── wasm_loader.js        # WASM nn_engine wrapper (owns all feature encoding)
+│   ├── worker.js             # Training worker (match simulation)
+│   ├── nn_engine.cpp         # WASM neural engine SOURCE (also build_wasm.sh + committed nn_engine.wasm live HERE)
+│   └── build_wasm.sh         # clang wasm32 build script
 ├── BotPlayers/               # @buraco/bot-players — bot gameplay for each game
 │   ├── package.json          # "name": "@buraco/bot-players", exports
 │   ├── Buraco.js             # Buraco bot (auto-starts)
@@ -55,8 +61,8 @@ Buraco card-game app: React/Vite client + Node.js/boardgame.io server + a geneti
 ## Single source of truth: `GameEngines/Buraco.js`
 
 - Rules engine, moves, meld parsing (`parseMeld`, `generateAllValidMelds`), and net config (`DEFAULT_NET_PARAMS` → `computeNetConfig()` → `AI_CONFIG`) all live in `@buraco/game/Buraco.js`.
-- `buraco-server/*.js` import `'@buraco/game/Buraco.js'` (or `'./game.js'` which is the copy placed there by `deploy/entrypoint.sh` at runtime). **Always edit `GameEngines/Buraco.js`**.
-- The server entrypoint (`deploy/entrypoint.sh`) copies `GameEngines/Buraco.js` → `buraco-server/game.js` at container start so the server can import `'./game.js'`. Running server code locally requires that same copy.
+- `buraco-server/*.js` import `'@buraco/game/Buraco.js'` statically via the workspace link. **Always edit `GameEngines/Buraco.js`**, never `buraco-server/game.js`.
+- `buraco-server/game.js` is an **untracked, gitignored manual copy** of `GameEngines/Buraco.js` (`deploy/entrypoint.sh` does NOT create it — that mechanism was deleted). Only `server.js:1185` (`/api/bots/debug-match`) uses `await import('./game.js')`; if it's absent that admin endpoint 500s (everything else works). If you need it locally: `cp GameEngines/Buraco.js buraco-server/game.js` (and keep it synced after engine edits).
 
 ## Card/meld encoding (easy to get wrong)
 - Cards are flat indices: 0–51 (two physical copies each), 52 unused, 53 = Joker (two copies). Hands/table/discard are 54-wide bitmaps (`Uint8Array[54]`).
@@ -72,12 +78,12 @@ Buraco card-game app: React/Vite client + Node.js/boardgame.io server + a geneti
 - **Morto**: once a hand empties, that team takes the morto (once per team); see the `suppressMorto` invariant below.
 - **Game end**: 'Bateu' when a player's hand is empty (morto taken or no pots; clean canasta needed if `cleanCanastaToWin`) → winner +`endGameBonus`; or 'Monte Esgotado' on exhaustion/deck out (`checkGameOver`).
 
-## WASM engine (`nn_engine.cpp` → `nn_engine.wasm`)
+## WASM engine (`BotEngines/nn_engine.cpp` → `nn_engine.wasm`)
 - The engine is **generic and data-driven**: 16 configurable NN slots per team share one weights buffer (`get_weights_per_team()` = 2,500,000 floats/team, 10MB). A single primitive `forwardpass(NNidx, parents)` runs slot `NNidx`, feeding its input vector from `in[]` plus the outputs of parent slots. Two-phase behavior is expressed as slots: 0 CURRENT (417 features → 24-dim state), 1 SEQ (parents=[0]), 2 RUN (parents=[0]), 3 DISCARD (parents=[0], 54 logits).
 - `wasm_loader.js` owns all feature encoding in JS (no wasm-side card/meld/state buffers to sync). `setScoreFunctions` hooks are all null (`_updateMeld`/`_syncCards` stay null in game.js — that machinery no longer exists). `runCurrentState` builds the 417-float state and runs slot 0; the engine itself **max-abs normalizes the 24-dim state vector to `[-1,1]` in-place** (`normalize_state`, slot 0 only) so SEQ/RUN/DISCARD read the same context with no JS round-trip. The divisor comes from `g_normalize_max` (exported `get/set_normalize_max`, settable in JS via `setNormalizeMax`); `0` (default) = auto max-abs. Preserve this normalization in any refactor.
 - `initweights(weights, cfg)` writes one bot to a free team slot (auto-assigns 0 then 1, throws when both are taken) and returns a `{team}` handle; `loadMatchDNA(a, b)` is the wrapper both teams share. `setActiveNetConfig` accepts raw `netParams` **or** a full `computeNetConfig()` result (it normalizes internally).
 - The committed `nn_engine.wasm` is **kept current** with `nn_engine.cpp` — rebuild and commit it whenever you change the C++. Containers run the *committed* wasm (no build-time recompile anymore), so this invariant is load-bearing for deployed code.
-- Rebuild locally with `bash build_wasm.sh` **run from `buraco-server/`** (the script uses the relative path `nn_engine.cpp`; running it from the repo root fails). It needs clang **and** `lld`/`wasm-ld` (a bare `clang -c` won't link).
+- Rebuild locally with `bash build_wasm.sh` **run from `BotEngines/`** (the script uses the relative path `nn_engine.cpp`; running it from the repo root fails). It needs clang **and** `lld`/`wasm-ld` (a bare `clang -c` won't link). `wasm_loader.js` loads `nn_engine.wasm` from its own `__dirname`, so the wasm must stay next to it.
 - `initWasm()` silently disables the engine (`_ex = null`) if any required export is missing or the wasm file is absent → scoring returns `null`/`[]` and bots play degenerate moves. If you see that, the deployed `nn_engine.wasm` predates the current `nn_engine.cpp` — rebuild it.
 
 ## Deployment: git-driven containers (docker-compose.yml)
@@ -105,7 +111,8 @@ Buraco card-game app: React/Vite client + Node.js/boardgame.io server + a geneti
 - Morto must only trigger when the hand is truly empty after a discard pickup: `moveMeld`/`cardsRemoveCards` take a `suppressMorto` flag and `movePickUpDiscard` passes `true`, relying on the post-pickup check. Preserve in any refactor.
 
 ## Commands
-- Syntax check: `node --check <file>` (all files are ESM). Lint: `cd buraco-client && npx eslint src/game.js` (legacy — eslint still targets `src/game.js` path but real file is `GameEngines/Buraco.js`).
+- Syntax check: `node --check <file>` (all files are ESM). Lint: `cd buraco-client && npx eslint .` (flat config in `buraco-client/eslint.config.js`; it scans `**/*.{js,jsx}` from `buraco-client/` — the `Boards/` sources are NOT covered).
+- Ad-hoc harnesses: `node test-euchre-engine.mjs` / `node test-euchre-match.mjs` / `node test-euchre-bot.mjs` (euchre-focused, run from repo root).
 - Rule changes: harness the pure exports directly, e.g. `import { moveMeld, movePickUpDiscard, generateAllValidMelds } from '@buraco/game/Buraco.js'` and call `setScoreFunctions(null,null,null,()=>{},()=>{})` to neutralize the wasm meld-sync hook.
 - Client source: `Boards/` directory at repo root. Vite root: `Boards/` (see `buraco-client/vite.config.js` → `root: path.resolve(__dirname, '..', 'Boards')`). Build output: `buraco-client/dist/`.
 - Ports: server 8000, client 5173 (vite dev/preview). Compose runs `buraco-server`, `buraco-client`, `buraco-bot`.

@@ -720,13 +720,13 @@ const App = () => {
     if (view === 'lounge' || view === 'tournaments' || view === 'admin') {
       const fetchMatches = async () => {
         try {
-          const both = await Promise.all(['buraco', 'mighty'].map(async (g) => {
+          const fetched = await Promise.all(['buraco', 'mighty', 'euchre'].map(async (g) => {
             try {
               const r = await lobbyClient.listMatches(g);
               return (r.matches || []).map(m => ({ ...m, gameName: g }));
             } catch { return []; }
           }));
-          setMatches(both.flat());
+          setMatches(fetched.flat());
         } catch (e) { console.error("Sem conexão com o servidor."); }
         if (view === 'admin') {
           setHistory(await fetch(`${API_ADDRESS}/api/history`).then(r => r.json()).catch(() => []));
@@ -2080,12 +2080,13 @@ const App = () => {
   }
 
   const visibleTournaments = tournaments.filter(isTournamentVisible);
-  const activeTournaments = visibleTournaments.filter(t => t.status !== 'completed');
-  const completedTournaments = visibleTournaments.filter(t => t.status === 'completed');
+  const activeTournaments = visibleTournaments.filter(t => t.status !== 'completed' && (t.game || 'buraco') === preferredGame);
+  const completedTournaments = visibleTournaments.filter(t => t.status === 'completed' && (t.game || 'buraco') === preferredGame);
   const savedSessions = getSavedSessions();
 
   const isBotSeat = (m, p) => String(m.setupData?.assignments?.[p.id] || '').toLowerCase().includes('bot');
   const openQuickMatches = matches.filter(m => {
+    if ((m.gameName || 'buraco') !== preferredGame) return false;
     if (m.setupData?.isTournament === true) return false;
     if (history.some(h => h.matchID === m.matchID)) return false;
     return (m.players || []).some(p => !p.name && !isBotSeat(m, p));
@@ -2109,15 +2110,17 @@ const App = () => {
     return parts.join(t('rules.joinSep'));
   };
 
+  const gameStatsUsers = stats?.byGame?.[preferredGame] ?? stats?.users ?? [];
+
   const rankBy = (win, metric) => {
     const key = metric === 'wins' ? 'v' : metric;
-    return (stats?.users || [])
+    return gameStatsUsers
       .filter(u => (u[win]?.games || 0) > 0)
       .sort((a, b) => ((b[win]?.[key] || 0) - (a[win]?.[key] || 0)) || ((b[win]?.points || 0) - (a[win]?.points || 0)));
   };
 
   const myStatsRow = currentUser && stats
-    ? stats.users.find(u => u.name.toLowerCase() === currentUser.username.toLowerCase()) || null
+    ? gameStatsUsers.find(u => u.name.toLowerCase() === currentUser.username.toLowerCase()) || null
     : null;
 
   return (
@@ -2329,11 +2332,11 @@ const App = () => {
                 return (
                   <div key={m.matchID} style={{ background: '#222', border: '2px solid #40916c', borderRadius: '10px', padding: '20px', width: '320px', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
                     <h3 style={{ margin: '0 0 10px 0', color: '#ffd700', fontSize: '1.3em' }}>{m.setupData?.name || t('lounge.openQuick.defaultTable')}
-                      <span style={{ fontSize: '0.6em', color: '#4da6ff', marginLeft: '8px', border: '1px solid #4da6ff', borderRadius: '4px', padding: '1px 6px', verticalAlign: 'middle' }}>{m.gameName === 'mighty' ? t('mighty.title') : 'Buraco'}</span>
+                      <span style={{ fontSize: '0.6em', color: '#4da6ff', marginLeft: '8px', border: '1px solid #4da6ff', borderRadius: '4px', padding: '1px 6px', verticalAlign: 'middle' }}>{m.gameName === 'mighty' ? t('mighty.title') : m.gameName === 'euchre' ? t('euchre.title') : 'Buraco'}</span>
                     </h3>
                     <div style={{ fontSize: '0.85em', color: '#aaa', marginBottom: '12px', lineHeight: '1.6' }}>
                       {t('lounge.openQuick.playersLine', { bots: numBots, seats: openSeats })}<br/>
-                      {m.gameName !== 'mighty' && rulesSummary(m.setupData)}
+                      {m.gameName !== 'mighty' && m.gameName !== 'euchre' && rulesSummary(m.setupData)}
                     </div>
                     <button onClick={() => { if (firstOpen) handleJoinMatch(m, firstOpen.id.toString()); }} style={{ width: '100%', padding: '10px', background: '#ffd700', color: 'black', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>{t('lounge.openQuick.enter')}</button>
                   </div>
