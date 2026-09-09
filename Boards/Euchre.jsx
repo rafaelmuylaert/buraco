@@ -13,6 +13,7 @@ import {
   isPointCard, getLegalPlays, createEuchreDeck, DECK_SIZES, getDeckWidth,
 } from '@buraco/game/euchre.js';
 import { BoardErrorBoundary } from './shared/ErrorBoundary.jsx';
+import { CardShell, CardBack as SharedCardBack } from './shared/Card.jsx';
 
 const CARD_W = 46, CARD_H = 64;
 
@@ -23,45 +24,48 @@ const Card = ({ card, trump, onClick, disabled, selected, legal, dim, badge }) =
   const isLeft = isLeftBowler(card, trump);
   const color = getSuit(card) === 1 || getSuit(card) === 3 ? '#d03030' : '#111';
   return (
-    <div onClick={disabled ? undefined : onClick} style={{
-      position: 'relative',
-      border: selected ? '3px solid #ffd700' : legal ? '2px solid #7CFC00' : '1px solid #333',
-      transform: selected ? 'translateY(-8px)' : 'none',
-      transition: 'all 0.15s',
-      cursor: disabled ? 'default' : 'pointer',
-      borderRadius: '6px', width: `${CARD_W}px`, height: `${CARD_H}px`, minWidth: `${CARD_W}px`,
-      display: 'inline-flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', margin: '2px',
-      backgroundColor: isRight ? '#b8860b' : (isLeft ? '#cd853f' : 'white'),
-      color: isRight || isLeft ? 'white' : color,
-      opacity: dim ? 0.35 : 1,
-      boxShadow: '2px 2px 4px rgba(0,0,0,0.5)',
-    }}>
-      <div style={{ position: 'absolute', top: '2px', left: '3px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '0.9' }}>
-        <span style={{ fontSize: '15px', fontWeight: 'bold' }}>{rankDisplay(card)}</span>
-        <span style={{ fontSize: '16px' }}>{suitChar(getSuit(card))}</span>
-      </div>
-      <div style={{ fontSize: '30px', opacity: 0.5, textAlign: 'center', lineHeight: '1' }}>
-        {suitChar(getSuit(card))}
-      </div>
-      <div style={{ position: 'absolute', bottom: '2px', right: '4px', fontSize: '11px', fontWeight: 'bold' }}>
-        {isRight ? 'R' : isLeft ? 'L' : ''}
-      </div>
-    </div>
+    <CardShell
+      w={CARD_W} h={CARD_H}
+      selected={selected}
+      legal={legal}
+      opacity={dim ? 0.35 : 1}
+      onClick={onClick}
+      disabled={disabled}
+      bg={isRight ? '#b8860b' : (isLeft ? '#cd853f' : 'white')}
+      color={isRight || isLeft ? 'white' : color}
+      transition='all 0.15s'
+      boxShadow='2px 2px 4px rgba(0,0,0,0.5)'
+      cursor={disabled ? 'default' : 'pointer'}
+      corner={{ rank: rankDisplay(card), suit: suitChar(getSuit(card)) }}
+      cornerRow={false}
+      cornerTopLeft='3px'
+      cornerLineHeight='0.9'
+      cornerRankSize='15px'
+      cornerSuitSize='16px'
+      center={suitChar(getSuit(card))}
+      centerSize='30px'
+      centerOpacity={0.5}
+      centerTextAlign='center'
+      centerLineHeight='1'
+      overlay={
+        <div style={{ position: 'absolute', bottom: '2px', right: '4px', fontSize: '11px', fontWeight: 'bold' }}>
+          {isRight ? 'R' : isLeft ? 'L' : ''}
+        </div>
+      }
+      style={{}}
+    />
   );
 };
 
 const CardBack = ({ label, count }) => (
-  <div style={{
-    border: '2px solid white', borderRadius: '8px', width: '46px', height: '64px', margin: '2px',
-    backgroundColor: '#0a3d62',
-    backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.12) 4px, rgba(255,255,255,0.12) 8px)',
-    boxShadow: '2px 2px 5px rgba(0,0,0,0.5)',
-    display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'white',
-    fontSize: '0.75em', textAlign: 'center',
-  }}>
-    <span style={{ fontWeight: 'bold' }}>{label}</span>
-    <span style={{ fontSize: '1.4em' }}>{count}</span>
-  </div>
+  <SharedCardBack
+    label={label} count={count}
+    w={46} h={64}
+    stripe={{ a: 4, b: 8, alpha: 0.12 }}
+    baseFontSize='0.75em'
+    labelSize={undefined}
+    countSize='1.4em'
+  />
 );
 
 const RoleBadge = ({ emoji, placeholder }) => (

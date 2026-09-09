@@ -21,6 +21,7 @@ import {
   SUIT_NAMES,
 } from '@buraco/game/Mighty.js';
 import { BoardErrorBoundary } from './shared/ErrorBoundary.jsx';
+import { CardShell, CardBack as SharedCardBack } from './shared/Card.jsx';
 
 const RANK_SHOW = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const SUIT_COLORS = { 0: '#111', 1: '#d03030', 2: '#111', 3: '#d03030' };
@@ -31,47 +32,51 @@ const Card = ({ card, trump, onClick, disabled, selected, legal, dim, badge }) =
   const mighty = isMighty(card, trump);
   const ripper = isRipper(card, trump);
   const joker = card === JOKER;
+  const style = {};
+  if (badge === 'M' || badge === 'R') style.border = '2px solid #ffd700';
   return (
-    <div onClick={disabled ? undefined : onClick} style={{
-      position: 'relative',
-      border: selected ? '3px solid #ffd700' : legal ? '2px solid #7CFC00' : '1px solid #333',
-      transform: selected ? 'translateY(-8px)' : 'none',
-      transition: 'all 0.15s',
-      cursor: disabled ? 'default' : 'pointer',
-      borderRadius: '6px', width: `${CARD_W}px`, height: `${CARD_H}px`, minWidth: `${CARD_W}px`,
-      display: 'inline-flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', margin: '2px',
-      backgroundColor: joker ? '#8e44ad' : (mighty ? '#d4af37' : (ripper ? '#1a5276' : 'white')),
-      color: joker ? 'white' : (mighty ? '#1a1a1a' : (ripper ? '#ffd700' : SUIT_COLORS[suitOf(card)])),
-      opacity: dim ? 0.35 : 1,
-      boxShadow: '2px 2px 4px rgba(0,0,0,0.5)',
-      ...(badge ? { border: badge === 'M' ? '2px solid #ffd700' : badge === 'R' ? '2px solid #ffd700' : {} } : {}),
-    }}>
-      <div style={{ position: 'absolute', top: '2px', left: '3px', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '0.9' }}>
-        <span style={{ fontSize: '15px', fontWeight: 'bold' }}>{joker ? '' : RANK_SHOW[rankOf(card)]}</span>
-        {!joker && <span style={{ fontSize: '16px' }}>{suitChar(suitOf(card))}</span>}
-      </div>
-      <div style={{ fontSize: '30px', opacity: 0.5, textAlign: 'center', lineHeight: '1' }}>
-        {joker ? '🤡' : suitChar(suitOf(card))}
-      </div>
-      <div style={{ position: 'absolute', bottom: '2px', right: '4px', fontSize: '11px', fontWeight: 'bold', color: mighty ? '#1a1a1a' : ripper ? '#ffd700' : '#888' }}>
-        {mighty ? 'M' : ripper ? 'R' : ''}
-      </div>
-    </div>
+    <CardShell
+      w={CARD_W} h={CARD_H}
+      selected={selected}
+      legal={legal}
+      opacity={dim ? 0.35 : 1}
+      onClick={onClick}
+      disabled={disabled}
+      bg={joker ? '#8e44ad' : (mighty ? '#d4af37' : (ripper ? '#1a5276' : 'white'))}
+      color={joker ? 'white' : (mighty ? '#1a1a1a' : (ripper ? '#ffd700' : SUIT_COLORS[suitOf(card)]))}
+      transition='all 0.15s'
+      boxShadow='2px 2px 4px rgba(0,0,0,0.5)'
+      cursor={disabled ? 'default' : 'pointer'}
+      corner={{ rank: joker ? '' : RANK_SHOW[rankOf(card)], suit: joker ? '' : suitChar(suitOf(card)) }}
+      cornerRow={false}
+      cornerTopLeft='3px'
+      cornerLineHeight='0.9'
+      cornerRankSize='15px'
+      cornerSuitSize='16px'
+      center={joker ? '🤡' : suitChar(suitOf(card))}
+      centerSize='30px'
+      centerOpacity={0.5}
+      centerTextAlign='center'
+      centerLineHeight='1'
+      overlay={
+        <div style={{ position: 'absolute', bottom: '2px', right: '4px', fontSize: '11px', fontWeight: 'bold', color: mighty ? '#1a1a1a' : ripper ? '#ffd700' : '#888' }}>
+          {mighty ? 'M' : ripper ? 'R' : ''}
+        </div>
+      }
+      style={style}
+    />
   );
 };
 
 const CardBack = ({ label, count }) => (
-  <div style={{
-    border: '2px solid white', borderRadius: '8px', width: '46px', height: '64px', margin: '2px',
-    backgroundColor: '#0a3d62',
-    backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.12) 4px, rgba(255,255,255,0.12) 8px)',
-    boxShadow: '2px 2px 5px rgba(0,0,0,0.5)',
-    display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'white',
-    fontSize: '0.75em', textAlign: 'center',
-  }}>
-    <span style={{ fontWeight: 'bold' }}>{label}</span>
-    <span style={{ fontSize: '1.4em' }}>{count}</span>
-  </div>
+  <SharedCardBack
+    label={label} count={count}
+    w={46} h={64}
+    stripe={{ a: 4, b: 8, alpha: 0.12 }}
+    baseFontSize='0.75em'
+    labelSize={undefined}
+    countSize='1.4em'
+  />
 );
 
 const RoleBadge = ({ emoji, placeholder }) => (

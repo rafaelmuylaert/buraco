@@ -28,6 +28,7 @@ import React, { useState, useEffect } from 'react';
 import {isMeldClean, getMeldLength, calculateMeldPoints, meldToCards, handToCards, intToCardObj} from '@buraco/game/Buraco.js';
 import { useT } from './i18n.jsx';
 import { BoardErrorBoundary, FatalFallback } from './shared/ErrorBoundary.jsx';
+import { CardShell, CardBack as SharedCardBack } from './shared/Card.jsx';
 
 // Card dimensions used for overlap calculations
 const CARD_W = 46, CARD_H = 60;
@@ -35,44 +36,49 @@ const CARD_W = 46, CARD_H = 60;
 const Card = ({ card, isSelected, isNewlyDrawn, onClick, customStyle, deckColor, horizontalCorner }) => {
   const cssW = parseFloat(customStyle?.width);
   const isSmall = !isNaN(cssW) && cssW < CARD_W;
+  const style = { WebkitTextSizeAdjust: '100%', ...customStyle };
+  if (isNewlyDrawn && !isSelected) style.border = '3px solid #ffcc00';
   return (
-    <div onClick={onClick} style={{
-      position: 'relative',
-      border: isSelected ? '3px solid #ffd700' : (isNewlyDrawn ? '3px solid #ffcc00' : '1px solid #333'), 
-      transform: isSelected ? 'translateY(-8px)' : 'none', 
-      transition: 'all 0.2s', 
-      cursor: onClick ? 'pointer' : 'default',
-      borderRadius: '6px', width: `${CARD_W}px`, height: `${CARD_H}px`, minWidth: `${CARD_W}px`,
-      display: 'inline-flex', flexDirection: 'column', 
-      justifyContent: 'center', alignItems: 'center', margin: '2px',
-      backgroundColor: 'white', color: card.color, 
-      boxShadow: isNewlyDrawn && !isSelected ? '0 0 12px rgba(255, 204, 0, 0.8)' : '2px 2px 4px rgba(0,0,0,0.4)',
-      WebkitTextSizeAdjust: '100%',
-      ...customStyle
-    }}>
-      <div style={{ position: 'absolute', top: '2px', left: '2px', display: 'flex', flexDirection: horizontalCorner ? 'row' : 'column', alignItems: 'center', lineHeight: '0.7' }}>
-        <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{card.rank}</span>
-        <span style={{ fontSize: '18px' }}>{card.suit}</span>
-      </div>
-      <div style={{ fontSize: isSmall ? '25px' : '34px', opacity: 0.4}}>{card.suit}</div>
-      {deckColor && <div style={{ position: 'absolute', bottom: 0, left: 0, width: 0, height: 0,
-        borderStyle: 'solid', borderWidth: '0 12px 12px 0',
-        borderColor: `transparent transparent ${deckColor} transparent`,
-        borderBottomLeftRadius: '4px' }} />}
-    </div>
+    <CardShell
+      w={CARD_W} h={CARD_H}
+      selected={isSelected}
+      onClick={onClick}
+      disabled={false}
+      bg='white'
+      color={card.color}
+      transition='all 0.2s'
+      boxShadow={isNewlyDrawn && !isSelected ? '0 0 12px rgba(255, 204, 0, 0.8)' : '2px 2px 4px rgba(0,0,0,0.4)'}
+      corner={{ rank: card.rank, suit: card.suit }}
+      cornerRow={horizontalCorner}
+      cornerTopLeft='2px'
+      cornerLineHeight='0.7'
+      cornerRankSize='16px'
+      cornerSuitSize='18px'
+      center={card.suit}
+      centerSize={isSmall ? '25px' : '34px'}
+      centerOpacity={0.4}
+      overlay={deckColor ? (
+        <div style={{ position: 'absolute', bottom: 0, left: 0, width: 0, height: 0,
+          borderStyle: 'solid', borderWidth: '0 12px 12px 0',
+          borderColor: `transparent transparent ${deckColor} transparent`,
+          borderBottomLeftRadius: '4px' }} />
+      ) : null}
+      style={style}
+    />
   );
 };
 
-
 const CardBack = ({ label, count, onClick, deckColor }) => (
-  <div onClick={onClick} style={{
-    border: '2px solid white', borderRadius: '8px', width: '60px', height: '90px', margin: '2px',
-    backgroundColor: deckColor || '#0a3d62', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px)',
-    boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'white', cursor: onClick ? 'pointer' : 'default', textAlign: 'center'
-  }}>
-    <span style={{ fontSize: '0.8em', fontWeight: 'bold' }}>{label}</span>
-    <span style={{ fontSize: '1.2em' }}>{count}</span>
-  </div>
+  <SharedCardBack
+    label={label} count={count}
+    w={60} h={90}
+    deckColor={deckColor}
+    onClick={onClick}
+    stripe={{ a: 5, b: 10, alpha: 0.1 }}
+    labelSize='0.8em'
+    countSize='1.2em'
+    cursor={onClick ? 'pointer' : 'default'}
+  />
 );
 
 export function BuracoBoard(props) {
