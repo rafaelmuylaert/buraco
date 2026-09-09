@@ -20,27 +20,10 @@ import {
   isMighty, isRipper, getLegalPlays, createDeck, computePartner,
   SUIT_NAMES,
 } from '@buraco/game/Mighty.js';
+import { BoardErrorBoundary } from './shared/ErrorBoundary.jsx';
 
 const RANK_SHOW = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const SUIT_COLORS = { 0: '#111', 1: '#d03030', 2: '#111', 3: '#d03030' };
-
-class ErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { error: null }; }
-  static getDerivedStateFromError(e) { return { error: e }; }
-  render() {
-    const t = this.props.t || ((k) => k);
-    if (this.state.error) {
-      return (
-        <div style={{ color: 'white', padding: '40px', backgroundColor: '#0d1f2d', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-          <h1 style={{ color: '#ffd700' }}>{t('board.gameOver')}</h1>
-          <p style={{ color: '#ccc' }}>{t('board.gameOverDesc')}</p>
-          <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>{t('common.backToLounge')}</button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
 
 const CARD_W = 46, CARD_H = 64;
 
@@ -137,7 +120,7 @@ const bidText = (bid, t) => {
 
 export function MightyBoard(props) {
   const { t } = useT();
-  return <ErrorBoundary t={t}><MightyBoardInner {...props} /></ErrorBoundary>;
+  return <BoardErrorBoundary t={t} bg="#0d1f2d"><MightyBoardInner {...props} /></BoardErrorBoundary>;
 }
 
 function MightyBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress = null, tournament = null, tournamentStandings = null }) {

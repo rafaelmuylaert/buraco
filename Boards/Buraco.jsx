@@ -27,25 +27,7 @@
 import React, { useState, useEffect } from 'react';
 import {isMeldClean, getMeldLength, calculateMeldPoints, meldToCards, handToCards, intToCardObj} from '@buraco/game/Buraco.js';
 import { useT } from './i18n.jsx';
-
-
-class ErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { error: null }; }
-  static getDerivedStateFromError(e) { return { error: e }; }
-  render() {
-    const t = this.props.t || ((k) => k);
-    if (this.state.error) {
-      return (
-        <div style={{ color: 'white', padding: '40px', backgroundColor: '#1b4332', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-          <h1 style={{ color: '#ffd700' }}>{t('board.gameOver')}</h1>
-          <p style={{ color: '#ccc' }}>{t('board.gameOverDesc')}</p>
-          <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>{t('common.backToLounge')}</button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
+import { BoardErrorBoundary, FatalFallback } from './shared/ErrorBoundary.jsx';
 
 // Card dimensions used for overlap calculations
 const CARD_W = 46, CARD_H = 60;
@@ -95,7 +77,7 @@ const CardBack = ({ label, count, onClick, deckColor }) => (
 
 export function BuracoBoard(props) {
   const { t } = useT();
-  return <ErrorBoundary t={t}><BuracoBoardInner {...props} /></ErrorBoundary>;
+  return <BoardErrorBoundary t={t}><BuracoBoardInner {...props} /></BoardErrorBoundary>;
 }
 
 function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament = null, tournamentStandings = null, apiAddress = null, matchData = null }) {
@@ -377,13 +359,7 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
 if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>{t('board.loadingTable')}</div>;
 
   if (!G.cards || !G.teams || !G.teamPlayers || !G.table) {
-    return (
-      <div style={{ color: 'white', padding: '40px', backgroundColor: '#1b4332', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-        <h1 style={{ color: '#ffd700' }}>{t('board.gameOver')}</h1>
-        <p style={{ color: '#ccc' }}>{t('board.gameOverDesc')}</p>
-        <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>{t('common.backToLounge')}</button>
-      </div>
-    );
+    return <FatalFallback t={t} bg="#1b4332" />;
   }
 
   // Build hand display from cards2 flat buffer

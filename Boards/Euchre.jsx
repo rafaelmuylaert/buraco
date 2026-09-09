@@ -12,6 +12,7 @@ import {
   getRank, isRightBowler, isLeftBowler, isBowler,
   isPointCard, getLegalPlays, createEuchreDeck, DECK_SIZES, getDeckWidth,
 } from '@buraco/game/euchre.js';
+import { BoardErrorBoundary } from './shared/ErrorBoundary.jsx';
 
 const CARD_W = 46, CARD_H = 64;
 
@@ -97,29 +98,11 @@ const BidBox = ({ points, suit, passed, waiting, active, t }) => {
 
 // ── Error boundary ──────────────────────────────────────────────────────────
 
-class ErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { error: null }; }
-  static getDerivedStateFromError(e) { return { error: e }; }
-  render() {
-    const { t } = this.props;
-    if (this.state.error) {
-      return (
-        <div style={{ color: 'white', padding: '40px', backgroundColor: '#0d1f2d', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-          <h1 style={{ color: '#ffd700' }}>{t('board.gameOver')}</h1>
-          <p style={{ color: '#ccc' }}>{t('board.gameOverDesc')}</p>
-          <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1em', cursor: 'pointer' }}>{t('common.backToLounge')}</button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
 // ── Main component ──────────────────────────────────────────────────────────
 
 export function EuchreBoard(props) {
   const { t } = useT();
-  return <ErrorBoundary t={t}><EuchreBoardInner {...props} /></ErrorBoundary>;
+  return <BoardErrorBoundary t={t} bg="#0d1f2d"><EuchreBoardInner {...props} /></BoardErrorBoundary>;
 }
 
 function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress = null, tournament = null, tournamentStandings = null }) {
