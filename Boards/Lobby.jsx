@@ -31,9 +31,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Client } from 'boardgame.io/react';
-import { SocketIO } from 'boardgame.io/multiplayer';
 import { LobbyClient } from 'boardgame.io/client';
-import { io } from 'socket.io-client';
 import { BuracoGame, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS } from '@buraco/game/Buraco.js';
 import { BuracoBoard } from './Buraco.jsx';
 import { MightyGame } from '@buraco/game/Mighty.js';
@@ -41,29 +39,10 @@ import { MightyBoard } from './Mighty.jsx';
 import { createEuchreGame } from '@buraco/game/euchre.js';
 import { EuchreBoard } from './Euchre.jsx';
 import { useT } from './i18n.jsx';
-
-const { port, hostname, protocol, origin } = window.location;
-const IS_DIRECT = ['8000','5173'].includes(port);
-const IS_SUBDOMAIN = hostname.startsWith('buraco.');
-const BASE_DOMAIN = IS_SUBDOMAIN ? hostname.replace('buraco.', '') : null;
-
-const API_ADDRESS = IS_DIRECT
-  ? `${protocol}//${hostname}:8000`
-  : IS_SUBDOMAIN
-    ? `${protocol}//buracoapi.${BASE_DOMAIN}`
-    : `${origin}/buraco`;
-
-const SOCKET_SERVER = IS_DIRECT
-  ? `${protocol}//${hostname}:8000`
-  : IS_SUBDOMAIN
-    ? `${protocol}//buracoapi.${BASE_DOMAIN}`
-    : origin;
-const SOCKET_PATH = (IS_DIRECT || IS_SUBDOMAIN) ? '/socket.io' : '/buraco/socket.io';
+import { API_ADDRESS, makeMultiplayer, newReconnectSocket } from './shared/sockets.js';
+import { AUTH_KEY, getSavedAuth, getSessions, setSession } from './shared/session.js';
 
 const lobbyClient = new LobbyClient({ server: API_ADDRESS });
-
-const AUTH_KEY = 'buraco_auth';
-const getSavedAuth = () => { try { return JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch { return null; } };
 
 const PREFERRED_GAME_KEY = 'buraco_preferred_game';
 const VALID_GAMES = ['buraco', 'mighty', 'euchre'];
@@ -143,21 +122,15 @@ const GameSwitcher = ({ t, preferredGame, onChange }) => (
 
 const BuracoClient = Client({ 
   game: BuracoGame, 
-  board: BuracoBoard, 
-  multiplayer: SocketIO({ 
-    server: SOCKET_SERVER, 
-    socketOpts: { path: SOCKET_PATH, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000 } 
-  }), 
+  board: BuracoBoard,
+  multiplayer: makeMultiplayer(),
   debug: false 
 });
 
 const MightyClient = Client({
   game: MightyGame,
   board: MightyBoard,
-  multiplayer: SocketIO({
-    server: SOCKET_SERVER,
-    socketOpts: { path: SOCKET_PATH, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000 }
-  }),
+  multiplayer: makeMultiplayer(),
   debug: false,
   numPlayers: 5,
 });
@@ -167,10 +140,7 @@ const EucharGameConfig = createEuchreGame({ deckSize: 24, winPoints: 5 });
 GAME_CLIENTS.euchre = Client({
   game: EucharGameConfig,
   board: EuchreBoard,
-  multiplayer: SocketIO({
-    server: SOCKET_SERVER,
-    socketOpts: { path: SOCKET_PATH, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000 }
-  }),
+  multiplayer: makeMultiplayer(),
   debug: false,
   numPlayers: 4,
 });
@@ -178,7 +148,7 @@ GAME_CLIENTS.euchre = Client({
 function ReconnectingClient({ matchID, playerID, credentials, tournament, tournamentStandings, apiAddress, gameName }) {
   const [key, setKey] = React.useState(0);
   React.useEffect(() => {
-    const socket = io(SOCKET_SERVER, { path: SOCKET_PATH, autoConnect: true, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000 });
+    const socket = newReconnectSocket();
     socket.on('reconnect', () => setKey(k => k + 1));
     return () => socket.close();
   }, []);
@@ -494,8 +464,6 @@ const App = () => {
     });
   };
 
-  const getSavedSessions = () => JSON.parse(localStorage.getItem('buraco_sessions') || '{}');
-
   const myDisplayName = currentUser?.username || t('lounge.myName');
 
   const isRegisteredName = (name) =>
@@ -781,9 +749,7 @@ const App = () => {
          setupData: { ...rules, numPlayers: numPlayers, isTournament: false, assignments: assignmentsMap, name: rules.name || t('lounge.openQuick.tableOf', { name: myName }) }
       }).then(async ({ matchID }) => {
          const { playerCredentials } = await lobbyClient.joinMatch('buraco', matchID, { playerID: '0', playerName: myName });
-         const sessions = getSavedSessions();
-         sessions[`${matchID}_0`] = { matchID, playerID: '0', credentials: playerCredentials };
-         localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
+          setSession(matchID, '0', { matchID, playerID: '0', credentials: playerCredentials });
          
          setMatchID(matchID); setPlayerID('0'); setCredentials(playerCredentials); 
          setTimeout(() => setView('game'), 500);
@@ -830,9 +796,7 @@ const App = () => {
                             });
                             const data = await res.json();
                             if (!res.ok || !data.playerCredentials) { console.error('Auto-join falhou:', data.error); return; }
-                            const sessions = getSavedSessions();
-                            sessions[`${targetMatch.matchID}_${targetSeatID}`] = { matchID: targetMatch.matchID, playerID: targetSeatID, credentials: data.playerCredentials, gameName: targetGame };
-                            localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
+                             setSession(targetMatch.matchID, targetSeatID, { matchID: targetMatch.matchID, playerID: targetSeatID, credentials: data.playerCredentials, gameName: targetGame });
                             setMatchID(targetMatch.matchID); setPlayerID(targetSeatID); setCredentials(data.playerCredentials);
                             setGameName(targetGame);
                             setView('game');
@@ -872,9 +836,7 @@ const App = () => {
         alert(data.error || t('lounge.join.joinFailed'));
         return;
       }
-      const sessions = getSavedSessions();
-      sessions[`${match.matchID}_${seatID}`] = { matchID: match.matchID, playerID: seatID, credentials: data.playerCredentials, gameName: gn };
-      localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
+       setSession(match.matchID, seatID, { matchID: match.matchID, playerID: seatID, credentials: data.playerCredentials, gameName: gn });
       setMatchID(match.matchID); setPlayerID(seatID); setCredentials(data.playerCredentials);
       setGameName(gn);
       setView('game');
@@ -884,7 +846,7 @@ const App = () => {
   };
 
   const handleReconnect = async (mID, pID) => {
-    const sessions = getSavedSessions();
+    const sessions = getSessions();
     const session = sessions[`${mID}_${pID}`];
     if (!session) return;
     // Probe the current seat state: if a live human took over the seat while the
@@ -1005,9 +967,7 @@ const App = () => {
 
       const { playerCredentials } = await lobbyClient.joinMatch('buraco', matchID, { playerID: '0', playerName: myName });
       
-      const sessions = getSavedSessions();
-      sessions[`${matchID}_0`] = { matchID, playerID: '0', credentials: playerCredentials };
-      localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
+       setSession(matchID, '0', { matchID, playerID: '0', credentials: playerCredentials });
       
       setMatchID(matchID); 
       setPlayerID('0'); 
@@ -1041,9 +1001,7 @@ const App = () => {
 
       const { playerCredentials } = await lobbyClient.joinMatch('mighty', matchID, { playerID: '0', playerName: myName });
 
-      const sessions = getSavedSessions();
-      sessions[`${matchID}_0`] = { matchID, playerID: '0', credentials: playerCredentials, gameName: 'mighty' };
-      localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
+       setSession(matchID, '0', { matchID, playerID: '0', credentials: playerCredentials, gameName: 'mighty' });
 
       setMatchID(matchID);
       setPlayerID('0');
@@ -1076,9 +1034,7 @@ const App = () => {
 
       const { playerCredentials } = await lobbyClient.joinMatch('euchre', matchID, { playerID: '0', playerName: myName });
 
-      const sessions = getSavedSessions();
-      sessions[`${matchID}_0`] = { matchID, playerID: '0', credentials: playerCredentials, gameName: 'euchre' };
-      localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
+       setSession(matchID, '0', { matchID, playerID: '0', credentials: playerCredentials, gameName: 'euchre' });
 
       setMatchID(matchID);
       setPlayerID('0');
@@ -2082,7 +2038,7 @@ const App = () => {
   const visibleTournaments = tournaments.filter(isTournamentVisible);
   const activeTournaments = visibleTournaments.filter(t => t.status !== 'completed' && (t.game || 'buraco') === preferredGame);
   const completedTournaments = visibleTournaments.filter(t => t.status === 'completed' && (t.game || 'buraco') === preferredGame);
-  const savedSessions = getSavedSessions();
+  const savedSessions = getSessions();
 
   const isBotSeat = (m, p) => String(m.setupData?.assignments?.[p.id] || '').toLowerCase().includes('bot');
   const openQuickMatches = matches.filter(m => {
