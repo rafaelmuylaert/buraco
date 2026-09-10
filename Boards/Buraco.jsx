@@ -29,6 +29,8 @@ import {isMeldClean, getMeldLength, calculateMeldPoints, meldToCards, handToCard
 import { useT } from './i18n.jsx';
 import { BoardErrorBoundary, FatalFallback } from './shared/ErrorBoundary.jsx';
 import { CardShell, CardBack as SharedCardBack } from './shared/Card.jsx';
+import { SeatManager } from './shared/SeatManager.jsx';
+import { useSeatActions } from './shared/useSeatActions.js';
 
 // Card dimensions used for overlap calculations
 const CARD_W = 46, CARD_H = 60;
@@ -86,18 +88,13 @@ export function BuracoBoard(props) {
   return <BoardErrorBoundary t={t}><BuracoBoardInner {...props} /></BoardErrorBoundary>;
 }
 
-function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament = null, tournamentStandings = null, apiAddress = null, matchData = null }) {
+function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament = null, tournamentStandings = null, apiAddress = null }) {
   const { t } = useT();
   // State: Set of uids instead of {cardType: count}
   const [selectedCards, setSelectedCards] = useState(new Set());
   const [gameOverMinimized, setGameOverMinimized] = useState(false);
   const [popupPos, setPopupPos] = useState({ x: null, y: null });
   const [dragging, setDragging] = useState(false);
-  const [removePopup, setRemovePopup] = useState(null);
-  const [renamePopup, setRenamePopup] = useState(null);
-  const [renameForm, setRenameForm] = useState({ name: '', password: '' });
-  const [renameBusy, setRenameBusy] = useState(false);
-  const [renameError, setRenameError] = useState('');
   const [compact, setCompact] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.innerWidth < 900;
@@ -108,6 +105,7 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+  const seatActions = useSeatActions({ apiAddress, gameName: 'buraco', matchID, playerID, moves, t });
   const compactScale = compact ? (window.innerWidth < 480 ? 0.7 : 0.82) : 1;
   const MELD_W = Math.round(CARD_W * compactScale);
   const MELD_H = Math.round(CARD_H * compactScale);
@@ -443,116 +441,6 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>{t('boar
 };
 
 
-  const savedAuthHeaders = () => {
-    const savedAuth = (() => { try { return JSON.parse(localStorage.getItem('buraco_auth') || 'null'); } catch { return null; } })();
-    return { 'Content-Type': 'application/json', ...(savedAuth?.token ? { 'Authorization': `Bearer ${savedAuth.token}` } : {}) };
-  };
-
-  const handleRemovePlayer = async (seatID, seatName) => {
-    if (!apiAddress) return;
-    try {
-      const res = await fetch(`${apiAddress}/api/quick/kick-seat`, {
-        method: 'POST',
-        headers: savedAuthHeaders(),
-        body: JSON.stringify({ matchID, playerID: seatID.toString() })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'kick failed');
-      alert(t('board.kickSeatDone', { id: seatID, name: seatName }));
-    } catch (e) {
-      alert(e.message && e.message.includes('conectado') ? e.message : t('board.kickSeatFail'));
-    }
-  };
-
-  const isTournament = !!tournament;
-
-  const handleReplaceWithBot = async (seatID, seatName) => {
-    if (!window.confirm(t('board.replaceWithBotConfirm', { name: seatName }))) return;
-    moves.renamePlayer(seatID, `Bot ${seatID}`);
-    try {
-      const res = await fetch(`${apiAddress}/api/quick/replace-bot`, {
-        method: 'POST',
-        headers: savedAuthHeaders(),
-        body: JSON.stringify({ matchID, playerID: seatID.toString() })
-      });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || t('board.replaceWithBotError')); }
-      else alert(t('board.replaceWithBotDone', { name: seatName, id: seatID }));
-    } catch { alert(t('board.replaceWithBotFail')); }
-  };
-
-  const handleRenameSubmit = async () => {
-    if (!apiAddress) return;
-    const newName = renameForm.name.trim();
-    if (newName.length < 2) { setRenameError(t('board.renameNameMin')); return; }
-    if (renameForm.password.length < 6) { setRenameError(t('board.renamePassMin')); return; }
-    setRenameBusy(true);
-    setRenameError('');
-    try {
-      let auth = null;
-      const tryLogin = async () => {
-        const res = await fetch(`${apiAddress}/api/auth/login`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: newName, password: renameForm.password })
-        });
-        if (res.ok) return await res.json();
-        const data = await res.json().catch(() => ({}));
-        const err = new Error(data.error || 'login failed'); err.status = res.status; throw err;
-      };
-      try {
-        auth = await tryLogin();
-      } catch (e) {
-        if (e.status === 401) {
-          const regRes = await fetch(`${apiAddress}/api/auth/register`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: newName, password: renameForm.password })
-          });
-          if (!regRes.ok) { const d = await regRes.json().catch(() => ({})); throw new Error(d.error || 'register failed'); }
-          auth = await regRes.json();
-        } else {
-          throw e;
-        }
-      }
-      if (auth?.token) localStorage.setItem('buraco_auth', JSON.stringify(auth));
-      moves.renamePlayer(playerID, newName);
-      try {
-        const sessions = (() => { try { return JSON.parse(localStorage.getItem('buraco_sessions') || '{}'); } catch { return {}; } })();
-        const credentials = sessions[`${matchID}_${playerID}`]?.credentials;
-        if (credentials) {
-          await fetch(`${apiAddress}/games/buraco/${matchID}/update`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ playerID, credentials, newName })
-          });
-        }
-      } catch (e) {
-        console.warn('Falha ao atualizar o nome da mesa:', e.message);
-      }
-      setRenamePopup(null);
-      setRenameForm({ name: '', password: '' });
-    } catch (e) {
-      setRenameError(e.message || t('board.renameFail'));
-    } finally {
-      setRenameBusy(false);
-    }
-  };
-
-  const handleLeaveSeat = async () => {
-    if (!window.confirm(t('board.leaveSeatConfirm'))) return;
-    try {
-      const savedAuth = (() => { try { return JSON.parse(localStorage.getItem('buraco_auth') || 'null'); } catch { return null; } })();
-      const res = await fetch(`${apiAddress}/api/quick/release-seat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(savedAuth?.token ? { 'Authorization': `Bearer ${savedAuth.token}` } : {}) },
-        body: JSON.stringify({ matchID, playerID: playerID.toString() })
-      });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || t('board.leaveSeatError')); return; }
-      const sessions = (() => { try { return JSON.parse(localStorage.getItem('buraco_sessions') || '{}'); } catch { return {}; } })();
-      delete sessions[`${matchID}_${playerID}`];
-      localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
-      window.location.reload();
-    } catch { alert(t('board.leaveSeatFail')); }
-  };
-
   const renderTeamTable = (teamId, title, isMyTeam) => {
     const teamTable = G.table[teamId];
     const runners = (teamTable[1] || []).filter(m => m && getMeldLength(m) > 0).map((meldGroup, index) => ({ key: `runner-${index}`, index, meldGroup, isRunner: true }));
@@ -649,12 +537,20 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>{t('boar
   const deckEmpty = G.deck.length === 0 && G.pots.length === 0;
   const deckCount = G.deck.length === 0 && G.pots.length > 0 ? 11 : G.deck.length;
 
+  const seatRows = Object.keys(G.handSizes || {}).map(p => ({
+    seatID: p,
+    isMe: p === playerID,
+    isTurn: ctx.currentPlayer === p,
+    fallbackName: G.rules?.assignments?.[p] || null,
+    count: G.handSizes[p] ?? 0
+  }));
+
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100vh', boxSizing: 'border-box', overflow: 'hidden', padding: '15px', fontFamily: 'sans-serif', backgroundColor: '#2d6a4f', color: 'white', display: 'flex', gap: '15px' }}>
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: `${LEFT_COL_W}px`, minWidth: `${LEFT_COL_W}px`, flexShrink: 0, alignItems: 'center', overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
         
-        <button onClick={handleLeaveSeat} style={{ width: '100%', background: '#4da6ff', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.8em', boxSizing: 'border-box' }}>
+        <button onClick={seatActions.leaveSeat} style={{ width: '100%', background: '#4da6ff', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.8em', boxSizing: 'border-box' }}>
           {t('common.lounge')}
         </button>
 
@@ -722,40 +618,17 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>{t('boar
           })()}
         </div>
 
-        <div style={{ width: '100%', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '8px', boxSizing: 'border-box' }}>
-          <h4 style={{ margin: '0 0 5px 0', fontSize: '0.8em', color: '#ccc' }}>{t('board.players')}</h4>
-          {Object.keys(G.handSizes).map(p => {
-            const isTurn = ctx.currentPlayer === p;
-            const isMe = p === playerID;
-            const md = matchData?.find(m => m.id?.toString() === p);
-            const occupied = !!md?.name;
-            const name = md?.name || G.rules?.assignments?.[p] || t('board.playerFallback', { n: p });
-            const isBot = String(name || '').toLowerCase().includes('bot');
-            const showActions = occupied && !isMe && !!apiAddress;
-            const showRename = isMe && !isTournament && !!apiAddress;
-            return (
-              <div key={p} style={{ 
-                fontSize: '0.70em', display: 'flex', flexDirection: 'column',
-                color: isTurn ? '#ffd700' : '#888', 
-                fontWeight: isTurn ? 'bold' : 'normal', 
-                marginBottom: '2px',
-                background: isTurn ? 'rgba(77, 166, 255, 0.2)' : 'transparent',
-                border: isTurn ? '1px solid #4da6ff' : '1px solid transparent',
-                padding: '3px 4px', borderRadius: '4px',
-                overflow: 'hidden', minWidth: 0
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 0 }}>
-                  <span
-                    onClick={showActions ? () => setRemovePopup({ seatID: p, seatName: name }) : (showRename ? () => setRenamePopup({ seatID: p, seatName: name }) : undefined)}
-                    title={showActions ? t('board.manageSeatTitle', { name }) : (showRename ? t('board.renameSeatTitle') : undefined)}
-                    style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0, cursor: (showActions || showRename) ? 'pointer' : 'default', color: showActions ? '#ff9900' : undefined, textDecoration: showActions ? 'underline' : 'none' }}
-                  >{isBot ? '🤖' : '👤'} {isTurn ? '» ' : ''}{name}</span>
-                  <span style={{ flexShrink: 0, marginLeft: '4px' }}>{G.handSizes[p] ?? 0}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <SeatManager
+          t={t}
+          gameName="buraco"
+          matchID={matchID}
+          playerID={playerID}
+          isTournament={!!tournament}
+          actions={seatActions}
+          rows={seatRows}
+          title={t('board.players')}
+          apiAddress={apiAddress}
+        />
 
         {G.rules?.showKnownCards && G.knownCards && Object.keys(G.knownCards).some(p => {
             const flat = G.knownCards[p] || [];
@@ -809,81 +682,6 @@ if (!G || !ctx) return <div style={{ color: 'white', padding: '50px' }}>{t('boar
       </div>
 
       {gameOverPopup}
-
-      {removePopup && (() => {
-        const md = matchData?.find(m => m.id?.toString() === removePopup.seatID);
-        const occupied = !!md?.name;
-        const isBot = String(md?.name || G.rules?.assignments?.[removePopup.seatID] || '').toLowerCase().includes('bot');
-        const humanConnected = occupied && !isBot && md?.isConnected !== false;
-        const canRemove = !humanConnected;
-        const canReplace = !isBot && !humanConnected;
-        return (
-          <div onClick={() => setRemovePopup(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
-            <div onClick={e => e.stopPropagation()} style={{ background: '#1b4332', border: '2px solid #ff9900', borderRadius: '12px', padding: '24px', maxWidth: '340px', width: '100%', textAlign: 'center', boxShadow: '0 8px 30px rgba(0,0,0,0.5)' }}>
-              <h3 style={{ margin: '0 0 8px 0', color: '#ffd700' }}>{removePopup.seatName}</h3>
-              <p style={{ color: '#ccc', margin: '0 0 12px 0', fontSize: '0.95em', lineHeight: '1.4' }}>
-                {isBot
-                  ? t('board.removeBotPrompt', { name: removePopup.seatName, id: removePopup.seatID })
-                  : t('board.removeSeatPrompt', { id: removePopup.seatID, name: removePopup.seatName })}
-              </p>
-              {humanConnected && (
-                <p style={{ color: '#ffcc66', margin: '0 0 12px 0', fontSize: '0.85em', lineHeight: '1.4' }}>
-                  {t('board.playerConnected')}
-                </p>
-              )}
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button onClick={() => setRemovePopup(null)} style={{ padding: '8px 18px', background: '#555', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t('common.cancel')}</button>
-                {!isBot && (
-                  <button
-                    onClick={canReplace ? () => { handleReplaceWithBot(removePopup.seatID, removePopup.seatName); setRemovePopup(null); } : undefined}
-                    disabled={!canReplace}
-                    title={canReplace ? t('board.freeSeatForBot') : t('board.waitingDisconnect')}
-                    style={{ padding: '8px 18px', background: canReplace ? '#2a9d8f' : '#444', color: canReplace ? 'white' : '#888', border: 'none', borderRadius: '6px', cursor: canReplace ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>{t('board.replaceWithBot')}</button>
-                )}
-                <button
-                  onClick={canRemove ? () => { handleRemovePlayer(removePopup.seatID, removePopup.seatName); setRemovePopup(null); } : undefined}
-                  disabled={!canRemove}
-                  title={canRemove ? t('board.freeSeatReenter') : t('board.waitingDisconnect')}
-                  style={{ padding: '8px 18px', background: canRemove ? '#ff9900' : '#444', color: canRemove ? '#000' : '#888', border: 'none', borderRadius: '6px', cursor: canRemove ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>{t('board.remove')}</button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {renamePopup && (
-        <div onClick={() => setRenamePopup(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#1b4332', border: '2px solid #2a9d8f', borderRadius: '12px', padding: '24px', maxWidth: '340px', width: '100%', textAlign: 'center', boxShadow: '0 8px 30px rgba(0,0,0,0.5)' }}>
-            <h3 style={{ margin: '0 0 8px 0', color: '#ffd700' }}>{t('board.renameTitle')}</h3>
-            <p style={{ color: '#ccc', margin: '0 0 14px 0', fontSize: '0.9em', lineHeight: '1.4' }}>
-              {t('board.renameDesc')}
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-              <input
-                type="text"
-                placeholder={t('board.renameUserPlaceholder')}
-                value={renameForm.name}
-                onChange={e => setRenameForm({ ...renameForm, name: e.target.value })}
-                autoComplete="username"
-                style={{ padding: '10px', borderRadius: '5px', border: 'none' }}
-              />
-              <input
-                type="password"
-                placeholder={t('board.renamePassPlaceholder')}
-                value={renameForm.password}
-                onChange={e => setRenameForm({ ...renameForm, password: e.target.value })}
-                autoComplete="current-password"
-                style={{ padding: '10px', borderRadius: '5px', border: 'none' }}
-              />
-            </div>
-            {renameError && <div style={{ color: '#ff6b6b', fontSize: '0.85em', marginBottom: '10px' }}>{renameError}</div>}
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-              <button onClick={() => { setRenamePopup(null); setRenameForm({ name: '', password: '' }); setRenameError(''); }} style={{ padding: '8px 18px', background: '#555', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t('common.cancel')}</button>
-              <button onClick={handleRenameSubmit} disabled={renameBusy} style={{ padding: '8px 18px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '6px', cursor: renameBusy ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>{renameBusy ? t('board.renameSaving') : t('board.renameSubmit')}</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
