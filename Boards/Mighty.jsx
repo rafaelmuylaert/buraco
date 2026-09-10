@@ -24,6 +24,7 @@ import { BoardErrorBoundary } from './shared/ErrorBoundary.jsx';
 import { CardShell, CardBack as SharedCardBack } from './shared/Card.jsx';
 import { RoleBadge, BidBox } from './shared/SeatBox.jsx';
 import { backToLobby, queueTournamentNext } from './shared/replay.js';
+import { useGameoverPersist } from './shared/useGameoverPersist.js';
 
 const RANK_SHOW = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const SUIT_COLORS = { 0: '#111', 1: '#d03030', 2: '#111', 3: '#d03030' };
@@ -289,7 +290,7 @@ function MightyBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
   );
 
   // ── game over ──────────────────────────────────────────────────────────────
-  const go = ctx.gameover;
+  const { gameover: go } = useGameoverPersist(matchID, playerID, ctx.gameover, false);
   const isTournament = !!tournament;
   const isTournamentComplete = tournament && tournament.status === 'completed';
   const showNextButton = !isTournament || (isTournament && !isTournamentComplete);

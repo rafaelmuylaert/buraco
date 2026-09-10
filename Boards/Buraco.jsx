@@ -32,6 +32,7 @@ import { CardShell, CardBack as SharedCardBack } from './shared/Card.jsx';
 import { SeatManager } from './shared/SeatManager.jsx';
 import { useSeatActions } from './shared/useSeatActions.js';
 import { backToLobby, queueTournamentNext, queueRematch } from './shared/replay.js';
+import { useGameoverPersist } from './shared/useGameoverPersist.js';
 
 // Card dimensions used for overlap calculations
 const CARD_W = 46, CARD_H = 60;
@@ -115,24 +116,7 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
   const isMyTurn = ctx.currentPlayer === playerID;
 
   // Persist the last seen gameover across remounts (ReconnectingClient resets key on reconnect)
-  const storageKey = matchID ? `gameover_${matchID}_${playerID}` : null;
-    const lastGameoverRef = React.useRef(null);
-    React.useEffect(() => {
-    lastGameoverRef.current = null;
-    if (storageKey) sessionStorage.removeItem(storageKey);
-    }, [matchID]);
-  if (ctx?.gameover) {
-    lastGameoverRef.current = ctx.gameover;
-    if (storageKey) sessionStorage.setItem(storageKey, JSON.stringify(ctx.gameover));
-  } else if (G?.hasDrawn !== undefined) {
-    // Game is clearly still active — clear any stale gameover from storage
-    if (storageKey) sessionStorage.removeItem(storageKey);
-  } else if (!lastGameoverRef.current && storageKey) {
-    const stored = sessionStorage.getItem(storageKey);
-    if (stored) try { lastGameoverRef.current = JSON.parse(stored); } catch (_) {}
-  }
-
-  const gameover = lastGameoverRef.current;
+  const { gameover, storageKey } = useGameoverPersist(matchID, playerID, ctx?.gameover, G?.hasDrawn !== undefined);
 
   // Track melds snapshot at end of my last turn to highlight opponent additions
   const meldSnapshotRef = React.useRef(null);

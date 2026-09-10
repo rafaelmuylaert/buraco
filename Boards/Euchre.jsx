@@ -16,6 +16,7 @@ import { BoardErrorBoundary } from './shared/ErrorBoundary.jsx';
 import { CardShell, CardBack as SharedCardBack } from './shared/Card.jsx';
 import { RoleBadge } from './shared/SeatBox.jsx';
 import { backToLobby, queueTournamentNext } from './shared/replay.js';
+import { useGameoverPersist } from './shared/useGameoverPersist.js';
 
 const CARD_W = 46, CARD_H = 64;
 
@@ -236,7 +237,7 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
 
   // ── Game over ──────────────────────────────────────────────────────────
 
-  const go = ctx.gameover;
+  const { gameover: go } = useGameoverPersist(matchID, playerID, ctx.gameover, false);
   const isTournament = !!tournament;
   const isTournamentComplete = tournament && tournament.status === 'completed';
   const showNextButton = !isTournament || (isTournament && !isTournamentComplete);
