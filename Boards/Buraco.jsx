@@ -31,6 +31,7 @@ import { BoardErrorBoundary, FatalFallback } from './shared/ErrorBoundary.jsx';
 import { CardShell, CardBack as SharedCardBack } from './shared/Card.jsx';
 import { SeatManager } from './shared/SeatManager.jsx';
 import { useSeatActions } from './shared/useSeatActions.js';
+import { backToLobby, queueTournamentNext, queueRematch } from './shared/replay.js';
 
 // Card dimensions used for overlap calculations
 const CARD_W = 46, CARD_H = 60;
@@ -229,12 +230,11 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
     const isTournament = !!tournament;
     const isTournamentComplete = tournament && tournament.status === 'completed';
     const showNextButton = !isTournament || (isTournament && !isTournamentComplete);
-    const handleReturnLobby = () => { if (storageKey) sessionStorage.removeItem(storageKey); window.location.reload(); };
+    const handleReturnLobby = () => { if (storageKey) sessionStorage.removeItem(storageKey); backToLobby(); };
     const handleNextMatch = () => {
       if (storageKey) sessionStorage.removeItem(storageKey);
-      if (isTournament) sessionStorage.setItem('auto_join_tournament', JSON.stringify({ tournamentId: tournament.id, playerName: myName }));
-      else sessionStorage.setItem('quick_game_rematch', JSON.stringify({ rules: G.rules, numPlayers: G.rules.numPlayers, myName }));
-      window.location.reload();
+      if (isTournament) queueTournamentNext({ tournamentId: tournament.id, playerName: myName });
+      else queueRematch({ rules: G.rules, numPlayers: G.rules.numPlayers, myName });
     };
 
     // === UPDATED STANDINGS: apply this game's result to the pre-game standings ===

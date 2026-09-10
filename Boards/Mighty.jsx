@@ -23,6 +23,7 @@ import {
 import { BoardErrorBoundary } from './shared/ErrorBoundary.jsx';
 import { CardShell, CardBack as SharedCardBack } from './shared/Card.jsx';
 import { RoleBadge, BidBox } from './shared/SeatBox.jsx';
+import { backToLobby, queueTournamentNext } from './shared/replay.js';
 
 const RANK_SHOW = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const SUIT_COLORS = { 0: '#111', 1: '#d03030', 2: '#111', 3: '#d03030' };
@@ -315,17 +316,13 @@ function MightyBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
     return Object.entries(map).sort((a, b) => b[1].points - a[1].points);
   })();
 
-  const handleReturnLobby = () => {
-    sessionStorage.removeItem('auto_join_tournament');
-    sessionStorage.removeItem('quick_game_rematch');
-    window.location.reload();
-  };
+  const handleReturnLobby = () => backToLobby();
   const handleNextMatch = () => {
     if (isTournament) {
-      sessionStorage.removeItem('quick_game_rematch');
-      sessionStorage.setItem('auto_join_tournament', JSON.stringify({ tournamentId: tournament.id, playerName: myName }));
+      queueTournamentNext({ tournamentId: tournament.id, playerName: myName });
+    } else {
+      window.location.reload();
     }
-    window.location.reload();
   };
 
   // Release my seat (so a human/bot can take it) and return to the lounge —

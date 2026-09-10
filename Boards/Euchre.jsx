@@ -15,6 +15,7 @@ import {
 import { BoardErrorBoundary } from './shared/ErrorBoundary.jsx';
 import { CardShell, CardBack as SharedCardBack } from './shared/Card.jsx';
 import { RoleBadge } from './shared/SeatBox.jsx';
+import { backToLobby, queueTournamentNext } from './shared/replay.js';
 
 const CARD_W = 46, CARD_H = 64;
 
@@ -259,17 +260,13 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
     return Object.entries(map).sort((a, b) => b[1].points - a[1].points);
   })();
 
-  const handleReturnLobby = () => {
-    sessionStorage.removeItem('auto_join_tournament');
-    sessionStorage.removeItem('quick_game_rematch');
-    window.location.reload();
-  };
+  const handleReturnLobby = () => backToLobby();
   const handleNextMatch = () => {
     if (isTournament) {
-      sessionStorage.removeItem('quick_game_rematch');
-      sessionStorage.setItem('auto_join_tournament', JSON.stringify({ tournamentId: tournament.id, playerName: players[me] || `P${me}` }));
+      queueTournamentNext({ tournamentId: tournament.id, playerName: players[me] || `P${me}` });
+    } else {
+      window.location.reload();
     }
-    window.location.reload();
   };
 
   const handleLeaveSeat = async () => {

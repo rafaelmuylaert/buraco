@@ -41,6 +41,7 @@ import { EuchreBoard } from './Euchre.jsx';
 import { useT } from './i18n.jsx';
 import { API_ADDRESS, makeMultiplayer, newReconnectSocket } from './shared/sockets.js';
 import { AUTH_KEY, getSavedAuth, getSessions, setSession } from './shared/session.js';
+import { REPLAY_KEYS } from './shared/replay.js';
 
 const lobbyClient = new LobbyClient({ server: API_ADDRESS });
 
@@ -733,9 +734,9 @@ const App = () => {
   }, [history]);
 
   useEffect(() => {
-    const rematchData = sessionStorage.getItem('quick_game_rematch');
+    const rematchData = sessionStorage.getItem(REPLAY_KEYS.rematch);
     if (rematchData) {
-      sessionStorage.removeItem('quick_game_rematch');
+      sessionStorage.removeItem(REPLAY_KEYS.rematch);
       const { rules, numPlayers, myName } = JSON.parse(rematchData);
       const prevAssignments = rules?.assignments || {};
       const numBots = Object.values(prevAssignments).filter(n => String(n).toLowerCase().includes('bot')).length;
@@ -757,7 +758,7 @@ const App = () => {
       return; 
     }
 
-    const tourneyAutoJoin = sessionStorage.getItem('auto_join_tournament');
+    const tourneyAutoJoin = sessionStorage.getItem(REPLAY_KEYS.tourneyNext);
     if (tourneyAutoJoin && tournaments.length > 0 && matches.length > 0) {
       const { tournamentId, playerName } = JSON.parse(tourneyAutoJoin);
       const t = tournaments.find(t => t.id === tournamentId);
@@ -774,7 +775,7 @@ const App = () => {
               const targetMatch = matches.find(m => m.matchID === myAssignment.matchID);
               if (targetMatch) {
                   const targetGame = targetMatch.gameName || t.game || 'buraco';
-                  sessionStorage.removeItem('auto_join_tournament');
+                  sessionStorage.removeItem(REPLAY_KEYS.tourneyNext);
                   let targetSeatID = null;
                   const assignments = targetMatch.setupData?.assignments || {};
                   for (let seatId in assignments) {
