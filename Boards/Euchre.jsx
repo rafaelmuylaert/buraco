@@ -14,6 +14,7 @@ import {
 } from '@buraco/game/euchre.js';
 import { BoardErrorBoundary } from './shared/ErrorBoundary.jsx';
 import { CardShell, CardBack as SharedCardBack } from './shared/Card.jsx';
+import { RoleBadge } from './shared/SeatBox.jsx';
 
 const CARD_W = 46, CARD_H = 64;
 
@@ -67,38 +68,6 @@ const CardBack = ({ label, count }) => (
     countSize='1.4em'
   />
 );
-
-const RoleBadge = ({ emoji, placeholder }) => (
-  <div style={{
-    width: '46px', height: '64px', margin: '2px', borderRadius: '8px',
-    border: placeholder ? '2px dashed #444' : '2px solid #555',
-    backgroundColor: placeholder ? 'transparent' : 'rgba(0,0,0,0.25)',
-    display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
-    color: 'white',
-  }}>
-    {!placeholder && <span style={{ fontSize: '1.8em' }}>{emoji}</span>}
-  </div>
-);
-
-const BidBox = ({ points, suit, passed, waiting, active, t }) => {
-  const suitColor = suit === NO_TRUMP ? 'white' : suitChar(suit);
-  return (
-    <div style={{
-      width: '46px', height: '64px', margin: '2px', borderRadius: '8px',
-      border: active ? '2px solid #ffd700' : (passed ? '1px solid #666' : '2px solid #555'),
-      backgroundColor: waiting ? 'transparent' : 'rgba(0,0,0,0.25)',
-      borderStyle: waiting ? 'dashed' : 'solid',
-      display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
-      color: passed ? '#999' : 'white', opacity: waiting ? 0.45 : 1, gap: '2px',
-    }}>
-      {waiting
-        ? <span style={{ fontSize: '1.4em' }}>…</span>
-        : passed
-          ? <span style={{ fontSize: '0.75em' }}>{t('euchre.passed')}</span>
-          : <span style={{ fontSize: '1.2em', fontWeight: 'bold', lineHeight: '1' }}>{points}</span>}
-    </div>
-  );
-};
 
 // ── Error boundary ──────────────────────────────────────────────────────────
 

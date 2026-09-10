@@ -22,6 +22,7 @@ import {
 } from '@buraco/game/Mighty.js';
 import { BoardErrorBoundary } from './shared/ErrorBoundary.jsx';
 import { CardShell, CardBack as SharedCardBack } from './shared/Card.jsx';
+import { RoleBadge, BidBox } from './shared/SeatBox.jsx';
 
 const RANK_SHOW = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const SUIT_COLORS = { 0: '#111', 1: '#d03030', 2: '#111', 3: '#d03030' };
@@ -78,44 +79,6 @@ const CardBack = ({ label, count }) => (
     countSize='1.4em'
   />
 );
-
-const RoleBadge = ({ emoji, placeholder }) => (
-  <div style={{
-    width: '46px', height: '64px', margin: '2px', borderRadius: '8px',
-    border: placeholder ? '2px dashed #444' : '2px solid #555',
-    backgroundColor: placeholder ? 'transparent' : 'rgba(0,0,0,0.25)',
-    display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
-    color: 'white',
-  }}>
-    {!placeholder && <span style={{ fontSize: '1.8em' }}>{emoji}</span>}
-  </div>
-);
-
-// A seat's bid during the bidding phase: the points + trump suit chosen (or a
-// pass / "waiting" marker). Stacked in the same box shape as RoleBadge so the
-// seats stay visually aligned across phases.
-const BidBox = ({ points, suit, passed, waiting, active, t }) => {
-  const suitColor = suit === NO_TRUMP ? 'white' : SUIT_COLORS[suit];
-  return (
-    <div style={{
-      width: '46px', height: '64px', margin: '2px', borderRadius: '8px',
-      border: active ? '2px solid #ffd700' : (passed ? '1px solid #666' : '2px solid #555'),
-      backgroundColor: waiting ? 'transparent' : 'rgba(0,0,0,0.25)',
-      borderStyle: waiting ? 'dashed' : 'solid',
-      display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
-      color: passed ? '#999' : 'white', opacity: waiting ? 0.45 : 1, gap: '2px',
-    }}>
-      {waiting
-        ? <span style={{ fontSize: '1.4em' }}>…</span>
-        : passed
-          ? <span style={{ fontSize: '0.75em' }}>{t('mighty.passed')}</span>
-          : <>
-              <span style={{ fontSize: '1.5em', fontWeight: 'bold', lineHeight: '1' }}>{points}</span>
-              <span style={{ fontSize: '1.3em', color: suitColor, lineHeight: '1' }}>{suit === NO_TRUMP ? 'NT' : suitChar(suit)}</span>
-            </>}
-    </div>
-  );
-};
 
 const bidText = (bid, t) => {
   if (!bid) return '';
