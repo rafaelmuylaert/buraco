@@ -50,14 +50,16 @@ export function GameOverPanel({ open, bg = '#0d1f2d', maxWidth, title, children,
         style={{
           ...panelStyle, pointerEvents: 'auto', background: bg, border: '2px solid #ffd700', borderRadius: '12px',
           padding: '24px 32px', color: 'white', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center',
-          fontFamily: 'sans-serif', maxHeight: '90vh', overflowY: 'auto',
-          cursor: draggable ? (dragging ? 'grabbing' : 'grab') : 'default', userSelect: 'none',
+          // Drag/minimize-specific chrome (scroll container, grab cursor, no text-select)
+          // only applies when the panel is actually draggable. Non-draggable boards
+          // (Mighty/Euchre) keep their original inert shell: no max-height, selectable text.
+          ...(draggable ? { fontFamily: 'sans-serif', maxHeight: '90vh', overflowY: 'auto', cursor: dragging ? 'grabbing' : 'grab', userSelect: 'none' } : {}),
         }}
         onMouseDown={draggable ? onMouseDown : undefined}
       >
         {title}
         {minimizable && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginBottom: '-12px', position: 'relative', zIndex: 2 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-20px', position: 'relative', zIndex: 2 }}>
             <button onClick={() => setMinimized(true)} style={{ background: 'transparent', border: 'none', color: '#ccc', fontSize: '1.5em', cursor: 'pointer', padding: '0 6px', lineHeight: 1 }} title={t('board.minimizeTitle')}>−</button>
           </div>
         )}
