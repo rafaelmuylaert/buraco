@@ -33,6 +33,8 @@ import { SeatManager } from './shared/SeatManager.jsx';
 import { useSeatActions } from './shared/useSeatActions.js';
 import { backToLobby, queueTournamentNext, queueRematch } from './shared/replay.js';
 import { useGameoverPersist } from './shared/useGameoverPersist.js';
+import { GameOverPanel, StandingsTable, GameOverFooter } from './shared/GameOverPanel.jsx';
+import { updateStandingsPerTeam } from './shared/standings.js';
 
 // Card dimensions used for overlap calculations
 const CARD_W = 46, CARD_H = 60;
@@ -94,9 +96,6 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
   const { t } = useT();
   // State: Set of uids instead of {cardType: count}
   const [selectedCards, setSelectedCards] = useState(new Set());
-  const [gameOverMinimized, setGameOverMinimized] = useState(false);
-  const [popupPos, setPopupPos] = useState({ x: null, y: null });
-  const [dragging, setDragging] = useState(false);
   const [compact, setCompact] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.innerWidth < 900;
@@ -111,7 +110,7 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
   const compactScale = compact ? (window.innerWidth < 480 ? 0.7 : 0.82) : 1;
   const MELD_W = Math.round(CARD_W * compactScale);
   const MELD_H = Math.round(CARD_H * compactScale);
-  const dragOffset = React.useRef({ x: 0, y: 0 });
+  const panelMaxWidth = 860;
 
   const isMyTurn = ctx.currentPlayer === playerID;
 
@@ -222,124 +221,52 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
     };
 
     // === UPDATED STANDINGS: apply this game's result to the pre-game standings ===
-    const updatedStandings = (() => {
-      if (!tournamentStandings) return null;
-      const score0 = s0.total ?? 0;
-      const score1 = s1.total ?? 0;
-      const team0Names_ = (G.teamPlayers[0] || []).map(p => G.rules?.assignments?.[p]);
-      const team1Names_ = (G.teamPlayers[1] || []).map(p => G.rules?.assignments?.[p]);
-      // Deep copy standings into a map
-      const map = {};
-      for (const [name, st] of tournamentStandings) {
-        map[name] = { ...st };
-      }
-      // Add this game's results
-      for (const name of team0Names_) {
-        if (name && map[name]) {
-          map[name].points += score0;
-          if (score0 > score1) map[name].v += 1;
-          else if (score0 === score1) map[name].e += 1;
-          else map[name].d += 1;
-        }
-      }
-      for (const name of team1Names_) {
-        if (name && map[name]) {
-          map[name].points += score1;
-          if (score1 > score0) map[name].v += 1;
-          else if (score1 === score0) map[name].e += 1;
-          else map[name].d += 1;
-        }
-      }
-      // Sort by points descending
-      return Object.entries(map).sort((a, b) => b[1].points - a[1].points);
-    })();
-
-    if (gameOverMinimized) {
-      return (
-        <button onClick={() => setGameOverMinimized(false)} style={{ position: 'fixed', bottom: '20px', right: '20px', zIndex: 1001, padding: '10px 16px', background: '#ffd700', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>
-          {t('board.resultButton')}
-        </button>
-      );
-    }
-
-    const onMouseDown = (e) => {
-      if (e.target.closest('button')) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      dragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-      setDragging(true);
-    };
-    const onMouseMove = (e) => {
-      if (!dragging) return;
-      setPopupPos({ x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y });
-    };
-    const onMouseUp = () => setDragging(false);
-
-    const panelStyle = popupPos
-      ? { position: 'fixed', top: popupPos.y, left: popupPos.x, zIndex: 1001, maxWidth: '860px', width: '90%' }
-      : { maxWidth: '860px', width: '100%' };
+    const updatedStandings = updateStandingsPerTeam(tournamentStandings, s0, s1,
+      (G.teamPlayers[0] || []).map(p => G.rules?.assignments?.[p]),
+      (G.teamPlayers[1] || []).map(p => G.rules?.assignments?.[p]));
 
     return (
-      <div
-        style={{ position: 'fixed', inset: 0, backgroundColor: popupPos ? 'transparent' : 'rgba(0,0,0,0.75)', pointerEvents: popupPos ? 'none' : 'auto', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
-      >
-        <div
-          onMouseDown={onMouseDown}
-          style={{ ...panelStyle, pointerEvents: 'auto', background: '#1b4332', border: '2px solid #ffd700', borderRadius: '16px', padding: '30px', maxHeight: '90vh', overflowY: 'auto', color: 'white', fontFamily: 'sans-serif', cursor: dragging ? 'grabbing' : 'grab', userSelect: 'none' }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-20px', position: 'relative', zIndex: 2 }}>
-            <button onClick={() => setGameOverMinimized(true)} style={{ background: 'transparent', border: 'none', color: '#ccc', fontSize: '1.5em', cursor: 'pointer', padding: '0 6px', lineHeight: 1 }} title={t('board.minimizeTitle')}>−</button>
-          </div>
+      <GameOverPanel
+        open={!!gameover}
+        bg="#1b4332"
+        maxWidth={panelMaxWidth}
+        draggable
+        minimizable
+        title={
           <div style={{ textAlign: 'center', marginBottom: '24px' }}>
             <h1 style={{ fontSize: '2.4em', color: '#ffd700', margin: '0 0 8px 0' }}>{t('board.gameOverTitle')}</h1>
             <h2 style={{ margin: 0, color: '#ccc', fontSize: '1em' }}>{t('board.reason', { reason: gameover.reason === 'Bateu!' ? t('board.reasonBateu') : (gameover.reason === 'Monte Esgotado' ? t('board.reasonMonte') : gameover.reason) })}</h2>
           </div>
-          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', marginBottom: '24px' }}>
-            <div style={{ background: 'rgba(0,0,0,0.5)', padding: '16px', borderRadius: '12px', border: '2px solid #4da6ff', flex: '1', minWidth: '200px' }}>
-              <h3 style={{ textAlign: 'center', color: '#4da6ff', margin: '0 0 12px 0' }}>{team0Names || t('board.teamFallback', { n: 0 })}</h3>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', fontSize: '0.9em' }}><span>{t('board.tablePoints')}</span><span>{s0.table}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>{t('board.handDeduction')}</span><span>{s0.hand}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>{t('board.mortoPenalty')}</span><span>{s0.mortoPenalty}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ffd700', fontSize: '0.9em' }}><span>{t('board.bonus')}</span><span>{s0.baterBonus}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', fontSize: '1.2em', fontWeight: 'bold' }}><span>{t('board.total')}</span><span>{s0.total}</span></div>
-            </div>
-            <div style={{ background: 'rgba(0,0,0,0.5)', padding: '16px', borderRadius: '12px', border: '2px solid #ff4d4d', flex: '1', minWidth: '200px' }}>
-              <h3 style={{ textAlign: 'center', color: '#ff4d4d', margin: '0 0 12px 0' }}>{team1Names || t('board.teamFallback', { n: 1 })}</h3>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', fontSize: '0.9em' }}><span>{t('board.tablePoints')}</span><span>{s1.table}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>{t('board.handDeduction')}</span><span>{s1.hand}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>{t('board.mortoPenalty')}</span><span>{s1.mortoPenalty}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ffd700', fontSize: '0.9em' }}><span>{t('board.bonus')}</span><span>{s1.baterBonus}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', fontSize: '1.2em', fontWeight: 'bold' }}><span>{t('board.total')}</span><span>{s1.total}</span></div>
-            </div>
-            {updatedStandings && (
-              <div style={{ background: '#222', padding: '16px', borderRadius: '12px', border: '2px solid #ffd700', minWidth: '220px' }}>
-                <h3 style={{ textAlign: 'center', color: '#ffd700', margin: '0 0 12px 0' }}>{t('board.standings')}</h3>
-                <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '0.85em' }}>
-                  <thead><tr style={{ borderBottom: '1px solid #444', color: '#ccc' }}><th>{t('board.player')}</th><th>{t('board.pts')}</th><th>{t('board.ved')}</th></tr></thead>
-                  <tbody>{updatedStandings.map(([pName, st]) => {
-                    const isMe = G.rules?.assignments?.[playerID] === pName;
-                    return (<tr key={pName} style={{ borderBottom: '1px solid #333', background: isMe ? 'rgba(255,215,0,0.2)' : 'transparent' }}>
-                      <td style={{ padding: '5px 0', fontWeight: isMe ? 'bold' : 'normal' }}>{pName}</td>
-                      <td style={{ fontWeight: 'bold', color: '#ffd700' }}>{st.points}</td>
-                      <td>{st.v}-{st.e}-{st.d}</td>
-                    </tr>);
-                  })}</tbody>
-                </table>
-              </div>
-            )}
+        }
+        footer={<GameOverFooter t={t} onReturn={handleReturnLobby} onNext={handleNextMatch} showNext={showNextButton} isTournament={isTournament} />}
+      >
+        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', marginBottom: '24px' }}>
+          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '16px', borderRadius: '12px', border: '2px solid #4da6ff', flex: '1', minWidth: '200px' }}>
+            <h3 style={{ textAlign: 'center', color: '#4da6ff', margin: '0 0 12px 0' }}>{team0Names || t('board.teamFallback', { n: 0 })}</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', fontSize: '0.9em' }}><span>{t('board.tablePoints')}</span><span>{s0.table}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>{t('board.handDeduction')}</span><span>{s0.hand}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>{t('board.mortoPenalty')}</span><span>{s0.mortoPenalty}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ffd700', fontSize: '0.9em' }}><span>{t('board.bonus')}</span><span>{s0.baterBonus}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', fontSize: '1.2em', fontWeight: 'bold' }}><span>{t('board.total')}</span><span>{s0.total}</span></div>
           </div>
-          <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
-            <button onClick={handleReturnLobby} style={{ padding: '12px 24px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer' }}>{t('common.backToLounge')}</button>
-            {showNextButton && (
-              <button onClick={handleNextMatch} style={{ padding: '12px 24px', background: '#4da6ff', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1em', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 12px rgba(77,166,255,0.6)' }}>
-                {isTournament ? t('board.nextMatch') : t('board.playAgain')}
-              </button>
-            )}
+          <div style={{ background: 'rgba(0,0,0,0.5)', padding: '16px', borderRadius: '12px', border: '2px solid #ff4d4d', flex: '1', minWidth: '200px' }}>
+            <h3 style={{ textAlign: 'center', color: '#ff4d4d', margin: '0 0 12px 0' }}>{team1Names || t('board.teamFallback', { n: 1 })}</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', fontSize: '0.9em' }}><span>{t('board.tablePoints')}</span><span>{s1.table}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>{t('board.handDeduction')}</span><span>{s1.hand}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ff4d4d', fontSize: '0.9em' }}><span>{t('board.mortoPenalty')}</span><span>{s1.mortoPenalty}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #444', padding: '4px 0', color: '#ffd700', fontSize: '0.9em' }}><span>{t('board.bonus')}</span><span>{s1.baterBonus}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', fontSize: '1.2em', fontWeight: 'bold' }}><span>{t('board.total')}</span><span>{s1.total}</span></div>
           </div>
+          {updatedStandings && (
+            <StandingsTable
+              title={t('board.standings')}
+              standings={updatedStandings}
+              myName={myName}
+              labels={{ player: t('board.player'), pts: t('board.pts'), wld: t('board.ved') }}
+            />
+          )}
         </div>
-      </div>
+      </GameOverPanel>
     );
   })() : null;
 
