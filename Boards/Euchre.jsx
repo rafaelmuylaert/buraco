@@ -20,6 +20,8 @@ import { useGameoverPersist } from './shared/useGameoverPersist.js';
 import { GameOverPanel, StandingsTable, GameOverFooter } from './shared/GameOverPanel.jsx';
 import { updateStandingsPerPlayer } from './shared/standings.js';
 import { TrickArea, TrickList } from './shared/TrickArea.jsx';
+import { SeatManager } from './shared/SeatManager.jsx';
+import { useSeatActions } from './shared/useSeatActions.js';
 
 const CARD_W = 46, CARD_H = 64;
 
@@ -85,6 +87,9 @@ export function EuchreBoard(props) {
 
 function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress = null, tournament = null, tournamentStandings = null }) {
   const { t } = useT();
+  // NOTE: on Euchre a self-rename updates match metadata + lounge/panel label only; the in-board G.players caption stays stale until the next hand (no moves.renamePlayer move defined for this game).
+  const seatActions = useSeatActions({ apiAddress, gameName: 'euchre', matchID, playerID, moves, t });
+  const [showSeats, setShowSeats] = useState(false);
   const me = String(playerID);
   const isMyTurn = ctx.currentPlayer === me;
   const phase = ctx.phase;
@@ -109,6 +114,12 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
 
   const players = G.players || {};
   const playerName = (p) => players[p] || `P${p}`;
+  const seatRows = seatOrder.map((p) => ({
+    seatID: p,
+    isMe: p === me,
+    isTurn: ctx.currentPlayer === p,
+    fallbackName: G.rules?.assignments?.[p] || players[p] || null,
+  }));
 
   // Role badges: exactly two teams — making team (declarer + positional partner)
   // gets a sword, defending team gets a shield.
@@ -256,24 +267,6 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
     }
   };
 
-  const handleLeaveSeat = async () => {
-    if (!window.confirm(t('board.leaveSeatConfirm'))) return;
-    try {
-      const savedAuth = (() => { try { return JSON.parse(localStorage.getItem('buraco_auth') || 'null'); } catch { return null; } })();
-      if (apiAddress && matchID) {
-        const res = await fetch(`${apiAddress}/api/quick/release-seat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(savedAuth?.token ? { 'Authorization': `Bearer ${savedAuth.token}` } : {}) },
-          body: JSON.stringify({ matchID, playerID: String(playerID) }),
-        });
-        if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || t('board.leaveSeatError')); return; }
-      }
-      const sessions = (() => { try { return JSON.parse(localStorage.getItem('buraco_sessions') || '{}'); } catch { return {}; } })();
-      delete sessions[`${matchID}_${playerID}`];
-      localStorage.setItem('buraco_sessions', JSON.stringify(sessions));
-      window.location.reload();
-    } catch { alert(t('board.leaveSeatFail')); }
-  };
 
   // ── Running team totals (parity teams: {0,2} vs {1,3}) ──────────────────
   const evenTotal = (G.playerScores && G.playerScores['0']) || 0;
@@ -457,9 +450,36 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
             {scoreChip}
           </div>
           {!go && (
-            <button onClick={handleLeaveSeat} style={{ background: '#4da6ff', color: 'white', border: 'none', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.8em', flexShrink: 0 }}>
-              {t('common.lounge')}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                onClick={() => setShowSeats((s) => !s)}
+                style={{ background: '#4da6ff', color: 'white', border: 'none', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.8em', flexShrink: 0 }}
+                title={t('board.manageSeatTitle')}
+              >👥</button>
+              <button
+                onClick={seatActions.leaveSeat}
+                style={{ background: '#4da6ff', color: 'white', border: 'none', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.8em', flexShrink: 0 }}
+              >
+                {t('common.lounge')}
+              </button>
+              {showSeats && (
+                <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 1001, marginBottom: '4px' }}>
+                  <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '8px', boxShadow: '0 4px 14px rgba(0,0,0,0.45)', overflow: 'hidden', minWidth: '180px' }}>
+                    <SeatManager
+                      t={t}
+                      gameName="euchre"
+                      matchID={matchID}
+                      playerID={playerID}
+                      isTournament={isTournament}
+                      actions={seatActions}
+                      rows={seatRows}
+                      title={t('board.players')}
+                      apiAddress={apiAddress}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
