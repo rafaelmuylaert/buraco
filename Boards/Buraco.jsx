@@ -32,6 +32,7 @@ import { CardShell, CardBack as SharedCardBack } from './shared/Card.jsx';
 import { SeatManager } from './shared/SeatManager.jsx';
 import { useSeatActions } from './shared/useSeatActions.js';
 import { backToLobby, queueTournamentNext, queueRematch } from './shared/replay.js';
+import { getSavedAuth } from './shared/session.js';
 import { useGameoverPersist } from './shared/useGameoverPersist.js';
 import { GameOverPanel, StandingsTable, GameOverFooter } from './shared/GameOverPanel.jsx';
 import { updateStandingsPerTeam } from './shared/standings.js';
@@ -208,7 +209,7 @@ function BuracoBoardInner({ ctx, G, moves, undo, playerID, matchID, tournament =
     const team1NamesArr = (G.teamPlayers[1] || []).map(p => G.rules?.assignments?.[p] || t('board.playerNameFallback', { n: p }));
     const team0Names = team0NamesArr.join(' & ');
     const team1Names = team1NamesArr.join(' & ');
-    const savedAuth = (() => { try { return JSON.parse(localStorage.getItem('buraco_auth') || 'null'); } catch { return null; } })();
+    const savedAuth = getSavedAuth();
     const myName = G.rules?.assignments?.[playerID] || savedAuth?.username || t('board.me');
     const isTournament = !!tournament;
     const isTournamentComplete = tournament && tournament.status === 'completed';

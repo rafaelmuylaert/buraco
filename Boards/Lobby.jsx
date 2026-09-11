@@ -735,10 +735,10 @@ const App = () => {
   }, [history]);
 
   useEffect(() => {
-    const rematchData = sessionStorage.getItem(REPLAY_KEYS.rematch);
-    if (rematchData) {
+    const rematchRecord = sessionStorage.getItem(REPLAY_KEYS.rematch);
+    if (rematchRecord) {
       sessionStorage.removeItem(REPLAY_KEYS.rematch);
-      const { rules, numPlayers, myName } = JSON.parse(rematchData);
+      const { rules, numPlayers, myName } = JSON.parse(rematchRecord);
       const prevAssignments = rules?.assignments || {};
       const numBots = Object.values(prevAssignments).filter(n => String(n).toLowerCase().includes('bot')).length;
       
