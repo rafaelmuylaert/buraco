@@ -19,6 +19,7 @@ import { backToLobby, queueTournamentNext } from './shared/replay.js';
 import { useGameoverPersist } from './shared/useGameoverPersist.js';
 import { GameOverPanel, StandingsTable, GameOverFooter } from './shared/GameOverPanel.jsx';
 import { updateStandingsPerPlayer } from './shared/standings.js';
+import { TrickArea, TrickList } from './shared/TrickArea.jsx';
 
 const CARD_W = 46, CARD_H = 64;
 
@@ -484,29 +485,22 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
         </div>
 
         {/* Central trick */}
-        <div style={{
-          background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px',
-          padding: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginBottom: '12px', minHeight: '110px',
-        }}>
+        <TrickArea
+          footer={
+            phase === 'play' && G.trickNumber > 0 && (
+              <div style={{ color: '#aaa', fontSize: '0.8em' }}>{t('euchre.trickNum', { n: G.trickNumber, total: 5 })}</div>
+            )
+          }
+        >
           {trick.length === 0 && !go && (
             <div style={{ color: '#9fc5b8', fontSize: '0.9em' }}>
               {phase === 'play' ? (isMyTurn ? t('euchre.leadHint') : t('euchre.waitingLead')) : status}
             </div>
           )}
           {trick.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-              {trick.map((tr, i) => (
-                <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                  <span style={{ fontSize: '0.7em', color: '#ffd700' }}>{i === 0 ? t('euchre.lead') : playerName(tr.player)}</span>
-                  <Card card={tr.card} trump={trump} />
-                </div>
-              ))}
-            </div>
+            <TrickList t={t} trick={trick} playerName={playerName} leadLabel={t('euchre.lead')} renderCard={(c) => <Card card={c} trump={trump} />} />
           )}
-          {phase === 'play' && G.trickNumber > 0 && (
-            <div style={{ color: '#aaa', fontSize: '0.8em' }}>{t('euchre.trickNum', { n: G.trickNumber, total: 5 })}</div>
-          )}
-        </div>
+        </TrickArea>
 
         {/* Upcard (if available) */}
         {phase === 'call' && G.upcard != null && (

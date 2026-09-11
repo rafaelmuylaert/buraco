@@ -27,6 +27,7 @@ import { backToLobby, queueTournamentNext } from './shared/replay.js';
 import { useGameoverPersist } from './shared/useGameoverPersist.js';
 import { GameOverPanel, StandingsTable, GameOverFooter } from './shared/GameOverPanel.jsx';
 import { updateStandingsPerPlayer } from './shared/standings.js';
+import { TrickArea, TrickList } from './shared/TrickArea.jsx';
 
 const RANK_SHOW = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const SUIT_COLORS = { 0: '#111', 1: '#d03030', 2: '#111', 3: '#d03030' };
@@ -485,32 +486,27 @@ function MightyBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
         </div>
 
         {/* Central trick */}
-        <div style={{
-          background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px',
-          padding: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginBottom: '12px', minHeight: '110px',
-        }}>
+        <TrickArea
+          footer={
+            <>
+              {G.namedSuit != null && trick.length > 0 && (
+                <div style={{ color: '#8be9fd', fontSize: '0.8em' }}>{t('mighty.namedSuit', { suit: suitChar(G.namedSuit) })}</div>
+              )}
+              {phase === 'play' && G.trickNumber > 0 && (
+                <div style={{ color: '#aaa', fontSize: '0.8em' }}>{t('mighty.trickNum', { n: G.trickNumber, total: 10 })}</div>
+              )}
+            </>
+          }
+        >
           {trick.length === 0 && !go && (
             <div style={{ color: '#9fc5b8', fontSize: '0.9em' }}>
               {phase === 'play' ? (isMyTurn ? t('mighty.leadHint') : t('mighty.waitingLead')) : status}
             </div>
           )}
           {trick.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-              {trick.map((tr, i) => (
-                <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                  <span style={{ fontSize: '0.7em', color: '#ffd700' }}>{i === 0 ? t('mighty.lead') : playerName(tr.player)}</span>
-                  <Card card={tr.card} trump={trump} />
-                </div>
-              ))}
-            </div>
+            <TrickList t={t} trick={trick} playerName={playerName} leadLabel={t('mighty.lead')} renderCard={(c) => <Card card={c} trump={trump} />} />
           )}
-          {G.namedSuit != null && trick.length > 0 && (
-            <div style={{ color: '#8be9fd', fontSize: '0.8em' }}>{t('mighty.namedSuit', { suit: suitChar(G.namedSuit) })}</div>
-          )}
-          {phase === 'play' && G.trickNumber > 0 && (
-            <div style={{ color: '#aaa', fontSize: '0.8em' }}>{t('mighty.trickNum', { n: G.trickNumber, total: 10 })}</div>
-          )}
-        </div>
+        </TrickArea>
 
         {/* Kitty (visible to declarer during call) */}
         {phase === 'call' && isMyTurn && (G.kitty || []).some((c) => c != null) && (
