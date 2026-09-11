@@ -40,8 +40,9 @@ import { createEuchreGame } from '@buraco/game/euchre.js';
 import { EuchreBoard } from './Euchre.jsx';
 import { useT } from './i18n.jsx';
 import { API_ADDRESS, makeMultiplayer, newReconnectSocket } from './shared/sockets.js';
-import { AUTH_KEY, getSavedAuth, getSessions, setSession } from './shared/session.js';
+import { AUTH_KEY, authHeaders, getSavedAuth, getSessions, setSession } from './shared/session.js';
 import { REPLAY_KEYS } from './shared/replay.js';
+import { startQuickMatch } from './shared/quickgame.js';
 
 const lobbyClient = new LobbyClient({ server: API_ADDRESS });
 
@@ -788,9 +789,7 @@ const App = () => {
                   if (targetSeatID) {
                       (async () => {
                           try {
-                            const savedAuth = getSavedAuth();
-                            const headers = { 'Content-Type': 'application/json' };
-                            if (savedAuth?.token) headers['Authorization'] = `Bearer ${savedAuth.token}`;
+                            const headers = authHeaders(getSavedAuth()?.token);
                             const res = await fetch(`${API_ADDRESS}/api/tournaments/claim-seat`, {
                               method: 'POST', headers,
                               body: JSON.stringify({ matchID: targetMatch.matchID, playerID: targetSeatID, playerName, gameName: targetGame })
@@ -825,8 +824,7 @@ const App = () => {
     if (!pName) pName = prompt(t('lounge.join.namePrompt'));
     if (!pName) return;
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      if (currentUser?.token) headers['Authorization'] = `Bearer ${currentUser.token}`;
+      const headers = authHeaders(currentUser?.token);
       const res = await fetch(`${API_ADDRESS}/api/tournaments/claim-seat`, {
         method: 'POST',
         headers,
@@ -953,32 +951,31 @@ const App = () => {
     }
 
     try {
-      const { matchID } = await lobbyClient.createMatch('buraco', {
-         numPlayers: numPlayers,
-         setupData: { 
-             ...quickGameConfig.rules, 
-             numPlayers: numPlayers, 
-             isTournament: false, 
-             assignments: assignmentsMap,
-             name: tableName,
-             debugLog: true,
-             targetBotName: targetBotName
-         }
+      const { matchID, credentials } = await startQuickMatch({
+        lobbyClient,
+        gameName: 'buraco',
+        numPlayers,
+        setupData: {
+            ...quickGameConfig.rules,
+            numPlayers: numPlayers,
+            isTournament: false,
+            assignments: assignmentsMap,
+            name: tableName,
+            debugLog: true,
+            targetBotName: targetBotName
+        },
+        myName
       });
 
-      const { playerCredentials } = await lobbyClient.joinMatch('buraco', matchID, { playerID: '0', playerName: myName });
-      
-       setSession(matchID, '0', { matchID, playerID: '0', credentials: playerCredentials });
-      
-      setMatchID(matchID); 
-      setPlayerID('0'); 
-      setCredentials(playerCredentials); 
+      setMatchID(matchID);
+      setPlayerID('0');
+      setCredentials(credentials);
       setShowQuickGamePopup(false);
 
       setTimeout(() => setView('game'), 500);
 
-    } catch (e) { 
-        alert(t('lounge.openQuick.createError', { msg: e.message })); 
+    } catch (e) {
+        alert(t('lounge.openQuick.createError', { msg: e.message }));
     }
   };
 
@@ -995,18 +992,17 @@ const App = () => {
     }
 
     try {
-      const { matchID } = await lobbyClient.createMatch('mighty', {
+      const { matchID, credentials } = await startQuickMatch({
+        lobbyClient,
+        gameName: 'mighty',
         numPlayers,
-        setupData: { numPlayers, assignments: assignmentsMap, name: tableName }
+        setupData: { numPlayers, assignments: assignmentsMap, name: tableName },
+        myName
       });
-
-      const { playerCredentials } = await lobbyClient.joinMatch('mighty', matchID, { playerID: '0', playerName: myName });
-
-       setSession(matchID, '0', { matchID, playerID: '0', credentials: playerCredentials, gameName: 'mighty' });
 
       setMatchID(matchID);
       setPlayerID('0');
-      setCredentials(playerCredentials);
+      setCredentials(credentials);
       setShowQuickGamePopup(false);
 
       setTimeout(() => setView('game'), 500);
@@ -1028,18 +1024,17 @@ const App = () => {
     }
 
     try {
-      const { matchID } = await lobbyClient.createMatch('euchre', {
+      const { matchID, credentials } = await startQuickMatch({
+        lobbyClient,
+        gameName: 'euchre',
         numPlayers,
-        setupData: { numPlayers, assignments: assignmentsMap, name: tableName, deckSize: 24 }
+        setupData: { numPlayers, assignments: assignmentsMap, name: tableName, deckSize: 24 },
+        myName
       });
-
-      const { playerCredentials } = await lobbyClient.joinMatch('euchre', matchID, { playerID: '0', playerName: myName });
-
-       setSession(matchID, '0', { matchID, playerID: '0', credentials: playerCredentials, gameName: 'euchre' });
 
       setMatchID(matchID);
       setPlayerID('0');
-      setCredentials(playerCredentials);
+      setCredentials(credentials);
       setShowQuickGamePopup(false);
 
       setTimeout(() => setView('game'), 500);
