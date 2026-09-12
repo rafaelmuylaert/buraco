@@ -163,7 +163,7 @@ export function playerView({ G, ctx, playerID }) {
   // Per-player point count (safe: reveals count but not card identities)
   view.wonPoints = {};
   for (const p in G.won) {
-    view.wonPoints[p] = G.won[p] ? G.won[p].filter((c) => c >= 0).length : 0;
+    view.wonPoints[p] = (G.wonTricks && G.wonTricks[p]) || 0;
   }
 
   // Kitty visible only to declarer during call phase

@@ -5,7 +5,7 @@
 // Reuses shared UI components where possible (Card, BidBox, RoleBadge).
 // ──────────────────────────────────────────────────────────────────────────────
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useT } from './i18n.jsx';
 import {
   NO_TRUMP, suitChar, cardFace, rankDisplay, getSuit,
@@ -20,7 +20,7 @@ import { useGameoverPersist } from './shared/useGameoverPersist.js';
 import { GameOverPanel, StandingsTable, GameOverFooter } from './shared/GameOverPanel.jsx';
 import { updateStandingsPerPlayer } from './shared/standings.js';
 import { TrickArea, TrickList } from './shared/TrickArea.jsx';
-import { SeatManager } from './shared/SeatManager.jsx';
+import { fetchSeatStates } from './shared/SeatManager.jsx';
 import { useSeatActions } from './shared/useSeatActions.js';
 
 const CARD_W = 46, CARD_H = 64;
@@ -89,10 +89,29 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
   const { t } = useT();
   // NOTE: on Euchre a self-rename updates match metadata + lounge/panel label only; the in-board G.players caption stays stale until the next hand (no moves.renamePlayer move defined for this game).
   const seatActions = useSeatActions({ apiAddress, gameName: 'euchre', matchID, playerID, moves, t });
-  const [showSeats, setShowSeats] = useState(false);
+  const [seatPopup, setSeatPopup] = useState(null);
+  const [liveness, setLiveness] = useState({});
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameForm, setRenameForm] = useState({ name: '', password: '' });
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameError, setRenameError] = useState('');
   const me = String(playerID);
   const isMyTurn = ctx.currentPlayer === me;
   const phase = ctx.phase;
+
+  useEffect(() => {
+    if (seatPopup == null) return;
+    let active = true;
+    fetchSeatStates('euchre', matchID).then((s) => { if (active) setLiveness(s); }).catch(() => {});
+    return () => { active = false; };
+  }, [seatPopup, matchID]);
+
+  const closePopup = () => {
+    setSeatPopup(null);
+    setRenameOpen(false);
+    setRenameForm({ name: '', password: '' });
+    setRenameError('');
+  };
 
   const legal = useMemo(
     () => (phase === 'play' && isMyTurn ? getLegalPlays(G, me) : []),
@@ -440,6 +459,90 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
     }}>
       {gameOverUI}
       {handOverUI}
+      {seatPopup != null && (() => {
+        const st = liveness[seatPopup] || { isConnected: false };
+        const name = st.name || playerName(seatPopup) || `P${seatPopup}`;
+        const isBot = String(name || '').toLowerCase().includes('bot');
+        const humanConnected = !!st.name && st.isConnected === true;
+        const canRemove = !humanConnected;
+        const canReplace = !isBot && !humanConnected;
+        const isMe = String(seatPopup) === me;
+
+        const handleRemove = async () => {
+          await seatActions.kickSeat(seatPopup, name);
+          closePopup();
+        };
+        const handleReplace = async () => {
+          await seatActions.replaceWithBot(seatPopup, name);
+          closePopup();
+        };
+        const handleRename = async () => {
+          setRenameBusy(true);
+          setRenameError('');
+          const res = await seatActions.renameSelf(renameForm.name, renameForm.password);
+          setRenameBusy(false);
+          if (res.ok) {
+            closePopup();
+          } else {
+            setRenameError(res.error || t('board.renameFail'));
+          }
+        };
+
+        return (
+          <div onClick={closePopup} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: '#1b4332', border: '2px solid #ff9900', borderRadius: '12px', padding: '24px', maxWidth: '340px', width: '100%', textAlign: 'center', boxShadow: '0 8px 30px rgba(0,0,0,0.5)' }}>
+              <h3 style={{ margin: '0 0 8px 0', color: '#ffd700' }}>{name}</h3>
+              {humanConnected && (
+                <p style={{ color: '#ffcc66', margin: '0 0 12px 0', fontSize: '0.85em', lineHeight: '1.4' }}>{t('board.playerConnected')}</p>
+              )}
+              {renameOpen ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                  <input
+                    type="text"
+                    placeholder={t('board.renameUserPlaceholder')}
+                    value={renameForm.name}
+                    onChange={e => setRenameForm({ ...renameForm, name: e.target.value })}
+                    autoComplete="username"
+                    style={{ padding: '10px', borderRadius: '5px', border: 'none' }}
+                  />
+                  <input
+                    type="password"
+                    placeholder={t('board.renamePassPlaceholder')}
+                    value={renameForm.password}
+                    onChange={e => setRenameForm({ ...renameForm, password: e.target.value })}
+                    autoComplete="current-password"
+                    style={{ padding: '10px', borderRadius: '5px', border: 'none' }}
+                  />
+                  {renameError && <div style={{ color: '#ff6b6b', fontSize: '0.85em', marginBottom: '10px' }}>{renameError}</div>}
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                    <button onClick={() => { setRenameOpen(false); setRenameError(''); }} style={{ padding: '8px 18px', background: '#555', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t('common.cancel')}</button>
+                    <button onClick={handleRename} disabled={renameBusy} style={{ padding: '8px 18px', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '6px', cursor: renameBusy ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>{renameBusy ? t('board.renameSaving') : t('board.renameSubmit')}</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button onClick={closePopup} style={{ padding: '8px 18px', background: '#555', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t('common.cancel')}</button>
+                  {!isBot && (
+                    <button
+                      onClick={canReplace ? handleReplace : undefined}
+                      disabled={!canReplace}
+                      title={canReplace ? t('board.freeSeatForBot') : t('board.waitingDisconnect')}
+                      style={{ padding: '8px 18px', background: canReplace ? '#2a9d8f' : '#444', color: canReplace ? 'white' : '#888', border: 'none', borderRadius: '6px', cursor: canReplace ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>{t('board.replaceWithBot')}</button>
+                  )}
+                  <button
+                    onClick={canRemove ? handleRemove : undefined}
+                    disabled={!canRemove}
+                    title={canRemove ? t('board.freeSeatReenter') : t('board.waitingDisconnect')}
+                    style={{ padding: '8px 18px', background: canRemove ? '#ff9900' : '#444', color: canRemove ? '#000' : '#888', border: 'none', borderRadius: '6px', cursor: canRemove ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>{t('board.remove')}</button>
+                  {isMe && (
+                    <button onClick={() => setRenameOpen(true)} style={{ padding: '8px 18px', background: '#4a6a8a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t('board.renameSeatTitle')}</button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       <div style={{ width: '100%', maxWidth: '1000px' }}>
         {/* Top bar */}
@@ -452,33 +555,11 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
           {!go && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <button
-                onClick={() => setShowSeats((s) => !s)}
-                style={{ background: '#4da6ff', color: 'white', border: 'none', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.8em', flexShrink: 0 }}
-                title={t('board.manageSeatTitle')}
-              >👥</button>
-              <button
                 onClick={seatActions.leaveSeat}
                 style={{ background: '#4da6ff', color: 'white', border: 'none', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '2px 2px 5px rgba(0,0,0,0.3)', fontSize: '0.8em', flexShrink: 0 }}
               >
                 {t('common.lounge')}
               </button>
-              {showSeats && (
-                <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 1001, marginBottom: '4px' }}>
-                  <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '8px', boxShadow: '0 4px 14px rgba(0,0,0,0.45)', overflow: 'hidden', minWidth: '180px' }}>
-                    <SeatManager
-                      t={t}
-                      gameName="euchre"
-                      matchID={matchID}
-                      playerID={playerID}
-                      isTournament={isTournament}
-                      actions={seatActions}
-                      rows={seatRows}
-                      title={t('board.players')}
-                      apiAddress={apiAddress}
-                    />
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -489,38 +570,65 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
             const isMe = p === me;
             const pts = (G.wonPoints && G.wonPoints[p]) ?? 0;
             const active = ctx.currentPlayer === p && !go;
+            const teamColor = (Number(p) % 2 === 0) ? '#4da6ff' : '#ffd700';
             return (
-              <div key={p} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', width: '110px' }}>
-                <div style={{
-                  color: active ? '#ffd700' : isMe ? '#7CFC00' : 'white',
-                  fontWeight: active ? 'bold' : 'normal', fontSize: '0.85em', textAlign: 'center',
-                }}>{playerName(p)}{isMe ? ' (you)' : ''}</div>
-                {phase !== 'bidding' && <RoleBadge key={`role-${p}`} emoji={roleBadgeOf(p)} />}
-                <div style={{ color: '#aaa', fontSize: '0.75em' }}>
-                  {t('euchre.won', { n: pts })}
+              <div key={p} style={{ border: `2px solid ${teamColor}`, borderRadius: '8px', padding: '6px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', width: '110px' }}>
+                  <div
+                    onClick={() => { setSeatPopup(p); setRenameOpen(false); setRenameForm({ name: '', password: '' }); setRenameError(''); }}
+                    onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+                    onMouseLeave={(e) => { if (seatPopup !== p) e.currentTarget.style.textDecoration = 'none'; }}
+                    style={{
+                      color: active ? '#ffd700' : isMe ? '#7CFC00' : 'white',
+                      fontWeight: active ? 'bold' : 'normal', fontSize: '0.85em', textAlign: 'center',
+                      cursor: 'pointer',
+                      textDecoration: seatPopup === p ? 'underline' : 'none',
+                    }}
+                  >{playerName(p)}{isMe ? ' (you)' : ''}</div>
+                  {phase !== 'bidding' && <RoleBadge key={`role-${p}`} emoji={roleBadgeOf(p)} />}
+                  <div style={{ color: '#aaa', fontSize: '0.75em' }}>
+                    {t('euchre.won', { n: pts })}
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
 
-        {/* Central trick */}
-        <TrickArea
-          footer={
-            phase === 'play' && G.trickNumber > 0 && (
-              <div style={{ color: '#aaa', fontSize: '0.8em' }}>{t('euchre.trickNum', { n: G.trickNumber, total: 5 })}</div>
-            )
-          }
-        >
-          {trick.length === 0 && !go && (
-            <div style={{ color: '#9fc5b8', fontSize: '0.9em' }}>
-              {phase === 'play' ? (isMyTurn ? t('euchre.leadHint') : t('euchre.waitingLead')) : status}
+        {/* Central trick + trick history */}
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', alignItems: 'flex-start' }}>
+          <TrickArea
+            footer={
+              phase === 'play' && G.trickNumber > 0 && (
+                <div style={{ color: '#aaa', fontSize: '0.8em' }}>{t('euchre.trickNum', { n: G.trickNumber, total: 5 })}</div>
+              )
+            }
+          >
+            {trick.length === 0 && !go && (
+              <div style={{ color: '#9fc5b8', fontSize: '0.9em' }}>
+                {phase === 'play' ? (isMyTurn ? t('euchre.leadHint') : t('euchre.waitingLead')) : status}
+              </div>
+            )}
+            {trick.length > 0 && (
+              <TrickList t={t} trick={trick} playerName={playerName} leadLabel={t('euchre.lead')} renderCard={(c) => <Card card={c} trump={trump} />} />
+            )}
+          </TrickArea>
+          {phase === 'play' && !go && (G.trickHistory || []).length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px', padding: '10px' }}>
+              <div style={{ color: '#aaa', fontSize: '0.75em' }}>{t('euchre.tricksTitle')}</div>
+              {(G.trickHistory || []).map((tr, i) => (
+                <div key={i} style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '0.7em', color: '#ccc' }}>
+                  {tr.cards.map((c, j) => (
+                    <div key={j} style={{ transform: 'scale(0.6)', width: 46, height: 64, overflow: 'hidden' }}>
+                      <Card card={c.card} trump={trump} />
+                    </div>
+                  ))}
+                  <span style={{ color: '#ffd700' }}>{playerName(tr.winner)}</span>
+                </div>
+              ))}
             </div>
           )}
-          {trick.length > 0 && (
-            <TrickList t={t} trick={trick} playerName={playerName} leadLabel={t('euchre.lead')} renderCard={(c) => <Card card={c} trump={trump} />} />
-          )}
-        </TrickArea>
+        </div>
 
         {/* Upcard (if available) */}
         {phase === 'call' && G.upcard != null && (

@@ -305,8 +305,9 @@ console.log('--- Scoring / Game Over ---\n');
 const mockCtx = { numPlayers: 4 };
 
 const g1 = {
-  declarer: '0', trump: 0, calledCard: 3,
-  won: { '0': [3,5], '1': [2], '2': [], '3': [] },
+   declarer: '0', trump: 0, calledCard: 3,
+   won: { '0': [3,5], '1': [2], '2': [], '3': [] },
+   wonTricks: { '0': 2, '1': 1, '2': 0, '3': 0 },
 };
 const r1 = computeGameOver(g1, mockCtx);
 assert(r1 !== undefined, 'computeGameOver returns result');
@@ -316,6 +317,7 @@ assert(r1.declarer === '0', 'computeGameOver: declarer = 0');
 const mk = (t0, t1, t2, t3) => ({
   declarer: '0', trump: 0,
   won: { '0': new Array(t0).fill(0), '1': new Array(t1).fill(0), '2': new Array(t2).fill(0), '3': new Array(t3).fill(0) },
+  wonTricks: { '0': t0, '1': t1, '2': t2, '3': t3 },
 });
 const makeR = computeGameOver(mk(2, 2, 1, 0), mockCtx); // team 4, defenders 1
 assert(makeR.contractMade === true, 'scoring: make (3+ tricks)');
@@ -548,6 +550,7 @@ console.log('--- Solo Scoring ---\n');
 const soloG1 = {
   declarer: '0', trump: 0, openAlone: true,
   won: { '0': [1,2,3], '1': [], '2': [], '3': [4,5] },
+  wonTricks: { '0': 3, '1': 0, '2': 0, '3': 0 },
 };
 const soloMake = computeGameOver(soloG1, mockCtx);
 assert(soloMake.contractMade === true, 'solo: make (3+ tricks)');
@@ -559,6 +562,7 @@ assert(soloMake.scores['1'] === 0 && soloMake.scores['3'] === 0, 'solo: defender
 const soloMarch = computeGameOver({
   declarer: '0', trump: 0, openAlone: true,
   won: { '0': [1,2,3,4,5], '1': [], '2': [], '3': [] },
+  wonTricks: { '0': 5, '1': 0, '2': 0, '3': 0 },
 }, mockCtx);
 assert(soloMarch.march === true, 'solo: march (5 tricks)');
 assert(soloMarch.scores['0'] === 4, 'solo: declarer +4 on march');
@@ -568,6 +572,7 @@ assert(soloMarch.scores['2'] === 4, 'solo: partner +4 on march');
 const soloEuchred = computeGameOver({
   declarer: '0', trump: 0, openAlone: true,
   won: { '0': [1], '1': [2,3], '2': [], '3': [4,5] },
+  wonTricks: { '0': 1, '1': 0, '2': 0, '3': 0 },
 }, mockCtx);
 assert(soloEuchred.contractMade === false, 'solo: euchred (<3 tricks)');
 assert(soloEuchred.scores['0'] === 0, 'solo: declarer gets 0 on euchred');

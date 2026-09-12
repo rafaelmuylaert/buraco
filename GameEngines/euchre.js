@@ -274,10 +274,8 @@ export function computeGameOver(G, ctx) {
 
   // Tricks won: solo counts only the declarer (partner was skipped);
   // partnership counts declarer + partner.
-  const teamTricks = isSolo
-    ? (G.won[declarer] || []).length
-    : (G.won[declarer] || []).length + (G.won[partner] || []).length;
-  const defenderTricks = defenders.reduce((sum, p) => sum + (G.won[p] || []).length, 0);
+  const teamTricks = isSolo ? (G.wonTricks[declarer] || 0) : (G.wonTricks[declarer] || 0) + (G.wonTricks[partner] || 0);
+  const defenderTricks = defenders.reduce((sum, p) => sum + (G.wonTricks[p] || 0), 0);
 
   // Same thresholds both ways: make = 3+, march = all 5.
   //   Non-solo : make +1, march +2 (each of declarer & partner)
@@ -504,6 +502,9 @@ export function dealHand(G, shuffle) {
   G.upcardDiscarded = false;
   G.won = {};
   for (let i = 0; i < numPlayers; i++) G.won[String(i)] = [];
+  G.wonTricks = {};
+  for (let i = 0; i < numPlayers; i++) G.wonTricks[String(i)] = 0;
+  G.trickHistory = [];
 }
 
 /**
@@ -691,6 +692,8 @@ export function createEuchreGame(options = {}) {
       // Per rules: the player after the dealer leads, not the declarer
       G.leader = dealerPlus1(G);
       for (let i = 0; i < (G.numPlayers || 4); i++) G.won[String(i)] = [];
+      for (let i = 0; i < (G.numPlayers || 4); i++) G.wonTricks[String(i)] = 0;
+      G.trickHistory = [];
     },
     moves: { playCard: (args, card) => playCardMoveOverride(args, card) },
   };
@@ -819,6 +822,8 @@ function playCardMoveOverride({ G, ctx, events }, card) {
     const winner = computeTrickWinner(G.trick, G.trump, G.trickNumber, G.namedSuit, trickR);
     if (!G.won[winner]) G.won[winner] = [];
     for (const t of G.trick) G.won[winner].push(t.card);
+    G.wonTricks[winner] = (G.wonTricks[winner] || 0) + 1;
+    G.trickHistory.push({ cards: G.trick.map((t) => ({ player: t.player, card: t.card })), winner });
 
     G.trick = [];
     G.namedSuit = null;

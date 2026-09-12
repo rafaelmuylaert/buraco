@@ -145,6 +145,12 @@ Scoring is per-hand and **not** zero-sum. It is purely based on tricks won,
 declarer and their positional partner both score the same amount; the same
 applies to the two defenders).
 
+**Trick counting.** The per-seat "tricks won" counter and the make/march
+thresholds count **tricks** (one per trick won), not individual cards — a
+partnership trick contains 4 cards, and 3 when playing solo (open). "Make"
+needs the declaring team to win at least 3 of the 5 tricks; "march" means
+winning all 5. This is independent of how many point-cards land in each trick.
+
 ### Partnership scoring
 
 | Outcome | Declarer's team (each seat) | Defenders (each seat) |

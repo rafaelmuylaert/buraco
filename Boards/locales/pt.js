@@ -617,6 +617,7 @@ export const messages = {
     lead: 'Abre',
     namedSuit: 'Bowler nomeia: {suit}',
     trickNum: 'Vaza {n}/{total}',
+    tricksTitle: 'Vazas',
     handNumber: 'Mão {n}',
     nextHand: 'Próxima Mão',
     matchOver: {

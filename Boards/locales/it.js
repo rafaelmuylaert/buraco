@@ -615,6 +615,7 @@ export const messages = {
     lead: 'Apre',
     namedSuit: 'Il Bowler dichiara: {suit}',
     trickNum: 'Presa {n}/{total}',
+    tricksTitle: 'Prese',
     handNumber: 'Mano {n}',
     nextHand: 'Prossima Mano',
     matchOver: {
