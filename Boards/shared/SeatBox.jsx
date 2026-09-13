@@ -7,10 +7,10 @@ import { NO_TRUMP, suitChar } from '@buraco/game/Mighty.js';
 
 const SUIT_COLORS = { 0: '#111', 1: '#d03030', 2: '#111', 3: '#d03030' };
 
-export const RoleBadge = ({ emoji, placeholder }) => (
+export const RoleBadge = ({ emoji, placeholder, borderColor }) => (
   <div style={{
     width: '46px', height: '64px', margin: '2px', borderRadius: '8px',
-    border: placeholder ? '2px dashed #444' : '2px solid #555',
+    border: placeholder ? '2px dashed #444' : `2px solid ${borderColor || '#555'}`,
     backgroundColor: placeholder ? 'transparent' : 'rgba(0,0,0,0.25)',
     display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
     color: 'white',
