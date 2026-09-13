@@ -572,7 +572,7 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
             const active = ctx.currentPlayer === p && !go;
             const teamColor = (Number(p) % 2 === 0) ? '#4da6ff' : '#ffd700';
             return (
-              <div key={p} style={{ border: `2px solid ${teamColor}`, borderRadius: '8px', padding: '6px' }}>
+              <div key={p}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', width: '110px' }}>
                   <div
                     onClick={() => { setSeatPopup(p); setRenameOpen(false); setRenameForm({ name: '', password: '' }); setRenameError(''); }}
@@ -585,7 +585,7 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
                       textDecoration: seatPopup === p ? 'underline' : 'none',
                     }}
                   >{playerName(p)}{isMe ? ' (you)' : ''}</div>
-                  {phase !== 'bidding' && <RoleBadge key={`role-${p}`} emoji={roleBadgeOf(p)} />}
+                  {phase !== 'bidding' && <RoleBadge key={`role-${p}`} emoji={roleBadgeOf(p)} borderColor={teamColor} />}
                   <div style={{ color: '#aaa', fontSize: '0.75em' }}>
                     {t('euchre.won', { n: pts })}
                   </div>
