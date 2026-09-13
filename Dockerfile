@@ -7,20 +7,30 @@ ENV PATH="/app/node_modules/.bin:${PATH}"
 
 WORKDIR /app
 
-# git-entrypoint.sh needs git for clone/pull/poll
-RUN apk add --no-cache git
-
-# Copy the git-driven entrypoint (auto-pulls on update, installs deps, starts service)
-COPY deploy/entrypoint.sh /usr/local/bin/git-entrypoint.sh
-RUN chmod +x /usr/local/bin/git-entrypoint.sh
-
+# Copy repo code built by Komodo
 COPY . .
 
-RUN npm ci --no-audit --no-fund && \
-    npm --prefix buraco-client run build
+# Install dependencies and build client image-side
+RUN npm ci --no-audit --no-fund
+RUN npm --prefix /app/buraco-client run build
+# Make entrypoint executable
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["entrypoint.sh"]
+CMD ["server"]
+
+# Copy the git-driven entrypoint (auto-pulls on update, installs deps, starts service)
+#COPY deploy/entrypoint.sh /usr/local/bin/git-entrypoint.sh
+#RUN chmod +x /usr/local/bin/git-entrypoint.sh
+
+#COPY . .
+
+#RUN npm ci --no-audit --no-fund && \
+    #npm --prefix buraco-client run build
 
 # Server/bot run from here by default
-WORKDIR /app/buraco-server
+#WORKDIR /app/buraco-server
 
-ENTRYPOINT ["/usr/local/bin/git-entrypoint.sh"]
-CMD ["server"]
+#ENTRYPOINT ["/usr/local/bin/git-entrypoint.sh"]
+#CMD ["server"]
