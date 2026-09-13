@@ -14,7 +14,7 @@ COPY . .
 RUN npm ci --no-audit --no-fund
 RUN npm --prefix /app/buraco-client run build
 # Make entrypoint executable
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY deploy/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 ENTRYPOINT ["entrypoint.sh"]
