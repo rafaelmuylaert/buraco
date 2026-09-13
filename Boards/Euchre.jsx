@@ -596,23 +596,7 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
         </div>
 
         {/* Central trick + trick history */}
-        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', alignItems: 'flex-start' }}>
-          <TrickArea
-            footer={
-              phase === 'play' && G.trickNumber > 0 && (
-                <div style={{ color: '#aaa', fontSize: '0.8em' }}>{t('euchre.trickNum', { n: G.trickNumber, total: 5 })}</div>
-              )
-            }
-          >
-            {trick.length === 0 && !go && (
-              <div style={{ color: '#9fc5b8', fontSize: '0.9em' }}>
-                {phase === 'play' ? (isMyTurn ? t('euchre.leadHint') : t('euchre.waitingLead')) : status}
-              </div>
-            )}
-            {trick.length > 0 && (
-              <TrickList t={t} trick={trick} playerName={playerName} leadLabel={t('euchre.lead')} renderCard={(c) => <Card card={c} trump={trump} />} />
-            )}
-          </TrickArea>
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap' }}>
           {phase === 'play' && !go && (G.trickHistory || []).length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px', padding: '10px' }}>
               <div style={{ color: '#aaa', fontSize: '0.75em' }}>{t('euchre.tricksTitle')}</div>
@@ -628,6 +612,24 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
               ))}
             </div>
           )}
+          <div style={{ minWidth: '280px' }}>
+            <TrickArea
+              footer={
+                phase === 'play' && G.trickNumber > 0 && (
+                  <div style={{ color: '#aaa', fontSize: '0.8em' }}>{t('euchre.trickNum', { n: G.trickNumber, total: 5 })}</div>
+                )
+              }
+            >
+              {trick.length === 0 && !go && (
+                <div style={{ color: '#9fc5b8', fontSize: '0.9em' }}>
+                  {phase === 'play' ? (isMyTurn ? t('euchre.leadHint') : t('euchre.waitingLead')) : status}
+                </div>
+              )}
+              {trick.length > 0 && (
+                <TrickList t={t} trick={trick} playerName={playerName} leadLabel={t('euchre.lead')} renderCard={(c) => <Card card={c} trump={trump} />} />
+              )}
+            </TrickArea>
+          </div>
         </div>
 
         {/* Upcard (if available) */}
