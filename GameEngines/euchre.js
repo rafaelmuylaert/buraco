@@ -191,10 +191,12 @@ export function isPointCard(card) {
 
 /**
  * Is this card of the trump suit?
+ * The left bower (Jack of the same colour as trump) is treated as trump
+ * so it beats every trump card except the right bower.
  */
 export function isTrumpCard(card, trump) {
   if (trump === NO_TRUMP) return false;
-  return getSuit(card) === trump;
+  return getSuit(card) === trump || isLeftBowler(card, trump);
 }
 
 // ── Legal plays ─────────────────────────────────────────────────────────────
