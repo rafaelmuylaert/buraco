@@ -10,7 +10,7 @@ import { Client } from 'boardgame.io/dist/cjs/client.js';
 import { SocketIO } from 'boardgame.io/dist/cjs/multiplayer.js';
 import {
   NO_TRUMP, isTrumpCard, getLegalPlays, computeTrickWinner,
-  isRightBowler, isLeftBowler, getSuit, getRank,
+  isRightBowler, isLeftBowler, isBowler, getSuit, getRank,
   cardValue, isPointCard as isPointCardEuchre, createEuchreGame,
 } from '@buraco/game/euchre.js';
 
