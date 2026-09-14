@@ -129,6 +129,9 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
   const trick = G.trick || [];
   const trump = G.trump;
 
+  // Fixed player order for the trick-history grid (does not rotate with the leader).
+  const trickPlayerCols = Array.from({ length: G.numPlayers }, (_, i) => String(i));
+
   const seatOrder = useMemo(() => {
     const start = leader || declarer || 0;
     const arr = [];
@@ -595,18 +598,32 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
         {/* Central trick + trick history */}
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap' }}>
           {phase === 'play' && !go && (G.trickHistory || []).length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px', padding: '10px' }}>
-              <div style={{ color: '#aaa', fontSize: '0.75em' }}>{t('euchre.tricksTitle')}</div>
-              {(G.trickHistory || []).map((tr, i) => (
-                <div key={i} style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '0.7em', color: '#ccc' }}>
-                  {tr.cards.map((c, j) => (
-                    <div key={j} style={{ transform: 'scale(0.6)', width: 46, height: 64, overflow: 'hidden' }}>
-                      <Card card={c.card} trump={trump} />
-                    </div>
-                  ))}
-                  <span style={{ color: '#ffd700' }}>{playerName(tr.winner)}</span>
-                </div>
-              ))}
+            <div style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px', padding: '10px' }}>
+              <div style={{ color: '#aaa', fontSize: '0.75em', marginBottom: '6px' }}>{t('euchre.tricksTitle')}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${G.numPlayers}, minmax(0, 1fr))`, gap: '6px' }}>
+                {trickPlayerCols.map((p) => (
+                  <div key={`h-${p}`} style={{ textAlign: 'center', fontSize: '0.7em', color: '#ccc', fontWeight: 'bold' }}>
+                    {playerName(p)}
+                  </div>
+                ))}
+                {(G.trickHistory || []).map((tr, i) =>
+                  trickPlayerCols.map((p) => {
+                    const played = (tr.cards || []).find((c) => c.player === p);
+                    const isWinner = p === tr.winner;
+                    return (
+                      <div key={`${i}-${p}`} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40px' }}>
+                        {played ? (
+                          <div style={{ transform: 'scale(0.6)', width: 46, height: 64, overflow: 'hidden', border: isWinner ? '2px solid #ffd700' : 'none', borderRadius: '4px' }}>
+                            <Card card={played.card} trump={trump} />
+                          </div>
+                        ) : (
+                          <span style={{ color: '#555', fontSize: '0.7em' }}>–</span>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           )}
           <div style={{ minWidth: '280px' }}>
