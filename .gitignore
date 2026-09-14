@@ -7,3 +7,4 @@ buraco-server/mighty.js
 npm-debug.log
 .env
 .omo
+*.log
