@@ -156,7 +156,7 @@ export const messages = {
     renameUserFail: 'Errore durante la rinomina dell\'utente.',
     endTournamentConfirm: 'Concludere il torneo ora? La classifica attuale verrà mantenuta come risultato finale e nessun nuovo round verrà generato.',
     generateRound: 'Genera Round',
-    generateRoundConfirm: 'Generare la prima rounda di tavoli per questo torneo?',
+    generateRoundConfirm: 'Generare una nuova rounda di tavoli per questo torneo?',
     deleteTournamentConfirm: 'Sei sicuro? Questo eliminerà il torneo E DISTRUGGERÀ definitivamente tutti i tavoli associati.',
     cleanOrphansConfirm: 'Questo eliminerà tutti i tavoli fantasma dal disco. Continuare?',
     cleanOrphansDone: '{n} tavoli fantasma eliminati! IMPORTANTE: Se continuano a comparire sullo schermo, riavvia il container del server nel terminale (sudo docker compose restart buraco-server) per liberare la cache della RAM!',
@@ -324,6 +324,7 @@ export const messages = {
     copyLinkPrompt: 'Copia il link di accesso:',
     link: '🔗 Link',
     end: 'Concludi',
+    generateRound: 'Genera Tavoli',
     createError: 'Errore nella generazione dei tavoli: {msg}',
   },
 

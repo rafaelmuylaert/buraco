@@ -1289,11 +1289,15 @@ const App = () => {
     saveTournamentsToAPI(updated);
   };
 
-  // Manual trigger: auto-generation only fires after a round finishes, so a
-  // fresh tournament (rounds: []) needs this to create its first round.
+  // "Active" = still on the server (in `matches`) and not finished (not in `history`).
+  const hasActiveTable = (trn) => {
+    const currentRoundMatches = trn.rounds.length > 0 ? trn.rounds[trn.rounds.length - 1].assignments.map(a => a.matchID) : [];
+    return currentRoundMatches.some(mID => matches.some(m => m.matchID === mID && !history.some(h => h.matchID === mID)));
+  };
+
   const handleGenerateRound = async (tID) => {
     const trn = tournaments.find(x => x.id === tID);
-    if (!trn || trn.status === 'completed' || trn.rounds.length > 0 || trn.isGeneratingNext) return;
+    if (!trn || trn.status === 'completed' || trn.isGeneratingNext || hasActiveTable(trn)) return;
     if (!confirm(t('admin.generateRoundConfirm'))) return;
     const updated = tournaments.map(x => x.id === tID ? { ...x, isGeneratingNext: true } : x);
     saveTournamentsToAPI(updated);
@@ -1725,7 +1729,7 @@ const App = () => {
                 <button onClick={() => handleToggleTournamentVisibility(trn.id)} title={trn.private ? t('admin.privateTitle') : t('admin.publicTitle')} style={{ background: trn.private ? '#8a2be2' : '#2a9d8f', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>{trn.private ? t('admin.privateBadge') : t('admin.publicBadge')}</button>
                 <button onClick={() => handleEndTournament(trn.id)} style={{ background: '#ff9900', color: 'black', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>{t('admin.end')}</button>
                 <button onClick={() => handleAdminDeleteTournament(trn.id)} style={{ background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>{t('admin.delete')}</button>
-                {trn.rounds.length === 0 && (
+                {!hasActiveTable(trn) && (
                   <button onClick={() => handleGenerateRound(trn.id)} style={{ background: '#50fa7b', color: '#000', border: 'none', borderRadius: '3px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}>{t('admin.generateRound')}</button>
                 )}
               </div>
@@ -2342,10 +2346,13 @@ const App = () => {
                       }
                     }} style={{ width: '100%', background: '#2a9d8f', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>{t('tourney.link')}</button>
                   )}
-                  {canEndTournament(trn) && (
-                    <button onClick={() => handleEndTournament(trn.id)} style={{ width: '100%', background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>{t('tourney.end')}</button>
-                  )}
-                </div>
+                   {canEndTournament(trn) && (
+                     <button onClick={() => handleEndTournament(trn.id)} style={{ width: '100%', background: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>{t('tourney.end')}</button>
+                   )}
+                   {canEndTournament(trn) && !hasActiveTable(trn) && (
+                     <button onClick={() => handleGenerateRound(trn.id)} style={{ width: '100%', background: '#50fa7b', color: '#000', border: 'none', borderRadius: '5px', padding: '8px 14px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9em' }}>{t('tourney.generateRound')}</button>
+                   )}
+                 </div>
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px' }}>

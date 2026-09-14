@@ -156,7 +156,7 @@ export const messages = {
     renameUserFail: 'Error renaming user.',
     endTournamentConfirm: 'End the tournament now? The current standings will be kept as the final result and no new round will be generated.',
     generateRound: 'Generate Round',
-    generateRoundConfirm: 'Generate the first round of tables for this tournament?',
+    generateRoundConfirm: 'Generate a new round of tables for this tournament?',
     deleteTournamentConfirm: 'Are you sure? This will delete the tournament AND DESTROY all associated tables permanently.',
     cleanOrphansConfirm: 'This will delete all ghost tables from disk. Continue?',
     cleanOrphansDone: '{n} ghost tables deleted! IMPORTANT: If they still appear on screen, restart the server container in the terminal (sudo docker compose restart buraco-server) to clear the RAM cache!',
@@ -324,6 +324,7 @@ export const messages = {
     copyLinkPrompt: 'Copy the access link:',
     link: '🔗 Link',
     end: 'End',
+    generateRound: 'Generate Round',
     createError: 'Error generating tables: {msg}',
   },
 
