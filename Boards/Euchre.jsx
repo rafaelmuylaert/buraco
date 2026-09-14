@@ -90,6 +90,7 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
   // NOTE: on Euchre a self-rename updates match metadata + lounge/panel label only; the in-board G.players caption stays stale until the next hand (no moves.renamePlayer move defined for this game).
   const seatActions = useSeatActions({ apiAddress, gameName: 'euchre', matchID, playerID, moves, t });
   const [seatPopup, setSeatPopup] = useState(null);
+  const [selectedCard, setSelectedCard] = useState(null);
   const [liveness, setLiveness] = useState({});
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameForm, setRenameForm] = useState({ name: '', password: '' });
@@ -105,6 +106,10 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
     fetchSeatStates('euchre', matchID).then((s) => { if (active) setLiveness(s); }).catch(() => {});
     return () => { active = false; };
   }, [seatPopup, matchID]);
+
+  useEffect(() => {
+    setSelectedCard(null);
+  }, [phase, G.hand, G.declarer]);
 
   const closePopup = () => {
     setSeatPopup(null);
@@ -218,27 +223,19 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
         <div style={{ color: 'white', fontSize: '0.9em' }}>{t('euchre.continueCall')}</div>
       )}
       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-        {G.declarer === me && G.upcardPicked && !G.openAlone && (
+        {G.declarer === me && G.upcardPicked && !G.openAlone && selectedCard != null && (
           <>
-            <button onClick={() => moves.chooseDiscard(myHand[0])} style={{
+            <button onClick={() => moves.callDecision(selectedCard, true)} style={{
+              padding: '10px 22px', borderRadius: '6px', border: '1px solid #8a6a2a', background: '#8a6a2a',
+              color: 'white', cursor: 'pointer', fontWeight: 'bold',
+            }}>{t('euchre.goAlone')}</button>
+            <button onClick={() => moves.callDecision(selectedCard, false)} style={{
               padding: '10px 22px', borderRadius: '6px', border: '1px solid #2a7a4a', background: '#2a7a4a',
               color: 'white', cursor: 'pointer', fontWeight: 'bold',
-            }}>{t('euchre.discard')}</button>
+            }}>{t('euchre.goWithPartner')}</button>
           </>
         )}
         {G.declarer === me && !G.upcardPicked && !G.openAlone && (
-          <button onClick={() => moves.continueCall()} style={{
-            padding: '10px 22px', borderRadius: '6px', border: '1px solid #4a6a8a', background: '#4a6a8a',
-            color: 'white', cursor: 'pointer', fontWeight: 'bold',
-          }}>{t('euchre.continueCall')}</button>
-        )}
-        {!G.openAlone && G.declarer === me && (
-          <button onClick={() => moves.declareSolo()} style={{
-            padding: '10px 22px', borderRadius: '6px', border: '1px solid #8a6a2a', background: '#8a6a2a',
-            color: 'white', cursor: 'pointer', fontWeight: 'bold',
-          }}>{t('euchre.declareSolo')}</button>
-        )}
-        {G.declarer === me && !G.openAlone && !G.upcardPicked && G.calledCard != null && (
           <button onClick={() => moves.continueCall()} style={{
             padding: '10px 22px', borderRadius: '6px', border: '1px solid #4a6a8a', background: '#4a6a8a',
             color: 'white', cursor: 'pointer', fontWeight: 'bold',
@@ -664,7 +661,8 @@ function EuchreBoardInner({ ctx, G, moves, playerID, matchID = null, apiAddress 
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px', marginTop: '8px' }}>
               {myHand.map((c) => (
                 <Card key={c} card={c} trump={trump} legal={isMyTurn}
-                  onClick={() => moves.chooseDiscard(c)} />
+                  selected={selectedCard === c}
+                  onClick={() => setSelectedCard(c)} />
               ))}
             </div>
           )}

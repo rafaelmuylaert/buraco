@@ -444,6 +444,33 @@ export function chooseDiscardMove({ G, ctx, events }, card) {
 }
 
 /**
+ * Final call decision: discard the chosen card to the kitty and, when `alone`
+ * is true, declare solo (emptying the positional partner's hand). Advances to
+ * play. Combines the old declareSolo + chooseDiscard steps into one atomic move
+ * so the UI can highlight a card first and confirm the mode afterwards.
+ */
+export function callDecisionMove({ G, ctx, events }, card, alone) {
+  const p = ctx.currentPlayer;
+  if (p !== G.declarer) return 'INVALID_MOVE';
+  const c = Number(card);
+  const hand = G.hands[p] || [];
+  if (!Number.isInteger(c) || !hand.includes(c)) return 'INVALID_MOVE';
+  if (!G.upcardPicked) return 'INVALID_MOVE';
+
+  hand.splice(hand.indexOf(c), 1);
+  G.kitty = [c];
+  G.upcardDiscarded = true;
+
+  if (alone) {
+    G.openAlone = true;
+    const partner = computePartner(G, G.numPlayers || 4);
+    if (partner) G.hands[partner] = [];
+  }
+
+  events.endPhase('play');
+}
+
+/**
  * Skip the discard step (only when no discard is owed, i.e. round 2 / no
  * upcard pickup). Advances to play.
  */
@@ -677,6 +704,7 @@ export function createEuchreGame(options = {}) {
       declareSolo: declareSoloMove,
       chooseDiscard: chooseDiscardMove,
       continueCall: continueCallMove,
+      callDecision: callDecisionMove,
     },
   };
 

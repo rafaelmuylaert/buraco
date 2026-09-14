@@ -86,6 +86,11 @@ function makeIface(client, botName, playerID) {
       return runMove(() => client.moves.chooseDiscard(card),
         (st) => st.ctx.phase === 'play');
     },
+    callDecision: (card, alone) => {
+      console.log(`[EUCHRE] ${botName} => callDecision ${card} alone=${alone}`);
+      return runMove(() => client.moves.callDecision(card, alone),
+        (st) => st.ctx.phase === 'play');
+    },
     continueCall: () => {
       console.log(`[EUCHRE] ${botName} => continueCall`);
       return runMove(() => client.moves.continueCall(),
@@ -396,28 +401,12 @@ async function startBotClient(matchID, playerID, credentials, botName) {
       } else if (phase === 'call') {
         // Check if I'm the declarer
         if (G.declarer === me) {
-          // Declarer's turn in call phase
-          if (G.openAlone === true) {
-            // Already declared solo, need to discard
-            if (G.upcardPicked && G.kitty && G.kitty.length > 0) {
-              const discard = decideChooseDiscard(hand, G.trump);
-              await iface.chooseDiscard(discard);
-            } else if (!G.upcardPicked) {
-              // No discard owed, continue to play
-              await iface.continueCall();
-            }
-          } else if (!G.openAlone && !G.upcardPicked && G.calledCard != null) {
-            // Can declare solo
-            if (decideDeclareSolo(hand, G.upcardSuit || 0)) {
-              await iface.declareSolo();
-            } else if (!G.upcardPicked) {
-              // No discard owed, continue to play
-              await iface.continueCall();
-            }
-          } else if (G.upcardPicked) {
-            // Upcard was picked, need to discard
+          if (G.upcardPicked) {
             const discard = decideChooseDiscard(hand, G.trump);
-            await iface.chooseDiscard(discard);
+            const alone = decideDeclareSolo(hand, G.trump);
+            await iface.callDecision(discard, alone);
+          } else {
+            await iface.continueCall();
           }
         } else if (!G.openAlone) {
           // Not declarer and not solo — this shouldn't happen normally

@@ -589,6 +589,8 @@ export const messages = {
     discard: 'Scarta',
     continueCall: 'Continua',
     declareSolo: 'Dichiara Solo',
+    goAlone: 'Gioca da Solo',
+    goWithPartner: 'Gioca con il Partner',
     waitingCall: 'In attesa del dichiarante...',
     gameOver: {
       winner: 'I dichiaranti hanno vinto!',
