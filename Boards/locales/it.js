@@ -155,6 +155,8 @@ export const messages = {
     renameUserDone: 'Utente rinominato in "{name}".',
     renameUserFail: 'Errore durante la rinomina dell\'utente.',
     endTournamentConfirm: 'Concludere il torneo ora? La classifica attuale verrà mantenuta come risultato finale e nessun nuovo round verrà generato.',
+    generateRound: 'Genera Round',
+    generateRoundConfirm: 'Generare la prima rounda di tavoli per questo torneo?',
     deleteTournamentConfirm: 'Sei sicuro? Questo eliminerà il torneo E DISTRUGGERÀ definitivamente tutti i tavoli associati.',
     cleanOrphansConfirm: 'Questo eliminerà tutti i tavoli fantasma dal disco. Continuare?',
     cleanOrphansDone: '{n} tavoli fantasma eliminati! IMPORTANTE: Se continuano a comparire sullo schermo, riavvia il container del server nel terminale (sudo docker compose restart buraco-server) per liberare la cache della RAM!',

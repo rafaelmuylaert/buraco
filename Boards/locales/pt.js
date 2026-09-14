@@ -157,6 +157,8 @@ export const messages = {
     renameUserDone: 'Usuário renomeado para "{name}".',
     renameUserFail: 'Erro ao renomear usuário.',
     endTournamentConfirm: 'Encerrar o torneio agora? A classificação atual será mantida como resultado final e nenhuma nova rodada será gerada.',
+    generateRound: 'Gerar Rodada',
+    generateRoundConfirm: 'Gerar a primeira rodada de mesas para este torneio?',
     deleteTournamentConfirm: 'Tem certeza? Isso apagará o torneio E DESTRUIRÁ todas as mesas associadas permanentemente.',
     cleanOrphansConfirm: 'Isso apagará todas as mesas fantasma do disco. Continuar?',
     cleanOrphansDone: '{n} mesas fantasma apagadas! IMPORTANTE: Se elas continuarem na tela, reinicie o container do servidor no terminal (sudo docker compose restart buraco-server) para limpar o cache da memória RAM!',
