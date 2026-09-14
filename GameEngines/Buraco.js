@@ -567,19 +567,14 @@ function newsuitorrank(cardIds){
     let suit = null;
     let rank = null;
     let wilds = null;
+    let wilds2 = null;
     let suitedwilds = false;
     for (const c of cardIds) {
         const s = getSuit(c), r = getRank(c);
         if (s === 5 || r === 2) {
             // Determine suit context: same-suit 2 = natural wild candidate; everything else = foreign
             if (wilds === null) wilds = s;
-            else if (!suitedwilds){
-                if (s === suit){suitedwilds = true;}
-                if (wilds === suit) {
-                    suitedwilds = true;
-                    wilds = s;
-                }
-            } 
+            else if (wilds2 === null) wilds2 = s;
             else{
                 //console.log("[GAME.JS] INVALID MOVE: Too many wilds"); 
                 return null;
@@ -600,6 +595,8 @@ function newsuitorrank(cardIds){
             suit = null;
         }
     }
+    if (wilds2 !== null) rank = null;
+    if (wilds2 !== null && wilds !== suit && wilds2 !== suit) return null;
     return {suit: suit, rank: rank}
 }
 
