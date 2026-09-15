@@ -366,7 +366,7 @@ export const TrainerService = {
         if (params.cardPointValues != null) rules = { ...rules, cardPointValues:     params.cardPointValues };
         if (params.meldSizeBonus   != null) rules = { ...rules, meldSizeBonus:       params.meldSizeBonus };
 
-        const NUM_ISLANDS = Math.max(2, cpus().length - 1);
+        const NUM_ISLANDS = NUM_WORKERS;
 
         // Island-evolution tuning (persisted to meta.json trainParams).
         // Normal islands: RR#1 over the whole population on one shared shuffle ranks the field,
