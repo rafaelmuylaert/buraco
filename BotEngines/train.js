@@ -40,7 +40,7 @@ import { Worker } from 'worker_threads';
 import { cpus } from 'os';
 import { AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS } from '@buraco/game/Buraco.js';
 
-const NUM_WORKERS = Math.max(1, cpus().length - 1); 
+const NUM_WORKERS = Math.max(1, (cpus().length / 2) - 1); 
 const WORKER_PATH = new URL('./worker.js', import.meta.url).pathname; 
 
 // Default hard cap on any single weight/bias magnitude. GA mutation can otherwise
