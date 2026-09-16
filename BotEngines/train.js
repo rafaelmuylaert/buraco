@@ -39,6 +39,7 @@ import path from 'path';
 import { Worker } from 'worker_threads';
 import { cpus } from 'os';
 import { AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS } from '@buraco/game/Buraco.js';
+import { fitChampion } from './nn_fit.js';
 
 const NUM_WORKERS = Math.max(1, (cpus().length / 2) - 1); 
 const WORKER_PATH = new URL('./worker.js', import.meta.url).pathname; 
@@ -53,6 +54,15 @@ if (!fs.existsSync(BOTS_DIR)) fs.mkdirSync(BOTS_DIR, { recursive: true });
 
 const activeTrainings = new Map();
 const stopFlags = new Set();
+
+let CURATED_ROUNDS = null;
+export function loadCuratedRounds() {
+    if (CURATED_ROUNDS) return CURATED_ROUNDS;
+    const p = new URL('./curated_rounds.json', import.meta.url).pathname;
+    try { CURATED_ROUNDS = JSON.parse(fs.readFileSync(p, 'utf8')).rounds || []; }
+    catch (e) { CURATED_ROUNDS = []; }
+    return CURATED_ROUNDS;
+}
 
 function gaussianRandom() {
     let u, v;
@@ -588,6 +598,16 @@ export const TrainerService = {
                     .sort((a, b) => b.score - a.score);
                 latestChampion = new Float32Array(ranked[0].genome);
                 kept = ranked.slice(0, NUM_CHAMPIONS).map(r => new Float32Array(r.genome));
+            }
+
+            // Per-round supervised fit (gradient): refine the champion's move-scoring nets
+            // (SEQ/RUN) against curated rounds. Slot 0 (state) and slot 3 (discard) are frozen.
+            const curated = loadCuratedRounds();
+            if (curated.length > 0) {
+                latestChampion = await fitChampion(latestChampion, netConfig, curated, {
+                    fitLr: params.fitLr, fitIters: params.fitIters,
+                    weightClip,
+                });
             }
 
             fs.writeFileSync(path.join(BOTS_DIR, `${botName}.json`), JSON.stringify(Array.from(latestChampion)));

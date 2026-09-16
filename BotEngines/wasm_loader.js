@@ -449,7 +449,7 @@ export function runCurrentState(G, player, myTeam, oppTeam) {
 
 // Replicates the old seq candidate encoding as floats (byte/255).
 // [suit/255, new_meld 0/1 x16, existing_meld 0/1 x16]
-function _encodeSeqCandidateFloats(cand) {
+export function _encodeSeqCandidateFloats(cand) {
     const f = new Float32Array(33);
     const s = cand.targetSuit || seqSuit(Object.keys(cand.cardCounts).map(Number));
     //f[0] = (s || 1) / 255;
@@ -470,7 +470,7 @@ function _encodeSeqCandidateFloats(cand) {
 
 // Replicates the old run candidate encoding as floats (byte/255).
 // [rank/13, new counts 0/1 x4, 0, existing counts/2 x4, 0]
-function _encodeRunCandidateFloats(cand) {
+export function _encodeRunCandidateFloats(cand) {
     const f = new Float32Array(11);
     const rm = cand.parsedMeld;
     const er = cand.existingRunner;
