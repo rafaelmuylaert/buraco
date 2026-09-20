@@ -318,6 +318,7 @@ export async function fitChampion(startGenome, netConfig, rounds, opts = {}) {
     const beta2 = opts.beta2 ?? 0.999;
     const eps = opts.eps ?? 1e-8;
     const weightClip = opts.weightClip ?? 5.0;
+    const patience = opts.patience ?? 500;
     const verbose = opts.verbose !== false;
 
     await ensureWasmReady();
@@ -392,10 +393,15 @@ export async function fitChampion(startGenome, netConfig, rounds, opts = {}) {
     }
     logMargins('init', initMargins);
 
-    let bestL = Infinity;
+    // The raw logsumexp loss is unbounded below (the margin can grow to +inf,
+    // driving L -> -inf), so "lowest loss" would pick the most-overfit genome.
+    // Track the genome satisfying the most rounds; break ties by worst margin.
+    let bestSat = -1;
+    let bestWorst = -Infinity;
     let bestT = 0;
     let bestSeq = snapshotNet(seqNet);
     let bestRun = snapshotNet(runNet);
+    let tNoImprove = 0;
 
     const t0 = Date.now();
     const progressEvery = Math.max(1, Math.floor(fitIters / 4));
@@ -404,6 +410,7 @@ export async function fitChampion(startGenome, netConfig, rounds, opts = {}) {
         zeroGrads(runNet);
 
         let totalL = 0;
+        const perRound = [];
         for (const rd of roundData) {
             const goodScores = [], goodCaches = [];
             for (const e of rd.good) {
@@ -418,34 +425,54 @@ export async function fitChampion(startGenome, netConfig, rounds, opts = {}) {
                 badCaches.push(f);
             }
 
-            // L_r = logsumexp(B) + logsumexp(-G); an empty side contributes 0
-            // (no bad moves to push down / no good moves to push up).
+            // The raw L_r = logsumexp(B) + logsumexp(-G) is unbounded below, so
+            // its gradient never vanishes and scores explode. Wrap in a logistic:
+            // the gradient is the raw one * sigmoid(L_r), which -> 0 as margin grows.
             const lseB = badScores.length ? logsumexp(badScores) : 0;
             const lseNegG = goodScores.length ? logsumexp(goodScores.map(v => -v)) : 0;
-            totalL += lseB + lseNegG;
+            const lcur = lseB + lseNegG;
+            totalL += Math.log(1 + Math.exp(lcur));
 
+            const scale = 1 / (1 + Math.exp(-lcur));
             const sNegG = softmaxNegArr(goodScores);
             const sB = softmaxArr(badScores);
             for (let i = 0; i < rd.good.length; i++) {
-                backprop(rd.good[i].isSeq ? seqNet : runNet, goodCaches[i], -sNegG[i]);
+                backprop(rd.good[i].isSeq ? seqNet : runNet, goodCaches[i], -scale * sNegG[i]);
             }
             for (let i = 0; i < rd.bad.length; i++) {
-                backprop(rd.bad[i].isSeq ? seqNet : runNet, badCaches[i], +sB[i]);
+                backprop(rd.bad[i].isSeq ? seqNet : runNet, badCaches[i], +scale * sB[i]);
             }
+
+            const minGood = goodScores.length ? Math.min(...goodScores) : null;
+            const maxBad = badScores.length ? Math.max(...badScores) : null;
+            let margin;
+            if (minGood !== null && maxBad !== null) margin = minGood - maxBad;
+            else if (maxBad !== null) margin = -maxBad;
+            else if (minGood !== null) margin = minGood;
+            else margin = 0;
+            perRound.push({ id: rd.id, margin });
         }
 
-        if (totalL < bestL) {
-            bestL = totalL;
+        const sat = perRound.filter(x => x.margin > 0).length;
+        const worst = perRound.reduce((a, x) => Math.min(a, x.margin), Infinity);
+        if (sat > bestSat || (sat === bestSat && worst > bestWorst)) {
+            bestSat = sat;
+            bestWorst = worst;
             bestT = t;
             bestSeq = snapshotNet(seqNet);
             bestRun = snapshotNet(runNet);
+            tNoImprove = 0;
+        } else {
+            tNoImprove++;
         }
 
         adamStep(seqNet, fitLr, beta1, beta2, eps, t, weightClip);
         adamStep(runNet, fitLr, beta1, beta2, eps, t, weightClip);
 
+        if (tNoImprove >= patience) break;
+
         if (verbose && t % progressEvery === 0) {
-            console.log(`[FIT] iter ${t}/${fitIters} loss=${fmt(totalL)}`);
+            console.log(`[FIT] iter ${t}/${fitIters} loss=${fmt(totalL)} sat=${bestSat}/${roundData.length} worst=${fmt(bestWorst)}`);
         }
     }
     const fitMs = Date.now() - t0;
