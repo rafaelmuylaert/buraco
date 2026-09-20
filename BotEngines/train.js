@@ -59,8 +59,13 @@ let CURATED_ROUNDS = null;
 export function loadCuratedRounds() {
     if (CURATED_ROUNDS) return CURATED_ROUNDS;
     const p = new URL('./curated_rounds.json', import.meta.url).pathname;
-    try { CURATED_ROUNDS = JSON.parse(fs.readFileSync(p, 'utf8')).rounds || []; }
-    catch (e) { CURATED_ROUNDS = []; }
+    try {
+        CURATED_ROUNDS = JSON.parse(fs.readFileSync(p, 'utf8')).rounds || [];
+        console.log(`[FIT] loaded ${CURATED_ROUNDS.length} curated round(s) from curated_rounds.json`);
+    } catch (e) {
+        CURATED_ROUNDS = [];
+        console.log(`[FIT] curated_rounds.json not found/readable (${e.message}); supervised fit disabled`);
+    }
     return CURATED_ROUNDS;
 }
 
@@ -604,6 +609,7 @@ export const TrainerService = {
             // (SEQ/RUN) against curated rounds. Slot 0 (state) and slot 3 (discard) are frozen.
             const curated = loadCuratedRounds();
             if (curated.length > 0) {
+                console.log(`[${botName}] 🎯 Supervised fit: ${curated.length} curated rounds (lr=${params.fitLr ?? 1e-3}, iters=${params.fitIters ?? 3000})`);
                 latestChampion = await fitChampion(latestChampion, netConfig, curated, {
                     fitLr: params.fitLr, fitIters: params.fitIters,
                     weightClip,

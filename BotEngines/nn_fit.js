@@ -88,6 +88,7 @@ export function buildNet(genome, start, C, inWidth, out) {
 function snapshotNet(net) {
     return {
         layers: net.layers,
+        hlay: net.hlay,
         W: net.W.map(w => new Float32Array(w)),
         b: net.b.map(bb => new Float32Array(bb)),
     };
@@ -285,6 +286,30 @@ const isSeqMove = (moveType) => moveType === 'playMeld' || moveType === 'appendT
 
 // ── Public API ───────────────────────────────────────────
 
+// Read-only: total loss + per-round good-vs-bad margin for the current nets
+// (forward only, no gradient). A round is "satisfied" when its margin > 0.
+function computeMargins(roundData, seqNet, runNet) {
+    let totalL = 0;
+    const perRound = [];
+    for (const rd of roundData) {
+        const goodScores = rd.good.map(e => forward(e.isSeq ? seqNet : runNet, e.x).score);
+        const badScores = rd.bad.map(e => forward(e.isSeq ? seqNet : runNet, e.x).score);
+        const lseB = badScores.length ? logsumexp(badScores) : 0;
+        const lseNegG = goodScores.length ? logsumexp(goodScores.map(v => -v)) : 0;
+        const Lr = lseB + lseNegG;
+        totalL += Lr;
+        const minGood = goodScores.length ? Math.min(...goodScores) : null;
+        const maxBad = badScores.length ? Math.max(...badScores) : null;
+        let margin;
+        if (minGood !== null && maxBad !== null) margin = minGood - maxBad;
+        else if (maxBad !== null) margin = -maxBad;      // hold round: want maxBad < 0
+        else if (minGood !== null) margin = minGood;    // play round: want minGood > 0
+        else margin = 0;
+        perRound.push({ id: rd.id, minGood, maxBad, margin, Lr });
+    }
+    return { totalL, perRound };
+}
+
 export async function fitChampion(startGenome, netConfig, rounds, opts = {}) {
     const C = netConfig;
     const fitLr = opts.fitLr ?? 1e-3;
@@ -293,6 +318,7 @@ export async function fitChampion(startGenome, netConfig, rounds, opts = {}) {
     const beta2 = opts.beta2 ?? 0.999;
     const eps = opts.eps ?? 1e-8;
     const weightClip = opts.weightClip ?? 5.0;
+    const verbose = opts.verbose !== false;
 
     await ensureWasmReady();
     setActiveNetConfig(C);
@@ -307,7 +333,8 @@ export async function fitChampion(startGenome, netConfig, rounds, opts = {}) {
 
     // Precompute per-round data (state is frozen — constant across iterations).
     const roundData = [];
-    for (const r of rounds) {
+    for (let ri = 0; ri < rounds.length; ri++) {
+        const r = rounds[ri];
         const G = r.G ?? r.state;
         const player = r.player;
         const myTeam = r.myTeam;
@@ -340,16 +367,38 @@ export async function fitChampion(startGenome, netConfig, rounds, opts = {}) {
         };
 
         roundData.push({
+            id: r.id ?? `round${ri}`,
             state: stateArr,
             good: (r.good || []).map(buildEntry),
             bad: (r.bad || []).map(buildEntry),
         });
     }
 
+    const fmt = (v) => (v == null ? 'n/a' : (Number.isFinite(v) ? v.toFixed(3) : String(v)));
+    const satisfiedCount = (m) => m.perRound.filter(x => x.margin > 0).length;
+    const logMargins = (label, m) => {
+        if (!verbose) return;
+        const per = m.perRound.map(x =>
+            `${x.id}: ${fmt(x.margin)} (good=${fmt(x.minGood)}, bad=${fmt(x.maxBad)})`
+        ).join(' | ');
+        console.log(`[FIT] ${label} loss=${fmt(m.totalL)} | ${per}`);
+    };
+
+    const initMargins = computeMargins(roundData, seqNet, runNet);
+    if (verbose) {
+        const nGood = roundData.reduce((a, r) => a + r.good.length, 0);
+        const nBad = roundData.reduce((a, r) => a + r.bad.length, 0);
+        console.log(`[FIT] fitting ${roundData.length} rounds (${nGood} good / ${nBad} bad) | lr=${fitLr} iters=${fitIters} clip=${weightClip}`);
+    }
+    logMargins('init', initMargins);
+
     let bestL = Infinity;
+    let bestT = 0;
     let bestSeq = snapshotNet(seqNet);
     let bestRun = snapshotNet(runNet);
 
+    const t0 = Date.now();
+    const progressEvery = Math.max(1, Math.floor(fitIters / 4));
     for (let t = 1; t <= fitIters; t++) {
         zeroGrads(seqNet);
         zeroGrads(runNet);
@@ -369,8 +418,9 @@ export async function fitChampion(startGenome, netConfig, rounds, opts = {}) {
                 badCaches.push(f);
             }
 
-            // L_r = logsumexp(B) + logsumexp(-G)   (=- softmin(G) term)
-            const lseB = logsumexp(badScores);
+            // L_r = logsumexp(B) + logsumexp(-G); an empty side contributes 0
+            // (no bad moves to push down / no good moves to push up).
+            const lseB = badScores.length ? logsumexp(badScores) : 0;
             const lseNegG = goodScores.length ? logsumexp(goodScores.map(v => -v)) : 0;
             totalL += lseB + lseNegG;
 
@@ -386,18 +436,34 @@ export async function fitChampion(startGenome, netConfig, rounds, opts = {}) {
 
         if (totalL < bestL) {
             bestL = totalL;
+            bestT = t;
             bestSeq = snapshotNet(seqNet);
             bestRun = snapshotNet(runNet);
         }
 
         adamStep(seqNet, fitLr, beta1, beta2, eps, t, weightClip);
         adamStep(runNet, fitLr, beta1, beta2, eps, t, weightClip);
+
+        if (verbose && t % progressEvery === 0) {
+            console.log(`[FIT] iter ${t}/${fitIters} loss=${fmt(totalL)}`);
+        }
     }
+    const fitMs = Date.now() - t0;
 
     // Result: copy of startGenome with best slot 1/2 slices written back
     // (slot 0/3 untouched).
     const result = new Float32Array(startGenome);
     writeNet(result, C.DNA_CURRENT, bestSeq);
     writeNet(result, C.DNA_CURRENT + C.DNA_SEQ, bestRun);
+
+    if (verbose) {
+        const finMargins = computeMargins(roundData, bestSeq, bestRun);
+        logMargins('final', finMargins);
+        console.log(
+            `[FIT] done: loss ${fmt(initMargins.totalL)} -> ${fmt(finMargins.totalL)} | ` +
+            `satisfied ${satisfiedCount(initMargins)}/${roundData.length} -> ${satisfiedCount(finMargins)}/${roundData.length} | ` +
+            `best@iter ${bestT}/${fitIters} | ⏱ ${(fitMs / 1000).toFixed(2)}s`
+        );
+    }
     return result;
 }

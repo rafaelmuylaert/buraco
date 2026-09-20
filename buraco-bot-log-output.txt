@@ -1,0 +1,827 @@
+buraco-bot  | [entrypoint] Linking persistent data...
+buraco-bot  | [entrypoint] Starting bot...
+buraco-bot  | 🚀 WASM Neural Network Engine Online! (generic, zero-copy)
+buraco-bot  | 🤖 Buraco Bot Runner online! Polling the lobby every 5 seconds...
+buraco-bot  | 🤖 Mighty Bot Runner online! Polling the lobby every 5 seconds...
+buraco-bot  | 🤖 Euchre Bot Runner online! Polling the lobby every 5 seconds...
+buraco-bot  | [BOT] Claiming Seat 3 as Bot 3 using brain 'BotRafa'...
+buraco-bot  | [WASM] initweights team0: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | [WASM] initweights team1: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | [BOT] Claiming Seat 1 as Bot 1 using brain 'RafaNEw'...
+buraco-bot  | [BOT] Claiming Seat 2 as Bot 2 using brain 'RafaNEw'...
+buraco-bot  | [WASM] initweights team0: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | [WASM] initweights team1: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | [BOT] Bot 1 | hasDrawn=false hand=[2♠ 6♠ 7♠ 10♠ 9♥ K♥ 5♣ 6♣ 7♣ K♣ 7♦] | discard_top=9♠
+buraco-bot  | [RCS] p1 team=1 opp=0 hand=[2♠,6♠,7♠,10♠,9♥,K♥,5♣,6♣,7♣,K♣,7♦] td=9♠ deck=36 discPile=2
+buraco-bot  | [WASM_DBG] Seq candidate: 1,0,0,0,0,0,0,1,1,0,1,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1054
+buraco-bot  | [WASM_DBG] Seq candidate: 1,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 749
+buraco-bot  | --- PICKUP CANDIDATES (Phase A, sorted) ---
+buraco-bot  |   playMeld cards={2♠ 6♠ 7♠ 10♠} score=1054.4539
+buraco-bot  |   playMeld cards={2♠ 10♠} score=748.9482
+buraco-bot  | pickUpDiscard {"1":1,"5":1,"6":1,"9":1}
+buraco-bot  | [BOT] Bot 1 => pickUpDiscard cc={2♠ 6♠ 7♠ 10♠} tgt={"type":"new"}
+buraco-bot  | [BOT] Claiming Seat 3 as Bot 3 using brain 'RafaNEw'...
+buraco-bot  | [WASM] initweights team0: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | [WASM] initweights team1: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | pickUpDiscard {"1":1,"9":1}
+buraco-bot  | [BOT] Bot 1 => pickUpDiscard cc={2♠ 10♠} tgt={"type":"new"}
+buraco-bot  | [BOT] Claiming Seat 1 as Bot 1 using brain 'RafaNEw'...
+buraco-bot  | [WASM] initweights team0: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | [WASM] initweights team1: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | drawCard
+buraco-bot  | [BOT] Bot 1 => drawCard
+buraco-bot  | [BOT] Claiming Seat 2 as Bot 2 using brain 'RafaNEw'...
+buraco-bot  | [WASM] initweights team0: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | [WASM] initweights team1: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | [BOT] Claiming Seat 3 as Bot 3 using brain 'RafaNEw'...
+buraco-bot  | [WASM] initweights team0: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | [WASM] initweights team1: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | [BOT] Bot 1 => drawCard
+buraco-bot  | ERROR: invalid move: drawCard args: 
+buraco-bot  | [WASM_DBG] Seq candidate: 1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 934
+buraco-bot  | [WASM_DBG] Seq candidate: 3,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1184
+buraco-bot  | [WASM_DBG] Seq candidate: 3,0,0,0,0,0,1,1,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1099
+buraco-bot  | [WASM_DBG] Run candidate: 13,0,1,1,0,0,0,0,0,0,0 score: 1293
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  |   playMeld cards={2♠ 6♠ 7♠} score=933.5995
+buraco-bot  |   playMeld cards={5♣ 6♣ 7♣} score=1184.4307
+buraco-bot  |   playMeld cards={2♠ 5♣ 6♣ 7♣} score=1098.9788
+buraco-bot  |   playRunner cards={2♠ K♥ K♣} score=1292.8177
+buraco-bot  | playRunner {"1":1,"25":1,"38":1}
+buraco-bot  | [BOT] Bot 1 => playMeld cc={2♠ K♥ K♣}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: missing card 1 have 0 need 1
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | [WASM] initweights team0: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | [WASM] initweights team1: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | playMeld {"30":1,"31":1,"32":1}
+buraco-bot  | [BOT] Bot 1 => playMeld cc={5♣ 6♣ 7♣}
+buraco-bot  | playMeld {"1":1,"30":1,"31":1,"32":1}
+buraco-bot  | [BOT] Bot 1 => playMeld cc={2♠ 5♣ 6♣ 7♣}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: missing card 1 have 0 need 1
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | playMeld {"1":1,"5":1,"6":1}
+buraco-bot  | [BOT] Bot 1 => playMeld cc={2♠ 6♠ 7♠}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: missing card 1 have 0 need 1
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | [WASM_DBG] discard logits: 518, 451, -355, 516, 405, -463, -337, -195, -297, -763, 304, 111, 489, -430, 50, 318, -197, -229, -383, -668, -878, -115, 305, 98, 212, 161, 417, -565, 183, -64, 147, 237, -397, -137, -532, -369, -174, 56, -310, -243, 227, 574, 102, -424, -214, -991, -420, -779, -26, 529, 770, -231, 287, 705
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   2♠ score=451.0554
+buraco-bot  |   6♣ score=237.0667
+buraco-bot  |   K♥ score=161.4841
+buraco-bot  |   5♣ score=147.3516
+buraco-bot  |   9♥ score=-115.3353
+buraco-bot  |   K♣ score=-309.5575
+buraco-bot  |   7♠ score=-337.3305
+buraco-bot  |   7♣ score=-396.7115
+buraco-bot  |   6♠ score=-463.4628
+buraco-bot  |   10♠ score=-763.3154
+buraco-bot  |   7♦ score=-990.5431
+buraco-bot  | discardCard(1)
+buraco-bot  | ERROR: invalid move: discardCard args: 1
+buraco-bot  | discardCard(31)
+buraco-bot  | discardCard(25)
+buraco-bot  | discardCard(30)
+buraco-bot  | discardCard(21)
+buraco-bot  | discardCard(38)
+buraco-bot  | discardCard(6)
+buraco-bot  | ERROR: invalid move: discardCard args: 6
+buraco-bot  | discardCard(32)
+buraco-bot  | ERROR: invalid move: discardCard args: 32
+buraco-bot  | discardCard(5)
+buraco-bot  | ERROR: invalid move: discardCard args: 5
+buraco-bot  | discardCard(9)
+buraco-bot  | ERROR: invalid move: discardCard args: 9
+buraco-bot  | discardCard(45)
+buraco-bot  | [BOT] Bot 1 | hasDrawn=true hand=[3♠ 9♥ K♥ K♣ 7♦] | discard_top=empty
+buraco-bot  | [RCS] p1 team=1 opp=0 hand=[3♠,9♥,K♥,K♣,7♦] td=empty deck=36 discPile=0
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  | [WASM_DBG] discard logits: 466, 619, -45, 590, 307, -505, -495, -185, -373, -841, 228, -0, 552, -164, 98, -96, -35, -238, -382, -826, -1041, -147, 417, -224, 269, -19, 269, -578, 105, -317, 155, 76, -363, -83, -591, -359, -374, 13, -263, -616, 285, 641, 67, -763, -259, -1037, -303, -915, -16, 576, 993, -392, 433, 460
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   K♥ score=-19.2386
+buraco-bot  |   3♠ score=-45.1317
+buraco-bot  |   9♥ score=-147.1871
+buraco-bot  |   K♣ score=-263.3938
+buraco-bot  |   7♦ score=-1036.8639
+buraco-bot  | discardCard(25)
+buraco-bot  | discardCard(2)
+buraco-bot  | discardCard(21)
+buraco-bot  | discardCard(38)
+buraco-bot  | discardCard(45)
+buraco-bot  | [BOT] Bot 1 turn state stalled (stateID=6, lastTurnStateId=6); forcing resync
+buraco-bot  | [BOT] Bot 1 | hasDrawn=true hand=[3♠ 9♥ K♥ K♣ 7♦] | discard_top=empty
+buraco-bot  | [RCS] p1 team=1 opp=0 hand=[3♠,9♥,K♥,K♣,7♦] td=empty deck=36 discPile=0
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  | [WASM_DBG] discard logits: 466, 619, -45, 590, 307, -505, -495, -185, -373, -841, 228, -0, 552, -164, 98, -96, -35, -238, -382, -826, -1041, -147, 417, -224, 269, -19, 269, -578, 105, -317, 155, 76, -363, -83, -591, -359, -374, 13, -263, -616, 285, 641, 67, -763, -259, -1037, -303, -915, -16, 576, 993, -392, 433, 460
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   K♥ score=-19.2386
+buraco-bot  |   3♠ score=-45.1317
+buraco-bot  |   9♥ score=-147.1871
+buraco-bot  |   K♣ score=-263.3938
+buraco-bot  |   7♦ score=-1036.8639
+buraco-bot  | discardCard(25)
+buraco-bot  | discardCard(2)
+buraco-bot  | discardCard(21)
+buraco-bot  | discardCard(38)
+buraco-bot  | discardCard(45)
+buraco-bot  | [BOT] Bot 1 turn state stalled (stateID=6, lastTurnStateId=6); forcing resync
+buraco-bot  | [BOT] Bot 1 | hasDrawn=true hand=[3♠ 9♥ K♥ K♣ 7♦] | discard_top=empty
+buraco-bot  | [RCS] p1 team=1 opp=0 hand=[3♠,9♥,K♥,K♣,7♦] td=empty deck=36 discPile=0
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  | [WASM_DBG] discard logits: 466, 619, -45, 590, 307, -505, -495, -185, -373, -841, 228, -0, 552, -164, 98, -96, -35, -238, -382, -826, -1041, -147, 417, -224, 269, -19, 269, -578, 105, -317, 155, 76, -363, -83, -591, -359, -374, 13, -263, -616, 285, 641, 67, -763, -259, -1037, -303, -915, -16, 576, 993, -392, 433, 460
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   K♥ score=-19.2386
+buraco-bot  |   3♠ score=-45.1317
+buraco-bot  |   9♥ score=-147.1871
+buraco-bot  |   K♣ score=-263.3938
+buraco-bot  |   7♦ score=-1036.8639
+buraco-bot  | discardCard(25)
+buraco-bot  | discardCard(2)
+buraco-bot  | discardCard(21)
+buraco-bot  | discardCard(38)
+buraco-bot  | discardCard(45)
+buraco-bot  | [BOT] Bot 2 | hasDrawn=false hand=[4♠ 5♠ 6♠ J♠ K♠ 4♥ 7♣ 6♦ 9♦ J♦ Q♦] | discard_top=K♣
+buraco-bot  | [RCS] p2 team=0 opp=1 hand=[4♠,5♠,6♠,J♠,K♠,4♥,7♣,6♦,9♦,J♦,Q♦] td=K♣ deck=36 discPile=1
+buraco-bot  | --- PICKUP CANDIDATES (Phase A, sorted) ---
+buraco-bot  | drawCard
+buraco-bot  | [BOT] Bot 2 => drawCard
+buraco-bot  | [BOT] Claiming Seat 1 as Bot 1 using brain 'RafaNEw'...
+buraco-bot  | [BOT] Claiming Seat 2 as Bot 2 using brain 'RafaNEw'...
+buraco-bot  | [WASM] initweights team0: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | [WASM] initweights team1: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | [BOT] Bot 1 turn state stalled (stateID=6, lastTurnStateId=6); forcing resync
+buraco-bot  | [BOT] Claiming Seat 3 as Bot 3 using brain 'RafaNEw'...
+buraco-bot  | [WASM] initweights team0: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | [WASM] initweights team1: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | [BOT] Bot 1 | hasDrawn=true hand=[3♠ 9♥ K♥ K♣ 7♦] | discard_top=empty
+buraco-bot  | [RCS] p1 team=1 opp=0 hand=[3♠,9♥,K♥,K♣,7♦] td=empty deck=36 discPile=0
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  | [WASM_DBG] discard logits: 466, 619, -45, 590, 307, -505, -495, -185, -373, -841, 228, -0, 552, -164, 98, -96, -35, -238, -382, -826, -1041, -147, 417, -224, 269, -19, 269, -578, 105, -317, 155, 76, -363, -83, -591, -359, -374, 13, -263, -616, 285, 641, 67, -763, -259, -1037, -303, -915, -16, 576, 993, -392, 433, 460
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   K♥ score=-19.2386
+buraco-bot  |   3♠ score=-45.1317
+buraco-bot  |   9♥ score=-147.1871
+buraco-bot  |   K♣ score=-263.3938
+buraco-bot  |   7♦ score=-1036.8639
+buraco-bot  | discardCard(25)
+buraco-bot  | discardCard(2)
+buraco-bot  | [WASM] initweights team0: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | [WASM] initweights team1: DNA=57920 floats, slots 0..3 = [417->24@0 33->1@28296 11->1@38185 0->54@47018]
+buraco-bot  | discardCard(21)
+buraco-bot  | discardCard(38)
+buraco-bot  | discardCard(45)
+buraco-bot  | [BOT] Bot 2 => drawCard
+buraco-bot  | ERROR: invalid move: drawCard args: 
+buraco-bot  | [WASM_DBG] Seq candidate: 1,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1107
+buraco-bot  | [WASM_DBG] Seq candidate: 3,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0 score: 1375
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  |   playMeld cards={4♠ 5♠ 6♠} score=1106.9697
+buraco-bot  |   appendToMeld cards={7♣} existing=[3♣ 4♣ 5♣ 6♣] score=1374.9739
+buraco-bot  | appendToMeld seq[30] {"32":1}
+buraco-bot  | [BOT] Bot 2 => appendToMeld target=[3♣ 4♣ 5♣ 6♣] cc={7♣}
+buraco-bot  | playMeld {"3":1,"4":1,"5":1}
+buraco-bot  | [BOT] Bot 2 => playMeld cc={4♠ 5♠ 6♠}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: not drawn
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | [WASM_DBG] discard logits: 466, 619, -45, 590, 307, -505, -495, -185, -373, -841, 228, -0, 552, -164, 98, -96, -35, -238, -382, -826, -1041, -147, 417, -224, 269, -19, 269, -578, 105, -317, 155, 76, -363, -83, -591, -359, -374, 13, -263, -616, 285, 641, 67, -763, -259, -1037, -303, -915, -16, 576, 993, -392, 433, 460
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   Q♦ score=992.7827
+buraco-bot  |   4♠ score=589.5498
+buraco-bot  |   J♦ score=575.7476
+buraco-bot  |   K♠ score=552.1713
+buraco-bot  |   5♠ score=306.7554
+buraco-bot  |   J♠ score=228.3764
+buraco-bot  |   4♥ score=-34.5615
+buraco-bot  |   6♦ score=-259.4916
+buraco-bot  |   7♣ score=-362.6009
+buraco-bot  |   6♠ score=-505.0875
+buraco-bot  |   9♦ score=-914.9845
+buraco-bot  | discardCard(50)
+buraco-bot  | ERROR: invalid move: discardCard args: 50
+buraco-bot  | discardCard(3)
+buraco-bot  | ERROR: invalid move: discardCard args: 3
+buraco-bot  | discardCard(49)
+buraco-bot  | ERROR: invalid move: discardCard args: 49
+buraco-bot  | discardCard(12)
+buraco-bot  | ERROR: invalid move: discardCard args: 12
+buraco-bot  | discardCard(4)
+buraco-bot  | ERROR: invalid move: discardCard args: 4
+buraco-bot  | discardCard(10)
+buraco-bot  | ERROR: invalid move: discardCard args: 10
+buraco-bot  | discardCard(16)
+buraco-bot  | ERROR: invalid move: discardCard args: 16
+buraco-bot  | discardCard(44)
+buraco-bot  | ERROR: invalid move: discardCard args: 44
+buraco-bot  | discardCard(32)
+buraco-bot  | ERROR: invalid move: discardCard args: 32
+buraco-bot  | discardCard(5)
+buraco-bot  | ERROR: invalid move: discardCard args: 5
+buraco-bot  | discardCard(47)
+buraco-bot  | ERROR: invalid move: discardCard args: 47
+buraco-bot  | [BOT] Bot 2 turn state stalled (stateID=7, lastTurnStateId=7); forcing resync
+buraco-bot  | [BOT] Bot 2 | hasDrawn=false hand=[4♠ 5♠ 6♠ J♠ K♠ 4♥ 7♣ 6♦ 9♦ J♦ Q♦] | discard_top=K♣
+buraco-bot  | [RCS] p2 team=0 opp=1 hand=[4♠,5♠,6♠,J♠,K♠,4♥,7♣,6♦,9♦,J♦,Q♦] td=K♣ deck=36 discPile=1
+buraco-bot  | --- PICKUP CANDIDATES (Phase A, sorted) ---
+buraco-bot  | drawCard
+buraco-bot  | [BOT] Bot 2 => drawCard
+buraco-bot  | [BOT] Bot 2 => drawCard
+buraco-bot  | [WASM_DBG] Seq candidate: 1,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1212
+buraco-bot  | [WASM_DBG] Seq candidate: 3,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0 score: 1436
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  |   playMeld cards={4♠ 5♠ 6♠} score=1211.7660
+buraco-bot  |   appendToMeld cards={7♣} existing=[3♣ 4♣ 5♣ 6♣] score=1435.7009
+buraco-bot  | appendToMeld seq[30] {"32":1}
+buraco-bot  | [BOT] Bot 2 => appendToMeld target=[3♣ 4♣ 5♣ 6♣] cc={7♣}
+buraco-bot  | playMeld {"3":1,"4":1,"5":1}
+buraco-bot  | [BOT] Bot 2 => playMeld cc={4♠ 5♠ 6♠}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: not drawn
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | [WASM_DBG] discard logits: 438, 556, -203, 446, 399, -470, -557, -205, -289, -766, 260, 54, 533, -264, 93, -3, -164, -308, -399, -726, -915, -169, 397, 32, 288, 111, 294, -541, 167, -278, 217, 180, -347, -87, -577, -314, -254, 60, -285, -284, 184, 696, 62, -635, -338, -1052, -385, -904, 92, 502, 798, -276, 353, 637
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   Q♦ score=798.2437
+buraco-bot  |   K♠ score=533.3785
+buraco-bot  |   J♦ score=501.7870
+buraco-bot  |   4♠ score=445.6446
+buraco-bot  |   5♠ score=398.7752
+buraco-bot  |   J♠ score=259.8655
+buraco-bot  |   4♥ score=-163.5994
+buraco-bot  |   6♦ score=-338.0655
+buraco-bot  |   7♣ score=-347.1732
+buraco-bot  |   6♠ score=-469.9748
+buraco-bot  |   9♦ score=-904.1955
+buraco-bot  | discardCard(50)
+buraco-bot  | ERROR: invalid move: discardCard args: 50
+buraco-bot  | discardCard(12)
+buraco-bot  | ERROR: invalid move: discardCard args: 12
+buraco-bot  | discardCard(49)
+buraco-bot  | ERROR: invalid move: discardCard args: 49
+buraco-bot  | discardCard(3)
+buraco-bot  | ERROR: invalid move: discardCard args: 3
+buraco-bot  | discardCard(4)
+buraco-bot  | ERROR: invalid move: discardCard args: 4
+buraco-bot  | discardCard(10)
+buraco-bot  | ERROR: invalid move: discardCard args: 10
+buraco-bot  | discardCard(16)
+buraco-bot  | ERROR: invalid move: discardCard args: 16
+buraco-bot  | discardCard(44)
+buraco-bot  | ERROR: invalid move: discardCard args: 44
+buraco-bot  | discardCard(32)
+buraco-bot  | ERROR: invalid move: discardCard args: 32
+buraco-bot  | discardCard(5)
+buraco-bot  | ERROR: invalid move: discardCard args: 5
+buraco-bot  | discardCard(47)
+buraco-bot  | ERROR: invalid move: discardCard args: 47
+buraco-bot  | [BOT] Bot 2 turn state stalled (stateID=7, lastTurnStateId=7); forcing resync
+buraco-bot  | [BOT] Bot 2 | hasDrawn=false hand=[4♠ 5♠ 6♠ J♠ K♠ 4♥ 7♣ 6♦ 9♦ J♦ Q♦] | discard_top=K♣
+buraco-bot  | [RCS] p2 team=0 opp=1 hand=[4♠,5♠,6♠,J♠,K♠,4♥,7♣,6♦,9♦,J♦,Q♦] td=K♣ deck=36 discPile=1
+buraco-bot  | --- PICKUP CANDIDATES (Phase A, sorted) ---
+buraco-bot  | drawCard
+buraco-bot  | [BOT] Bot 2 => drawCard
+buraco-bot  | [BOT] Bot 2 => drawCard
+buraco-bot  | [WASM_DBG] Seq candidate: 1,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1212
+buraco-bot  | [WASM_DBG] Seq candidate: 3,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0 score: 1436
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  |   playMeld cards={4♠ 5♠ 6♠} score=1211.7660
+buraco-bot  |   appendToMeld cards={7♣} existing=[3♣ 4♣ 5♣ 6♣] score=1435.7009
+buraco-bot  | appendToMeld seq[30] {"32":1}
+buraco-bot  | [BOT] Bot 2 => appendToMeld target=[3♣ 4♣ 5♣ 6♣] cc={7♣}
+buraco-bot  | playMeld {"3":1,"4":1,"5":1}
+buraco-bot  | [BOT] Bot 2 => playMeld cc={4♠ 5♠ 6♠}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: not drawn
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | [WASM_DBG] discard logits: 438, 556, -203, 446, 399, -470, -557, -205, -289, -766, 260, 54, 533, -264, 93, -3, -164, -308, -399, -726, -915, -169, 397, 32, 288, 111, 294, -541, 167, -278, 217, 180, -347, -87, -577, -314, -254, 60, -285, -284, 184, 696, 62, -635, -338, -1052, -385, -904, 92, 502, 798, -276, 353, 637
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   Q♦ score=798.2437
+buraco-bot  |   K♠ score=533.3785
+buraco-bot  |   J♦ score=501.7870
+buraco-bot  |   4♠ score=445.6446
+buraco-bot  |   5♠ score=398.7752
+buraco-bot  |   J♠ score=259.8655
+buraco-bot  |   4♥ score=-163.5994
+buraco-bot  |   6♦ score=-338.0655
+buraco-bot  |   7♣ score=-347.1732
+buraco-bot  |   6♠ score=-469.9748
+buraco-bot  |   9♦ score=-904.1955
+buraco-bot  | discardCard(50)
+buraco-bot  | ERROR: invalid move: discardCard args: 50
+buraco-bot  | discardCard(12)
+buraco-bot  | ERROR: invalid move: discardCard args: 12
+buraco-bot  | discardCard(49)
+buraco-bot  | ERROR: invalid move: discardCard args: 49
+buraco-bot  | discardCard(3)
+buraco-bot  | ERROR: invalid move: discardCard args: 3
+buraco-bot  | discardCard(4)
+buraco-bot  | ERROR: invalid move: discardCard args: 4
+buraco-bot  | discardCard(10)
+buraco-bot  | ERROR: invalid move: discardCard args: 10
+buraco-bot  | discardCard(16)
+buraco-bot  | ERROR: invalid move: discardCard args: 16
+buraco-bot  | discardCard(44)
+buraco-bot  | ERROR: invalid move: discardCard args: 44
+buraco-bot  | discardCard(32)
+buraco-bot  | ERROR: invalid move: discardCard args: 32
+buraco-bot  | [BOT] Bot 1 | hasDrawn=false hand=[6♥ A♣ 2♣ 4♣ 10♣ Q♣ K♣ 6♦ J♦ Q♦ K♦] | discard_top=K♠
+buraco-bot  | [RCS] p1 team=1 opp=0 hand=[6♥,A♣,2♣,4♣,10♣,Q♣,K♣,6♦,J♦,Q♦,K♦] td=K♠ deck=36 discPile=2
+buraco-bot  | [WASM_DBG] Run candidate: 13,1,0,1,1,0,0,0,0,0,0 score: 1332
+buraco-bot  | [WASM_DBG] Run candidate: 13,1,0,0,1,0,0,0,0,0,0 score: 1478
+buraco-bot  | [WASM_DBG] Run candidate: 13,1,0,1,0,0,0,0,0,0,0 score: 1333
+buraco-bot  | [WASM_DBG] Run candidate: 13,1,0,1,1,0,0,0,0,0,0 score: 1332
+buraco-bot  | --- PICKUP CANDIDATES (Phase A, sorted) ---
+buraco-bot  |   playRunner cards={K♣ K♦} score=1332.4312
+buraco-bot  |   playRunner cards={2♣ K♦} score=1477.7571
+buraco-bot  |   playRunner cards={2♣ K♣} score=1332.6764
+buraco-bot  |   playRunner cards={2♣ K♣ K♦} score=1332.4312
+buraco-bot  | pickUpDiscard {"27":1,"51":1}
+buraco-bot  | [BOT] Bot 1 => pickUpDiscard cc={2♣ K♦} tgt={"type":"new"}
+buraco-bot  | discardCard(5)
+buraco-bot  | ERROR: invalid move: discardCard args: 5
+buraco-bot  | discardCard(47)
+buraco-bot  | ERROR: invalid move: discardCard args: 47
+buraco-bot  | [WASM_DBG] Seq candidate: 3,0,1,0,0,0,0,0,0,0,0,1,0,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 931
+buraco-bot  | [WASM_DBG] Seq candidate: 3,0,1,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1006
+buraco-bot  | [WASM_DBG] Seq candidate: 3,0,1,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1006
+buraco-bot  | [WASM_DBG] Seq candidate: 4,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1804
+buraco-bot  | [WASM_DBG] Seq candidate: 4,0,0,0,0,0,0,0,0,0,0,0,1,1,1,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1084
+buraco-bot  | [WASM_DBG] Run candidate: 13,0,0,1,1,0,0,0,0,0,0 score: 1410
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  |   playMeld cards={A♣ 2♣x2 10♣ Q♣ K♣} score=931.3190
+buraco-bot  |   playMeld cards={A♣ 2♣ Q♣ K♣} score=1006.4384
+buraco-bot  |   playMeld cards={A♣ 2♣x2 Q♣ K♣} score=1006.4384
+buraco-bot  |   playMeld cards={J♦ Q♦ K♦} score=1803.6425
+buraco-bot  |   playMeld cards={2♣ J♦ Q♦ K♦} score=1084.4734
+buraco-bot  |   playRunner cards={2♣ K♣ K♦} score=1410.3033
+buraco-bot  | [WASM_DBG] discard logits: 536, 593, -116, 484, 372, -567, -534, -227, -324, -839, 276, 67, 569, -270, 55, -52, -156, -300, -455, -786, -1019, -102, 462, -30, 368, 84, 359, -612, 146, -307, 171, 132, -378, -108, -606, -373, -269, 56, -267, -406, 128, 730, 84, -697, -343, -1116, -361, -936, 24, 578, 868, -369, 387, 578
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   Q♦ score=868.4633
+buraco-bot  |   J♦ score=577.5040
+buraco-bot  |   A♣ score=359.1111
+buraco-bot  |   Q♣ score=56.2218
+buraco-bot  |   K♣ score=-266.7776
+buraco-bot  |   4♣ score=-307.1138
+buraco-bot  |   6♦ score=-342.7104
+buraco-bot  |   K♦ score=-368.8570
+buraco-bot  |   10♣ score=-373.2569
+buraco-bot  |   6♥ score=-455.3552
+buraco-bot  |   2♣ score=-612.2434
+buraco-bot  | [BOT] Bot 1 turn state stalled (stateID=2, lastTurnStateId=2); forcing resync
+buraco-bot  | [BOT] Bot 1 | hasDrawn=false hand=[6♥ A♣ 2♣ 4♣ 10♣ Q♣ K♣ 6♦ J♦ Q♦ K♦] | discard_top=K♠
+buraco-bot  | [RCS] p1 team=1 opp=0 hand=[6♥,A♣,2♣,4♣,10♣,Q♣,K♣,6♦,J♦,Q♦,K♦] td=K♠ deck=36 discPile=2
+buraco-bot  | [WASM_DBG] Run candidate: 13,1,0,1,1,0,0,0,0,0,0 score: 1332
+buraco-bot  | [WASM_DBG] Run candidate: 13,1,0,0,1,0,0,0,0,0,0 score: 1478
+buraco-bot  | [WASM_DBG] Run candidate: 13,1,0,1,0,0,0,0,0,0,0 score: 1333
+buraco-bot  | [WASM_DBG] Run candidate: 13,1,0,1,1,0,0,0,0,0,0 score: 1332
+buraco-bot  | --- PICKUP CANDIDATES (Phase A, sorted) ---
+buraco-bot  |   playRunner cards={K♣ K♦} score=1332.4312
+buraco-bot  |   playRunner cards={2♣ K♦} score=1477.7571
+buraco-bot  |   playRunner cards={2♣ K♣} score=1332.6764
+buraco-bot  |   playRunner cards={2♣ K♣ K♦} score=1332.4312
+buraco-bot  | pickUpDiscard {"27":1,"51":1}
+buraco-bot  | [BOT] Bot 1 => pickUpDiscard cc={2♣ K♦} tgt={"type":"new"}
+buraco-bot  | ERROR: invalid move: pickUpDiscard args: [object Object],[object Object]
+buraco-bot  | pickUpDiscard {"27":1,"38":1}
+buraco-bot  | [BOT] Bot 1 => pickUpDiscard cc={2♣ K♣} tgt={"type":"new"}
+buraco-bot  | ERROR: invalid move: pickUpDiscard args: [object Object],[object Object]
+buraco-bot  | pickUpDiscard {"38":1,"51":1}
+buraco-bot  | [BOT] Bot 1 => pickUpDiscard cc={K♣ K♦} tgt={"type":"new"}
+buraco-bot  | ERROR: invalid move: pickUpDiscard args: [object Object],[object Object]
+buraco-bot  | [BOT] Bot 2 turn state stalled (stateID=7, lastTurnStateId=7); forcing resync
+buraco-bot  | pickUpDiscard {"27":1,"38":1,"51":1}
+buraco-bot  | [BOT] Bot 1 => pickUpDiscard cc={2♣ K♣ K♦} tgt={"type":"new"}
+buraco-bot  | ERROR: invalid move: pickUpDiscard args: [object Object],[object Object]
+buraco-bot  | [BOT] Bot 2 | hasDrawn=false hand=[4♠ 5♠ 6♠ J♠ K♠ 4♥ 7♣ 6♦ 9♦ J♦ Q♦] | discard_top=K♣
+buraco-bot  | [RCS] p2 team=0 opp=1 hand=[4♠,5♠,6♠,J♠,K♠,4♥,7♣,6♦,9♦,J♦,Q♦] td=K♣ deck=36 discPile=1
+buraco-bot  | --- PICKUP CANDIDATES (Phase A, sorted) ---
+buraco-bot  | drawCard
+buraco-bot  | [BOT] Bot 2 => drawCard
+buraco-bot  | drawCard
+buraco-bot  | [BOT] Bot 1 => drawCard
+buraco-bot  | ERROR: invalid move: drawCard args: 
+buraco-bot  | [BOT] Bot 2 => drawCard
+buraco-bot  | [WASM_DBG] Seq candidate: 1,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1212
+buraco-bot  | [WASM_DBG] Seq candidate: 3,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0 score: 1436
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  |   playMeld cards={4♠ 5♠ 6♠} score=1211.7660
+buraco-bot  |   appendToMeld cards={7♣} existing=[3♣ 4♣ 5♣ 6♣] score=1435.7009
+buraco-bot  | appendToMeld seq[30] {"32":1}
+buraco-bot  | [BOT] Bot 2 => appendToMeld target=[3♣ 4♣ 5♣ 6♣] cc={7♣}
+buraco-bot  | [BOT] Bot 1 => drawCard
+buraco-bot  | ERROR: invalid move: drawCard args: 
+buraco-bot  | [WASM_DBG] Seq candidate: 3,0,1,0,0,0,0,0,0,0,0,1,0,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1010
+buraco-bot  | [WASM_DBG] Seq candidate: 3,0,1,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1091
+buraco-bot  | [WASM_DBG] Seq candidate: 3,0,1,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1091
+buraco-bot  | [WASM_DBG] Seq candidate: 4,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1884
+buraco-bot  | [WASM_DBG] Seq candidate: 4,0,0,0,0,0,0,0,0,0,0,0,1,1,1,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 977
+buraco-bot  | [WASM_DBG] Run candidate: 13,0,0,1,1,0,0,0,0,0,0 score: 1220
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  |   playMeld cards={A♣ 2♣x2 10♣ Q♣ K♣} score=1009.7640
+buraco-bot  |   playMeld cards={A♣ 2♣ Q♣ K♣} score=1091.4055
+buraco-bot  |   playMeld cards={A♣ 2♣x2 Q♣ K♣} score=1091.4055
+buraco-bot  |   playMeld cards={J♦ Q♦ K♦} score=1883.9252
+buraco-bot  |   playMeld cards={2♣ J♦ Q♦ K♦} score=977.0833
+buraco-bot  |   playRunner cards={2♣ K♣ K♦} score=1220.1678
+buraco-bot  | playMeld {"49":1,"50":1,"51":1}
+buraco-bot  | [BOT] Bot 1 => playMeld cc={J♦ Q♦ K♦}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: missing card 51 have 0 need 1
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | playRunner {"27":1,"38":1,"51":1}
+buraco-bot  | [BOT] Bot 1 => playMeld cc={2♣ K♣ K♦}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: missing card 27 have 0 need 1
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | playMeld {"3":1,"4":1,"5":1}
+buraco-bot  | [BOT] Bot 2 => playMeld cc={4♠ 5♠ 6♠}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: not drawn
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | playMeld {"26":1,"27":1,"37":1,"38":1}
+buraco-bot  | [BOT] Bot 1 => playMeld cc={A♣ 2♣ Q♣ K♣}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: missing card 27 have 0 need 1
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | [WASM_DBG] discard logits: 438, 556, -203, 446, 399, -470, -557, -205, -289, -766, 260, 54, 533, -264, 93, -3, -164, -308, -399, -726, -915, -169, 397, 32, 288, 111, 294, -541, 167, -278, 217, 180, -347, -87, -577, -314, -254, 60, -285, -284, 184, 696, 62, -635, -338, -1052, -385, -904, 92, 502, 798, -276, 353, 637
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   Q♦ score=798.2437
+buraco-bot  |   K♠ score=533.3785
+buraco-bot  |   J♦ score=501.7870
+buraco-bot  |   4♠ score=445.6446
+buraco-bot  |   5♠ score=398.7752
+buraco-bot  |   J♠ score=259.8655
+buraco-bot  |   4♥ score=-163.5994
+buraco-bot  |   6♦ score=-338.0655
+buraco-bot  |   7♣ score=-347.1732
+buraco-bot  |   6♠ score=-469.9748
+buraco-bot  |   9♦ score=-904.1955
+buraco-bot  | discardCard(50)
+buraco-bot  | ERROR: invalid move: discardCard args: 50
+buraco-bot  | playMeld {"26":1,"27":2,"37":1,"38":1}
+buraco-bot  | [BOT] Bot 1 => playMeld cc={A♣ 2♣x2 Q♣ K♣}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: missing card 27 have 0 need 2
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | playMeld {"26":1,"27":2,"35":1,"37":1,"38":1}
+buraco-bot  | [BOT] Bot 1 => playMeld cc={A♣ 2♣x2 10♣ Q♣ K♣}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: missing card 27 have 0 need 2
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | discardCard(12)
+buraco-bot  | ERROR: invalid move: discardCard args: 12
+buraco-bot  | playMeld {"27":1,"49":1,"50":1,"51":1}
+buraco-bot  | [BOT] Bot 1 => playMeld cc={2♣ J♦ Q♦ K♦}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: missing card 27 have 0 need 1
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | discardCard(49)
+buraco-bot  | ERROR: invalid move: discardCard args: 49
+buraco-bot  | discardCard(3)
+buraco-bot  | ERROR: invalid move: discardCard args: 3
+buraco-bot  | [WASM_DBG] discard logits: 438, 556, -203, 446, 399, -470, -557, -205, -289, -766, 260, 54, 533, -264, 93, -3, -164, -308, -399, -726, -915, -169, 397, 32, 288, 111, 294, -541, 167, -278, 217, 180, -347, -87, -577, -314, -254, 60, -285, -284, 184, 696, 62, -635, -338, -1052, -385, -904, 92, 502, 798, -276, 353, 637
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   Q♦ score=798.2437
+buraco-bot  |   J♦ score=501.7870
+buraco-bot  |   A♣ score=294.2089
+buraco-bot  |   Q♣ score=59.7910
+buraco-bot  |   K♦ score=-276.1971
+buraco-bot  |   4♣ score=-278.2977
+buraco-bot  |   K♣ score=-285.4680
+buraco-bot  |   10♣ score=-314.3153
+buraco-bot  |   6♦ score=-338.0655
+buraco-bot  |   6♥ score=-399.2676
+buraco-bot  |   2♣ score=-541.0996
+buraco-bot  | discardCard(50)
+buraco-bot  | discardCard(49)
+buraco-bot  | discardCard(4)
+buraco-bot  | ERROR: invalid move: discardCard args: 4
+buraco-bot  | discardCard(26)
+buraco-bot  | discardCard(10)
+buraco-bot  | ERROR: invalid move: discardCard args: 10
+buraco-bot  | discardCard(37)
+buraco-bot  | discardCard(16)
+buraco-bot  | ERROR: invalid move: discardCard args: 16
+buraco-bot  | discardCard(51)
+buraco-bot  | ERROR: invalid move: discardCard args: 51
+buraco-bot  | discardCard(44)
+buraco-bot  | ERROR: invalid move: discardCard args: 44
+buraco-bot  | discardCard(32)
+buraco-bot  | ERROR: invalid move: discardCard args: 32
+buraco-bot  | discardCard(29)
+buraco-bot  | discardCard(5)
+buraco-bot  | ERROR: invalid move: discardCard args: 5
+buraco-bot  | discardCard(38)
+buraco-bot  | discardCard(47)
+buraco-bot  | ERROR: invalid move: discardCard args: 47
+buraco-bot  | discardCard(35)
+buraco-bot  | discardCard(44)
+buraco-bot  | [BOT] Bot 2 turn state stalled (stateID=7, lastTurnStateId=7); forcing resync
+buraco-bot  | discardCard(18)
+buraco-bot  | [BOT] Bot 2 | hasDrawn=false hand=[3♥ 4♥ J♥ K♥ 4♣ 5♣ 8♣ K♣ 2♦ 3♦ 8♦] | discard_top=Q♦
+buraco-bot  | [RCS] p2 team=0 opp=1 hand=[3♥,4♥,J♥,K♥,4♣,5♣,8♣,K♣,2♦,3♦,8♦] td=Q♦ deck=36 discPile=1
+buraco-bot  | --- PICKUP CANDIDATES (Phase A, sorted) ---
+buraco-bot  | drawCard
+buraco-bot  | [BOT] Bot 2 => drawCard
+buraco-bot  | [BOT] Bot 2 | hasDrawn=false hand=[4♠ 5♠ 6♠ J♠ K♠ 4♥ 7♣ 6♦ 9♦ J♦ Q♦] | discard_top=K♣
+buraco-bot  | [RCS] p2 team=0 opp=1 hand=[4♠,5♠,6♠,J♠,K♠,4♥,7♣,6♦,9♦,J♦,Q♦] td=K♣ deck=36 discPile=1
+buraco-bot  | --- PICKUP CANDIDATES (Phase A, sorted) ---
+buraco-bot  | drawCard
+buraco-bot  | [BOT] Bot 2 => drawCard
+buraco-bot  | [BOT] Bot 2 => drawCard
+buraco-bot  | [WASM_DBG] Seq candidate: 2,0,0,0,1,1,0,0,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 881
+buraco-bot  | [WASM_DBG] Seq candidate: 2,0,0,0,0,0,0,0,0,0,0,0,1,0,1,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1125
+buraco-bot  | [WASM_DBG] Seq candidate: 3,0,0,0,0,1,1,0,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1771
+buraco-bot  | [WASM_DBG] Run candidate: 13,0,1,1,0,0,0,0,0,0,0 score: 1259
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  |   playMeld cards={3♥ 4♥ 2♦} score=881.0246
+buraco-bot  |   playMeld cards={J♥ K♥ 2♦} score=1124.9854
+buraco-bot  |   playMeld cards={4♣ 5♣ 2♦} score=1771.4172
+buraco-bot  |   playRunner cards={K♥ K♣ 2♦} score=1258.6533
+buraco-bot  | playMeld {"29":1,"30":1,"40":1}
+buraco-bot  | [BOT] Bot 2 => playMeld cc={4♣ 5♣ 2♦}
+buraco-bot  | [BOT] Bot 2 => drawCard
+buraco-bot  | [WASM_DBG] Seq candidate: 1,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1212
+buraco-bot  | [WASM_DBG] Seq candidate: 3,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0 score: 1436
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  |   playMeld cards={4♠ 5♠ 6♠} score=1211.7660
+buraco-bot  |   appendToMeld cards={7♣} existing=[3♣ 4♣ 5♣ 6♣] score=1435.7009
+buraco-bot  | appendToMeld seq[30] {"32":1}
+buraco-bot  | [BOT] Bot 2 => appendToMeld target=[3♣ 4♣ 5♣ 6♣] cc={7♣}
+buraco-bot  | playRunner {"25":1,"38":1,"40":1}
+buraco-bot  | [BOT] Bot 2 => playMeld cc={K♥ K♣ 2♦}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: not drawn
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | playMeld {"23":1,"25":1,"40":1}
+buraco-bot  | [BOT] Bot 2 => playMeld cc={J♥ K♥ 2♦}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: not drawn
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | playMeld {"15":1,"16":1,"40":1}
+buraco-bot  | [BOT] Bot 2 => playMeld cc={3♥ 4♥ 2♦}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: not drawn
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | playMeld {"3":1,"4":1,"5":1}
+buraco-bot  | [BOT] Bot 2 => playMeld cc={4♠ 5♠ 6♠}
+buraco-bot  | [GAME.JS] INVALID MOVE: moveMeld fail: not drawn
+buraco-bot  | ERROR: invalid move: playMeld args: [object Object]
+buraco-bot  | [WASM_DBG] discard logits: 438, 556, -203, 446, 399, -470, -557, -205, -289, -766, 260, 54, 533, -264, 93, -3, -164, -308, -399, -726, -915, -169, 397, 32, 288, 111, 294, -541, 167, -278, 217, 180, -347, -87, -577, -314, -254, 60, -285, -284, 184, 696, 62, -635, -338, -1052, -385, -904, 92, 502, 798, -276, 353, 637
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   Q♦ score=798.2437
+buraco-bot  |   K♠ score=533.3785
+buraco-bot  |   J♦ score=501.7870
+buraco-bot  |   4♠ score=445.6446
+buraco-bot  |   5♠ score=398.7752
+buraco-bot  |   J♠ score=259.8655
+buraco-bot  |   4♥ score=-163.5994
+buraco-bot  |   6♦ score=-338.0655
+buraco-bot  |   7♣ score=-347.1732
+buraco-bot  |   6♠ score=-469.9748
+buraco-bot  |   9♦ score=-904.1955
+buraco-bot  | discardCard(50)
+buraco-bot  | ERROR: invalid move: discardCard args: 50
+buraco-bot  | [WASM_DBG] discard logits: 438, 556, -203, 446, 399, -470, -557, -205, -289, -766, 260, 54, 533, -264, 93, -3, -164, -308, -399, -726, -915, -169, 397, 32, 288, 111, 294, -541, 167, -278, 217, 180, -347, -87, -577, -314, -254, 60, -285, -284, 184, 696, 62, -635, -338, -1052, -385, -904, 92, 502, 798, -276, 353, 637
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   3♦ score=695.7498
+buraco-bot  |   5♣ score=217.2269
+buraco-bot  |   2♦ score=184.2790
+buraco-bot  |   K♥ score=111.1131
+buraco-bot  |   J♥ score=32.4709
+buraco-bot  |   3♥ score=-2.6381
+buraco-bot  |   8♣ score=-87.1004
+buraco-bot  |   4♥ score=-163.5994
+buraco-bot  |   4♣ score=-278.2977
+buraco-bot  |   K♣ score=-285.4680
+buraco-bot  |   8♦ score=-384.9891
+buraco-bot  | discardCard(41)
+buraco-bot  | ERROR: invalid move: discardCard args: 41
+buraco-bot  | discardCard(30)
+buraco-bot  | ERROR: invalid move: discardCard args: 30
+buraco-bot  | discardCard(12)
+buraco-bot  | ERROR: invalid move: discardCard args: 12
+buraco-bot  | discardCard(49)
+buraco-bot  | ERROR: invalid move: discardCard args: 49
+buraco-bot  | discardCard(40)
+buraco-bot  | ERROR: invalid move: discardCard args: 40
+buraco-bot  | discardCard(25)
+buraco-bot  | ERROR: invalid move: discardCard args: 25
+buraco-bot  | discardCard(3)
+buraco-bot  | ERROR: invalid move: discardCard args: 3
+buraco-bot  | discardCard(4)
+buraco-bot  | ERROR: invalid move: discardCard args: 4
+buraco-bot  | discardCard(23)
+buraco-bot  | ERROR: invalid move: discardCard args: 23
+buraco-bot  | discardCard(15)
+buraco-bot  | discardCard(10)
+buraco-bot  | ERROR: invalid move: discardCard args: 10
+buraco-bot  | discardCard(33)
+buraco-bot  | discardCard(16)
+buraco-bot  | ERROR: invalid move: discardCard args: 16
+buraco-bot  | discardCard(16)
+buraco-bot  | discardCard(44)
+buraco-bot  | ERROR: invalid move: discardCard args: 44
+buraco-bot  | discardCard(32)
+buraco-bot  | ERROR: invalid move: discardCard args: 32
+buraco-bot  | discardCard(29)
+buraco-bot  | ERROR: invalid move: discardCard args: 29
+buraco-bot  | discardCard(5)
+buraco-bot  | ERROR: invalid move: discardCard args: 5
+buraco-bot  | discardCard(38)
+buraco-bot  | discardCard(47)
+buraco-bot  | ERROR: invalid move: discardCard args: 47
+buraco-bot  | discardCard(46)
+buraco-bot  | [BOT] Bot 3 | hasDrawn=false hand=[A♠ 7♠ J♠ 5♥ 10♥ Q♥ Q♥ Q♣ 5♦ 10♦ K♦] | discard_top=K♣
+buraco-bot  | [RCS] p3 team=1 opp=0 hand=[A♠,7♠,J♠,5♥,10♥,Q♥,Q♣,5♦,10♦,K♦] td=K♣ deck=35 discPile=2
+buraco-bot  | [WASM_DBG] Run candidate: 13,1,0,1,1,0,1,0,0,1,0 score: 1322
+buraco-bot  | [WASM_DBG] Run candidate: 13,1,0,1,2,0,1,0,0,1,0 score: 1198
+buraco-bot  | --- PICKUP CANDIDATES (Phase A, sorted) ---
+buraco-bot  |   appendRunner cards={} existing=[K♠ K♦ 2♣] score=1322.0823
+buraco-bot  |   appendRunner cards={K♦} existing=[K♠ K♦ 2♣] score=1198.0638
+buraco-bot  | pickUpDiscard {}
+buraco-bot  | [BOT] Bot 3 => pickUpDiscard cc={} tgt={"type":"append","meldTarget":{"type":"runner","index":0}}
+buraco-bot  | pickUpDiscard {"51":1}
+buraco-bot  | [BOT] Bot 3 => pickUpDiscard cc={K♦} tgt={"type":"append","meldTarget":{"type":"runner","index":0}}
+buraco-bot  | [BOT] Bot 2 | hasDrawn=true hand=[4♠ 5♠ 6♠ J♠ K♠ 4♥ 2♦ 6♦ 9♦ J♦ Q♦] | discard_top=empty
+buraco-bot  | [RCS] p2 team=0 opp=1 hand=[4♠,5♠,6♠,J♠,K♠,4♥,2♦,6♦,9♦,J♦,Q♦] td=K♣ deck=35 discPile=1
+buraco-bot  | [WASM_DBG] Seq candidate: 1,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1276
+buraco-bot  | [WASM_DBG] Seq candidate: 1,0,0,0,0,1,1,1,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1649
+buraco-bot  | [WASM_DBG] Seq candidate: 1,0,0,0,0,0,0,0,0,0,0,0,1,0,1,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1179
+buraco-bot  | [WASM_DBG] Seq candidate: 4,0,0,0,0,0,0,0,0,0,1,0,1,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1677
+buraco-bot  | [WASM_DBG] Seq candidate: 4,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1903
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  |   playMeld cards={4♠ 5♠ 6♠} score=1276.0538
+buraco-bot  |   playMeld cards={4♠ 5♠ 6♠ 2♦} score=1649.4417
+buraco-bot  |   playMeld cards={J♠ K♠ 2♦} score=1178.9746
+buraco-bot  |   playMeld cards={2♦ 9♦ J♦ Q♦} score=1677.0879
+buraco-bot  |   playMeld cards={2♦ J♦ Q♦} score=1903.4019
+buraco-bot  | playMeld {"40":1,"49":1,"50":1}
+buraco-bot  | [BOT] Bot 2 => playMeld cc={2♦ J♦ Q♦}
+buraco-bot  | drawCard
+buraco-bot  | [BOT] Bot 3 => drawCard
+buraco-bot  | playMeld {"40":1,"47":1,"49":1,"50":1}
+buraco-bot  | [BOT] Bot 2 => playMeld cc={2♦ 9♦ J♦ Q♦}
+buraco-bot  | [BOT] Bot 3 => drawCard
+buraco-bot  | ERROR: invalid move: drawCard args: 
+buraco-bot  | [WASM_DBG] Run candidate: 13,1,0,0,2,0,1,0,0,1,0 score: 1347
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  |   appendRunner cards={K♦} existing=[K♠ K♦ 2♣] score=1347.3440
+buraco-bot  | appendRunner runner[0] {"51":1}
+buraco-bot  | [BOT] Bot 3 => appendToMeld target=[K♠ K♣ K♦ 2♣] cc={K♦}
+buraco-bot  | playMeld {"3":1,"4":1,"5":1,"40":1}
+buraco-bot  | [BOT] Bot 2 => playMeld cc={4♠ 5♠ 6♠ 2♦}
+buraco-bot  | playMeld {"3":1,"4":1,"5":1}
+buraco-bot  | [BOT] Bot 2 => playMeld cc={4♠ 5♠ 6♠}
+buraco-bot  | [WASM_DBG] discard logits: 427, 537, -254, 512, 442, -444, -579, -187, -289, -777, 283, 43, 520, -294, 89, 22, -127, -292, -374, -691, -907, -208, 359, 15, 276, 96, 326, -558, 191, -231, 212, 186, -367, -93, -567, -322, -257, 67, -315, -288, 252, 677, 48, -625, -345, -1056, -390, -928, 91, 474, 818, -311, 362, 692
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   A♠ score=426.6605
+buraco-bot  |   10♥ score=358.6982
+buraco-bot  |   J♠ score=282.5962
+buraco-bot  |   Q♥ score=275.7965
+buraco-bot  |   10♦ score=90.5798
+buraco-bot  |   Q♣ score=67.3819
+buraco-bot  |   5♥ score=-291.9359
+buraco-bot  |   K♦ score=-311.2740
+buraco-bot  |   7♠ score=-578.8914
+buraco-bot  |   5♦ score=-624.7603
+buraco-bot  | discardCard(0)
+buraco-bot  | discardCard(22)
+buraco-bot  | playMeld {"10":1,"12":1,"40":1}
+buraco-bot  | [BOT] Bot 2 => playMeld cc={J♠ K♠ 2♦}
+buraco-bot  | discardCard(10)
+buraco-bot  | discardCard(24)
+buraco-bot  | [WASM_DBG] discard logits: 427, 537, -254, 512, 442, -444, -579, -187, -289, -777, 283, 43, 520, -294, 89, 22, -127, -292, -374, -691, -907, -208, 359, 15, 276, 96, 326, -558, 191, -231, 212, 186, -367, -93, -567, -322, -257, 67, -315, -288, 252, 677, 48, -625, -345, -1056, -390, -928, 91, 474, 818, -311, 362, 692
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   Q♦ score=817.8447
+buraco-bot  |   K♠ score=520.2089
+buraco-bot  |   4♠ score=512.2444
+buraco-bot  |   J♦ score=473.9470
+buraco-bot  |   5♠ score=442.2269
+buraco-bot  |   J♠ score=282.5962
+buraco-bot  |   2♦ score=251.5583
+buraco-bot  |   4♥ score=-127.4032
+buraco-bot  |   6♦ score=-344.9856
+buraco-bot  |   6♠ score=-444.2244
+buraco-bot  |   9♦ score=-928.3704
+buraco-bot  | discardCard(50)
+buraco-bot  | discardCard(48)
+buraco-bot  | discardCard(12)
+buraco-bot  | discardCard(3)
+buraco-bot  | discardCard(49)
+buraco-bot  | discardCard(4)
+buraco-bot  | discardCard(10)
+buraco-bot  | discardCard(40)
+buraco-bot  | discardCard(16)
+buraco-bot  | discardCard(44)
+buraco-bot  | discardCard(5)
+buraco-bot  | discardCard(47)
+buraco-bot  | [BOT] Bot 2 | hasDrawn=true hand=[4♠ 5♠ 6♠ J♠ K♠ 4♥ 6♦ 9♦] | discard_top=empty
+buraco-bot  | [RCS] p2 team=0 opp=1 hand=[4♠,5♠,6♠,J♠,K♠,4♥,6♦,9♦] td=K♣ deck=35 discPile=1
+buraco-bot  | [WASM_DBG] Seq candidate: 1,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1076
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  |   playMeld cards={4♠ 5♠ 6♠} score=1076.0618
+buraco-bot  | playMeld {"3":1,"4":1,"5":1}
+buraco-bot  | [BOT] Bot 2 => playMeld cc={4♠ 5♠ 6♠}
+buraco-bot  | [WASM_DBG] discard logits: 628, 598, -311, 692, 433, -474, -367, -248, -397, -880, 370, 131, 646, -412, 65, 213, -70, -202, -532, -774, -1150, -161, 378, 63, 326, 76, 410, -697, 178, -185, 176, 202, -468, -154, -646, -430, -175, 73, -279, -369, 374, 697, 111, -530, -298, -1168, -467, -1053, -22, 657, 897, -264, 405, 748
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   4♠ score=691.7415
+buraco-bot  |   K♠ score=645.6639
+buraco-bot  |   5♠ score=432.6966
+buraco-bot  |   J♠ score=369.8273
+buraco-bot  |   4♥ score=-70.3836
+buraco-bot  |   6♦ score=-298.2416
+buraco-bot  |   6♠ score=-473.7021
+buraco-bot  |   9♦ score=-1052.7515
+buraco-bot  | discardCard(3)
+buraco-bot  | discardCard(12)
+buraco-bot  | discardCard(4)
+buraco-bot  | ERROR: invalid move: discardCard args: 4
+buraco-bot  | [BOT] Bot 1 | hasDrawn=false hand=[3♠ 6♥ A♣ 4♣ 10♣ Q♣ K♣ 6♦ J♦] | discard_top=4♠
+buraco-bot  | [RCS] p1 team=1 opp=0 hand=[3♠,6♥,A♣,4♣,10♣,Q♣,K♣,6♦,J♦] td=4♠ deck=34 discPile=2
+buraco-bot  | --- PICKUP CANDIDATES (Phase A, sorted) ---
+buraco-bot  | drawCard
+buraco-bot  | [BOT] Bot 1 => drawCard
+buraco-bot  | [WASM_DBG] Seq candidate: 3,0,1,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1101
+buraco-bot  | [WASM_DBG] Run candidate: 13,1,0,2,2,0,1,0,1,2,0 score: 1455
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  |   playMeld cards={A♣ Q♣ K♣} score=1100.7542
+buraco-bot  |   appendRunner cards={K♣} existing=[K♠ K♣ K♦ K♦ 2♣] score=1455.3363
+buraco-bot  | [WASM_DBG] discard logits: 429, 622, -120, 619, 318, -471, -376, -244, -333, -809, 297, 48, 594, -165, 88, -110, -64, -233, -403, -734, -1014, -43, 388, -145, 228, -19, 200, -585, 167, -339, 141, 138, -369, -2, -512, -325, -332, 6, -212, -521, 187, 702, 47, -646, -266, -976, -339, -878, 58, 554, 843, -379, 390, 500
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   J♦ score=554.2397
+buraco-bot  |   A♣ score=199.7158
+buraco-bot  |   Q♣ score=5.7942
+buraco-bot  |   3♠ score=-119.6830
+buraco-bot  |   K♣ score=-211.7185
+buraco-bot  |   6♦ score=-266.0226
+buraco-bot  |   10♣ score=-324.6347
+buraco-bot  |   4♣ score=-338.9999
+buraco-bot  |   6♥ score=-402.5637
+buraco-bot  | [BOT] Bot 1 turn state stalled (stateID=12, lastTurnStateId=12); forcing resync
+buraco-bot  | [BOT] Bot 1 | hasDrawn=false hand=[3♠ 6♥ A♣ 4♣ 10♣ Q♣ K♣ 6♦ J♦] | discard_top=4♠
+buraco-bot  | [RCS] p1 team=1 opp=0 hand=[3♠,6♥,A♣,4♣,10♣,Q♣,K♣,6♦,J♦] td=4♠ deck=34 discPile=2
+buraco-bot  | --- PICKUP CANDIDATES (Phase A, sorted) ---
+buraco-bot  | drawCard
+buraco-bot  | [BOT] Bot 1 => drawCard
+buraco-bot  | ERROR: invalid move: drawCard args: 
+buraco-bot  | [BOT] Bot 1 => drawCard
+buraco-bot  | ERROR: invalid move: drawCard args: 
+buraco-bot  | [WASM_DBG] Seq candidate: 3,0,1,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1101
+buraco-bot  | [WASM_DBG] Run candidate: 13,1,0,2,2,0,1,0,1,2,0 score: 1455
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  |   playMeld cards={A♣ Q♣ K♣} score=1100.7542
+buraco-bot  |   appendRunner cards={K♣} existing=[K♠ K♣ K♦ K♦ 2♣] score=1455.3363
+buraco-bot  | appendRunner runner[0] {"38":1}
+buraco-bot  | [BOT] Bot 1 => appendToMeld target=[K♠ K♣ K♦ K♦ 2♣] cc={K♣}
+buraco-bot  | playMeld {"26":1,"37":1,"38":1}
+buraco-bot  | [BOT] Bot 1 => playMeld cc={A♣ Q♣ K♣}
+buraco-bot  | [WASM_DBG] discard logits: 429, 622, -120, 619, 318, -471, -376, -244, -333, -809, 297, 48, 594, -165, 88, -110, -64, -233, -403, -734, -1014, -43, 388, -145, 228, -19, 200, -585, 167, -339, 141, 138, -369, -2, -512, -325, -332, 6, -212, -521, 187, 702, 47, -646, -266, -976, -339, -878, 58, 554, 843, -379, 390, 500
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   J♦ score=554.2397
+buraco-bot  |   A♣ score=199.7158
+buraco-bot  |   Q♣ score=5.7942
+buraco-bot  |   3♠ score=-119.6830
+buraco-bot  |   K♣ score=-211.7185
+buraco-bot  |   6♦ score=-266.0226
+buraco-bot  |   10♣ score=-324.6347
+buraco-bot  |   4♣ score=-338.9999
+buraco-bot  |   6♥ score=-402.5637
+buraco-bot  | discardCard(49)
+buraco-bot  | discardCard(26)
+buraco-bot  | discardCard(37)
+buraco-bot  | [BOT] Bot 2 | hasDrawn=false hand=[3♥ 4♥ 5♥ J♥ K♥ 8♣ 3♦ 8♦] | discard_top=A♣
+buraco-bot  | [RCS] p2 team=0 opp=1 hand=[3♥,4♥,5♥,J♥,K♥,8♣,3♦,8♦] td=A♣ deck=33 discPile=3
+buraco-bot  | --- PICKUP CANDIDATES (Phase A, sorted) ---
+buraco-bot  | drawCard
+buraco-bot  | [BOT] Bot 2 => drawCard
+buraco-bot  | [BOT] Bot 2 => drawCard
+buraco-bot  | [WASM_DBG] Seq candidate: 2,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1323
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  |   playMeld cards={3♥ 4♥ 5♥} score=1323.4664
+buraco-bot  | playMeld {"15":1,"16":1,"17":1}
+buraco-bot  | [BOT] Bot 2 => playMeld cc={3♥ 4♥ 5♥}
+buraco-bot  | [WASM_DBG] discard logits: 681, 469, -305, 507, 339, -557, -461, -167, -259, -795, 306, 262, 588, -499, -98, 111, -108, -293, -508, -575, -901, 38, 233, 203, 340, 57, 452, -545, 98, -55, 201, 153, -433, -166, -496, -389, -13, -52, -255, -354, 186, 733, -31, -438, -360, -1036, -364, -791, 1, 521, 669, -311, 474, 595
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   3♦ score=732.8917
+buraco-bot  |   J♥ score=202.9550
+buraco-bot  |   3♥ score=111.1884
+buraco-bot  |   K♥ score=56.7203
+buraco-bot  |   4♥ score=-108.4474
+buraco-bot  |   8♣ score=-166.2745
+buraco-bot  |   5♥ score=-292.5085
+buraco-bot  |   8♦ score=-363.9185
+buraco-bot  | discardCard(41)
+buraco-bot  | discardCard(23)
+buraco-bot  | discardCard(15)
+buraco-bot  | ERROR: invalid move: discardCard args: 15
+buraco-bot  | [BOT] Bot 3 | hasDrawn=false hand=[A♠ 7♠ 5♥ 10♥ Q♥ Q♥ Q♣ 5♦ 10♦ Q♦] | discard_top=J♥
+buraco-bot  | [RCS] p3 team=1 opp=0 hand=[A♠,7♠,5♥,10♥,Q♥,Q♣,5♦,10♦,Q♦] td=J♥ deck=32 discPile=4
+buraco-bot  | [WASM_DBG] Seq candidate: 2,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 score: 1261
+buraco-bot  | --- PICKUP CANDIDATES (Phase A, sorted) ---
+buraco-bot  |   playMeld cards={10♥ Q♥} score=1261.0105
+buraco-bot  | pickUpDiscard {"22":1,"24":1}
+buraco-bot  | [BOT] Bot 3 => pickUpDiscard cc={10♥ Q♥} tgt={"type":"new"}
+buraco-bot  | drawCard
+buraco-bot  | [BOT] Bot 3 => drawCard
+buraco-bot  | [BOT] Bot 3 => drawCard
+buraco-bot  | --- MELD CANDIDATES (Phase B, sorted) ---
+buraco-bot  | [WASM_DBG] discard logits: 369, 256, -351, 539, 373, -173, -201, -320, -246, -469, 424, 266, 429, -226, 65, 10, -81, -103, -402, -331, -665, -63, 167, 177, 84, -134, 182, -479, 309, -220, 166, 258, -231, 193, -181, -123, 21, -49, -199, -163, 216, 701, 12, -380, -270, -620, -355, -648, 96, 302, 377, -218, 208, 483
+buraco-bot  | --- DISCARD CANDIDATES (sorted) ---
+buraco-bot  |   Q♦ score=376.5929
+buraco-bot  |   A♠ score=368.9779
+buraco-bot  |   10♥ score=166.7628
+buraco-bot  |   10♦ score=95.7489
+buraco-bot  |   Q♥ score=83.6028
+buraco-bot  |   Q♣ score=-48.5451
+buraco-bot  |   5♥ score=-102.9225
+buraco-bot  |   7♠ score=-200.9686
+buraco-bot  |   5♦ score=-380.4721
+buraco-bot  | discardCard(50)
+buraco-bot  | discardCard(0)
+ 
