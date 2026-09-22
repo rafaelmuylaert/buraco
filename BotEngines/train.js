@@ -1,4 +1,4 @@
-// ─── Overview ──────────────────────────────────────────────────────────────────
+// ─── Overview ──────────────runMatchBatch────────────────────────────────────────────────────
 // train.js — AI Genetic Training Pipeline
 //
 // This module implements the entire genetic algorithm for training Buraco AI bots.
@@ -41,7 +41,8 @@ import { cpus } from 'os';
 import { AI_CONFIG, computeNetConfig, DEFAULT_NET_PARAMS, MAX_WEIGHTS } from '@buraco/game/Buraco.js';
 import { fitChampion } from './nn_fit.js';
 
-const NUM_WORKERS = Math.max(1, (cpus().length / 2) - 1); 
+const NUM_ISLANDS = 5;
+const NUM_WORKERS = Math.max(1, (cpus().length / (2 * NUM_ISLANDS)) - 1);
 const WORKER_PATH = new URL('./worker.js', import.meta.url).pathname; 
 
 // Default hard cap on any single weight/bias magnitude. GA mutation can otherwise
@@ -381,7 +382,7 @@ export const TrainerService = {
         if (params.cardPointValues != null) rules = { ...rules, cardPointValues:     params.cardPointValues };
         if (params.meldSizeBonus   != null) rules = { ...rules, meldSizeBonus:       params.meldSizeBonus };
 
-        const NUM_ISLANDS = NUM_WORKERS;
+        
 
         // Island-evolution tuning (persisted to meta.json trainParams).
         // Normal islands: RR#1 over the whole population on one shared shuffle ranks the field,
@@ -590,12 +591,20 @@ export const TrainerService = {
                     const pairs = [];
                     for (let i = 0; i < candidates.length; i++)
                         for (let j = i + 1; j < candidates.length; j++)
-                            pairs.push({ i, j, dnaA: toBuffer(candidates[i], netConfig), dnaB: toBuffer(candidates[j], netConfig) });
-                    const results = await runMatchBatch(pairs, rules, netConfig, rrDeck);
-                    results.forEach(([sA], idx) => {
-                        wins[pairs[idx].i] += sA;
-                        wins[pairs[idx].j] -= sA;
-                    });
+                            pairs.push([i, j]);
+for (let idx = 0; idx < pairs.length; idx += 256) {
+                        const chunk = pairs.slice(idx, idx + 256);
+                        const batch = chunk.map(([i, j]) => ({
+                            i, j,
+                            dnaA: toBuffer(candidates[i], netConfig),
+                            dnaB: toBuffer(candidates[j], netConfig),
+                        }));
+                        const results = await runMatchBatch(batch, rules, netConfig, rrDeck);
+                        results.forEach(([sA], i) => {
+                            wins[pairs[idx + i][0]] += sA;
+                            wins[pairs[idx + i][1]] -= sA;
+                        });
+                    }
                 }
 
                 const ranked = candidates

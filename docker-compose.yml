@@ -21,7 +21,9 @@ services:
       dockerfile: buraco-server/Dockerfile
     container_name: buraco-server
     command: ["server"]
-    environment: *git-env
+    environment:
+      <<: *git-env
+      NODE_OPTIONS: --max-old-space-size=8192
     ports:
       - "8000:8000"
     volumes:
