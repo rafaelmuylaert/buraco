@@ -182,6 +182,546 @@
       ]
     },
     {
+      "id": "offsuit-wild-hold-h",
+      "description": "Prefer the clean 4-card heart sequence over dirtying it with an off-suit 2.",
+      "context": "Meld turn, 25 cards left, empty table, no discard. Hand = 3-7 diamonds, 5-9-Q spades, A clubs, 4-5-6-7 hearts + 2 diamonds. good = clean 4-card heart play; bad = same 4 cards + off-suit 2-diamonds (dirty).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 17,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          7,
+          8,
+          9,
+          10,
+          12,
+          13,
+          14,
+          15,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "16": 1,
+            "17": 1,
+            "18": 1,
+            "19": 1
+          },
+          "targetSuit": 2
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "16": 1,
+            "17": 1,
+            "18": 1,
+            "19": 1,
+            "40": 1
+          },
+          "targetSuit": 2
+        }
+      ]
+    },
+    {
+      "id": "offsuit-wild-hold-c",
+      "description": "Prefer the clean 4-card club sequence over dirtying it with an off-suit 2.",
+      "context": "Meld turn, 25 cards left, empty table, no discard. Hand = 3-7 spades, 5-9-Q hearts, A diamonds, 4-5-6-7 clubs + 2 spades. good = clean 4-card club play; bad = same 4 cards + off-suit 2-spades (dirty).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 17,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          20,
+          21,
+          22,
+          23,
+          25,
+          26,
+          27,
+          28,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "29": 1,
+            "30": 1,
+            "31": 1,
+            "32": 1
+          },
+          "targetSuit": 3
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "1": 1,
+            "29": 1,
+            "30": 1,
+            "31": 1,
+            "32": 1
+          },
+          "targetSuit": 3
+        }
+      ]
+    },
+    {
+      "id": "offsuit-wild-hold-d",
+      "description": "Prefer the clean 4-card diamond sequence over dirtying it with an off-suit 2.",
+      "context": "Meld turn, 25 cards left, empty table, no discard. Hand = 3-7 hearts, 5-9-Q clubs, A spades, 4-5-6-7 diamonds + 2 hearts. good = clean 4-card diamond play; bad = same 4 cards + off-suit 2-hearts (dirty).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 17,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          33,
+          34
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "42": 1,
+            "43": 1,
+            "44": 1,
+            "45": 1
+          },
+          "targetSuit": 4
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "42": 1,
+            "43": 1,
+            "44": 1,
+            "45": 1
+          },
+          "targetSuit": 4
+        }
+      ]
+    },
+    {
       "id": "wait-to-append",
       "description": "Hold a premature spade meld instead of laying it dirty with an off-suit 2.",
       "context": "Meld turn, 25 cards left, empty table, no discard. Hand = 3-7 clubs, 5-9-Q diamonds, A hearts, 4-5-7 spades + 2 clubs. good = pure hold; bad = lay 4-5-7 spades + off-suit 2-clubs (dirty).",
@@ -350,6 +890,510 @@
       ]
     },
     {
+      "id": "wait-to-append-h",
+      "description": "Hold a premature heart meld instead of laying it dirty with an off-suit 2.",
+      "context": "Meld turn, 25 cards left, empty table, no discard. Hand = 3-7 diamonds, 5-9-Q spades, A clubs, 4-5-7 hearts + 2 diamonds. good = pure hold; bad = lay 4-5-7 hearts + off-suit 2-diamonds (dirty).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          7,
+          8,
+          9,
+          10,
+          12,
+          13,
+          14,
+          15,
+          18,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "16": 1,
+            "17": 1,
+            "19": 1,
+            "40": 1
+          },
+          "targetSuit": 2
+        }
+      ]
+    },
+    {
+      "id": "wait-to-append-c",
+      "description": "Hold a premature club meld instead of laying it dirty with an off-suit 2.",
+      "context": "Meld turn, 25 cards left, empty table, no discard. Hand = 3-7 spades, 5-9-Q hearts, A diamonds, 4-5-7 clubs + 2 spades. good = pure hold; bad = lay 4-5-7 clubs + off-suit 2-spades (dirty).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          20,
+          21,
+          22,
+          23,
+          25,
+          26,
+          27,
+          28,
+          31,
+          33,
+          34,
+          35,
+          36,
+          37
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "1": 1,
+            "29": 1,
+            "30": 1,
+            "32": 1
+          },
+          "targetSuit": 3
+        }
+      ]
+    },
+    {
+      "id": "wait-to-append-d",
+      "description": "Hold a premature diamond meld instead of laying it dirty with an off-suit 2.",
+      "context": "Meld turn, 25 cards left, empty table, no discard. Hand = 3-7 hearts, 5-9-Q clubs, A spades, 4-5-7 diamonds + 2 hearts. good = pure hold; bad = lay 4-5-7 diamonds + off-suit 2-hearts (dirty).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          33,
+          34
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "42": 1,
+            "43": 1,
+            "45": 1
+          },
+          "targetSuit": 4
+        }
+      ]
+    },
+    {
       "id": "offsuit-wild-worth-it",
       "description": "Play the dirty spade meld (with off-suit 2) when it is the only meld available.",
       "context": "Meld turn, 25 cards left, empty table, no discard. Hand = 3 clubs, 4-5-7 spades + 2 clubs. good = play 4-5-7 spades + off-suit 2-clubs (dirty); bad = pure hold.",
@@ -513,6 +1557,510 @@
             "27": 1
           },
           "targetSuit": 1
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "offsuit-wild-worth-it-h",
+      "description": "Play the dirty heart meld (with off-suit 2) when it is the only meld available.",
+      "context": "Meld turn, 25 cards left, empty table, no discard. Hand = 3 diamonds, 4-5-7 hearts + 2 diamonds. good = play 4-5-7 hearts + off-suit 2-diamonds (dirty); bad = pure hold.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          18,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "16": 1,
+            "17": 1,
+            "19": 1,
+            "40": 1
+          },
+          "targetSuit": 2
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "offsuit-wild-worth-it-c",
+      "description": "Play the dirty club meld (with off-suit 2) when it is the only meld available.",
+      "context": "Meld turn, 25 cards left, empty table, no discard. Hand = 3 spades, 4-5-7 clubs + 2 spades. good = play 4-5-7 clubs + off-suit 2-spades (dirty); bad = pure hold.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "1": 1,
+            "29": 1,
+            "30": 1,
+            "32": 1
+          },
+          "targetSuit": 3
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "offsuit-wild-worth-it-d",
+      "description": "Play the dirty diamond meld (with off-suit 2) when it is the only meld available.",
+      "context": "Meld turn, 25 cards left, empty table, no discard. Hand = 3 hearts, 4-5-7 diamonds + 2 hearts. good = play 4-5-7 diamonds + off-suit 2-hearts (dirty); bad = pure hold.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "42": 1,
+            "43": 1,
+            "45": 1
+          },
+          "targetSuit": 4
         }
       ],
       "bad": []
@@ -701,6 +2249,567 @@
             "10": 1
           },
           "targetSuit": 1
+        }
+      ]
+    },
+    {
+      "id": "hold-when-cant-build-h",
+      "description": "Hold instead of laying a separate heart meld when the table meld can be built later.",
+      "context": "Meld turn, 25 cards left, own table = 4-5-6 hearts, opponent table empty, no discard. Hand = 3-7 spades, 5-9-Q diamonds, 8-9-10-J hearts + 2 clubs. good = pure hold; bad = lay 8-9-10-J hearts separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          7,
+          8,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          19,
+          24,
+          25,
+          26,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "20": 1,
+            "21": 1,
+            "22": 1,
+            "23": 1
+          },
+          "targetSuit": 2
+        }
+      ]
+    },
+    {
+      "id": "hold-when-cant-build-c",
+      "description": "Hold instead of laying a separate club meld when the table meld can be built later.",
+      "context": "Meld turn, 25 cards left, own table = 4-5-6 clubs, opponent table empty, no discard. Hand = 3-7 hearts, 5-9-Q spades, 8-9-10-J clubs + 2 diamonds. good = pure hold; bad = lay 8-9-10-J clubs separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          20,
+          21,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          32,
+          37,
+          38,
+          39,
+          41,
+          42,
+          43
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "33": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1
+          },
+          "targetSuit": 3
+        }
+      ]
+    },
+    {
+      "id": "hold-when-cant-build-d",
+      "description": "Hold instead of laying a separate diamond meld when the table meld can be built later.",
+      "context": "Meld turn, 25 cards left, own table = 4-5-6 diamonds, opponent table empty, no discard. Hand = 3-7 clubs, 5-9-Q hearts, 8-9-10-J diamonds + 2 spades. good = pure hold; bad = lay 8-9-10-J diamonds separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          33,
+          34,
+          36
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ]
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "46": 1,
+            "47": 1,
+            "48": 1,
+            "49": 1
+          },
+          "targetSuit": 4
         }
       ]
     },
@@ -901,6 +3010,606 @@
             "10": 1
           },
           "targetSuit": 1
+        }
+      ]
+    },
+    {
+      "id": "append-with-same-suit-2-h",
+      "description": "Append 2-8-9-10-J hearts (same-suit 2) to the 4-5-6 hearts meld instead of laying separate.",
+      "context": "Meld turn, 25 cards left, own table = 4-5-6 hearts, opponent table empty, no discard. Hand = 3-7 spades, 5-9-Q diamonds, 8-9-10-J hearts + 2 hearts. good = append 2-8-9-10-J to 4-5-6; bad = lay 8-9-10-J separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          7,
+          8,
+          10,
+          11,
+          12,
+          13,
+          15,
+          19,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "appendToMeld",
+          "cardCounts": {
+            "14": 1,
+            "20": 1,
+            "21": 1,
+            "22": 1,
+            "23": 1
+          },
+          "targetSuit": 2,
+          "targetSlot": 0
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "20": 1,
+            "21": 1,
+            "22": 1,
+            "23": 1
+          },
+          "targetSuit": 2
+        }
+      ]
+    },
+    {
+      "id": "append-with-same-suit-2-c",
+      "description": "Append 2-8-9-10-J clubs (same-suit 2) to the 4-5-6 clubs meld instead of laying separate.",
+      "context": "Meld turn, 25 cards left, own table = 4-5-6 clubs, opponent table empty, no discard. Hand = 3-7 hearts, 5-9-Q spades, 8-9-10-J clubs + 2 clubs. good = append 2-8-9-10-J to 4-5-6; bad = lay 8-9-10-J separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          20,
+          21,
+          23,
+          24,
+          25,
+          26,
+          28,
+          32,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "appendToMeld",
+          "cardCounts": {
+            "27": 1,
+            "33": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1
+          },
+          "targetSuit": 3,
+          "targetSlot": 0
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "33": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1
+          },
+          "targetSuit": 3
+        }
+      ]
+    },
+    {
+      "id": "append-with-same-suit-2-d",
+      "description": "Append 2-8-9-10-J diamonds (same-suit 2) to the 4-5-6 diamonds meld instead of laying separate.",
+      "context": "Meld turn, 25 cards left, own table = 4-5-6 diamonds, opponent table empty, no discard. Hand = 3-7 clubs, 5-9-Q hearts, 8-9-10-J diamonds + 2 diamonds. good = append 2-8-9-10-J to 4-5-6; bad = lay 8-9-10-J separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          33,
+          34
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ]
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "appendToMeld",
+          "cardCounts": {
+            "40": 1,
+            "46": 1,
+            "47": 1,
+            "48": 1,
+            "49": 1
+          },
+          "targetSuit": 4,
+          "targetSlot": 0
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "46": 1,
+            "47": 1,
+            "48": 1,
+            "49": 1
+          },
+          "targetSuit": 4
         }
       ]
     },
@@ -1142,6 +3851,717 @@
       ]
     },
     {
+      "id": "append-with-off-suit-2-h",
+      "description": "Append 8-9-10-J hearts + off-suit 2-clubs to the 4-5-6 hearts meld instead of laying separate.",
+      "context": "Meld turn, 25 cards left, own table = 4-5-6 hearts, opponent table = 5-6-7 + 7-8-9 hearts, no discard. Hand = 3-7 spades, 5-9-Q diamonds, 8-9-10-J hearts + 2 clubs. good = append 8-9-10-J + off-suit 2 to 4-5-6; bad = lay 8-9-10-J separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          7,
+          8,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          24,
+          25,
+          26,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "appendToMeld",
+          "cardCounts": {
+            "20": 1,
+            "21": 1,
+            "22": 1,
+            "23": 1,
+            "27": 1
+          },
+          "targetSuit": 2,
+          "targetSlot": 0
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "20": 1,
+            "21": 1,
+            "22": 1,
+            "23": 1
+          },
+          "targetSuit": 2
+        }
+      ]
+    },
+    {
+      "id": "append-with-off-suit-2-c",
+      "description": "Append 8-9-10-J clubs + off-suit 2-diamonds to the 4-5-6 clubs meld instead of laying separate.",
+      "context": "Meld turn, 25 cards left, own table = 4-5-6 clubs, opponent table = 5-6-7 + 7-8-9 clubs, no discard. Hand = 3-7 hearts, 5-9-Q spades, 8-9-10-J clubs + 2 diamonds. good = append 8-9-10-J + off-suit 2 to 4-5-6; bad = lay 8-9-10-J separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          20,
+          21,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          37,
+          38,
+          39,
+          41,
+          42,
+          43,
+          44
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "appendToMeld",
+          "cardCounts": {
+            "33": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1,
+            "40": 1
+          },
+          "targetSuit": 3,
+          "targetSlot": 0
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "33": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1
+          },
+          "targetSuit": 3
+        }
+      ]
+    },
+    {
+      "id": "append-with-off-suit-2-d",
+      "description": "Append 8-9-10-J diamonds + off-suit 2-spades to the 4-5-6 diamonds meld instead of laying separate.",
+      "context": "Meld turn, 25 cards left, own table = 4-5-6 diamonds, opponent table = 5-6-7 + 7-8-9 diamonds, no discard. Hand = 3-7 clubs, 5-9-Q hearts, 8-9-10-J diamonds + 2 spades. good = append 8-9-10-J + off-suit 2 to 4-5-6; bad = lay 8-9-10-J separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          33,
+          34,
+          36
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ]
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ]
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "appendToMeld",
+          "cardCounts": {
+            "1": 1,
+            "46": 1,
+            "47": 1,
+            "48": 1,
+            "49": 1
+          },
+          "targetSuit": 4,
+          "targetSlot": 0
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "46": 1,
+            "47": 1,
+            "48": 1,
+            "49": 1
+          },
+          "targetSuit": 4
+        }
+      ]
+    },
+    {
       "id": "append-only-hand",
       "description": "Append 8-9-10-J spades + off-suit 2-hearts to the 4-5-6 spades meld (hand has only these).",
       "context": "Meld turn, 25 cards left, own table = 4-5-6 spades, opponent table empty, no discard. Hand = 8-9-10-J spades + 2 hearts. good = append 8-9-10-J + off-suit 2 to 4-5-6; bad = lay 8-9-10-J separate.",
@@ -1342,6 +4762,606 @@
       ]
     },
     {
+      "id": "append-only-hand-h",
+      "description": "Append 8-9-10-J hearts + off-suit 2-clubs to the 4-5-6 hearts meld (hand has only these).",
+      "context": "Meld turn, 25 cards left, own table = 4-5-6 hearts, opponent table empty, no discard. Hand = 8-9-10-J hearts + 2 clubs. good = append 8-9-10-J + off-suit 2 to 4-5-6; bad = lay 8-9-10-J separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          19,
+          24,
+          25,
+          26,
+          28,
+          29,
+          30,
+          31,
+          32
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "appendToMeld",
+          "cardCounts": {
+            "20": 1,
+            "21": 1,
+            "22": 1,
+            "23": 1,
+            "27": 1
+          },
+          "targetSuit": 2,
+          "targetSlot": 0
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "20": 1,
+            "21": 1,
+            "22": 1,
+            "23": 1
+          },
+          "targetSuit": 2
+        }
+      ]
+    },
+    {
+      "id": "append-only-hand-c",
+      "description": "Append 8-9-10-J clubs + off-suit 2-diamonds to the 4-5-6 clubs meld (hand has only these).",
+      "context": "Meld turn, 25 cards left, own table = 4-5-6 clubs, opponent table empty, no discard. Hand = 8-9-10-J clubs + 2 diamonds. good = append 8-9-10-J + off-suit 2 to 4-5-6; bad = lay 8-9-10-J separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "appendToMeld",
+          "cardCounts": {
+            "33": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1,
+            "40": 1
+          },
+          "targetSuit": 3,
+          "targetSlot": 0
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "33": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1
+          },
+          "targetSuit": 3
+        }
+      ]
+    },
+    {
+      "id": "append-only-hand-d",
+      "description": "Append 8-9-10-J diamonds + off-suit 2-spades to the 4-5-6 diamonds meld (hand has only these).",
+      "context": "Meld turn, 25 cards left, own table = 4-5-6 diamonds, opponent table empty, no discard. Hand = 8-9-10-J diamonds + 2 spades. good = append 8-9-10-J + off-suit 2 to 4-5-6; bad = lay 8-9-10-J separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ]
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "appendToMeld",
+          "cardCounts": {
+            "1": 1,
+            "46": 1,
+            "47": 1,
+            "48": 1,
+            "49": 1
+          },
+          "targetSuit": 4,
+          "targetSlot": 0
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "46": 1,
+            "47": 1,
+            "48": 1,
+            "49": 1
+          },
+          "targetSuit": 4
+        }
+      ]
+    },
+    {
       "id": "append-low-deck",
       "description": "Append 8-9-10-J spades + off-suit 2-hearts to the 4-5-6 spades meld when the deck is nearly empty.",
       "context": "Meld turn, 5 cards left, own table = 4-5-6 spades, opponent table empty, no discard. Hand = 3-7 diamonds, 5-9-Q clubs, 8-9-10-J spades + 2 hearts. good = append 8-9-10-J + off-suit 2 to 4-5-6; bad = lay 8-9-10-J separate.",
@@ -1518,6 +5538,546 @@
             "10": 1
           },
           "targetSuit": 1
+        }
+      ]
+    },
+    {
+      "id": "append-low-deck-h",
+      "description": "Append 8-9-10-J hearts + off-suit 2-clubs to the 4-5-6 hearts meld when the deck is nearly empty.",
+      "context": "Meld turn, 5 cards left, own table = 4-5-6 hearts, opponent table empty, no discard. Hand = 3-7 spades, 5-9-Q diamonds, 8-9-10-J hearts + 2 clubs. good = append 8-9-10-J + off-suit 2 to 4-5-6; bad = lay 8-9-10-J separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          7,
+          8,
+          10
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "appendToMeld",
+          "cardCounts": {
+            "20": 1,
+            "21": 1,
+            "22": 1,
+            "23": 1,
+            "27": 1
+          },
+          "targetSuit": 2,
+          "targetSlot": 0
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "20": 1,
+            "21": 1,
+            "22": 1,
+            "23": 1
+          },
+          "targetSuit": 2
+        }
+      ]
+    },
+    {
+      "id": "append-low-deck-c",
+      "description": "Append 8-9-10-J clubs + off-suit 2-diamonds to the 4-5-6 clubs meld when the deck is nearly empty.",
+      "context": "Meld turn, 5 cards left, own table = 4-5-6 clubs, opponent table empty, no discard. Hand = 3-7 hearts, 5-9-Q spades, 8-9-10-J clubs + 2 diamonds. good = append 8-9-10-J + off-suit 2 to 4-5-6; bad = lay 8-9-10-J separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          9
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "appendToMeld",
+          "cardCounts": {
+            "33": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1,
+            "40": 1
+          },
+          "targetSuit": 3,
+          "targetSlot": 0
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "33": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1
+          },
+          "targetSuit": 3
+        }
+      ]
+    },
+    {
+      "id": "append-low-deck-d",
+      "description": "Append 8-9-10-J diamonds + off-suit 2-spades to the 4-5-6 diamonds meld when the deck is nearly empty.",
+      "context": "Meld turn, 5 cards left, own table = 4-5-6 diamonds, opponent table empty, no discard. Hand = 3-7 clubs, 5-9-Q hearts, 8-9-10-J diamonds + 2 spades. good = append 8-9-10-J + off-suit 2 to 4-5-6; bad = lay 8-9-10-J separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          2,
+          3,
+          4,
+          5
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ]
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "appendToMeld",
+          "cardCounts": {
+            "1": 1,
+            "46": 1,
+            "47": 1,
+            "48": 1,
+            "49": 1
+          },
+          "targetSuit": 4,
+          "targetSlot": 0
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "46": 1,
+            "47": 1,
+            "48": 1,
+            "49": 1
+          },
+          "targetSuit": 4
         }
       ]
     },
@@ -1728,6 +6288,624 @@
       ]
     },
     {
+      "id": "append-opp-canasta-morto-h",
+      "description": "Append 8-9-10-J hearts + off-suit 2-clubs to the 4-5-6 hearts meld when the opponent has a clean canasta and has taken the morto.",
+      "context": "Meld turn, 12 cards left, own table = 4-5-6 hearts, opponent table = 3-4-5-6-7-8-9 diamonds (clean canasta), opponent clean canasta = true, opponent morto = true, opponent hand sizes 7 and 1, no discard. Hand = 3-7 spades, 5-9-Q diamonds, 8-9-10-J hearts + 2 clubs. good = append 8-9-10-J + off-suit 2 to 4-5-6; bad = lay 8-9-10-J separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 7,
+          "2": 0,
+          "3": 1
+        },
+        "deck": [
+          0,
+          1,
+          7,
+          8,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          19,
+          24
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": true
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 1
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": [
+                [
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ]
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "appendToMeld",
+          "cardCounts": {
+            "20": 1,
+            "21": 1,
+            "22": 1,
+            "23": 1,
+            "27": 1
+          },
+          "targetSuit": 2,
+          "targetSlot": 0
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "20": 1,
+            "21": 1,
+            "22": 1,
+            "23": 1
+          },
+          "targetSuit": 2
+        }
+      ]
+    },
+    {
+      "id": "append-opp-canasta-morto-c",
+      "description": "Append 8-9-10-J clubs + off-suit 2-diamonds to the 4-5-6 clubs meld when the opponent has a clean canasta and has taken the morto.",
+      "context": "Meld turn, 12 cards left, own table = 4-5-6 clubs, opponent table = 3-4-5-6-7-8-9 spades (clean canasta), opponent clean canasta = true, opponent morto = true, opponent hand sizes 7 and 1, no discard. Hand = 3-7 hearts, 5-9-Q spades, 8-9-10-J clubs + 2 diamonds. good = append 8-9-10-J + off-suit 2 to 4-5-6; bad = lay 8-9-10-J separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 7,
+          "2": 0,
+          "3": 1
+        },
+        "deck": [
+          0,
+          1,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          20,
+          21,
+          23,
+          24
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": true
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 1
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [
+                [
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "appendToMeld",
+          "cardCounts": {
+            "33": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1,
+            "40": 1
+          },
+          "targetSuit": 3,
+          "targetSlot": 0
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "33": 1,
+            "34": 1,
+            "35": 1,
+            "36": 1
+          },
+          "targetSuit": 3
+        }
+      ]
+    },
+    {
+      "id": "append-opp-canasta-morto-d",
+      "description": "Append 8-9-10-J diamonds + off-suit 2-spades to the 4-5-6 diamonds meld when the opponent has a clean canasta and has taken the morto.",
+      "context": "Meld turn, 12 cards left, own table = 4-5-6 diamonds, opponent table = 3-4-5-6-7-8-9 hearts (clean canasta), opponent clean canasta = true, opponent morto = true, opponent hand sizes 7 and 1, no discard. Hand = 3-7 clubs, 5-9-Q hearts, 8-9-10-J diamonds + 2 spades. good = append 8-9-10-J + off-suit 2 to 4-5-6; bad = lay 8-9-10-J separate.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 7,
+          "2": 0,
+          "3": 1
+        },
+        "deck": [
+          0,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": true
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 1
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ]
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [
+                [
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "appendToMeld",
+          "cardCounts": {
+            "1": 1,
+            "46": 1,
+            "47": 1,
+            "48": 1,
+            "49": 1
+          },
+          "targetSuit": 4,
+          "targetSlot": 0
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "46": 1,
+            "47": 1,
+            "48": 1,
+            "49": 1
+          },
+          "targetSuit": 4
+        }
+      ]
+    },
+    {
       "id": "play-one-not-both",
       "description": "Play the clean 3-card spade sequence (4-5-6) rather than dirtying it with an off-suit 2.",
       "context": "Meld turn, 25 cards left, empty table, no discard. Hand = 3-7 diamonds, 5-9-Q clubs, 4-5-6-8-9-10-J spades + 2 hearts. good = clean 3-card spade play (4-5-6); bad = same 3 cards + off-suit 2-hearts (dirty).",
@@ -1902,6 +7080,540 @@
             "14": 1
           },
           "targetSuit": 1
+        }
+      ]
+    },
+    {
+      "id": "play-one-not-both-h",
+      "description": "Play the clean 3-card heart sequence (4-5-6) rather than dirtying it with an off-suit 2.",
+      "context": "Meld turn, 25 cards left, empty table, no discard. Hand = 3-7 spades, 5-9-Q diamonds, 4-5-6-8-9-10-J hearts + 2 clubs. good = clean 3-card heart play (4-5-6); bad = same 3 cards + off-suit 2-clubs (dirty).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 19,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          7,
+          8,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          19,
+          24,
+          25,
+          26,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "16": 1,
+            "17": 1,
+            "18": 1
+          },
+          "targetSuit": 2
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "16": 1,
+            "17": 1,
+            "18": 1,
+            "27": 1
+          },
+          "targetSuit": 2
+        }
+      ]
+    },
+    {
+      "id": "play-one-not-both-c",
+      "description": "Play the clean 3-card club sequence (4-5-6) rather than dirtying it with an off-suit 2.",
+      "context": "Meld turn, 25 cards left, empty table, no discard. Hand = 3-7 hearts, 5-9-Q spades, 4-5-6-8-9-10-J clubs + 2 diamonds. good = clean 3-card club play (4-5-6); bad = same 3 cards + off-suit 2-diamonds (dirty).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 19,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          20,
+          21,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          32,
+          37,
+          38,
+          39,
+          41,
+          42,
+          43
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "29": 1,
+            "30": 1,
+            "31": 1
+          },
+          "targetSuit": 3
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "29": 1,
+            "30": 1,
+            "31": 1,
+            "40": 1
+          },
+          "targetSuit": 3
+        }
+      ]
+    },
+    {
+      "id": "play-one-not-both-d",
+      "description": "Play the clean 3-card diamond sequence (4-5-6) rather than dirtying it with an off-suit 2.",
+      "context": "Meld turn, 25 cards left, empty table, no discard. Hand = 3-7 clubs, 5-9-Q hearts, 4-5-6-8-9-10-J diamonds + 2 spades. good = clean 3-card diamond play (4-5-6); bad = same 3 cards + off-suit 2-spades (dirty).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": null,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 19,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          33,
+          34,
+          36
+        ],
+        "discardPile": [],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "42": 1,
+            "43": 1,
+            "44": 1
+          },
+          "targetSuit": 4
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "1": 1,
+            "42": 1,
+            "43": 1,
+            "44": 1
+          },
+          "targetSuit": 4
         }
       ]
     }
