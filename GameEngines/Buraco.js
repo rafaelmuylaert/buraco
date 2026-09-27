@@ -363,14 +363,19 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
     // spans. A single wild may bridge one rank gap, hence the +/-2 tolerance.
     // A discard Ace makes the existing span degenerate (lo=0..hi=12), so skip
     // the check and let parseMeld decide.
+    // eLo/eHi are the span of the existing meld's natural (non-wild) cards,
+    // expressed in `m` position space so they compare directly with the scan's
+    // `lo`/`hi`. Mapping: em[0]=A-low→m[0], em[1]=A-high→m[12], em[2]=2→m[13],
+    // em[r+1] (rank r+1 ≥ 3) → m[r-1].
     let eLo = Infinity, eHi = -Infinity;
     if (!discardIsAce) {
         if (em[0]) { eLo = 0;}
         if (em[1]) { eHi = 12; }
         for (let r = 1; r <= 11; r++) {
             if (em[r+1]) {
-                eLo = Math.min(eLo, r);
-                eHi = Math.max(eHi, r);
+                const pos = (r === 1) ? 13 : (r - 1);
+                eLo = Math.min(eLo, pos);
+                eHi = Math.max(eHi, pos);
             }
         }
     }
@@ -405,15 +410,26 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
             }
             
             if (cgap >= 3) {
-                // Emit natural run
-                let lo = hi - cgap + 1;
-                const cc = {};
-                for (let p = lo; p <= hi; p++) {
-                    if (!m[p] || existing[p]) continue;
-                    const cardIdx = suit0 * 13 + (p === 0 || p === 12 ? 0 : p === 13 ? 1 : p + 1);
-                    cc[cardIdx] = (cc[cardIdx] || 0) + 1;
+                // Emit every sub-run of length 3..cgap (the len=cgap case is the
+                // maximum meld; shorter ones are the sub-melds). For appends the
+                // `existing[p]` skip keeps only new cards and the span check
+                // (lo <= eLo && e >= eHi) requires the run to cover the existing
+                // meld's natural cards; for new melds eLo/eHi are degenerate so
+                // every sub-run passes.
+                const baseLo = hi - cgap + 1;
+                for (let len = 3; len <= cgap; len++) {
+                    for (let s = 0; s <= cgap - len; s++) {
+                        const lo = baseLo + s;
+                        const e = lo + len - 1;
+                        const cc = {};
+                        for (let p = lo; p <= e; p++) {
+                            if (!m[p] || existing[p]) continue;
+                            const cardIdx = suit0 * 13 + (p === 0 || p === 12 ? 0 : p === 13 ? 1 : p + 1);
+                            cc[cardIdx] = (cc[cardIdx] || 0) + 1;
+                        }
+                        if (Object.keys(cc).length > 0 && lo <= eLo && e >= eHi) results.push({ cardCounts: cc });
+                    }
                 }
-                if (Object.keys(cc).length > 0 && lo <= eLo && hi >= eHi) results.push({ cardCounts: cc });
             }
 
             if (canAddWild && cgap >= 2) {

@@ -1,0 +1,8845 @@
+{
+  "version": 1,
+  "rounds": [
+    {
+      "id": "pickup-clean-seq",
+      "description": "Pick up the discard to form a clean 3-card heart sequence (2-3-4) rather than drawing from the deck.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 4 hearts, top of discard = 4 hearts. Hand = 3-7 hearts, 5-9-Q clubs, A spades, 4-5-7 diamonds + 2 hearts. good = pickup (2-3-4 hearts); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 16,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          35,
+          36
+        ],
+        "discardPile": [
+          16
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "15": 1,
+            "17": 1,
+            "18": 1,
+            "19": 1
+          },
+          "targetSuit": 2
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-clean-seq-c",
+      "description": "Pick up the discard to form a clean 3-card club sequence (2-3-4) rather than drawing from the deck.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 4 clubs, top of discard = 4 clubs. Hand = 3-7 clubs, 5-9-Q diamonds, A hearts, 4-5-7 spades + 2 clubs. good = pickup (2-3-4 clubs); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 30,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          6,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          28,
+          34
+        ],
+        "discardPile": [
+          30
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "27": 1,
+            "29": 1,
+            "31": 1,
+            "32": 1,
+            "33": 1
+          },
+          "targetSuit": 3
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-clean-seq-d",
+      "description": "Pick up the discard to form a clean 3-card diamond sequence (2-3-4) rather than drawing from the deck.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 4 diamonds, top of discard = 4 diamonds. Hand = 3-7 diamonds, 5-9-Q spades, A clubs, 4-5-7 hearts + 2 diamonds. good = pickup (2-3-4 diamonds); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 44,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          20,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          30,
+          31,
+          32,
+          33,
+          34
+        ],
+        "discardPile": [
+          44
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "40": 1,
+            "43": 1,
+            "45": 1,
+            "46": 1,
+            "47": 1
+          },
+          "targetSuit": 4
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-clean-seq-s",
+      "description": "Pick up the discard to form a clean 3-card spade sequence (2-3-4) rather than drawing from the deck.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 4 spades, top of discard = 4 spades. Hand = 3-7 spades, 5-9-Q hearts, A diamonds, 4-5-7 clubs + 2 spades. good = pickup (2-3-4 spades); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 6,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          2,
+          3,
+          4,
+          10,
+          11,
+          12,
+          13,
+          14,
+          16,
+          17,
+          18,
+          19,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          34,
+          36,
+          37,
+          38,
+          39
+        ],
+        "discardPile": [
+          6
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "1": 1,
+            "5": 1,
+            "7": 1,
+            "8": 1,
+            "9": 1
+          },
+          "targetSuit": 1
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-clean-seq-h",
+      "description": "Pick up the discard to form a clean 3-card heart sequence (2-3-4) rather than drawing from the deck.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 4 hearts, top of discard = 4 hearts. Hand = 3-7 hearts, 5-9-Q clubs, A spades, 4-5-7 diamonds + 2 hearts. good = pickup (2-3-4 hearts); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 20,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          15,
+          16,
+          17,
+          18,
+          24,
+          25,
+          26,
+          27,
+          28,
+          30,
+          31,
+          32
+        ],
+        "discardPile": [
+          20
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "19": 1,
+            "21": 1,
+            "22": 1,
+            "23": 1
+          },
+          "targetSuit": 2
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-dirty-hold",
+      "description": "Draw from the deck instead of picking up a dirty 3-4-5 spade meld (off-suit 2).",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 4 spades, top of discard = 4 spades. Hand = 3-6 hearts, 5-9-Q clubs, 3-5 spades, 4-5-7 diamonds + 2 hearts. good = draw from deck; bad = pickup (3-4-5 spades + off-suit 2-hearts (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 3,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          35,
+          36,
+          38
+        ],
+        "discardPile": [
+          3
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "2": 1,
+            "4": 1,
+            "14": 1
+          },
+          "targetSuit": 1
+        }
+      ]
+    },
+    {
+      "id": "pickup-dirty-hold-h",
+      "description": "Draw from the deck instead of picking up a dirty 3-4-5 heart meld (off-suit 2).",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 4 hearts, top of discard = 4 hearts. Hand = 3-6 clubs, 5-9-Q diamonds, 3-5 hearts, 4-5-7 spades + 2 clubs. good = draw from deck; bad = pickup (3-4-5 hearts + off-suit 2-clubs (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 17,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          6,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          28,
+          33,
+          34,
+          35
+        ],
+        "discardPile": [
+          17
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "16": 1,
+            "18": 1,
+            "27": 1
+          },
+          "targetSuit": 2
+        }
+      ]
+    },
+    {
+      "id": "pickup-dirty-hold-c",
+      "description": "Draw from the deck instead of picking up a dirty 3-4-5 club meld (off-suit 2).",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 4 clubs, top of discard = 4 clubs. Hand = 3-6 diamonds, 5-9-Q spades, 3-5 clubs, 4-5-7 hearts + 2 diamonds. good = draw from deck; bad = pickup (3-4-5 clubs + off-suit 2-diamonds (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 31,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          20,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          33,
+          34,
+          35,
+          36
+        ],
+        "discardPile": [
+          31
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "30": 1,
+            "32": 1,
+            "40": 1
+          },
+          "targetSuit": 3
+        }
+      ]
+    },
+    {
+      "id": "pickup-dirty-hold-d",
+      "description": "Draw from the deck instead of picking up a dirty 3-4-5 diamond meld (off-suit 2).",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 4 diamonds, top of discard = 4 diamonds. Hand = 3-6 spades, 5-9-Q hearts, 3-5 diamonds, 4-5-7 clubs + 2 spades. good = draw from deck; bad = pickup (3-4-5 diamonds + off-suit 2-spades (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 45,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          2,
+          3,
+          4,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          16,
+          17,
+          18,
+          19,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          34,
+          36,
+          37,
+          38
+        ],
+        "discardPile": [
+          45
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "1": 1,
+            "44": 1,
+            "46": 1
+          },
+          "targetSuit": 4
+        }
+      ]
+    },
+    {
+      "id": "pickup-dirty-hold-s",
+      "description": "Draw from the deck instead of picking up a dirty 3-4-5 spade meld (off-suit 2).",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 4 spades, top of discard = 4 spades. Hand = 3-6 hearts, 5-9-Q clubs, 3-5 spades, 4-5-7 diamonds + 2 hearts. good = draw from deck; bad = pickup (3-4-5 spades + off-suit 2-hearts (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 7,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 16,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          9,
+          10,
+          11,
+          12,
+          13,
+          15,
+          16,
+          17,
+          18,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          30,
+          31,
+          32,
+          33
+        ],
+        "discardPile": [
+          7
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "6": 1,
+            "8": 1,
+            "14": 1
+          },
+          "targetSuit": 1
+        }
+      ]
+    },
+    {
+      "id": "pickup-clean-over-dirty",
+      "description": "Pick up the clean 4-5-6-7 diamond sequence rather than dirtying it with an off-suit 2.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 diamonds, top of discard = 6 diamonds. Hand = 3 hearts, 4-5-7 diamonds + 2 hearts. good = pickup (4-5-6-7 diamonds); bad = pickup (4-5-6-7 diamonds + off-suit 2-hearts (dirty)), or draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 44,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26
+        ],
+        "discardPile": [
+          44
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "42": 1,
+            "43": 1,
+            "45": 1
+          },
+          "targetSuit": 4
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "42": 1,
+            "43": 1,
+            "45": 1
+          },
+          "targetSuit": 4
+        }
+      ]
+    },
+    {
+      "id": "pickup-clean-over-dirty-s",
+      "description": "Pick up the clean 4-5-6-7 spade sequence rather than dirtying it with an off-suit 2.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 spades, top of discard = 6 spades. Hand = 3 clubs, 4-5-7 spades + 2 clubs. good = pickup (4-5-6-7 spades); bad = pickup (4-5-6-7 spades + off-suit 2-clubs (dirty)), or draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 6,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          28,
+          30
+        ],
+        "discardPile": [
+          6
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "4": 1,
+            "5": 1,
+            "7": 1
+          },
+          "targetSuit": 1
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "4": 1,
+            "5": 1,
+            "7": 1,
+            "27": 1
+          },
+          "targetSuit": 1
+        }
+      ]
+    },
+    {
+      "id": "pickup-clean-over-dirty-h",
+      "description": "Pick up the clean 4-5-6-7 heart sequence rather than dirtying it with an off-suit 2.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 hearts, top of discard = 6 hearts. Hand = 3 diamonds, 4-5-7 hearts + 2 diamonds. good = pickup (4-5-6-7 hearts); bad = pickup (4-5-6-7 hearts + off-suit 2-diamonds (dirty)), or draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 20,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28
+        ],
+        "discardPile": [
+          20
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "18": 1,
+            "19": 1,
+            "21": 1
+          },
+          "targetSuit": 2
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "18": 1,
+            "19": 1,
+            "21": 1,
+            "40": 1
+          },
+          "targetSuit": 2
+        }
+      ]
+    },
+    {
+      "id": "pickup-clean-over-dirty-c",
+      "description": "Pick up the clean 4-5-6-7 club sequence rather than dirtying it with an off-suit 2.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 clubs, top of discard = 6 clubs. Hand = 3 spades, 4-5-7 clubs + 2 spades. good = pickup (4-5-6-7 clubs); bad = pickup (4-5-6-7 clubs + off-suit 2-spades (dirty)), or draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 34,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          2,
+          3,
+          4,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26
+        ],
+        "discardPile": [
+          34
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "32": 1,
+            "33": 1,
+            "35": 1
+          },
+          "targetSuit": 3
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "1": 1,
+            "32": 1,
+            "33": 1,
+            "35": 1
+          },
+          "targetSuit": 3
+        }
+      ]
+    },
+    {
+      "id": "pickup-clean-over-dirty-d",
+      "description": "Pick up the clean 4-5-6-7 diamond sequence rather than dirtying it with an off-suit 2.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 diamonds, top of discard = 6 diamonds. Hand = 3 hearts, 4-5-7 diamonds + 2 hearts. good = pickup (4-5-6-7 diamonds); bad = pickup (4-5-6-7 diamonds + off-suit 2-hearts (dirty)), or draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 48,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          15,
+          16,
+          17,
+          18,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26
+        ],
+        "discardPile": [
+          48
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "46": 1,
+            "47": 1,
+            "49": 1
+          },
+          "targetSuit": 4
+        }
+      ],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "46": 1,
+            "47": 1,
+            "49": 1
+          },
+          "targetSuit": 4
+        }
+      ]
+    },
+    {
+      "id": "pickup-dirty-hold-2",
+      "description": "Draw from the deck instead of picking up a dirty 4-5-6-7 diamond meld (off-suit 2).",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 diamonds, top of discard = 6 diamonds. Hand = 3 hearts, 5-9-Q clubs, 4-5-7 diamonds + 2 hearts. good = draw from deck; bad = pickup (4-5-6-7 diamonds + off-suit 2-hearts (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 44,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 11,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26
+        ],
+        "discardPile": [
+          44
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "42": 1,
+            "43": 1,
+            "45": 1
+          },
+          "targetSuit": 4
+        }
+      ]
+    },
+    {
+      "id": "pickup-dirty-hold-2-s",
+      "description": "Draw from the deck instead of picking up a dirty 4-5-6-7 spade meld (off-suit 2).",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 spades, top of discard = 6 spades. Hand = 3 clubs, 5-9-Q diamonds, 4-5-7 spades + 2 clubs. good = draw from deck; bad = pickup (4-5-6-7 spades + off-suit 2-clubs (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 6,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 11,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          28,
+          30
+        ],
+        "discardPile": [
+          6
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "4": 1,
+            "5": 1,
+            "7": 1,
+            "27": 1
+          },
+          "targetSuit": 1
+        }
+      ]
+    },
+    {
+      "id": "pickup-dirty-hold-2-h",
+      "description": "Draw from the deck instead of picking up a dirty 4-5-6-7 heart meld (off-suit 2).",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 hearts, top of discard = 6 hearts. Hand = 3 diamonds, 5-9-Q spades, 4-5-7 hearts + 2 diamonds. good = draw from deck; bad = pickup (4-5-6-7 hearts + off-suit 2-diamonds (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 20,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 11,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34
+        ],
+        "discardPile": [
+          20
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "18": 1,
+            "19": 1,
+            "21": 1,
+            "40": 1
+          },
+          "targetSuit": 2
+        }
+      ]
+    },
+    {
+      "id": "pickup-dirty-hold-2-c",
+      "description": "Draw from the deck instead of picking up a dirty 4-5-6-7 club meld (off-suit 2).",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 clubs, top of discard = 6 clubs. Hand = 3 spades, 5-9-Q hearts, 4-5-7 clubs + 2 spades. good = draw from deck; bad = pickup (4-5-6-7 clubs + off-suit 2-spades (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 34,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 11,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          2,
+          3,
+          4,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          16,
+          17,
+          18,
+          19,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          36
+        ],
+        "discardPile": [
+          34
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "1": 1,
+            "32": 1,
+            "33": 1,
+            "35": 1
+          },
+          "targetSuit": 3
+        }
+      ]
+    },
+    {
+      "id": "pickup-dirty-hold-2-d",
+      "description": "Draw from the deck instead of picking up a dirty 4-5-6-7 diamond meld (off-suit 2).",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 diamonds, top of discard = 6 diamonds. Hand = 3 hearts, 5-9-Q clubs, 4-5-7 diamonds + 2 hearts. good = draw from deck; bad = pickup (4-5-6-7 diamonds + off-suit 2-hearts (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 48,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 11,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          15,
+          16,
+          17,
+          18,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26
+        ],
+        "discardPile": [
+          48
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "46": 1,
+            "47": 1,
+            "49": 1
+          },
+          "targetSuit": 4
+        }
+      ]
+    },
+    {
+      "id": "pickup-dirty-worth-it",
+      "description": "Pick up the dirty 4-5-6-7 diamond meld (off-suit 2) when the hand is small and drawing is worse.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 diamonds, top of discard = 6 diamonds. Hand = 3 hearts, 4-5-7 diamonds + 2 hearts. good = pickup (4-5-6-7 diamonds + off-suit 2-hearts (dirty)); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 44,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26
+        ],
+        "discardPile": [
+          44
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "42": 1,
+            "43": 1,
+            "45": 1
+          },
+          "targetSuit": 4
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-dirty-worth-it-s",
+      "description": "Pick up the dirty 4-5-6-7 spade meld (off-suit 2) when the hand is small and drawing is worse.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 spades, top of discard = 6 spades. Hand = 3 clubs, 4-5-7 spades + 2 clubs. good = pickup (4-5-6-7 spades + off-suit 2-clubs (dirty)); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 6,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          28,
+          30
+        ],
+        "discardPile": [
+          6
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "4": 1,
+            "5": 1,
+            "7": 1,
+            "27": 1
+          },
+          "targetSuit": 1
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-dirty-worth-it-h",
+      "description": "Pick up the dirty 4-5-6-7 heart meld (off-suit 2) when the hand is small and drawing is worse.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 hearts, top of discard = 6 hearts. Hand = 3 diamonds, 4-5-7 hearts + 2 diamonds. good = pickup (4-5-6-7 hearts + off-suit 2-diamonds (dirty)); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 20,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28
+        ],
+        "discardPile": [
+          20
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "18": 1,
+            "19": 1,
+            "21": 1,
+            "40": 1
+          },
+          "targetSuit": 2
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-dirty-worth-it-c",
+      "description": "Pick up the dirty 4-5-6-7 club meld (off-suit 2) when the hand is small and drawing is worse.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 clubs, top of discard = 6 clubs. Hand = 3 spades, 4-5-7 clubs + 2 spades. good = pickup (4-5-6-7 clubs + off-suit 2-spades (dirty)); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 34,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          2,
+          3,
+          4,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26
+        ],
+        "discardPile": [
+          34
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "1": 1,
+            "32": 1,
+            "33": 1,
+            "35": 1
+          },
+          "targetSuit": 3
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-dirty-worth-it-d",
+      "description": "Pick up the dirty 4-5-6-7 diamond meld (off-suit 2) when the hand is small and drawing is worse.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 diamonds, top of discard = 6 diamonds. Hand = 3 hearts, 4-5-7 diamonds + 2 hearts. good = pickup (4-5-6-7 diamonds + off-suit 2-hearts (dirty)); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 48,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          15,
+          16,
+          17,
+          18,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26
+        ],
+        "discardPile": [
+          48
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "46": 1,
+            "47": 1,
+            "49": 1
+          },
+          "targetSuit": 4
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-dirty-hold-bigpile",
+      "description": "Draw from the deck instead of picking up a dirty 4-5-6-7 diamond meld when the discard pile is large.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 diamonds, 5-9-Q clubs, 3 spades, top of discard = 6 diamonds. Hand = 3 hearts, 4-5-7 diamonds + 2 hearts. good = draw from deck; bad = pickup (4-5-6-7 diamonds + off-suit 2-hearts (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 44,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27
+        ],
+        "discardPile": [
+          2,
+          37,
+          34,
+          33,
+          32,
+          31,
+          30,
+          44
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "42": 1,
+            "43": 1,
+            "45": 1
+          },
+          "targetSuit": 4
+        }
+      ]
+    },
+    {
+      "id": "pickup-dirty-hold-bigpile-s",
+      "description": "Draw from the deck instead of picking up a dirty 4-5-6-7 spade meld when the discard pile is large.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 spades, 5-9-Q diamonds, 3 hearts, top of discard = 6 spades. Hand = 3 clubs, 4-5-7 spades + 2 clubs. good = draw from deck; bad = pickup (4-5-6-7 spades + off-suit 2-clubs (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 6,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          28,
+          30,
+          31
+        ],
+        "discardPile": [
+          16,
+          51,
+          48,
+          47,
+          46,
+          45,
+          44,
+          6
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "4": 1,
+            "5": 1,
+            "7": 1,
+            "27": 1
+          },
+          "targetSuit": 1
+        }
+      ]
+    },
+    {
+      "id": "pickup-dirty-hold-bigpile-h",
+      "description": "Draw from the deck instead of picking up a dirty 4-5-6-7 heart meld when the discard pile is large.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 hearts, 5-9-Q spades, 3 clubs, top of discard = 6 hearts. Hand = 3 diamonds, 4-5-7 hearts + 2 diamonds. good = draw from deck; bad = pickup (4-5-6-7 hearts + off-suit 2-diamonds (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 20,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          31,
+          32,
+          33,
+          34,
+          35
+        ],
+        "discardPile": [
+          30,
+          0,
+          10,
+          9,
+          8,
+          7,
+          6,
+          20
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "18": 1,
+            "19": 1,
+            "21": 1,
+            "40": 1
+          },
+          "targetSuit": 2
+        }
+      ]
+    },
+    {
+      "id": "pickup-dirty-hold-bigpile-c",
+      "description": "Draw from the deck instead of picking up a dirty 4-5-6-7 club meld when the discard pile is large.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 clubs, 5-9-Q hearts, 3 diamonds, top of discard = 6 clubs. Hand = 3 spades, 4-5-7 clubs + 2 spades. good = draw from deck; bad = pickup (4-5-6-7 clubs + off-suit 2-spades (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 34,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          2,
+          3,
+          4,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          16,
+          17,
+          18,
+          19,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          36
+        ],
+        "discardPile": [
+          44,
+          15,
+          24,
+          23,
+          22,
+          21,
+          20,
+          34
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "1": 1,
+            "32": 1,
+            "33": 1,
+            "35": 1
+          },
+          "targetSuit": 3
+        }
+      ]
+    },
+    {
+      "id": "pickup-dirty-hold-bigpile-d",
+      "description": "Draw from the deck instead of picking up a dirty 4-5-6-7 diamond meld when the discard pile is large.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 6 diamonds, 5-9-Q clubs, 3 spades, top of discard = 6 diamonds. Hand = 3 hearts, 4-5-7 diamonds + 2 hearts. good = draw from deck; bad = pickup (4-5-6-7 diamonds + off-suit 2-hearts (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 48,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 5,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          15,
+          16,
+          17,
+          18,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27
+        ],
+        "discardPile": [
+          6,
+          29,
+          38,
+          37,
+          36,
+          35,
+          34,
+          48
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "46": 1,
+            "47": 1,
+            "49": 1
+          },
+          "targetSuit": 4
+        }
+      ]
+    },
+    {
+      "id": "pickup-low-deck-dirty",
+      "description": "Pick up the dirty 5-6-7-8-9 club meld (off-suit 2) when the deck is nearly empty.",
+      "context": "Pickup turn, 5 cards left, own table = 4-5-6 spades, opponent table empty, discard = 8 diamonds, 6-7 clubs, top of discard = 6 clubs. Hand = 4-5-7 diamonds, 5-9-Q clubs, 8-9-10-J spades + 2 hearts. good = pickup (5-6-7-8-9 clubs + off-suit 2-hearts (dirty)); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 31,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 14,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          6,
+          11
+        ],
+        "discardPile": [
+          46,
+          32,
+          31
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "30": 1,
+            "32": 1,
+            "33": 1,
+            "34": 1
+          },
+          "targetSuit": 3
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-low-deck-dirty-d",
+      "description": "Pick up the dirty 5-6-7-8-9 diamond meld (off-suit 2) when the deck is nearly empty.",
+      "context": "Pickup turn, 5 cards left, own table = 4-5-6 hearts, opponent table empty, discard = 8 spades, 6-7 diamonds, top of discard = 6 diamonds. Hand = 4-5-7 spades, 5-9-Q diamonds, 8-9-10-J hearts + 2 clubs. good = pickup (5-6-7-8-9 diamonds + off-suit 2-clubs (dirty)); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 45,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 14,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          6
+        ],
+        "discardPile": [
+          8,
+          46,
+          45
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "27": 1,
+            "44": 1,
+            "46": 1,
+            "47": 1,
+            "48": 1
+          },
+          "targetSuit": 4
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-low-deck-dirty-s",
+      "description": "Pick up the dirty 5-6-7-8-9 spade meld (off-suit 2) when the deck is nearly empty.",
+      "context": "Pickup turn, 5 cards left, own table = 4-5-6 clubs, opponent table empty, discard = 8 hearts, 6-7 spades, top of discard = 6 spades. Hand = 4-5-7 hearts, 5-9-Q spades, 8-9-10-J clubs + 2 diamonds. good = pickup (5-6-7-8-9 spades + off-suit 2-diamonds (dirty)); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 7,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 14,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "discardPile": [
+          22,
+          8,
+          7
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "6": 1,
+            "8": 1,
+            "9": 1,
+            "10": 1,
+            "40": 1
+          },
+          "targetSuit": 1
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-low-deck-dirty-h",
+      "description": "Pick up the dirty 5-6-7-8-9 heart meld (off-suit 2) when the deck is nearly empty.",
+      "context": "Pickup turn, 5 cards left, own table = 4-5-6 diamonds, opponent table empty, discard = 8 clubs, 6-7 hearts, top of discard = 6 hearts. Hand = 4-5-7 clubs, 5-9-Q hearts, 8-9-10-J diamonds + 2 spades. good = pickup (5-6-7-8-9 hearts + off-suit 2-spades (dirty)); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 21,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 14,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          2,
+          3,
+          4,
+          5
+        ],
+        "discardPile": [
+          36,
+          22,
+          21
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ]
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "1": 1,
+            "20": 1,
+            "22": 1,
+            "23": 1,
+            "24": 1
+          },
+          "targetSuit": 2
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-low-deck-dirty-c",
+      "description": "Pick up the dirty 5-6-7-8-9 club meld (off-suit 2) when the deck is nearly empty.",
+      "context": "Pickup turn, 5 cards left, own table = 4-5-6 spades, opponent table empty, discard = 8 diamonds, 6-7 clubs, top of discard = 6 clubs. Hand = 4-5-7 diamonds, 5-9-Q clubs, 8-9-10-J spades + 2 hearts. good = pickup (5-6-7-8-9 clubs + off-suit 2-hearts (dirty)); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 35,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 14,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          1,
+          6,
+          7,
+          8,
+          9
+        ],
+        "discardPile": [
+          50,
+          36,
+          35
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "34": 1,
+            "36": 1,
+            "37": 1,
+            "38": 1
+          },
+          "targetSuit": 3
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-hold-dirty-2",
+      "description": "Draw from the deck instead of picking up a dirty 5-6-7-8-9 club meld when the deck is full.",
+      "context": "Pickup turn, 25 cards left, own table = 4-5-6 spades, opponent table empty, discard = 8 diamonds, 6-7 clubs, top of discard = 6 clubs. Hand = 4-5-7 diamonds, 5-9-Q clubs, 8-9-10-J spades + 2 hearts. good = draw from deck; bad = pickup (5-6-7-8-9 clubs + off-suit 2-hearts (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 31,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 14,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          6,
+          11,
+          12,
+          13,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          35,
+          36,
+          38
+        ],
+        "discardPile": [
+          46,
+          32,
+          31
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "30": 1,
+            "32": 1,
+            "33": 1,
+            "34": 1
+          },
+          "targetSuit": 3
+        }
+      ]
+    },
+    {
+      "id": "pickup-hold-dirty-2-d",
+      "description": "Draw from the deck instead of picking up a dirty 5-6-7-8-9 diamond meld when the deck is full.",
+      "context": "Pickup turn, 25 cards left, own table = 4-5-6 hearts, opponent table empty, discard = 8 spades, 6-7 diamonds, top of discard = 6 diamonds. Hand = 4-5-7 spades, 5-9-Q diamonds, 8-9-10-J hearts + 2 clubs. good = draw from deck; bad = pickup (5-6-7-8-9 diamonds + off-suit 2-clubs (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 45,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 14,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          6,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          19,
+          20,
+          25,
+          26,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36
+        ],
+        "discardPile": [
+          8,
+          46,
+          45
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "27": 1,
+            "44": 1,
+            "46": 1,
+            "47": 1,
+            "48": 1
+          },
+          "targetSuit": 4
+        }
+      ]
+    },
+    {
+      "id": "pickup-hold-dirty-2-s",
+      "description": "Draw from the deck instead of picking up a dirty 5-6-7-8-9 spade meld when the deck is full.",
+      "context": "Pickup turn, 25 cards left, own table = 4-5-6 clubs, opponent table empty, discard = 8 hearts, 6-7 spades, top of discard = 6 spades. Hand = 4-5-7 hearts, 5-9-Q spades, 8-9-10-J clubs + 2 diamonds. good = draw from deck; bad = pickup (5-6-7-8-9 spades + off-suit 2-diamonds (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 7,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 14,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          20,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          32,
+          33,
+          34,
+          39,
+          41,
+          42
+        ],
+        "discardPile": [
+          22,
+          8,
+          7
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "6": 1,
+            "8": 1,
+            "9": 1,
+            "10": 1,
+            "40": 1
+          },
+          "targetSuit": 1
+        }
+      ]
+    },
+    {
+      "id": "pickup-hold-dirty-2-h",
+      "description": "Draw from the deck instead of picking up a dirty 5-6-7-8-9 heart meld when the deck is full.",
+      "context": "Pickup turn, 25 cards left, own table = 4-5-6 diamonds, opponent table empty, discard = 8 clubs, 6-7 hearts, top of discard = 6 hearts. Hand = 4-5-7 clubs, 5-9-Q hearts, 8-9-10-J diamonds + 2 spades. good = draw from deck; bad = pickup (5-6-7-8-9 hearts + off-suit 2-spades (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 21,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 14,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          16,
+          17,
+          18,
+          19,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ],
+        "discardPile": [
+          36,
+          22,
+          21
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ]
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "1": 1,
+            "20": 1,
+            "22": 1,
+            "23": 1,
+            "24": 1
+          },
+          "targetSuit": 2
+        }
+      ]
+    },
+    {
+      "id": "pickup-hold-dirty-2-c",
+      "description": "Draw from the deck instead of picking up a dirty 5-6-7-8-9 club meld when the deck is full.",
+      "context": "Pickup turn, 25 cards left, own table = 4-5-6 spades, opponent table empty, discard = 8 diamonds, 6-7 clubs, top of discard = 6 clubs. Hand = 4-5-7 diamonds, 5-9-Q clubs, 8-9-10-J spades + 2 hearts. good = draw from deck; bad = pickup (5-6-7-8-9 clubs + off-suit 2-hearts (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 35,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 14,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          1,
+          6,
+          7,
+          8,
+          9,
+          10,
+          13,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          30,
+          31,
+          32,
+          33
+        ],
+        "discardPile": [
+          50,
+          36,
+          35
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "34": 1,
+            "36": 1,
+            "37": 1,
+            "38": 1
+          },
+          "targetSuit": 3
+        }
+      ]
+    },
+    {
+      "id": "pickup-opp-canasta-morto",
+      "description": "Pick up the dirty 7-8-9 diamond meld (off-suit 2) when the opponent has a clean canasta and has taken the morto.",
+      "context": "Pickup turn, 12 cards left, own table = 4-5-6 spades, opponent table = 3-4-5-6-7-8-9 clubs (clean canasta), opponent clean canasta = true, opponent morto = true, opponent hand sizes 7 and 1, discard = 8 diamonds, 6-7 clubs, top of discard = 8 diamonds. Hand = 7-9 diamonds, 5-9-Q clubs, 8-9-10-J spades + 2 hearts. good = pickup (7-8-9 diamonds + off-suit 2-hearts (dirty)); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 46,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 13,
+          "1": 7,
+          "2": 0,
+          "3": 1
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          6,
+          11,
+          12,
+          13,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "discardPile": [
+          31,
+          32,
+          46
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": true
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 1
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [
+                [
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "45": 1,
+            "47": 1
+          },
+          "targetSuit": 4
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-opp-canasta-morto-s",
+      "description": "Pick up the dirty 7-8-9 spade meld (off-suit 2) when the opponent has a clean canasta and has taken the morto.",
+      "context": "Pickup turn, 12 cards left, own table = 4-5-6 hearts, opponent table = 3-4-5-6-7-8-9 diamonds (clean canasta), opponent clean canasta = true, opponent morto = true, opponent hand sizes 7 and 1, discard = 8 spades, 6-7 diamonds, top of discard = 8 spades. Hand = 7-9 spades, 5-9-Q diamonds, 8-9-10-J hearts + 2 clubs. good = pickup (7-8-9 spades + off-suit 2-clubs (dirty)); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 8,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 13,
+          "1": 7,
+          "2": 0,
+          "3": 1
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          10,
+          11,
+          12,
+          13,
+          14
+        ],
+        "discardPile": [
+          45,
+          46,
+          8
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": true
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 1
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": [
+                [
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ]
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "7": 1,
+            "9": 1,
+            "27": 1
+          },
+          "targetSuit": 1
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-opp-canasta-morto-h",
+      "description": "Pick up the dirty 7-8-9 heart meld (off-suit 2) when the opponent has a clean canasta and has taken the morto.",
+      "context": "Pickup turn, 12 cards left, own table = 4-5-6 clubs, opponent table = 3-4-5-6-7-8-9 spades (clean canasta), opponent clean canasta = true, opponent morto = true, opponent hand sizes 7 and 1, discard = 8 hearts, 6-7 spades, top of discard = 8 hearts. Hand = 7-9 hearts, 5-9-Q spades, 8-9-10-J clubs + 2 diamonds. good = pickup (7-8-9 hearts + off-suit 2-diamonds (dirty)); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 22,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 13,
+          "1": 7,
+          "2": 0,
+          "3": 1
+        },
+        "deck": [
+          1,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          24
+        ],
+        "discardPile": [
+          7,
+          8,
+          22
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": true
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 1
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [
+                [
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "21": 1,
+            "23": 1,
+            "40": 1
+          },
+          "targetSuit": 2
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-opp-canasta-morto-c",
+      "description": "Pick up the dirty 7-8-9 club meld (off-suit 2) when the opponent has a clean canasta and has taken the morto.",
+      "context": "Pickup turn, 12 cards left, own table = 4-5-6 diamonds, opponent table = 3-4-5-6-7-8-9 hearts (clean canasta), opponent clean canasta = true, opponent morto = true, opponent hand sizes 7 and 1, discard = 8 clubs, 6-7 hearts, top of discard = 8 clubs. Hand = 7-9 clubs, 5-9-Q hearts, 8-9-10-J diamonds + 2 spades. good = pickup (7-8-9 clubs + off-suit 2-spades (dirty)); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 36,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 13,
+          "1": 7,
+          "2": 0,
+          "3": 1
+        },
+        "deck": [
+          0,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "discardPile": [
+          21,
+          22,
+          36
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": true
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 1
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ]
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [
+                [
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "1": 1,
+            "35": 1,
+            "37": 1
+          },
+          "targetSuit": 3
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-opp-canasta-morto-d",
+      "description": "Pick up the dirty 7-8-9 diamond meld (off-suit 2) when the opponent has a clean canasta and has taken the morto.",
+      "context": "Pickup turn, 12 cards left, own table = 4-5-6 spades, opponent table = 3-4-5-6-7-8-9 clubs (clean canasta), opponent clean canasta = true, opponent morto = true, opponent hand sizes 7 and 1, discard = 8 diamonds, 6-7 clubs, top of discard = 8 diamonds. Hand = 7-9 diamonds, 5-9-Q clubs, 8-9-10-J spades + 2 hearts. good = pickup (7-8-9 diamonds + off-suit 2-hearts (dirty)); bad = draw from deck.",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 50,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 13,
+          "1": 7,
+          "2": 0,
+          "3": 1
+        },
+        "deck": [
+          1,
+          6,
+          7,
+          8,
+          9,
+          10,
+          13,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "discardPile": [
+          35,
+          36,
+          50
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": true
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 1
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [
+                [
+                  0,
+                  0,
+                  0,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "49": 1,
+            "51": 1
+          },
+          "targetSuit": 4
+        }
+      ],
+      "bad": []
+    },
+    {
+      "id": "pickup-hold-dirty-3",
+      "description": "Draw from the deck instead of picking up a dirty 7-8-9 diamond meld (off-suit 2) when the deck is full.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 8 diamonds, 6-7 clubs, top of discard = 8 diamonds. Hand = 7-9 diamonds, 5-9-Q clubs, 8-9-10-J spades + 2 hearts. good = draw from deck; bad = pickup (7-8-9 diamonds + off-suit 2-hearts (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 46,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 13,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          11,
+          12,
+          13,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29
+        ],
+        "discardPile": [
+          31,
+          32,
+          46
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "45": 1,
+            "47": 1
+          },
+          "targetSuit": 4
+        }
+      ]
+    },
+    {
+      "id": "pickup-hold-dirty-3-s",
+      "description": "Draw from the deck instead of picking up a dirty 7-8-9 spade meld (off-suit 2) when the deck is full.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 8 spades, 6-7 diamonds, top of discard = 8 spades. Hand = 7-9 spades, 5-9-Q diamonds, 8-9-10-J hearts + 2 clubs. good = draw from deck; bad = pickup (7-8-9 spades + off-suit 2-clubs (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 8,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 13,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          25,
+          26,
+          28,
+          29,
+          30,
+          31,
+          32
+        ],
+        "discardPile": [
+          45,
+          46,
+          8
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "7": 1,
+            "9": 1,
+            "27": 1
+          },
+          "targetSuit": 1
+        }
+      ]
+    },
+    {
+      "id": "pickup-hold-dirty-3-h",
+      "description": "Draw from the deck instead of picking up a dirty 7-8-9 heart meld (off-suit 2) when the deck is full.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 8 hearts, 6-7 spades, top of discard = 8 hearts. Hand = 7-9 hearts, 5-9-Q spades, 8-9-10-J clubs + 2 diamonds. good = draw from deck; bad = pickup (7-8-9 hearts + off-suit 2-diamonds (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 22,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 13,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33
+        ],
+        "discardPile": [
+          7,
+          8,
+          22
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "21": 1,
+            "23": 1,
+            "40": 1
+          },
+          "targetSuit": 2
+        }
+      ]
+    },
+    {
+      "id": "pickup-hold-dirty-3-c",
+      "description": "Draw from the deck instead of picking up a dirty 7-8-9 club meld (off-suit 2) when the deck is full.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 8 clubs, 6-7 hearts, top of discard = 8 clubs. Hand = 7-9 clubs, 5-9-Q hearts, 8-9-10-J diamonds + 2 spades. good = draw from deck; bad = pickup (7-8-9 clubs + off-suit 2-spades (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 36,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 13,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          0,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          16,
+          17,
+          18,
+          19,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ],
+        "discardPile": [
+          21,
+          22,
+          36
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "1": 1,
+            "35": 1,
+            "37": 1
+          },
+          "targetSuit": 3
+        }
+      ]
+    },
+    {
+      "id": "pickup-hold-dirty-3-d",
+      "description": "Draw from the deck instead of picking up a dirty 7-8-9 diamond meld (off-suit 2) when the deck is full.",
+      "context": "Pickup turn, 25 cards left, empty table, discard = 8 diamonds, 6-7 clubs, top of discard = 8 diamonds. Hand = 7-9 diamonds, 5-9-Q clubs, 8-9-10-J spades + 2 hearts. good = draw from deck; bad = pickup (7-8-9 diamonds + off-suit 2-hearts (dirty)).",
+      "player": 0,
+      "myTeam": 0,
+      "oppTeam": 1,
+      "topdiscard": 50,
+      "state": {
+        "rules": {
+          "numPlayers": 4,
+          "discard": true,
+          "runners": [
+            1,
+            13
+          ],
+          "largeCanasta": true,
+          "cleanCanastaToWin": true,
+          "noJokers": false,
+          "openDiscardView": false,
+          "debugLog": false
+        },
+        "numPlayers": 4,
+        "teams": {
+          "0": 0,
+          "1": 1,
+          "2": 0,
+          "3": 1
+        },
+        "handSizes": {
+          "0": 13,
+          "1": 11,
+          "2": 0,
+          "3": 11
+        },
+        "deck": [
+          1,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          13,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          30
+        ],
+        "discardPile": [
+          35,
+          36,
+          50
+        ],
+        "teamMortos": {
+          "0": false,
+          "1": false
+        },
+        "pots": [],
+        "cleanMelds": {
+          "0": 0,
+          "1": 0
+        },
+        "table": {
+          "0": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          },
+          "1": {
+            "0": {
+              "1": [],
+              "2": [],
+              "3": [],
+              "4": []
+            },
+            "1": []
+          }
+        },
+        "cards": {
+          "0": [
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0
+          ],
+          "1": [],
+          "2": [],
+          "3": []
+        }
+      },
+      "good": [],
+      "bad": [
+        {
+          "moveType": "playMeld",
+          "cardCounts": {
+            "14": 1,
+            "49": 1,
+            "51": 1
+          },
+          "targetSuit": 4
+        }
+      ]
+    }
+  ]
+}
