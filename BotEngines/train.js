@@ -70,6 +70,24 @@ export function loadCuratedRounds() {
     return CURATED_ROUNDS;
 }
 
+// Curated PICKUP rounds (draw-from-deck vs pick-up-the-discard decisions). These are
+// playMeld candidates too, so they feed the same SEQ net as the meld/append rounds —
+// see loadCuratedRounds() / fitChampion wiring below. Hyphenated filename, distinct
+// from curated_rounds.json (underscore).
+let CURATED_PICKUP_ROUNDS = null;
+export function loadPickupRounds() {
+    if (CURATED_PICKUP_ROUNDS) return CURATED_PICKUP_ROUNDS;
+    const p = new URL('./curated-rounds-pickup.json', import.meta.url).pathname;
+    try {
+        CURATED_PICKUP_ROUNDS = JSON.parse(fs.readFileSync(p, 'utf8')).rounds || [];
+        console.log(`[FIT] loaded ${CURATED_PICKUP_ROUNDS.length} curated round(s) from curated-rounds-pickup.json`);
+    } catch (e) {
+        CURATED_PICKUP_ROUNDS = [];
+        console.log(`[FIT] curated-rounds-pickup.json not found/readable (${e.message}); pickup fit disabled`);
+    }
+    return CURATED_PICKUP_ROUNDS;
+}
+
 function gaussianRandom() {
     let u, v;
     do { u = Math.random(); } while (u === 0);
@@ -616,9 +634,16 @@ for (let idx = 0; idx < pairs.length; idx += 256) {
 
             // Per-round supervised fit (gradient): refine the champion's move-scoring nets
             // (SEQ/RUN) against curated rounds. Slot 0 (state) and slot 3 (discard) are frozen.
-            const curated = loadCuratedRounds();
+            // Pickup rounds (curated-rounds-pickup.json) are playMeld candidates too, so they
+            // feed the same SEQ net as the meld/append rounds — fit both in one pass so the
+            // SEQ net learns the union instead of over-fitting pickup last.
+            const meldRounds = loadCuratedRounds();
+            const pickupRounds = loadPickupRounds();
+            const curated = [...meldRounds, ...pickupRounds];
             if (curated.length > 0) {
-                console.log(`[${botName}] 🎯 Supervised fit: ${curated.length} curated rounds (lr=${params.fitLr ?? 1e-3}, iters=${params.fitIters ?? 3000})`);
+                console.log(`[${botName}] 🎯 Supervised fit: ${curated.length} curated rounds ` +
+                    `(meld=${meldRounds.length}, pickup=${pickupRounds.length}) ` +
+                    `(lr=${params.fitLr ?? 1e-3}, iters=${params.fitIters ?? 3000})`);
                 latestChampion = await fitChampion(latestChampion, netConfig, curated, {
                     fitLr: params.fitLr, fitIters: params.fitIters,
                     weightClip,
