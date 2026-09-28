@@ -638,8 +638,9 @@ for (let idx = 0; idx < pairs.length; idx += 256) {
             // feed the same SEQ net as the meld/append rounds — fit both in one pass so the
             // SEQ net learns the union instead of over-fitting pickup last.
             const meldRounds = loadCuratedRounds();
-            const pickupRounds = loadPickupRounds();
-            const curated = [...meldRounds, ...pickupRounds];
+            const curated = [...meldRounds];
+            //const pickupRounds = loadPickupRounds();
+            //const curated = [...meldRounds, ...pickupRounds];
             if (curated.length > 0) {
                 console.log(`[${botName}] 🎯 Supervised fit: ${curated.length} curated rounds ` +
                     `(meld=${meldRounds.length}, pickup=${pickupRounds.length}) ` +
