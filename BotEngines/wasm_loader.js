@@ -567,7 +567,7 @@ export async function runTurn(S, playerID, iface) {
         const td = S.discardPile.length > 0 ? S.discardPile[S.discardPile.length - 1] : null;
         const moves = buildTurnMoveList(S, playerID, myTeam, oppTeam, td) || [];
         for (const m of moves) {
-            if (m.phase !== 0 || S.hasDrawn) continue;
+            if (m.phase !== 0 || S.hasDrawn || m.score < 0) continue;
             if (!stillMyTurn()) break;
             const ok = await _executeTurnMove(m, iface, log);
             iface.refreshState(S);
@@ -654,7 +654,7 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
     moves.sort((a, b) => b.score - a.score);
 
     if (_diagnosticLog >= 1)
-        printcandidates(isPickup ? '--- PICKUP CANDIDATES (Phase A, sorted) ---' : '--- MELD CANDIDATES (Phase B, sorted) ---', allCands, G);
+        printcandidates(isPickup ? '--- PICKUP CANDIDATES (Phase A, sorted) ---' : '--- MELD CANDIDATES (Phase B, sorted) ---', moves, G);
 
     addPlanTurnTime(performance.now() - _pt0);
     return moves;
