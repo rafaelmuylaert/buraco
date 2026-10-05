@@ -277,7 +277,7 @@ function printcandidates(headerLine, allCands, G) {
         let line = `${c.moveType} cards=${_fmtCounts(c.cardCounts)}`;
         if (c.moveType === 'appendToMeld') line += ` existing=[${_fmtMeldArr(c.existingMeld, c.targetSuit)}]`;
         else if (c.moveType === 'appendRunner') line += ` existing=[${_fmtMeldArr(c.existingRunner, 0)}]`;
-        if (c._score !== undefined) line += ` score=${c._score.toFixed(4)}`;
+        if (c.score !== undefined) line += ` score=${c.score.toFixed(4)}`;
         console.log(`  ${line}`);
     }
 }
@@ -630,7 +630,7 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
                 pickupTarget.type = 'append';
                 pickupTarget.meldTarget = { type: 'runner', index: c.targetSlot };
             }
-            moves.push({ phase: 0, moveType: 'pickUpDiscard', cardCounts: c.cardCounts, score, pickupTarget });
+            moves.push({ phase: 0, moveType: 'pickUpDiscard', cardCounts: c.cardCounts, existingMeld: c.existingMeld, existingRunner: c.existingRunner, score, pickupTarget });
         } else {
             moves.push({
                 phase: 1,
@@ -640,6 +640,8 @@ export function buildTurnMoveList(G, player, myTeam, oppTeam, topdiscard = null)
                 targetSlot: c.targetSlot ?? 0,
                 cardCounts: c.cardCounts,
                 score,
+                existingMeld: c.existingMeld,
+                existingRunner: c.existingRunner,
             });
         }
     }
