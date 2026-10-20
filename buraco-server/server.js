@@ -527,8 +527,9 @@ server.router.post('/api/quick/release-seat', async (ctx) => {
     }
     const metadata = data.metadata;
     const assignments = metadata.setupData?.assignments || {};
+    const isTournament = metadata.setupData?.isTournament === true;
     const wasBot = String(assignments[playerID] || '').toLowerCase().includes('bot');
-    if (!wasBot) assignments[playerID] = 'Jogador ' + playerID;
+    if (!isTournament && !wasBot) assignments[playerID] = 'Jogador ' + playerID;
     metadata.setupData = { ...metadata.setupData, assignments };
     metadata.players[playerID] = { id: Number(playerID) };
     await server.db.setMetadata(matchID, metadata);
