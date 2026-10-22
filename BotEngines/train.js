@@ -637,19 +637,19 @@ for (let idx = 0; idx < pairs.length; idx += 256) {
             // Pickup rounds (curated-rounds-pickup.json) are playMeld candidates too, so they
             // feed the same SEQ net as the meld/append rounds — fit both in one pass so the
             // SEQ net learns the union instead of over-fitting pickup last.
-            const meldRounds = loadCuratedRounds();
+            //const meldRounds = loadCuratedRounds();
             //const pickupRounds = loadPickupRounds();
-            const pickupRounds = [];
-            const curated = [...meldRounds, ...pickupRounds];
-            if (curated.length > 0) {
-                console.log(`[${botName}] 🎯 Supervised fit: ${curated.length} curated rounds ` +
-                    `(meld=${meldRounds.length}, pickup=${pickupRounds.length}) ` +
-                    `(lr=${params.fitLr ?? 1e-3}, iters=${params.fitIters ?? 3000})`);
-                latestChampion = await fitChampion(latestChampion, netConfig, curated, {
-                    fitLr: params.fitLr, fitIters: params.fitIters,
-                    weightClip,
-                });
-            }
+            //const pickupRounds = [];
+            //const curated = [...meldRounds, ...pickupRounds];
+            //if (curated.length > 0) {
+            //    console.log(`[${botName}] 🎯 Supervised fit: ${curated.length} curated rounds ` +
+            //        `(meld=${meldRounds.length}, pickup=${pickupRounds.length}) ` +
+            //        `(lr=${params.fitLr ?? 1e-3}, iters=${params.fitIters ?? 3000})`);
+            //    latestChampion = await fitChampion(latestChampion, netConfig, curated, {
+            //        fitLr: params.fitLr, fitIters: params.fitIters,
+            //        weightClip,
+            //    });
+            //}
 
             fs.writeFileSync(path.join(BOTS_DIR, `${botName}.json`), JSON.stringify(Array.from(latestChampion)));
             writeChampionMeta(latestChampion);
