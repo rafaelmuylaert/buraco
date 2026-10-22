@@ -1202,7 +1202,108 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
 //console.log("[GAME.JS] generateAllValidMelds result:");
 //console.log(results);
 //if (G.rules?.debugLog) console.log("End debug");
-    return results;
+
+    // ── Local helpers for foreign-wild filtering + dedup ─────────────────────
+    // (Defined inside this function on purpose: a module-level hasForeignWild
+    // already exists for hand-bitmap checks; this one inspects a candidate.)
+    function totalCardsInCounts(cc) {
+        return Object.values(cc).reduce((a, b) => a + b, 0);
+    }
+
+    function hasForeignWild(cand) {
+        return cand.parsedMeld[14] !== 0;
+    }
+
+    function naturalSignature(cand) {
+        // Return cardCounts with wild cards removed
+        const cc = { ...cand.cardCounts };
+        const suit = cand.targetSuit;
+        // Remove foreign wild: card of suit parsedMeld[14] (or joker 53)
+        if (cand.parsedMeld[14] !== 0) {
+            const fwSuit = cand.parsedMeld[14];
+            for (const [id, count] of Object.entries(cc)) {
+                const cardId = Number(id);
+                const cardSuit = getSuit(cardId);
+                if (cardId === 53 || cardSuit === fwSuit) {
+                    cc[id] = count - 1;
+                    if (cc[id] === 0) delete cc[id];
+                    break; // only one foreign wild
+                }
+            }
+        }
+        // Remove natural wild: one 2 of the meld's suit
+        if (cand.parsedMeld[15] !== 0) {
+            const nat2Id = (suit - 1) * 13 + 1;
+            if (cc[nat2Id]) {
+                cc[nat2Id]--;
+                if (cc[nat2Id] === 0) delete cc[nat2Id];
+            }
+        }
+        return cc;
+    }
+
+    // ── Filter: exclude foreign-wild sequence candidates unless a condition is met ──
+    const oppTeam = 1 - myTeam;
+    const filtered = [];
+    for (const cand of results) {
+        const isSeq = cand.moveType === 'playMeld' || cand.moveType === 'appendToMeld';
+        if (!isSeq || !hasForeignWild(cand)) {
+            filtered.push(cand);
+            continue;
+        }
+        // Has a foreign wild — check conditions
+        const totalCards = totalCardsInCounts(cand.cardCounts);
+        const exhaustsHand = G.handSizes[player] - totalCards === 0;
+        const isAppend = cand.moveType === 'appendToMeld';
+        const existingLen = isAppend ? getMeldLength(cand.existingMeld) : 0;
+        const newMeldLen = !isAppend ? getMeldLength(cand.parsedMeld) : 0;
+
+        // Condition A: exhausts hand
+        const condA = exhaustsHand && (!isAppend || existingLen <= 6);
+
+        // Condition B: pickup + no other non-FW pickup candidates + size constraint
+        const noOtherNonFW = !results.some(other =>
+            other.phase === 0 &&
+            (other.moveType === 'playMeld' || other.moveType === 'appendToMeld') &&
+            !hasForeignWild(other)
+        );
+        const sizeOK = isAppend ? existingLen <= 4 : newMeldLen <= 3;
+        const condB = cand.phase === 0 && noOtherNonFW && sizeOK;
+
+        // Condition C: no morts available
+        const condC = Array.isArray(G.pots) && G.pots.length === 0 && (!isAppend || existingLen <= 6);
+
+        // Condition D: opp has clean canasta + picked up morto
+        const condD = teamHasClean(G, oppTeam) && (G.teamMortos?.[oppTeam] ?? false) === true && (!isAppend || existingLen <= 6);
+
+        if (condA || condB || condC || condD) {
+            filtered.push(cand);
+        }
+    }
+    let finalResults = filtered;
+
+    // ── Dedup: same natural cards in new meld + append → keep new meld only if append has FW ──
+    const seqCands = finalResults.filter(c => c.moveType === 'playMeld' || c.moveType === 'appendToMeld');
+    const newMelds = seqCands.filter(c => c.moveType === 'playMeld');
+    const appends = seqCands.filter(c => c.moveType === 'appendToMeld');
+
+    for (const nm of newMelds) {
+        const nmSig = naturalSignature(nm);
+        const overlappingAppend = appends.find(a => {
+            const aSig = naturalSignature(a);
+            // Deep equality of the two signatures
+            const aKeys = Object.keys(aSig);
+            const nKeys = Object.keys(nmSig);
+            if (aKeys.length !== nKeys.length) return false;
+            return aKeys.every(k => aSig[k] === nmSig[k]);
+        });
+        if (overlappingAppend && !hasForeignWild(overlappingAppend)) {
+            // Append has no FW → remove the new meld
+            finalResults = finalResults.filter(c => c !== nm);
+        }
+    }
+
+    return finalResults;
 }
 
 export const BuracoGame = {
