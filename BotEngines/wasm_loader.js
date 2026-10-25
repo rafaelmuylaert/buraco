@@ -266,7 +266,7 @@ function _fmtMeldArr(meld, suit) {
 // context. Prints m.moveType verbatim — 'playMeld' is NOT renamed to 'NEW MELD'.
 // Also accepts discard moves (discardCard) and legacy pre-formatted strings.
 function printcandidates(headerLine, allCands, G) {
-    if (_diagnosticLog < 1) return;
+    if (_diagnosticLog < 2) return;
     console.log(headerLine);
     for (const c of allCands) {
         if (typeof c === 'string') { console.log(`  ${c}`); continue; }
@@ -430,7 +430,7 @@ export function runCurrentState(G, player, myTeam, oppTeam) {
 
     _vStateVec = state.subarray(0, CURRENT_OUTPUTS);
 
-    if (_diagnosticLog >= 1) {
+    if (_diagnosticLog >= 2) {
         const hand = G.cards?.[player] || G.cards?.[player.toString()] || [];
         let handStr = '';
         if (hand && hand.length > 0) {
@@ -491,7 +491,7 @@ export function scoreSeqCandidate(cand) {
     if (!_ex || !cand) return -1;
     const enc = _encodeSeqCandidateFloats(cand);
     const out = getscores(_activeTeam, 1, [0], enc);
-    if (_diagnosticLog >= 2) {
+    if (_diagnosticLog >= 3) {
         console.log(`[WASM_DBG] Seq candidate: ${Array.from(enc).map(v => v.toFixed(0))} score: ${Array.from(out).map(v => v.toFixed(0))}`);
     }
     return out && out.length ? out[0] : -999;
@@ -501,7 +501,7 @@ export function scoreRunCandidate(cand) {
     if (!_ex || !cand) return -1;
     const enc = _encodeRunCandidateFloats(cand);
     const out = getscores(_activeTeam, 2, [0], enc);
-    if (_diagnosticLog >= 2) {
+    if (_diagnosticLog >= 3) {
         console.log(`[WASM_DBG] Run candidate: ${Array.from(enc).map(v => v.toFixed(0))} score: ${Array.from(out).map(v => v.toFixed(0))}`);
     }
     return out && out.length ? out[0] : -999;
@@ -510,7 +510,7 @@ export function scoreRunCandidate(cand) {
 export function scoreSeqCandidates(candidates) {
     if (!candidates?.length) return [];
     const scores = candidates.map(scoreSeqCandidate);
-    if (_diagnosticLog >= 1) {
+    if (_diagnosticLog >= 2) {
         console.log(`[WASM_DBG] seq scores: ${scores.map(v => v.toFixed(0)).join(', ')}`);
     }
     return scores;
@@ -519,7 +519,7 @@ export function scoreSeqCandidates(candidates) {
 export function scoreRunCandidates(candidates) {
     if (!candidates?.length) return [];
     const scores = candidates.map(scoreRunCandidate);
-    if (_diagnosticLog >= 1) {
+    if (_diagnosticLog >= 2) {
         console.log(`[WASM_DBG] run scores: ${scores.map(v => v.toFixed(0)).join(', ')}`);
     }
     return scores;
@@ -529,7 +529,7 @@ export function scoreDiscards() {
     if (!_ex || !_vStateVec) return null;
     const out = getscores(_activeTeam, 3, [0], []);
     if (!out) return null;
-    if (_diagnosticLog >= 2) {
+    if (_diagnosticLog >= 3) {
         console.log(`[WASM_DBG] discard logits: ${Array.from(out).map(v => v.toFixed(0)).join(', ')}`);
     }
     return out;
