@@ -226,8 +226,8 @@ function printState(G, botName, playerID) {
     }
     console.log(`[BOT] ${botName} | hasDrawn=${G.hasDrawn} hand=[${handCards.join(' ')}] | discard_top=${td}`);
     // Log both teams' table melds (seq keyed by suit 1..4, runners as a flat list).
-    for (let team = 0; team < 2; team++) {
-        const t = G.table?.[team];
+    const myTeam = G.teams?.[playerID] ?? 0;
+        const t = G.table?.[myTeam];
         if (!t) continue;
         const seqParts = [];
         for (let suit = 1; suit <= 4; suit++) {
@@ -235,8 +235,7 @@ function printState(G, botName, playerID) {
             if (melds) for (const m of melds) seqParts.push(meldToStr(m, suit));
         }
         const runParts = (t[1] || []).map(m => meldToStr(m, 0));
-        console.log(`[BOT] ${botName} | team${team} table seq=[${seqParts.join(' | ')}] run=[${runParts.join(' | ')}]`);
-    }
+        console.log(`[BOT] ${botName} | team${myTeam} table seq=[${seqParts.join(' | ')}] run=[${runParts.join(' | ')}]`);
 }
 async function pollLobby() {
   if (_pollingLobby) return;
