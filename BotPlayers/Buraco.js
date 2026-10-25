@@ -225,6 +225,18 @@ function printState(G, botName, playerID) {
         if (cnt > 0) { const cid = i===52?54:i; const s=cid===54?5:Math.floor(cid/13)+1; const r=cid===54?2:(cid%13)+1; for (let n=0;n<cnt;n++) handCards.push(getRankChar(r)+getSuitChar(s)); }
     }
     console.log(`[BOT] ${botName} | hasDrawn=${G.hasDrawn} hand=[${handCards.join(' ')}] | discard_top=${td}`);
+    // Log both teams' table melds (seq keyed by suit 1..4, runners as a flat list).
+    for (let team = 0; team < 2; team++) {
+        const t = G.table?.[team];
+        if (!t) continue;
+        const seqParts = [];
+        for (let suit = 1; suit <= 4; suit++) {
+            const melds = t[0]?.[suit];
+            if (melds) for (const m of melds) seqParts.push(meldToStr(m, suit));
+        }
+        const runParts = (t[1] || []).map(m => meldToStr(m, 0));
+        console.log(`[BOT] ${botName} | team${team} table seq=[${seqParts.join(' | ')}] run=[${runParts.join(' | ')}]`);
+    }
 }
 async function pollLobby() {
   if (_pollingLobby) return;
