@@ -228,7 +228,6 @@ function printState(G, botName, playerID) {
     // Log both teams' table melds (seq keyed by suit 1..4, runners as a flat list).
     const myTeam = G.teams?.[playerID] ?? 0;
         const t = G.table?.[myTeam];
-        if (!t) continue;
         const seqParts = [];
         for (let suit = 1; suit <= 4; suit++) {
             const melds = t[0]?.[suit];
