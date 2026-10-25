@@ -1211,7 +1211,17 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
     }
 
     function hasForeignWild(cand) {
-        return cand.parsedMeld[14] !== 0;
+        // A foreign wild is a joker (53) or a 2 of a suit different from the meld's suit.
+        // Only flag the candidate if the NEW cards being added include such a wild.
+        const suit = cand.targetSuit;
+        for (const [id, count] of Object.entries(cand.cardCounts)) {
+            const cardId = Number(id);
+            if (cardId === 53) return true;                       // joker
+            const cardSuit = getSuit(cardId);
+            const cardRank = getRank(cardId);
+            if (cardRank === 2 && cardSuit !== suit) return true;  // 2 of a different suit
+        }
+        return false;
     }
 
     function naturalSignature(cand) {
