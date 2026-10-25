@@ -406,14 +406,15 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
                         cc[wildInHand] = (cc[wildInHand] || 0) + 1;
                     }
                 }
-                if (Object.keys(cc).length > 0 && lo <= eLo && hi >= eHi) results.push({ cardCounts: cc });
+                const spanOK = existingMeld ? (lo <= eHi + 1 && hi >= eLo - 1) : true;
+                if (Object.keys(cc).length > 0 && spanOK) results.push({ cardCounts: cc });
             }
             
             if (cgap >= 3) {
                 // Emit every sub-run of length 3..cgap (the len=cgap case is the
                 // maximum meld; shorter ones are the sub-melds). For appends the
                 // `existing[p]` skip keeps only new cards and the span check
-                // (lo <= eLo && e >= eHi) requires the run to cover the existing
+                // (true) requires the run to cover the existing
                 // meld's natural cards; for new melds eLo/eHi are degenerate so
                 // every sub-run passes.
                 const baseLo = hi - cgap + 1;
@@ -427,7 +428,8 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
                             const cardIdx = suit0 * 13 + (p === 0 || p === 12 ? 0 : p === 13 ? 1 : p + 1);
                             cc[cardIdx] = (cc[cardIdx] || 0) + 1;
                         }
-                        if (Object.keys(cc).length > 0 && lo <= eLo && e >= eHi) results.push({ cardCounts: cc });
+                        const spanOK = existingMeld ? (lo <= eHi + 1 && hi >= eLo - 1) : true;
+                if (Object.keys(cc).length > 0 && spanOK) results.push({ cardCounts: cc });
                     }
                 }
             }
@@ -447,7 +449,8 @@ export function findSeqRuns(handFlat, suit, topdiscard ,existingMeld = null) {
                         cc[wildInHand] = (cc[wildInHand] || 0) + 1;
                     }
                 }
-                if (Object.keys(cc).length > 0 && lo <= eLo && hi >= eHi) results.push({ cardCounts: cc });
+                const spanOK = existingMeld ? (lo <= eHi + 1 && hi >= eLo - 1) : true;
+                if (Object.keys(cc).length > 0 && spanOK) results.push({ cardCounts: cc });
             }
             
             cnogap = cgap;
