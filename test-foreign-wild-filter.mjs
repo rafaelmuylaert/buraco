@@ -154,5 +154,44 @@ console.log('\n=== CASE 8: dedup — same naturals in new meld + append, append 
     check('the overlapping new meld (FW) is kept (append has FW)', fwNew.length >= 1);
 }
 
+console.log('\n=== CASE 9: dedup — proper-subset overlap, append NO FW → new meld EXCLUDED ===');
+{
+    // Existing meld 8♠ 9♠ 10♠ (clean, no FW). Hand: 3♠ 4♠ 5♠ 6♠ 7♠.
+    // The new meld 3♠ 4♠ 5♠ (naturals {3,4,5}) is a PROPER SUBSET of the append
+    // 3♠ 4♠ 5♠ 6♠ 7♠ (naturals {3,4,5,6,7}). Under the old deep-equality check
+    // this new meld is kept; under the new subset check it is removed.
+    const existing = new Array(16).fill(0);
+    existing[8] = 1; existing[9] = 1; existing[10] = 1;
+    const hand = [cid(1,3), cid(1,4), cid(1,5), cid(1,6), cid(1,7)];
+    const G = makeG(hand, [[], [existing], [], []]);
+    const cands = generateAllValidMelds(G, '0', 0, null);
+    show(cands);
+    const subMeld = cands.filter(c => c.moveType === 'playMeld' &&
+        c.cardCounts[cid(1,3)] === 1 && c.cardCounts[cid(1,4)] === 1 &&
+        c.cardCounts[cid(1,5)] === 1 &&
+        Object.keys(c.cardCounts).length === 3);
+    check('the proper-subset new meld (3♠4♠5♠) is removed by dedup', subMeld.length === 0);
+}
+
+console.log('\n=== CASE 10: dedup — proper-subset overlap, existing meld HAS FW → new meld KEPT ===');
+{
+    // Existing meld 8♠ 9♠ 10♠ with a foreign wild (existing[14] = 2, hearts).
+    // Hand: 3♠ 4♠ 5♠ 6♠ 7♠. The new meld 3♠ 4♠ 5♠ overlaps the append
+    // 3♠ 4♠ 5♠ 6♠ 7♠ (subset), the append's added cards have no FW, but the
+    // existing meld has a FW → the new meld is kept.
+    const existing = new Array(16).fill(0);
+    existing[8] = 1; existing[9] = 1; existing[10] = 1;
+    existing[14] = 2; // foreign wild suit = hearts
+    const hand = [cid(1,3), cid(1,4), cid(1,5), cid(1,6), cid(1,7)];
+    const G = makeG(hand, [[], [existing], [], []]);
+    const cands = generateAllValidMelds(G, '0', 0, null);
+    show(cands);
+    const subMeld = cands.filter(c => c.moveType === 'playMeld' &&
+        c.cardCounts[cid(1,3)] === 1 && c.cardCounts[cid(1,4)] === 1 &&
+        c.cardCounts[cid(1,5)] === 1 &&
+        Object.keys(c.cardCounts).length === 3);
+    check('the proper-subset new meld (3♠4♠5♠) is kept (existing meld has FW)', subMeld.length >= 1);
+}
+
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURE(S)'}`);
 process.exit(failures === 0 ? 0 : 1);

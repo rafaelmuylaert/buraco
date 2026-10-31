@@ -1284,7 +1284,7 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
         const condB = cand.phase === 0 && noOtherNonFW && sizeOK;
 
         // Condition C: no morts available
-        const condC = Array.isArray(G.pots) && G.pots.length === 0 && (!isAppend || existingLen <= 6);
+        const condC = Array.isArray(G.pots) && G.pots.length === 0 && (!isAppend || existingLen <= 5);
 
         // Condition D: opp has clean canasta + picked up morto
         const condD = teamHasClean(G, oppTeam) && (G.teamMortos?.[oppTeam] ?? false) === true && (!isAppend || existingLen <= 6);
@@ -1304,14 +1304,14 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
         const nmSig = naturalSignature(nm);
         const overlappingAppend = appends.find(a => {
             const aSig = naturalSignature(a);
-            // Deep equality of the two signatures
-            const aKeys = Object.keys(aSig);
-            const nKeys = Object.keys(nmSig);
-            if (aKeys.length !== nKeys.length) return false;
-            return aKeys.every(k => aSig[k] === nmSig[k]);
+            // The new meld's natural cards must be usable in the append:
+            // every card in nmSig must be present in aSig with at least the same count.
+            return Object.entries(nmSig).every(([k, v]) => (aSig[k] || 0) >= v);
         });
-        if (overlappingAppend && !hasForeignWild(overlappingAppend)) {
-            // Append has no FW → remove the new meld
+        if (overlappingAppend &&
+            !hasForeignWild(overlappingAppend) &&
+            overlappingAppend.existingMeld[14] === 0) {
+            // Append has no FW (neither in added cards nor in the existing meld) → remove the new meld
             finalResults = finalResults.filter(c => c !== nm);
         }
     }
