@@ -193,5 +193,62 @@ console.log('\n=== CASE 10: dedup — proper-subset overlap, existing meld HAS F
     check('the proper-subset new meld (3♠4♠5♠) is kept (existing meld has FW)', subMeld.length >= 1);
 }
 
+console.log('\n=== CASE 11: dedup — partial (non-subset) overlap, append NO FW → A-high new melds EXCLUDED ===');
+{
+    // Existing meld 2♠ 3♠ 4♠ (clean, no FW). Hand: A♠ J♠ Q♠ K♠.
+    // The append A♠ extends the meld down to A-low (natural sig {A}).
+    // The new melds A♠Q♠K♠ and A♠J♠Q♠K♠ use A as HIGH (natural sigs
+    // {A,Q,K} and {A,J,Q,K}) → they share A with the append but are NOT a
+    // subset of it. Under the new any-overlap rule they are dropped.
+    // J♠Q♠K♠ (natural sig {J,Q,K}) shares no card with the append → kept.
+    const existing = new Array(16).fill(0);
+    existing[2] = 1; existing[3] = 1; existing[4] = 1;
+    const hand = [cid(1,1), cid(1,11), cid(1,12), cid(1,13)];
+    const G = makeG(hand, [[], [existing], [], []]);
+    const cands = generateAllValidMelds(G, '0', 0, null);
+    show(cands);
+    const isAqk = c => c.moveType === 'playMeld'
+        && c.cardCounts[cid(1,1)] === 1 && c.cardCounts[cid(1,12)] === 1 && c.cardCounts[cid(1,13)] === 1
+        && Object.keys(c.cardCounts).length === 3;
+    const isAjqk = c => c.moveType === 'playMeld'
+        && c.cardCounts[cid(1,1)] === 1 && c.cardCounts[cid(1,11)] === 1
+        && c.cardCounts[cid(1,12)] === 1 && c.cardCounts[cid(1,13)] === 1
+        && Object.keys(c.cardCounts).length === 4;
+    const isJqk = c => c.moveType === 'playMeld'
+        && c.cardCounts[cid(1,11)] === 1 && c.cardCounts[cid(1,12)] === 1 && c.cardCounts[cid(1,13)] === 1
+        && Object.keys(c.cardCounts).length === 3;
+    check('A♠Q♠K♠ is dropped (shares A♠ with the A-low append)', cands.filter(isAqk).length === 0);
+    check('A♠J♠Q♠K♠ is dropped (shares A♠ with the A-low append)', cands.filter(isAjqk).length === 0);
+    check('J♠Q♠K♠ is kept (shares no card with the append)', cands.filter(isJqk).length >= 1);
+}
+
+console.log('\n=== CASE 12: dedup — partial (non-subset) overlap, existing meld HAS FW → new melds KEPT ===');
+{
+    // Existing meld 2♠ 3♠ 4♠ WITH a foreign wild (existing[14] = 2, hearts).
+    // Hand: A♠ J♠ Q♠ K♠. Same appends/new melds as CASE 11, but the
+    // overlapping append A♠ is FW-dirty (existingMeld[14] !== 0), so the
+    // guard keeps every new meld.
+    const existing = new Array(16).fill(0);
+    existing[2] = 1; existing[3] = 1; existing[4] = 1;
+    existing[14] = 2; // foreign wild suit = hearts
+    const hand = [cid(1,1), cid(1,11), cid(1,12), cid(1,13)];
+    const G = makeG(hand, [[], [existing], [], []]);
+    const cands = generateAllValidMelds(G, '0', 0, null);
+    show(cands);
+    const isAqk = c => c.moveType === 'playMeld'
+        && c.cardCounts[cid(1,1)] === 1 && c.cardCounts[cid(1,12)] === 1 && c.cardCounts[cid(1,13)] === 1
+        && Object.keys(c.cardCounts).length === 3;
+    const isAjqk = c => c.moveType === 'playMeld'
+        && c.cardCounts[cid(1,1)] === 1 && c.cardCounts[cid(1,11)] === 1
+        && c.cardCounts[cid(1,12)] === 1 && c.cardCounts[cid(1,13)] === 1
+        && Object.keys(c.cardCounts).length === 4;
+    const isJqk = c => c.moveType === 'playMeld'
+        && c.cardCounts[cid(1,11)] === 1 && c.cardCounts[cid(1,12)] === 1 && c.cardCounts[cid(1,13)] === 1
+        && Object.keys(c.cardCounts).length === 3;
+    check('A♠Q♠K♠ is kept (overlapping append is FW-dirty)', cands.filter(isAqk).length >= 1);
+    check('A♠J♠Q♠K♠ is kept (overlapping append is FW-dirty)', cands.filter(isAjqk).length >= 1);
+    check('J♠Q♠K♠ is kept (shares no card with the append)', cands.filter(isJqk).length >= 1);
+}
+
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURE(S)'}`);
 process.exit(failures === 0 ? 0 : 1);

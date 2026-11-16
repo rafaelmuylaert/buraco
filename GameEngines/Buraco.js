@@ -1295,7 +1295,7 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
     }
     let finalResults = filtered;
 
-    // ── Dedup: same natural cards in new meld + append → keep new meld only if append has FW ──
+    // ── Dedup: new meld shares ANY natural card with an FW-free append → drop the new meld ──
     const seqCands = finalResults.filter(c => c.moveType === 'playMeld' || c.moveType === 'appendToMeld');
     const newMelds = seqCands.filter(c => c.moveType === 'playMeld');
     const appends = seqCands.filter(c => c.moveType === 'appendToMeld');
@@ -1304,9 +1304,9 @@ export function generateAllValidMelds(G, player, myTeam, topdiscard = null) {
         const nmSig = naturalSignature(nm);
         const overlappingAppend = appends.find(a => {
             const aSig = naturalSignature(a);
-            // The new meld's natural cards must be usable in the append:
-            // every card in nmSig must be present in aSig with at least the same count.
-            return Object.entries(nmSig).every(([k, v]) => (aSig[k] || 0) >= v);
+            // The new meld is dropped if it shares ANY natural card with an append:
+            // at least one card in nmSig must be present in aSig.
+            return Object.entries(nmSig).some(([k, v]) => (aSig[k] || 0) >= v);
         });
         if (overlappingAppend &&
             !hasForeignWild(overlappingAppend) &&
